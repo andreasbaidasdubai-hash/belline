@@ -1,7 +1,7 @@
 import type { Call, Location } from "../types";
 import { AgentSession } from "../agent/runtime";
 import { createSttStream, type SttStream } from "../providers/stt";
-import { speak, ttsEnabled, type TtsFormat } from "../providers/tts";
+import { speak, speakClip, ttsEnabled, type TtsFormat } from "../providers/tts";
 import { saveCall } from "../store";
 import { maxCallSeconds } from "../demo";
 import { speechKeyterms } from "../verticals";
@@ -101,7 +101,7 @@ export class VoiceSession {
     const greeting = this.agent.greeting();
     this.pushTranscript("agent", greeting);
     this.transport.sendEvent({ type: "transcript", role: "agent", text: greeting });
-    await this.say(greeting, ++this.generation);
+    await this.say(greeting, ++this.generation, { cache: true });
     // Close the bubble so the caller's first reply does not get merged into
     // the greeting in the console.
     this.transport.sendEvent({ type: "turn_end", latencyMs: 0 });
@@ -213,7 +213,7 @@ export class VoiceSession {
   }
 
   /** Speak one fragment, abortable, dropping output from a stale generation. */
-  private async say(text: string, gen: number): Promise<void> {
+  private async say(text: string, gen: number, opts?: { cache?: boolean }): Promise<void> {
     if (!ttsEnabled()) {
       // Text-only mode still needs the transcript to reach the console.
       return;
@@ -222,14 +222,28 @@ export class VoiceSession {
     this.abort = controller;
     this.speaking = true;
     this.speakingSince = Date.now();
+
+    const voice = {
+      voiceId: this.location.agent.voiceId,
+      modelId: this.location.agent.voiceModel,
+      speed: this.location.agent.voiceSpeed,
+      format: this.transport.output,
+      signal: controller.signal,
+      previousText: this.spokenThisTurn || undefined,
+    };
+
     try {
-      for await (const chunk of speak(text, {
-        voiceId: this.location.agent.voiceId,
-        modelId: this.location.agent.voiceModel,
-        format: this.transport.output,
-        signal: controller.signal,
-        previousText: this.spokenThisTurn || undefined,
-      })) {
+      if (opts?.cache) {
+        // A line that repeats verbatim every call. Handed over whole rather
+        // than streamed — both transports re-frame, and barge-in still works
+        // because clearAudio flushes whatever the far end has buffered.
+        const audio = await speakClip(text, { ...voice, previousText: undefined });
+        if (gen !== this.generation) return;
+        if (audio.length) this.transport.sendAudio(audio);
+        return;
+      }
+
+      for await (const chunk of speak(text, voice)) {
         if (gen !== this.generation) return;
         this.transport.sendAudio(chunk);
       }

@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AgentConfig } from "@/lib/types";
-import { VOICE_MODELS, DEFAULT_VOICE_MODEL } from "@/lib/providers/tts";
+import {
+  VOICE_MODELS,
+  DEFAULT_VOICE_MODEL,
+  DEFAULT_VOICE_SPEED,
+  MIN_VOICE_SPEED,
+  MAX_VOICE_SPEED,
+} from "@/lib/providers/tts";
 
 /** A few frames of silent MP3 — enough to unlock the element on a gesture. */
 const SILENCE =
@@ -98,6 +104,7 @@ export default function AgentEditor({
         body: JSON.stringify({
           voiceId: agent.voiceId,
           voiceModel: agent.voiceModel,
+          voiceSpeed: agent.voiceSpeed,
           locationId,
           // Preview the line this voice will actually open with.
           text: agent.greeting,
@@ -238,6 +245,28 @@ export default function AgentEditor({
               before the network call — see previewVoice. */}
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
           <audio ref={audioRef} preload="none" style={{ display: "none" }} />
+        </Field>
+
+        <Field
+          label={`Speaking pace — ${(agent.voiceSpeed ?? DEFAULT_VOICE_SPEED).toFixed(2)}×`}
+          hint="Slow reads as a recording; brisk reads as competent. Past about 1.1 a caller repeating a phone number back can't keep up. Preview it above after changing."
+        >
+          <input
+            type="range"
+            min={MIN_VOICE_SPEED}
+            max={MAX_VOICE_SPEED}
+            step={0.01}
+            value={agent.voiceSpeed ?? DEFAULT_VOICE_SPEED}
+            onChange={(e) => set("voiceSpeed", Number(e.target.value))}
+            style={{ padding: 0 }}
+          />
+          <div
+            className="muted"
+            style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 2 }}
+          >
+            <span>Measured</span>
+            <span>Brisk</span>
+          </div>
         </Field>
 
         <Field

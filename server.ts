@@ -13,6 +13,8 @@ import {
 } from "./src/lib/auth";
 import { reconcileStaleCalls, startCall } from "./src/lib/calls";
 import type { User } from "./src/lib/types";
+import { greetingFor } from "./src/lib/agent/runtime";
+import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { VoiceSession } from "./src/lib/voice/session";
 import { BrowserTransport, TwilioTransport } from "./src/lib/voice/transports";
 
@@ -40,6 +42,7 @@ await app.prepare();
 const upgradeHandler = app.getUpgradeHandler();
 seedIfEmpty();
 const reconciled = reconcileStaleCalls();
+void warmGreetings();
 
 const server = createServer((req, res) => {
   handle(req, res, parse(req.url ?? "/", true));
@@ -202,6 +205,41 @@ function handleTwilio(ws: WebSocket): void {
 
   ws.on("close", () => void session?.end("abandoned"));
   ws.on("error", () => void session?.end("abandoned"));
+}
+
+/**
+ * Synthesise each demo line's greeting once, at boot, into the clip cache.
+ *
+ * Without it the first caller after every deploy waits through a synthesis
+ * round trip of silence before anyone speaks — and on a demo line the first
+ * caller after a deploy is the one most likely to be a prospect. Costs a few
+ * hundred characters per boot.
+ *
+ * Deliberately not awaited and never fatal: a cold cache is slower, a server
+ * that refuses to start because a vendor is down is broken.
+ */
+async function warmGreetings(): Promise<void> {
+  if (!ttsEnabled()) return;
+  for (const location of listLocations().filter((l) => l.demo?.enabled)) {
+    // Which voice is actually live is otherwise invisible from outside the
+    // container — the store sits on a mounted disk, and "is it set to the
+    // voice I picked?" is a question worth being able to answer from the logs.
+    console.log(
+      `[voice] ${location.name}: voice=${location.agent.voiceId} model=${
+        location.agent.voiceModel ?? "default"
+      } speed=${location.agent.voiceSpeed ?? "default"}`,
+    );
+    try {
+      await speakClip(greetingFor(location), {
+        voiceId: location.agent.voiceId,
+        modelId: location.agent.voiceModel,
+        speed: location.agent.voiceSpeed,
+        format: "ulaw_8000",
+      });
+    } catch {
+      // Left cold on purpose; the first real call will fill it.
+    }
+  }
 }
 
 server.listen(port, () => {

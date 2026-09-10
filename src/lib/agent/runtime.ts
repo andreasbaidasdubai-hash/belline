@@ -109,6 +109,31 @@ function hasApiKey(): boolean {
  * that still reasons about which tool to call, and Haiku skips thinking
  * altogether.
  */
+/**
+ * The exact words the agent opens with.
+ *
+ * A free function, not just a method, because the server synthesises this at
+ * boot to warm the audio cache — and it should not have to invent a call
+ * record, which would land in the call log and count against the demo's
+ * daily cap, merely to ask what the greeting says.
+ */
+export function greetingFor(location: Location, callerNumber?: string): string {
+  const agent = location.agent;
+  const guest = callerNumber ? recallGuest(location, callerNumber) : null;
+
+  // Recognition has to happen in the opening line to land at all. By the time
+  // the model could produce it the caller has already started talking.
+  const base =
+    guest?.name && agent.returningGreeting?.trim()
+      ? agent.returningGreeting.replace(/\{name\}/g, guest.name)
+      : agent.greeting;
+
+  // On a public demo line the disclosure belongs in the first breath, not
+  // somewhere the caller has to ask for it.
+  const disclosure = location.demo?.enabled ? location.demo.disclosure.trim() : "";
+  return disclosure ? `${disclosure} ${base}` : base;
+}
+
 function modelParams(model: string): {
   thinking?: Anthropic.ThinkingConfigParam;
   output_config?: { effort: "low" | "medium" | "high" };
@@ -153,31 +178,14 @@ export class AgentSession {
    * second in the whole call.
    */
   greeting(): string {
-    const agent = this.location.agent;
-    const guest = this.callerNumber
-      ? recallGuest(this.location, this.callerNumber)
-      : null;
-
-    // Recognition has to happen in the opening line to land at all. By the
-    // time the model could produce it the caller has already started talking.
-    const base =
-      guest?.name && agent.returningGreeting?.trim()
-        ? agent.returningGreeting.replace(/\{name\}/g, guest.name)
-        : agent.greeting;
-
-    // On a public demo line the disclosure belongs in the first breath, not
-    // somewhere the caller has to ask for it.
-    const disclosure = this.location.demo?.enabled
-      ? this.location.demo.disclosure.trim()
-      : "";
-
-    this.spokenGreeting = disclosure ? `${disclosure} ${base}` : base;
+    this.spokenGreeting = greetingFor(this.location, this.callerNumber);
     return this.spokenGreeting;
   }
 
   get isEnded(): boolean {
     return this.ended;
   }
+
 
   private systemBlocks(): Anthropic.TextBlockParam[] {
     // Guest history goes in the volatile block, after the cache breakpoint —

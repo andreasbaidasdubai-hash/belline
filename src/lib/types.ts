@@ -90,6 +90,8 @@ export interface AgentConfig {
    * `DEFAULT_VOICE_MODEL`; see `VOICE_MODELS` for what is worth offering.
    */
   voiceModel?: string;
+  /** Delivery pace, 0.8–1.2. Unset falls back to `DEFAULT_VOICE_SPEED`. */
+  voiceSpeed?: number;
   model: string;
   /** Free-text tone/personality guidance folded into the system prompt. */
   persona: string;

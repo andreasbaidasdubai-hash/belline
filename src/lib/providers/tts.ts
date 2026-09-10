@@ -69,6 +69,19 @@ export const DEFAULT_VOICE_MODEL = "eleven_v3_conversational";
 const PREVIOUS_TEXT_CHARS = 300;
 
 /**
+ * A shade quicker than the voice's natural pace. Slow reads as a recording;
+ * much past this and a caller repeating a phone number cannot keep up.
+ */
+export const DEFAULT_VOICE_SPEED = 1.05;
+export const MIN_VOICE_SPEED = 0.8;
+export const MAX_VOICE_SPEED = 1.2;
+
+function clampSpeed(speed: number | undefined): number {
+  if (typeof speed !== "number" || Number.isNaN(speed)) return DEFAULT_VOICE_SPEED;
+  return Math.min(MAX_VOICE_SPEED, Math.max(MIN_VOICE_SPEED, speed));
+}
+
+/**
  * `pcm_16000` for the browser console, `ulaw_8000` for the phone network,
  * `mp3_44100_128` only for voice previews in the dashboard — an `<audio>`
  * element will not play raw PCM.
@@ -80,6 +93,16 @@ export interface SpeakOptions {
   format: TtsFormat;
   modelId?: string;
   signal?: AbortSignal;
+  /**
+   * Delivery pace, 0.7 to 1.2, where 1 is the voice's natural rate.
+   *
+   * A receptionist who is a touch brisk sounds competent; one who is slow
+   * sounds like a recording, and on a metered line every caller is paying for
+   * the difference. The conversational model honours this more gently than
+   * turbo does — measured, the same line runs 5.52 s at 0.8 and 4.56 s at
+   * 1.2, against 5.85 s and 3.81 s on turbo.
+   */
+  speed?: number;
   /**
    * What the agent said immediately before this fragment, in the same turn.
    *
@@ -147,7 +170,7 @@ export async function* speak(
           // more and it starts acting, which is wrong for a receptionist.
           style: 0.15,
           use_speaker_boost: true,
-          speed: 1.0,
+          speed: clampSpeed(opts.speed),
         },
       }),
       signal: opts.signal,
@@ -169,4 +192,50 @@ export async function* speak(
   } finally {
     reader.releaseLock();
   }
+}
+
+/**
+ * Audio for a line the agent says verbatim on every call.
+ *
+ * The greeting is the case that matters. It is identical call after call, yet
+ * it was costing a full synthesis round trip — measured at 669 ms — of dead
+ * air at the exact moment a caller is deciding whether anyone is there. Held
+ * in memory the second caller onward hears it immediately.
+ *
+ * Deliberately not persisted: it is cheap to rebuild, it must not survive a
+ * voice being changed in the dashboard, and a stale greeting on disk would be
+ * a genuinely confusing bug to chase.
+ */
+const CLIP_CACHE_MAX = 24;
+const clipCache = new Map<string, Buffer>();
+
+export async function speakClip(text: string, opts: SpeakOptions): Promise<Buffer> {
+  const key = [
+    opts.voiceId,
+    opts.modelId ?? DEFAULT_VOICE_MODEL,
+    opts.format,
+    clampSpeed(opts.speed),
+    text,
+  ].join(" ");
+
+  const hit = clipCache.get(key);
+  if (hit) {
+    // Re-insert so the map stays in least-recently-used order.
+    clipCache.delete(key);
+    clipCache.set(key, hit);
+    return hit;
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of speak(text, opts)) chunks.push(chunk);
+  const audio = Buffer.concat(chunks);
+
+  if (audio.length > 0) {
+    clipCache.set(key, audio);
+    if (clipCache.size > CLIP_CACHE_MAX) {
+      const oldest = clipCache.keys().next().value;
+      if (oldest !== undefined) clipCache.delete(oldest);
+    }
+  }
+  return audio;
 }

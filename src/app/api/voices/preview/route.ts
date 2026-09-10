@@ -28,6 +28,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     voiceId?: string;
     voiceModel?: string;
+    voiceSpeed?: number;
     locationId?: string;
     text?: string;
   };
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
       voiceId,
       // Preview what the caller will actually hear, not a house default.
       modelId: body.voiceModel?.trim() || location?.agent.voiceModel,
+      speed: body.voiceSpeed ?? location?.agent.voiceSpeed,
       format: "mp3_44100_128",
     })) {
       chunks.push(chunk);

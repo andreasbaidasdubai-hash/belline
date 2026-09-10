@@ -360,8 +360,13 @@ function asDemoLine(location: Location, disclosure: string): Location {
     ...location,
     demo: {
       enabled: true,
-      maxCallsPerDay: 40,
-      maxCallSeconds: 240,
+      // Four minutes cut prospects off mid-evaluation: the greeting, a
+      // booking, a change to it and a couple of awkward questions is the
+      // whole point of ringing, and that does not fit. Six minutes does.
+      // The daily cap comes down to keep the worst-case spend about level —
+      // 30 calls at six minutes is close to 40 at four.
+      maxCallsPerDay: 30,
+      maxCallSeconds: 360,
       clearBookingsDaily: true,
       disclosure,
     },
