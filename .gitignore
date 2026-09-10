@@ -7,3 +7,8 @@ data/
 .env.local
 *.tsbuildinfo
 next-env.d.ts
+
+# Rendered evidence for the design-critique loop; regenerate with 'npm run audit'.
+audit/
+test-results/
+playwright-report/

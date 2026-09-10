@@ -1,10 +1,29 @@
-﻿<meta charset="utf-8">
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <meta name="theme-color" content="#0F2131">
-<meta name="description" content="Belline is an AI receptionist for restaurants, salons and clinics. It answers the calls your team can't get to, checks real availability, and books.">
-<title>Belline</title>
+<title>Belline — Someone always answers</title>
+<meta name="description" content="Belline is an AI receptionist for clinics, dental practices, salons and restaurants. It answers the calls your team can't get to, checks real availability, and books.">
+<link rel="canonical" href="https://belline.ai/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Belline">
+<meta property="og:url" content="https://belline.ai/">
+<meta property="og:title" content="Belline — Someone always answers">
+<meta property="og:description" content="An AI receptionist for clinics, dental practices, salons and restaurants. It answers the calls your team can't get to, checks real availability, and books.">
+<meta property="og:image" content="https://belline.ai/img/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A concierge bell on a reception counter, a call arriving on a phone beside it.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Belline — Someone always answers">
+<meta name="twitter:description" content="An AI receptionist for clinics, dental practices, salons and restaurants.">
+<meta name="twitter:image" content="https://belline.ai/img/og.jpg">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
@@ -303,7 +322,12 @@
     .hero-art { order: -1; }
   }
 
-  @media (max-width: 720px) {
+  /* The header collapses at 900, not 720. Measured: at an iPad's 768px the
+     logo, five nav links, the sign-in and the CTA need 789px and pushed the
+     page into a sideways scroll — a tablet is not a wide phone, and the
+     breakpoint has to follow the content's real width rather than a round
+     number borrowed from a phone. */
+  @media (max-width: 900px) {
     section { padding: 52px 0; }
     .hero { padding: 46px 0 34px; }
     .closer { padding: 38px 24px; }
@@ -392,6 +416,8 @@
     * { transition: none !important; animation: none !important; }
   }
 </style>
+</head>
+<body>
 
 <header class="top">
   <div class="wrap top-in">
@@ -899,8 +925,13 @@
       if (event.key === "Escape") setOpen(false);
     });
 
-    window.matchMedia("(min-width: 721px)").addEventListener("change", function (e) {
+    // Must track the CSS breakpoint above, or the panel stays open and
+    // orphaned when a rotating tablet crosses back into the desktop header.
+    window.matchMedia("(min-width: 901px)").addEventListener("change", function (e) {
       if (e.matches) setOpen(false);
     });
   })();
 </script>
+
+</body>
+</html>
