@@ -111,6 +111,13 @@
   }
   .signin:hover { color: var(--navy); }
 
+  /* The in-menu twin of .signin, revealed by the mobile breakpoint below.
+     It must be declared HERE, before that media query: it carries the same
+     specificity, so sitting after the query it would win unconditionally and
+     hide itself on exactly the widths that need it — leaving a returning
+     customer on a phone with no way into their dashboard at all. */
+  .top nav .signin-mobile { display: none; }
+
   /* --- buttons ----------------------------------------------------------- */
 
   .btn {
@@ -321,8 +328,6 @@
     .top .right .signin { display: none; }
     .top nav .signin-mobile { display: block; }
   }
-
-  .top nav .signin-mobile { display: none; }
 
   @media (prefers-reduced-motion: reduce) {
     .menu-toggle .bar,
