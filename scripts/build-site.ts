@@ -29,7 +29,7 @@ fs.mkdirSync(OUT, { recursive: true });
 // ships a site that is unstyled, inert or silent while the build reports
 // success. This filter has quietly broken the site twice; add to it whenever
 // a page starts referencing a new kind of file.
-const ASSET = /\.(css|js|mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
+const ASSET = /\.(css|js|json|mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
 
 /**
  * Every asset under `public/`, as a path relative to it.
@@ -47,8 +47,6 @@ function assetsUnder(dir: string, prefix = ""): string[] {
 }
 
 const pages = fs.readdirSync(SOURCE).filter((f) => f.endsWith(".html"));
-/** Logos, icons, photography, recordings — anything the pages reference. */
-const assets = assetsUnder(".");
 
 /**
  * Clip filenames for a scene's lines, in order.
@@ -76,6 +74,35 @@ function withAudio(scene: { turns: [string, string][] }) {
   return audio.every((a) => a) ? audio : undefined;
 }
 
+const LANDING_SCENES = VERTICALS.map((v) => ({
+  ...v.scenes[0],
+  label: v.name,
+  audio: withAudio(v.scenes[0]),
+}));
+
+// The same scenes as a file the page can fetch.
+//
+// public/landing.html is a template with an empty scene block, filled in when
+// this script builds it into site/. Serving that template directly — which
+// the app does on its own hostname — left the call panel dead and the Listen
+// button wired to nothing. The page falls back to this file, so it works
+// compiled or not.
+fs.writeFileSync(
+  path.join(SOURCE, "call-scenes.json"),
+  JSON.stringify(LANDING_SCENES),
+  "utf8",
+);
+
+/**
+ * Logos, icons, photography, recordings — anything the pages reference.
+ *
+ * Listed *after* the scene file is written, not before: the scan is a
+ * snapshot, and taking it first left the file on disk but out of the build,
+ * which is the same silent-omission failure as the img/ folder and the
+ * stylesheet before it.
+ */
+const assets = assetsUnder(".");
+
 if (pages.length === 0) {
   console.error(`\n  No pages found in ${SOURCE}/\n`);
   process.exit(1);
@@ -97,9 +124,7 @@ for (const page of pages) {
   // the home page after being fixed everywhere else.
   html = html.replace(
     '<script type="application/json" id="call-scenes"></script>',
-    `<script type="application/json" id="call-scenes">${JSON.stringify(
-      VERTICALS.map((v) => ({ ...v.scenes[0], label: v.name, audio: withAudio(v.scenes[0]) })),
-    )}</script>`,
+    `<script type="application/json" id="call-scenes">${JSON.stringify(LANDING_SCENES)}</script>`,
   );
 
   fs.writeFileSync(path.join(OUT, target), html, "utf8");

@@ -22,9 +22,29 @@
   try {
     scenes = JSON.parse(data.textContent);
   } catch (e) {
-    return; // The static markup below it still reads fine.
+    scenes = null;
   }
-  if (!scenes || !scenes.length) return;
+
+  // The source page in public/ carries an empty block — the scenes are
+  // injected when the static site is built. Serving that template directly
+  // (which the app does, on its own hostname) left the panel dead: no tabs,
+  // no transcript, and a Listen button wired to nothing. Falling back to the
+  // shared file means the page works in either form.
+  if (!scenes || !scenes.length) {
+    fetch("/call-scenes.json")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (loaded) {
+        if (loaded && loaded.length) start(loaded);
+      })
+      .catch(function () {
+        /* The static markup around it still reads fine without the call. */
+      });
+    return;
+  }
+
+  start(scenes);
+
+  function start(scenes) {
 
   var tabsEl = call.querySelector(".call-tabs");
   var body = call.querySelector(".call-body");
@@ -283,6 +303,8 @@
       { threshold: 0.4 },
     ).observe(call);
   }
+
+  } // start
 })();
 
 /* --- mobile menu ---------------------------------------------------------- */
