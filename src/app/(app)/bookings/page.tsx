@@ -80,7 +80,7 @@ export default async function BookingsPage({
                     <tr key={b.id} style={cancelled ? { opacity: 0.42 } : undefined}>
                       <td
                         className="mono"
-                        style={{ width: 88, color: "var(--accent)", whiteSpace: "nowrap" }}
+                        style={{ width: 88, color: "var(--gold-ink)", whiteSpace: "nowrap" }}
                       >
                         {minutesToSpoken(b.startMin)}
                       </td>

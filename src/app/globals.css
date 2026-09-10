@@ -9,24 +9,31 @@
    --------------------------------------------------------------------------- */
 
 :root {
-  --bg: #FBFAF8;
+  /* Belline. Navy carries every primary action so the dashboard and the
+     website read as one product. Gold is the brand's accent but only about
+     2:1 against white, so it is reserved for the logo and for small
+     highlights on dark; --gold-ink is the darkened version that survives on
+     a light surface. */
+  --bg: #F6F7F9;
   --panel: #FFFFFF;
-  --panel-2: #F5F3EF;
-  --border: #E6E1D8;
-  --border-soft: #EFEBE4;
-  --text: #211E1A;
-  --text-2: #4A443D;
-  --muted: #7C756C;
-  --accent: #8A5C18;
-  --accent-soft: #F4EADA;
-  --accent-line: #DDC69C;
-  --ok: #2F6B4A;
+  --panel-2: #F1F3F6;
+  --border: #E1E6EB;
+  --border-soft: #EDF0F3;
+  --text: #0F2131;
+  --text-2: #3A4753;
+  --muted: #606972;
+  --accent: #0F2131;
+  --accent-soft: #E8ECF0;
+  --accent-line: #C3CDD6;
+  --gold: #CDAA70;
+  --gold-ink: #986F43;
+  --ok: #1E7A5A;
   --ok-soft: #E4EFE8;
   --warn: #9A5B1E;
   --warn-soft: #F7EBDC;
   --bad: #A5372F;
   --bad-soft: #F7E5E3;
-  --lift: 0 1px 2px rgba(33, 30, 26, 0.05);
+  --lift: 0 1px 2px rgba(15, 33, 49, 0.05);
 
   color-scheme: light;
 }
@@ -152,8 +159,8 @@ details > summary::marker {
 }
 
 .btn-accent:hover:not(:disabled) {
-  background: #744C12;
-  border-color: #744C12;
+  background: #223646;
+  border-color: #223646;
   color: #fff;
 }
 

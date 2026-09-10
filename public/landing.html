@@ -101,7 +101,15 @@
   .top nav { display: flex; gap: 24px; margin-left: 10px; }
   .top nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; }
   .top nav a:hover { color: var(--text); }
-  .top .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .top .right { margin-left: auto; display: flex; gap: 14px; align-items: center; }
+
+  /* Existing customers need a way back to their own dashboard, and it belongs
+     next to the CTA rather than buried in the footer. */
+  .signin {
+    color: var(--text-2); text-decoration: none;
+    font-size: 0.9rem; font-weight: 600; white-space: nowrap;
+  }
+  .signin:hover { color: var(--navy); }
 
   /* --- buttons ----------------------------------------------------------- */
 
@@ -307,9 +315,14 @@
     .top nav a:last-child { border-bottom: none; }
 
     /* The demo CTA stays on the bar rather than hiding inside the menu -
-       it is the one thing on this page worth a tap. */
+       it is the one thing on this page worth a tap. Sign in moves into the
+       menu, where a returning customer will look for it anyway. */
     .top .right .btn { padding: 9px 13px; font-size: 0.83rem; }
+    .top .right .signin { display: none; }
+    .top nav .signin-mobile { display: block; }
   }
+
+  .top nav .signin-mobile { display: none; }
 
   @media (prefers-reduced-motion: reduce) {
     .menu-toggle .bar,
@@ -331,8 +344,10 @@
       <a href="#integrations">Integrations</a>
       <a href="#try">Try it</a>
       <a href="#faq">FAQ</a>
+      <a class="signin-mobile" href="https://app.belline.ai">Sign in</a>
     </nav>
     <div class="right">
+      <a class="signin" href="https://app.belline.ai">Sign in</a>
       <a class="btn small" href="#demo">Book a demo</a>
       <button class="menu-toggle" type="button" aria-expanded="false"
               aria-controls="site-nav" aria-label="Open menu">

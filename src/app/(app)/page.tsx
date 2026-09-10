@@ -142,7 +142,7 @@ export default async function OverviewPage({
                   <tr key={b.id}>
                     <td
                       className="mono"
-                      style={{ width: 84, color: "var(--accent)", whiteSpace: "nowrap" }}
+                      style={{ width: 84, color: "var(--gold-ink)", whiteSpace: "nowrap" }}
                     >
                       {minutesToSpoken(b.startMin)}
                     </td>
