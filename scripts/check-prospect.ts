@@ -9,6 +9,7 @@
  */
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { assertPublicUrl, slugify, buildProspectLocation, type Extracted } from "../src/lib/prospect";
 
 let passed = 0;
@@ -107,6 +108,26 @@ await test("a restaurant gets tables, a clinic gets a diary", () => {
   assert.ok(clinic.salon && !clinic.restaurant);
   const rest = buildProspectLocation({ ...found, vertical: "restaurant" }, "https://x.example", "b");
   assert.ok(rest.restaurant && !rest.salon);
+});
+
+console.log("\nFile hygiene\n");
+
+// A byte-order mark in package.json broke every production build while the
+// tests, the typechecker and the static site build all stayed green — webpack
+// is the only thing in this stack that rejects one, and it does so with an
+// error naming neither the file nor the BOM. PowerShell's
+// `Set-Content -Encoding utf8` writes one, so this will happen again.
+await test("no byte-order mark in package.json", () => {
+  const bytes = fs.readFileSync("package.json");
+  assert.notDeepEqual(
+    [bytes[0], bytes[1], bytes[2]],
+    [0xef, 0xbb, 0xbf],
+    "package.json starts with a UTF-8 BOM, which breaks `next build`",
+  );
+});
+
+await test("package.json still parses", () => {
+  JSON.parse(fs.readFileSync("package.json", "utf8"));
 });
 
 console.log(

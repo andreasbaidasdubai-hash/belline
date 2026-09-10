@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { listBookings, listCalls } from "@/lib/store";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { callDurationSeconds } from "@/lib/calls";

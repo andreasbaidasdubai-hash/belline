@@ -1,4 +1,4 @@
-﻿import { requireUser, resolveLocation } from "@/lib/auth-server";
+import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import Console from "./Console";

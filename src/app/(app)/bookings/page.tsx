@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { listBookings } from "@/lib/store";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { minutesToSpoken, dateToSpoken, todayIn } from "@/lib/time";

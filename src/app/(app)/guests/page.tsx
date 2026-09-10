@@ -1,4 +1,4 @@
-﻿import { listGuests } from "@/lib/guests";
+import { listGuests } from "@/lib/guests";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { dateToSpoken, minutesToSpoken } from "@/lib/time";
 import { seedIfEmpty } from "@/lib/seed";

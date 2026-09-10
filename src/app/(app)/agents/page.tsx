@@ -1,4 +1,4 @@
-﻿import { notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { canEditAgent } from "@/lib/auth";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { staticPrompt } from "@/lib/agent/prompt";
