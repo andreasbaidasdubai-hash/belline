@@ -54,6 +54,26 @@ export interface Location {
   salon?: SalonConfig;
   /** Set when this venue is a public showcase rather than a real business. */
   demo?: DemoConfig;
+  /** Set when this venue was read off a prospect's website for a sales demo. */
+  prospect?: ProspectConfig;
+}
+
+/**
+ * A demo built from a prospect's public website.
+ *
+ * Everything in a venue carrying this was read off a web page by a model. It
+ * is unverified by definition, it impersonates a real business by design, and
+ * so it expires — a personalised demo that outlives the conversation it was
+ * built for is just a page on the internet pretending to be somebody.
+ */
+export interface ProspectConfig {
+  /** The public URL segment: /demo/<slug>. */
+  slug: string;
+  /** The website it was read from, shown on the demo so the source is plain. */
+  sourceUrl: string;
+  createdAt: string;
+  /** After this, the page is gone. Not hidden — gone. */
+  expiresAt: string;
 }
 
 /**

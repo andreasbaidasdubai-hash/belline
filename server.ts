@@ -14,6 +14,7 @@ import {
 import { reconcileStaleCalls, startCall } from "./src/lib/calls";
 import type { User } from "./src/lib/types";
 import { greetingFor } from "./src/lib/agent/runtime";
+import { checkDemoGate } from "./src/lib/demo";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { VoiceSession } from "./src/lib/voice/session";
 import { BrowserTransport, TwilioTransport } from "./src/lib/voice/transports";
@@ -69,6 +70,30 @@ server.on("upgrade", (req, socket, head) => {
     return;
   }
 
+  // A prospect's personalised demo page has no session — the visitor has
+  // never signed in and never will. The signed token issued when that page
+  // rendered is the entitlement, and it names the venue, so the browser never
+  // gets to choose which business it would like to spend a call on.
+  if (pathname === "/ws/demo") {
+    const locationId = verifyStreamToken(String(query.token ?? ""));
+    const location = locationId ? getLocation(locationId) : undefined;
+    if (!location?.prospect || !location.demo?.enabled) {
+      socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    const gate = checkDemoGate(location);
+    if (!gate.allowed) {
+      socket.write("HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    browserWss.handleUpgrade(req, socket, head, (ws) => {
+      handleBrowser(ws, location.id, "", null);
+    });
+    return;
+  }
+
   if (pathname === "/ws/twilio") {
     twilioWss.handleUpgrade(req, socket, head, (ws) => {
       handleTwilio(ws);
@@ -88,7 +113,8 @@ function handleBrowser(
   ws: WebSocket,
   locationId: string,
   from: string,
-  user: User,
+  /** Null on a public prospect demo, where the signed token stood in for one. */
+  user: User | null,
 ): void {
   const location = getLocation(locationId) ?? listLocations()[0];
   if (!location) {
@@ -97,8 +123,10 @@ function handleBrowser(
     return;
   }
 
-  // Signed in is not the same as entitled to this venue.
-  if (!canSeeLocation(user, location.id)) {
+  // Signed in is not the same as entitled to this venue. A null user only
+  // arrives from /ws/demo, which has already verified a signed token naming
+  // this exact venue — so there is nothing further to check here.
+  if (user && !canSeeLocation(user, location.id)) {
     ws.send(JSON.stringify({ type: "error", message: "Not your venue." }));
     ws.close();
     return;

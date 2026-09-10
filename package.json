@@ -16,7 +16,8 @@
                     "typecheck":  "tsc --noEmit",
                     "serve:site":  "node --import tsx scripts/serve-site.ts",
                     "audit":  "playwright test",
-                    "audit:ui":  "playwright test --ui"
+                    "audit:ui":  "playwright test --ui",
+                    "check:prospect":  "node --import tsx scripts/check-prospect.ts"
                 },
     "dependencies":  {
                          "@anthropic-ai/sdk":  "^0.124.0",

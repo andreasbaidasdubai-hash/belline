@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ToolTrace } from "@/lib/types";
@@ -59,9 +59,19 @@ function toPcm16(samples: Float32Array, fromRate: number): Int16Array {
 export default function Console({
   locationId,
   locationName,
+  demoToken,
+  compact = false,
 }: {
   locationId: string;
   locationName: string;
+  /**
+   * Signed entitlement for a public demo page. When present the socket goes
+   * to /ws/demo and carries no session — the token is what says which venue
+   * this call belongs to.
+   */
+  demoToken?: string;
+  /** Drop the operator-facing panes: a prospect wants the conversation. */
+  compact?: boolean;
 }) {
   const [connected, setConnected] = useState(false);
   const [listening, setListening] = useState(false);
@@ -197,10 +207,15 @@ export default function Console({
     void primeAudio();
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    // A signed token means this is a public demo page, where there is no
+    // session to authenticate with — the token is the entitlement, and it
+    // names the venue, so no locationId is sent or trusted from the client.
     const ws = new WebSocket(
-      `${proto}://${window.location.host}/ws/voice?locationId=${encodeURIComponent(
-        locationId,
-      )}&from=${encodeURIComponent(from.trim())}`,
+      demoToken
+        ? `${proto}://${window.location.host}/ws/demo?token=${encodeURIComponent(demoToken)}`
+        : `${proto}://${window.location.host}/ws/voice?locationId=${encodeURIComponent(
+            locationId,
+          )}&from=${encodeURIComponent(from.trim())}`,
     );
     ws.binaryType = "arraybuffer";
     socketRef.current = ws;
@@ -271,7 +286,7 @@ export default function Console({
       stopListening();
     };
     ws.onerror = () => setError("Connection failed.");
-  }, [locationId, from, enqueueAudio, stopAudio, primeAudio]);
+  }, [locationId, from, demoToken, enqueueAudio, stopAudio, primeAudio]);
 
   const hangup = useCallback(() => {
     stopListening();
@@ -347,7 +362,7 @@ export default function Console({
   // --- render --------------------------------------------------------------
 
   return (
-    <div className="split split-wide">
+    <div className={compact ? undefined : "split split-wide"}>
       <div className="panel console-pane" style={{ display: "flex", flexDirection: "column" }}>
         <div
           style={{
@@ -484,7 +499,7 @@ export default function Console({
         </div>
       </div>
 
-      <div className="panel console-pane" style={{ display: "flex", flexDirection: "column" }}>
+      <div className="panel console-pane" style={{ display: compact ? "none" : "flex", flexDirection: "column" }}>
         <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", fontWeight: 600, fontSize: 13 }}>
           Tool calls
           <span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>

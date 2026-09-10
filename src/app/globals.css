@@ -368,6 +368,141 @@ tbody tr:hover {
   height: 72vh;
 }
 
+/* --- prospect demo --------------------------------------------------------
+   A public page carrying somebody else's trading name. It borrows none of the
+   dashboard chrome: the visitor has never signed in, is not a user, and the
+   page has exactly two jobs — let them hear it, and be unmistakably honest
+   about what it is. */
+
+.prospect {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 28px 22px 64px;
+}
+
+.prospect-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+.prospect-top img {
+  height: 42px;
+  width: auto;
+}
+
+.prospect-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold-ink);
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.prospect-eyebrow {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.prospect h1 {
+  font-size: clamp(1.9rem, 1.4rem + 2vw, 2.6rem);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.prospect-lead {
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin: 16px 0 0;
+  max-width: 58ch;
+}
+
+/* Stated plainly rather than as fine print. Someone whose name is on this
+   page is entitled to know what it is before they hear it speak. */
+.prospect-note {
+  margin: 26px 0 30px;
+  padding: 15px 17px;
+  border-radius: 11px;
+  border: 1px solid var(--warn-soft);
+  background: var(--warn-soft);
+  color: #6B451A;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.prospect-note a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.prospect-call {
+  margin-bottom: 34px;
+}
+
+.prospect-try,
+.prospect-cta {
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+  margin-top: 30px;
+}
+
+.prospect h2 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 12px;
+}
+
+.prospect-try ul {
+  margin: 0;
+  padding-left: 19px;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.prospect-cta p {
+  color: var(--text-2);
+  font-size: 14.5px;
+  line-height: 1.6;
+  max-width: 56ch;
+  margin: 0 0 18px;
+}
+
+.prospect-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 11px 22px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.prospect-btn:hover {
+  background: #223646;
+}
+
+.prospect-foot {
+  margin-top: 46px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 /* --- phones -------------------------------------------------------------- */
 
 @media (max-width: 860px) {
