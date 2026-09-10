@@ -54,7 +54,17 @@ export async function POST(request: Request) {
   const params = Object.fromEntries(new URLSearchParams(raw)) as Record<string, string>;
   const url = new URL(request.url);
 
-  if (!signatureValid(url.toString(), params, request.headers.get("x-twilio-signature"))) {
+  // Railway (like every managed host) terminates TLS at the edge and forwards
+  // plain HTTP, so request.url says http:// while Twilio signed the https://
+  // URL the caller actually hit. Rebuild the public URL from the forwarded
+  // headers or the signature never matches.
+  const signedUrl = new URL(url.toString());
+  signedUrl.protocol = (request.headers.get("x-forwarded-proto") ?? "https").split(",")[0].trim() + ":";
+  signedUrl.host = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? url.host)
+    .split(",")[0]
+    .trim();
+
+  if (!signatureValid(signedUrl.toString(), params, request.headers.get("x-twilio-signature"))) {
     return new Response("Invalid signature", { status: 403 });
   }
 

@@ -26,8 +26,10 @@ COPY --from=build /app/public ./public
 COPY package.json next.config.mjs tsconfig.json server.ts ./
 COPY src ./src
 
+# The directory is created here, but the persistent disk is attached by the
+# host. Railway rejects a Dockerfile VOLUME outright, and on Fly or Render it
+# would be shadowed by the real mount anyway.
 RUN mkdir -p /data
-VOLUME ["/data"]
 
 EXPOSE 3000
 CMD ["node", "--import", "tsx", "server.ts", "--prod"]
