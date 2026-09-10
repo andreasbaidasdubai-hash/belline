@@ -1,0 +1,492 @@
+/* Belline site stylesheet.
+   Shared by the landing page and every vertical page, so a change to the
+   type scale or the call panel lands everywhere at once rather than in one
+   of five copies. Generated pages link this; nothing inlines it. */
+
+/* Committed to a single light world — this is a B2B page read in daylight
+     by an operator deciding whether to trust software with their phone line.
+     Navy carries authority; the sage green is reserved for outcomes. */
+  :root {
+    --page: #FFFFFF;
+    --band: #F5F7F9;
+    --card: #FFFFFF;
+    --line: #E1E6EB;
+    --line-soft: #EDF0F3;
+    --text: #0F1A24;
+    --text-2: #3A4753;
+    --muted: #667380;
+    /* Belline brand. Navy carries text and buttons; gold is reserved for the
+       mark and for accents on dark grounds — #CDAA70 on white is only about
+       2:1 and would fail as text. --gold-ink is the darkened gold that does
+       pass on a light surface. */
+    --navy: #0F2131;
+    --navy-dark: #223646;
+    --navy-soft: #E8ECF0;
+    --gold: #CDAA70;
+    --gold-ink: #986F43;
+    /* The brand's Gold Dark measures 4.48:1 on white — it clears AA for large
+       text and misses it for small by a hair. Anything under 18.66px bold uses
+       this instead. Worth knowing about the palette rather than discovering it
+       one caption at a time. */
+    --gold-ink-strong: #8A6339;
+    --sage: #1E7A5A;
+    --shadow: 0 1px 2px rgba(15, 26, 36, 0.06);
+    --shadow-lg: 0 4px 20px rgba(15, 26, 36, 0.07);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text);
+    font-family: Manrope, ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .narrow { max-width: 720px; }
+
+  h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.025em; }
+  h1 { font-size: clamp(2.1rem, 1.6rem + 2.2vw, 3.35rem); font-weight: 800; line-height: 1.08; }
+  h2 { font-size: clamp(1.6rem, 1.35rem + 1.1vw, 2.3rem); font-weight: 700; line-height: 1.18; }
+  h3 { font-size: 1.06rem; font-weight: 700; letter-spacing: -0.012em; }
+
+  p { margin: 0 0 14px; max-width: 64ch; color: var(--text-2); }
+  p.lead { font-size: 1.14rem; line-height: 1.55; color: var(--text-2); }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--navy);
+    margin-bottom: 14px;
+  }
+
+  section { padding: 74px 0; }
+  section.band { background: var(--band); border-block: 1px solid var(--line-soft); }
+
+  /* --- header ------------------------------------------------------------ */
+
+  header.top {
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(10px);
+    z-index: 20;
+  }
+
+  /* padding-block, not the `padding` shorthand: this element also carries
+     .wrap, and a shorthand here would wipe .wrap's horizontal padding and
+     pin the logo and the button to the screen edges. */
+  .top-in { display: flex; align-items: center; gap: 30px; padding-block: 15px; }
+
+  /* The kit specifies 150-190px of lockup width in a header; at this
+     aspect ratio that is roughly 52px of height. */
+  .logo { display: flex; align-items: center; flex-shrink: 0; }
+  .logo img { display: block; height: 52px; width: auto; }
+  footer .logo img { height: 46px; }
+
+  /* --- menu button (mobile only) ------------------------------------------ */
+
+  .menu-toggle { display: none; }
+
+  .top nav { display: flex; gap: 24px; margin-left: 10px; }
+  .top nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; }
+  .top nav a:hover { color: var(--text); }
+  .top .right { margin-left: auto; display: flex; gap: 14px; align-items: center; }
+
+  /* Existing customers need a way back to their own dashboard, and it belongs
+     next to the CTA rather than buried in the footer. */
+  .signin {
+    color: var(--text-2); text-decoration: none;
+    font-size: 0.9rem; font-weight: 600; white-space: nowrap;
+  }
+  .signin:hover { color: var(--navy); }
+
+  /* The in-menu twin of .signin, revealed by the mobile breakpoint below.
+     It must be declared HERE, before that media query: it carries the same
+     specificity, so sitting after the query it would win unconditionally and
+     hide itself on exactly the widths that need it — leaving a returning
+     customer on a phone with no way into their dashboard at all. */
+  .top nav .signin-mobile { display: none; }
+
+  /* --- buttons ----------------------------------------------------------- */
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 11px 20px; border-radius: 8px;
+    font-size: 0.92rem; font-weight: 600; text-decoration: none;
+    border: 1px solid var(--navy); background: var(--navy); color: #fff;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--navy-dark); border-color: var(--navy-dark); }
+  .btn.ghost { background: transparent; color: var(--text); border-color: var(--line); }
+  .btn.ghost:hover { border-color: var(--navy); color: var(--navy); background: transparent; }
+  .btn.small { padding: 8px 15px; font-size: 0.86rem; }
+
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--navy); outline-offset: 3px; border-radius: 4px;
+  }
+
+  /* --- hero -------------------------------------------------------------- */
+
+  .hero { padding: 66px 0 54px; }
+  /* Copy left, the scene right. The picture does the explaining that another
+     paragraph of adjectives cannot. */
+  .hero-in { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.04fr); gap: 46px; align-items: center; }
+  .hero h1 { max-width: 15ch; }
+  .hero .lead { margin-top: 20px; max-width: 52ch; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .reassure { margin-top: 18px; font-size: 0.86rem; color: var(--muted); }
+
+  /* --- the call panel ------------------------------------------------------
+     The hero's right-hand side is a call in progress rather than a picture of
+     one. Voice is the product, and voice is the one thing a static page
+     cannot show — so the page plays it instead of describing it. */
+
+  .call {
+    background: var(--navy);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px -30px rgba(15, 33, 49, 0.55);
+    color: #fff;
+  }
+
+  .call-tabs { display: flex; gap: 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .call-tab {
+    flex: 1; appearance: none; background: none; border: 0; cursor: pointer;
+    padding: 13px 4px; font: inherit; font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.02em; color: #8FA3B6;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .call-tab:hover { color: #D7E1EA; }
+  .call-tab[aria-selected="true"] { color: #fff; border-bottom-color: var(--gold); }
+  .call-tab:focus-visible { outline: 2px solid var(--gold); outline-offset: -3px; border-radius: 3px; }
+
+  .call-head {
+    display: flex; align-items: center; gap: 11px;
+    padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .call-status {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.11em;
+    text-transform: uppercase; color: var(--gold);
+  }
+  .call-line { margin-left: auto; font-size: 0.76rem; color: #7D93A8; font-variant-numeric: tabular-nums; }
+
+  /* Five bars, the same mark as the logo. They only move while the agent is
+     actually speaking, so the animation reports state instead of decorating. */
+  .wave { display: flex; align-items: center; gap: 3px; height: 18px; }
+  .wave i {
+    display: block; width: 3px; border-radius: 2px; background: var(--gold);
+    height: 5px; opacity: 0.55;
+  }
+  .call[data-speaking="true"] .wave i { animation: bar 900ms ease-in-out infinite; opacity: 1; }
+  .call[data-speaking="true"] .wave i:nth-child(2) { animation-delay: 120ms; }
+  .call[data-speaking="true"] .wave i:nth-child(3) { animation-delay: 240ms; }
+  .call[data-speaking="true"] .wave i:nth-child(4) { animation-delay: 120ms; }
+  .call[data-speaking="true"] .wave i:nth-child(5) { animation-delay: 0ms; }
+  @keyframes bar { 0%, 100% { height: 5px; } 50% { height: 17px; } }
+
+  .call-body { padding: 18px 20px; min-height: 268px; display: flex; flex-direction: column; gap: 12px; }
+
+  .turn { display: flex; flex-direction: column; gap: 3px; max-width: 88%; }
+  .turn .who {
+    font-size: 0.66rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: #7D93A8;
+  }
+  .turn .said { font-size: 0.94rem; line-height: 1.5; }
+  .turn.caller { align-self: flex-start; }
+  .turn.caller .said { color: #C8D6E2; }
+  .turn.agent { align-self: flex-end; text-align: right; }
+  .turn.agent .said { color: #fff; font-weight: 500; }
+
+  /* The outcome, not another chat bubble: this is the line the operator is
+     actually buying, so it gets the gold and a rule of its own. */
+  .call-out {
+    margin-top: auto; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .call-out .tag {
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--navy); background: var(--gold); padding: 3px 8px; border-radius: 4px;
+  }
+  .call-out .tag.human { background: #E6EDF3; color: var(--navy); }
+  .call-out .what { font-size: 0.9rem; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .call[data-speaking="true"] .wave i { animation: none; height: 11px; }
+  }
+
+  /* --- the spine ------------------------------------------------------------
+     One call, top to bottom. The timestamps are not decoration: they run
+     19:47 to 19:49 in order, so the page's structure states the claim it is
+     making — that all of this happens inside two minutes, unattended. */
+
+  .moment { display: flex; align-items: baseline; gap: 14px; margin-bottom: 16px; }
+  .moment .at {
+    font-size: 0.74rem; font-weight: 700; color: var(--gold-ink-strong);
+    font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+    flex-shrink: 0; padding-top: 1px;
+  }
+  .moment .at::after {
+    content: ""; display: inline-block; width: 22px; height: 1px;
+    background: var(--gold); vertical-align: middle; margin-left: 10px; opacity: 0.6;
+  }
+  .moment .eyebrow { margin-bottom: 0; }
+
+  /* --- photography ------------------------------------------------------- */
+
+  .hero-art, .shot {
+    border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--line);
+    box-shadow: 0 18px 40px -22px rgba(15, 26, 36, 0.42);
+  }
+  .hero-art img, .shot img { display: block; width: 100%; height: auto; }
+
+  /* --- trades ------------------------------------------------------------ */
+
+  .trades { display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: 26px; margin-top: 38px; }
+  .trade h3 { margin: 18px 0 8px; }
+  .trade p { font-size: 0.93rem; margin: 0; }
+
+  /* --- metric strip ------------------------------------------------------ */
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .metric { background: var(--card); padding: 22px 22px 20px; }
+  .metric .n {
+    font-size: 1.85rem; font-weight: 800; letter-spacing: -0.035em;
+    color: var(--navy); line-height: 1.1;
+  }
+  .metric .k { font-size: 0.88rem; color: var(--muted); margin-top: 6px; }
+
+  /* --- steps ------------------------------------------------------------- */
+
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 20px; margin-top: 38px; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); }
+  .step .num {
+    width: 27px; height: 27px; border-radius: 7px; background: var(--navy-soft);
+    color: var(--navy); font-size: 0.8rem; font-weight: 700;
+    display: grid; place-items: center; margin-bottom: 14px;
+  }
+  .step h3 { margin-bottom: 7px; }
+  .step p { font-size: 0.93rem; margin: 0; }
+
+  /* The number is the call to action on this card, so it carries the weight
+     a button would elsewhere. */
+  .step .dial {
+    font-size: 1.22rem; font-weight: 700; letter-spacing: -0.02em;
+    color: var(--navy); margin: 4px 0 10px; font-variant-numeric: tabular-nums;
+  }
+
+  /* --- handled ----------------------------------------------------------- */
+
+  .handled { margin-top: 34px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card); box-shadow: var(--shadow); }
+  .handled-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 22px;
+    padding: 16px 22px; border-bottom: 1px solid var(--line-soft); align-items: center;
+  }
+  .handled-row:last-child { border-bottom: none; }
+  .handled-row .q { font-size: 0.97rem; color: var(--text); font-weight: 500; }
+  .handled-row .a { font-size: 0.84rem; color: var(--sage); font-weight: 600; white-space: nowrap; }
+  .handled-row .a.human { color: var(--muted); }
+
+  /* --- two columns ------------------------------------------------------- */
+
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 34px; }
+  .col-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 26px; box-shadow: var(--shadow); }
+  .col-card h3 { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); }
+  .col-card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 13px; }
+  .col-card li { display: grid; grid-template-columns: 16px 1fr; gap: 11px; font-size: 0.93rem; line-height: 1.5; color: var(--text-2); }
+  .tick { color: var(--sage); font-weight: 700; }
+
+  /* --- integrations ------------------------------------------------------ */
+
+  .integrations { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--card); border-radius: 999px;
+    padding: 8px 16px; font-size: 0.88rem; font-weight: 600; color: var(--text-2);
+    display: inline-flex; align-items: center; gap: 9px;
+  }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+  .chip.live { border-color: var(--sage); color: var(--sage); }
+  .chip.live .dot { background: var(--sage); }
+
+  /* --- faq --------------------------------------------------------------- */
+
+  .faq { margin-top: 34px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card); box-shadow: var(--shadow); }
+  .faq details { border-bottom: 1px solid var(--line-soft); }
+  .faq details:last-child { border-bottom: none; }
+  .faq summary {
+    cursor: pointer; padding: 18px 22px; font-weight: 600; font-size: 0.98rem;
+    list-style: none; display: flex; align-items: center; gap: 14px;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after {
+    content: "+"; margin-left: auto; color: var(--navy); font-size: 1.2rem;
+    font-weight: 500; line-height: 1;
+  }
+  .faq details[open] summary::after { content: "–"; }
+  .faq details[open] summary { padding-bottom: 8px; }
+  .faq .answer { padding: 0 22px 20px; }
+  .faq .answer p { font-size: 0.93rem; margin: 0; max-width: 68ch; }
+
+  /* --- closing ----------------------------------------------------------- */
+
+  .closer {
+    background: var(--navy); border-radius: 16px; padding: 52px 44px;
+    color: #fff; text-align: center;
+  }
+  .closer h2 { color: #fff; }
+  .closer p { color: #C3D2E0; margin: 16px auto 0; max-width: 52ch; }
+  .closer .btn { background: #fff; color: var(--navy); border-color: #fff; margin-top: 26px; }
+  .closer .btn:hover { background: #E9EFF5; border-color: #E9EFF5; color: var(--navy-dark); }
+  .closer .eyebrow { color: var(--gold); }
+
+  /* The number IS the call to action here, so it is sized like one and is a
+     tel: link — on the device most people will read this on, the whole point
+     is that it dials. */
+  .dial-cta {
+    display: inline-flex; flex-direction: column; align-items: center; gap: 6px;
+    margin-top: 30px; padding: 18px 34px; border-radius: 13px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    transition: background 0.14s ease, border-color 0.14s ease;
+  }
+  .dial-cta:hover { background: rgba(255, 255, 255, 0.13); border-color: rgba(255, 255, 255, 0.4); }
+  .dial-label { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--gold); }
+  .dial-number {
+    font-size: clamp(1.6rem, 1.2rem + 1.7vw, 2.4rem); font-weight: 800;
+    letter-spacing: -0.03em; color: #fff; font-variant-numeric: tabular-nums;
+  }
+  .closer .dial-note { font-size: 0.82rem; color: #9DB2C6; margin-top: 22px; max-width: 56ch; }
+
+  /* --- closing split ----------------------------------------------------- */
+
+  .split-cta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 46px; align-items: center; }
+  .split-cta .btn { margin-top: 26px; }
+
+  /* --- footer ------------------------------------------------------------ */
+
+  footer { border-top: 1px solid var(--line); padding: 40px 0; margin-top: 74px; }
+  .foot-in { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  footer p { font-size: 0.85rem; color: var(--muted); margin: 0; }
+
+  /* The two-column blocks give up well before the phone breakpoint — a
+     tablet column narrow enough to hyphenate the headline is worse than
+     stacking, and the artwork wants width to be worth showing at all. */
+  @media (max-width: 940px) {
+    .hero-in, .split-cta { grid-template-columns: 1fr; gap: 34px; }
+    .hero h1, .hero .lead { max-width: none; }
+    .hero-art { order: -1; }
+  }
+
+  /* The header collapses at 900, not 720. Measured: at an iPad's 768px the
+     logo, five nav links, the sign-in and the CTA need 789px and pushed the
+     page into a sideways scroll — a tablet is not a wide phone, and the
+     breakpoint has to follow the content's real width rather than a round
+     number borrowed from a phone. */
+  @media (max-width: 900px) {
+    section { padding: 52px 0; }
+    .hero { padding: 46px 0 34px; }
+    .closer { padding: 38px 24px; }
+    .trades { gap: 30px; }
+    .dial-cta { padding: 16px 22px; width: 100%; }
+    .handled-row { grid-template-columns: 1fr; gap: 5px; }
+    .handled-row .a { text-align: left; }
+
+    /* A real menu. The scrolling row this replaces hid half the links off
+       the right edge with nothing to indicate they were there. */
+    .top-in { gap: 10px; padding-block: 10px; }
+    .logo img { height: 40px; }
+
+    .menu-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--card);
+      cursor: pointer;
+      padding: 0;
+    }
+    .menu-toggle .bar,
+    .menu-toggle .bar::before,
+    .menu-toggle .bar::after {
+      display: block;
+      width: 18px;
+      height: 2px;
+      border-radius: 2px;
+      background: var(--navy);
+      transition: transform 0.18s ease, opacity 0.18s ease;
+    }
+    .menu-toggle .bar { position: relative; }
+    .menu-toggle .bar::before,
+    .menu-toggle .bar::after { content: ""; position: absolute; left: 0; }
+    .menu-toggle .bar::before { top: -6px; }
+    .menu-toggle .bar::after { top: 6px; }
+    .menu-toggle[aria-expanded="true"] .bar { background: transparent; }
+    .menu-toggle[aria-expanded="true"] .bar::before { top: 0; transform: rotate(45deg); }
+    .menu-toggle[aria-expanded="true"] .bar::after { top: 0; transform: rotate(-45deg); }
+
+    /* The panel drops out of the sticky header, which is its containing
+       block, so it always sits directly under the bar. */
+    .top nav {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      flex-direction: column;
+      gap: 0;
+      margin: 0;
+      padding: 4px 24px 14px;
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      box-shadow: 0 8px 20px rgba(15, 26, 36, 0.08);
+    }
+    .top nav[data-open="true"] { display: flex; }
+    .top nav a {
+      padding: 14px 2px;
+      font-size: 1rem;
+      color: var(--text);
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .top nav a:last-child { border-bottom: none; }
+
+    /* The demo CTA stays on the bar rather than hiding inside the menu -
+       it is the one thing on this page worth a tap. Sign in moves into the
+       menu, where a returning customer will look for it anyway. */
+    .top .right .btn { padding: 9px 13px; font-size: 0.83rem; }
+    .top .right .signin { display: none; }
+    .top nav .signin-mobile { display: block; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .menu-toggle .bar,
+    .menu-toggle .bar::before,
+    .menu-toggle .bar::after { transition: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }

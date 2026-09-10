@@ -12,9 +12,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { VERTICALS, type Vertical } from "./site-content";
 
 const SOURCE = "public";
 const OUT = "site";
+const ORIGIN = "https://belline.ai";
 
 /** The landing page becomes the site root; everything else keeps its name. */
 const RENAME: Record<string, string> = { "landing.html": "index.html" };
@@ -22,7 +24,10 @@ const RENAME: Record<string, string> = { "landing.html": "index.html" };
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 
-const ASSET = /\.(svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
+// css and js belong here as much as the images do: the pages link
+// /site.css and /site.js, and leaving them out ships a site with no styles
+// and no behaviour while the build reports success.
+const ASSET = /\.(css|js|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
 
 /**
  * Every asset under `public/`, as a path relative to it.
@@ -59,6 +64,16 @@ for (const page of pages) {
     html = html.split(`"${from}"`).join(`"${to === "index.html" ? "./" : to}"`);
   }
 
+  // The landing page shows one call per trade, taken from the same data the
+  // vertical pages use — so a line the agent no longer says cannot survive on
+  // the home page after being fixed everywhere else.
+  html = html.replace(
+    '<script type="application/json" id="call-scenes"></script>',
+    `<script type="application/json" id="call-scenes">${JSON.stringify(
+      VERTICALS.map((v) => ({ ...v.scenes[0], label: v.name })),
+    )}</script>`,
+  );
+
   fs.writeFileSync(path.join(OUT, target), html, "utf8");
   bytes += Buffer.byteLength(html);
   console.log(`  ${page.padEnd(16)} →  ${OUT}/${target}`);
@@ -74,7 +89,197 @@ for (const asset of assets) {
   console.log(`  ${asset.padEnd(22)} →  ${OUT}/${asset}`);
 }
 
+// --- vertical pages ---------------------------------------------------------
+
+/**
+ * Escape text that lands in HTML. Every string here is ours rather than a
+ * visitor's, but a page that only escapes when it remembers to is a page that
+ * eventually forgets.
+ */
+function esc(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
+  );
+}
+
+function navFor(active: string): string {
+  const links = VERTICALS.map(
+    (v) =>
+      `<a href="/${v.slug}"${v.slug === active ? ' aria-current="page"' : ""}>${esc(v.name)}</a>`,
+  ).join("\n      ");
+  return `${links}
+      <a href="/#how">How it works</a>
+      <a href="/#try">Ring it</a>
+      <a class="signin-mobile" href="https://app.belline.ai">Sign in</a>`;
+}
+
+function verticalPage(v: Vertical): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<meta name="theme-color" content="#0F2131">
+<title>${esc(v.title)}</title>
+<meta name="description" content="${esc(v.description)}">
+<link rel="canonical" href="${ORIGIN}/${v.slug}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Belline">
+<meta property="og:url" content="${ORIGIN}/${v.slug}">
+<meta property="og:title" content="${esc(v.title)}">
+<meta property="og:description" content="${esc(v.description)}">
+<meta property="og:image" content="${ORIGIN}/img/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A concierge bell on a reception counter, a call arriving on a phone beside it.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(v.title)}">
+<meta name="twitter:description" content="${esc(v.description)}">
+<meta name="twitter:image" content="${ORIGIN}/img/og.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-in">
+    <a class="logo" href="/"><img src="/logo.svg" alt="Belline"></a>
+    <nav id="site-nav">
+      ${navFor(v.slug)}
+    </nav>
+    <div class="right">
+      <a class="signin" href="https://app.belline.ai">Sign in</a>
+      <a class="btn small" href="/#demo">Book a demo</a>
+      <button class="menu-toggle" type="button" aria-expanded="false"
+              aria-controls="site-nav" aria-label="Open menu">
+        <span class="bar"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <div class="eyebrow">Belline for ${esc(v.name.toLowerCase())}</div>
+        <h1>${esc(v.headline)}</h1>
+        <p class="lead">${esc(v.lead)}</p>
+        <div class="cta-row">
+          <a class="btn" href="/#try">Hear it answer</a>
+          <a class="btn ghost" href="/#demo">Build my Belline</a>
+        </div>
+        <p class="reassure">
+          Keep your existing number. No porting, no new hardware, nothing for
+          your callers to learn.
+        </p>
+      </div>
+
+      <div class="call" id="call" data-speaking="false">
+        <div class="call-tabs" role="tablist" aria-label="Choose a call"></div>
+        <div class="call-head">
+          <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="call-status">Ringing</span>
+          <span class="call-line">${esc(v.scenes[0].when)}</span>
+        </div>
+        <div class="call-body" id="call-body" role="tabpanel" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="constraints">
+    <div class="wrap">
+      <div class="narrow">
+        <div class="moment"><span class="at">19:48</span><div class="eyebrow">What it checks</div></div>
+        <h2>Answering is the easy part. Knowing what is genuinely free is not.</h2>
+        <p style="margin-top:16px">
+          A voice agent that cannot see your book is an expensive answering
+          machine. Belline holds the constraints your team holds in their head,
+          which is why it can commit to a time without anyone checking it after.
+        </p>
+      </div>
+      <div class="trades" style="margin-top:34px">
+        ${v.constraints
+          .map(
+            (c) => `<article class="trade">
+          <h3>${esc(c.head)}</h3>
+          <p>${esc(c.body)}</p>
+        </article>`,
+          )
+          .join("\n        ")}
+      </div>
+    </div>
+  </section>
+
+  <section id="boundary">
+    <div class="wrap">
+      <div class="split-cta">
+        <div>
+          <div class="moment"><span class="at">19:48</span><div class="eyebrow">Where it stops</div></div>
+          <h2>The most important thing it does is know what it must not answer.</h2>
+          <p style="margin-top:16px">${esc(v.boundary)}</p>
+          <a class="btn" href="/#demo">Build my Belline</a>
+        </div>
+        <div class="shot">
+          <img src="${esc(v.image)}" width="880" height="495" loading="lazy" alt="${esc(v.imageAlt)}">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <div class="closer">
+        <div class="eyebrow">Hear it now</div>
+        <h2>Be the caller.</h2>
+        <p>
+          A live line, answered by the same agent your callers would reach.
+          Book something, change it, then try to catch it out.
+        </p>
+        <a class="dial-cta" href="tel:+15717785920">
+          <span class="dial-label">Call the demonstration line</span>
+          <span class="dial-number">+1 571 778&nbsp;5920</span>
+        </a>
+        <p class="dial-note">
+          Answered 24 hours a day. Nothing you book is real — the agent says so
+          itself. Calls last up to six minutes and the line is capped each day.
+          Your own call charges apply.
+        </p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <a class="logo" href="/"><img src="/logo.svg" alt="Belline"></a>
+    <p>AI reception for clinics, dental practices, salons and restaurants.</p>
+  </div>
+</footer>
+
+<script type="application/json" id="call-scenes">${JSON.stringify(v.scenes)}</script>
+<script src="/site.js"></script>
+</body>
+</html>
+`;
+}
+
+for (const v of VERTICALS) {
+  // A directory with an index, so the URL is /dental rather than /dental.html.
+  const dir = path.join(OUT, v.slug);
+  fs.mkdirSync(dir, { recursive: true });
+  const html = verticalPage(v);
+  fs.writeFileSync(path.join(dir, "index.html"), html, "utf8");
+  bytes += Buffer.byteLength(html);
+  console.log(`  ${v.slug.padEnd(22)} →  ${OUT}/${v.slug}/index.html`);
+}
+
 console.log(
-  `\n  ${pages.length} pages, ${assets.length} assets, ${(bytes / 1024).toFixed(0)} KB. No build step, no dependencies.\n` +
+  `\n  ${pages.length + VERTICALS.length} pages, ${assets.length} assets, ${(bytes / 1024).toFixed(0)} KB. No build step, no dependencies.\n` +
     `  Deploy: drag the ${OUT}/ folder onto Netlify Drop, or run 'npx vercel deploy --prod ${OUT}'.\n`,
 );

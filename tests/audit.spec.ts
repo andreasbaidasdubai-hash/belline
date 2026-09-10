@@ -17,6 +17,10 @@ import { BREAKPOINTS } from "../playwright.config";
 
 const PAGES = [
   { slug: "home", url: "/" },
+  { slug: "dental", url: "/dental/" },
+  { slug: "clinics", url: "/clinics/" },
+  { slug: "salons", url: "/salons/" },
+  { slug: "restaurants", url: "/restaurants/" },
   { slug: "plan", url: "/plan.html" },
   { slug: "market", url: "/market.html" },
   { slug: "golive", url: "/golive.html" },
