@@ -55,6 +55,8 @@ export class VoiceSession {
   private thinking = false;
   private abort: AbortController | null = null;
   private speakingSince = 0;
+  /** What has already been spoken this turn, to carry prosody across cuts. */
+  private spokenThisTurn = "";
   private closed = false;
   private timeout: NodeJS.Timeout | null = null;
 
@@ -141,6 +143,7 @@ export class VoiceSession {
     this.abort = null;
     this.speaking = false;
     this.thinking = false;
+    this.spokenThisTurn = "";
     this.transport.clearAudio();
     this.transport.sendEvent({ type: "interrupted" });
   }
@@ -152,6 +155,9 @@ export class VoiceSession {
     if (this.speaking || this.thinking) this.interrupt();
 
     const gen = ++this.generation;
+    // A new answer starts a new contour — the previous turn's words would
+    // condition this one toward a cadence that no longer fits.
+    this.spokenThisTurn = "";
     this.pushTranscript("caller", text);
     this.transport.sendEvent({ type: "transcript", role: "caller", text });
     this.thinking = true;
@@ -222,6 +228,7 @@ export class VoiceSession {
         modelId: this.location.agent.voiceModel,
         format: this.transport.output,
         signal: controller.signal,
+        previousText: this.spokenThisTurn || undefined,
       })) {
         if (gen !== this.generation) return;
         this.transport.sendAudio(chunk);
@@ -235,7 +242,10 @@ export class VoiceSession {
       }
     } finally {
       if (this.abort === controller) this.abort = null;
-      if (gen === this.generation) this.speaking = false;
+      if (gen === this.generation) {
+        this.speaking = false;
+        this.spokenThisTurn = `${this.spokenThisTurn} ${text}`.trim();
+      }
     }
   }
 
