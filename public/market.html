@@ -1,0 +1,609 @@
+<title>Belline Market Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --page: #FFFFFF;
+    --band: #F5F7F9;
+    --card: #FFFFFF;
+    --line: #E1E6EB;
+    --line-soft: #EDF0F3;
+    --text: #0F1A24;
+    --text-2: #3A4753;
+    --muted: #667380;
+    --navy: #12395C;
+    --navy-soft: #E9EFF5;
+
+    /* Chart series — validated for CVD separation and contrast against the
+       chart surface. Page chrome uses the navy above; marks never do. */
+    --series-focus: #2A6FBF;
+    --series-adjacent: #2E9E70;
+
+    --warn: #9A5B1E;
+    --warn-soft: #FBF0E4;
+    --bad: #A5372F;
+    --bad-soft: #FBEAE8;
+    --shadow: 0 1px 2px rgba(15, 26, 36, 0.06);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font-family: Manrope, ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px; line-height: 1.62; -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+  h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.025em; }
+  h1 { font-size: clamp(2rem, 1.5rem + 2.2vw, 3rem); font-weight: 800; line-height: 1.06; }
+  h2 { font-size: clamp(1.4rem, 1.2rem + 0.9vw, 1.85rem); font-weight: 700; line-height: 1.2; }
+  h3 { font-size: 1.02rem; font-weight: 700; }
+
+  p { margin: 0 0 15px; max-width: 68ch; color: var(--text-2); }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+
+  header.hero { padding: 62px 0 34px; border-bottom: 1px solid var(--line); }
+  header.hero p { font-size: 1.12rem; margin-top: 16px; }
+  .stamp {
+    display: inline-block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--navy); background: var(--navy-soft);
+    padding: 5px 11px; border-radius: 999px; margin-bottom: 18px;
+  }
+
+  section { padding: 52px 0; border-bottom: 1px solid var(--line-soft); }
+  section:last-of-type { border-bottom: none; }
+  .eyebrow {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
+    color: var(--navy); margin-bottom: 12px;
+  }
+
+  /* --- KPI tiles --------------------------------------------------------- */
+
+  .tiles {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 12px; overflow: hidden; margin: 28px 0 10px;
+  }
+  .tile { background: var(--card); padding: 20px; }
+  .tile .n { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.035em; color: var(--navy); line-height: 1.12; }
+  .tile .k { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
+
+  /* --- chart ------------------------------------------------------------- */
+
+  figure { margin: 30px 0 0; }
+  figcaption { font-size: 0.86rem; color: var(--muted); margin-top: 16px; max-width: 68ch; }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; font-size: 0.84rem; color: var(--text-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  .chart { display: grid; gap: 12px; }
+  .row { display: grid; grid-template-columns: 172px 1fr; gap: 14px; align-items: center; }
+  .row .name { font-size: 0.88rem; font-weight: 600; text-align: right; color: var(--text); }
+  .row .name small { display: block; font-weight: 400; color: var(--muted); font-size: 0.76rem; }
+  .track { position: relative; height: 26px; background: var(--band); border-radius: 5px; }
+  .bar {
+    position: absolute; top: 4px; bottom: 4px; border-radius: 4px;
+    display: flex; align-items: center;
+  }
+  .bar[data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute; bottom: calc(100% + 8px); left: 0;
+    background: var(--text); color: #fff; font-size: 0.74rem; font-weight: 500;
+    padding: 6px 9px; border-radius: 6px; white-space: nowrap; z-index: 5;
+    box-shadow: 0 3px 10px rgba(15,26,36,0.18);
+  }
+  .bar .val {
+    position: absolute; left: calc(100% + 9px); font-size: 0.79rem;
+    font-weight: 600; color: var(--text-2); white-space: nowrap;
+  }
+  .axis { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+
+  /* --- tables ------------------------------------------------------------ */
+
+  .scroller { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin: 24px 0; box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th {
+    text-align: left; font-size: 0.68rem; letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700; padding: 11px 14px; background: var(--band);
+    border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; color: var(--text-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  td strong { color: var(--text); }
+  .num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .verdict { font-weight: 700; white-space: nowrap; }
+  .v-good { color: var(--series-adjacent); }
+  .v-mid { color: var(--warn); }
+  .v-bad { color: var(--bad); }
+
+  /* --- callouts ---------------------------------------------------------- */
+
+  .callout {
+    border-left: 3px solid var(--navy); background: var(--navy-soft);
+    padding: 16px 18px; border-radius: 0 10px 10px 0; margin: 22px 0;
+  }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+  .callout p { margin: 0; font-size: 0.94rem; }
+  .callout p + p { margin-top: 10px; }
+
+  /* The marker is positioned rather than made a grid or flex item: a list
+     item containing a <strong> plus loose text would otherwise become three
+     separate items and the text column would collapse. */
+  ul.plain { padding-left: 0; list-style: none; margin: 18px 0; }
+  ul.plain li {
+    position: relative; padding-left: 24px; margin-bottom: 11px;
+    font-size: 0.94rem; color: var(--text-2); max-width: 68ch;
+  }
+  ul.plain li::before {
+    content: "—"; position: absolute; left: 0; top: 0; color: var(--muted);
+  }
+  ul.plain li strong { color: var(--text); }
+
+  footer { padding: 34px 0 60px; }
+  footer p { font-size: 0.8rem; color: var(--muted); }
+
+  @media (max-width: 620px) {
+    section { padding: 38px 0; }
+    .row { grid-template-columns: 1fr; gap: 5px; }
+    .row .name { text-align: left; }
+    .row .name small { display: inline; margin-left: 6px; }
+    .bar .val { position: static; margin-left: auto; padding-right: 8px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <span class="stamp">Market study · September 2026</span>
+    <h1>Where the money actually is in AI voice reception</h1>
+    <p>
+      A look at the landscape around Belline: who else is building this, which
+      customers pay the most, where competition is thinnest, and which market to
+      enter first. The short version is that the two verticals we built for are
+      the two we should sell to last.
+    </p>
+  </header>
+
+  <section>
+    <div class="eyebrow">The headline</div>
+    <h2>We built for the cheapest customers in the category.</h2>
+    <p>
+      Restaurants and salons were a reasonable starting guess — they are visible,
+      they obviously miss calls, and they are the businesses we know. But across
+      the market, the price an AI receptionist commands tracks the value of a
+      single missed call, and a missed table is worth far less than a missed
+      root canal.
+    </p>
+    <p>
+      The good news is that this costs us almost nothing to correct. The salon
+      engine already models staff, service durations, qualifications, equipment
+      and cleanup buffers — which is precisely the shape of a dental or aesthetic
+      clinic diary. Moving up-market is a configuration change and a new prompt,
+      not a rebuild.
+    </p>
+
+    <div class="tiles">
+      <div class="tile">
+        <div class="n">$4.64B</div>
+        <div class="k">virtual reception market, 2026</div>
+      </div>
+      <div class="tile">
+        <div class="n">47%</div>
+        <div class="k">CAGR in AI voice agents</div>
+      </div>
+      <div class="tile">
+        <div class="n">4–5×</div>
+        <div class="k">clinic vs salon price point</div>
+      </div>
+      <div class="tile">
+        <div class="n">30,000+</div>
+        <div class="k">food outlets in the UAE</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Willingness to pay</div>
+    <h2>What each kind of business actually pays, per month.</h2>
+
+    <figure>
+      <div class="legend">
+        <span><i class="swatch" style="background: var(--series-focus)"></i> What we built for</span>
+        <span><i class="swatch" style="background: var(--series-adjacent)"></i> Adjacent, higher value</span>
+      </div>
+
+      <!-- Floating bars: each runs from the low to the high end of the observed
+           range, so the spread is visible rather than averaged away. -->
+      <div class="chart">
+        <div class="row">
+          <div class="name">Dental practices<small>longest retention</small></div>
+          <div class="track">
+            <div class="bar" style="left:36.4%; right:9.1%; background: var(--series-adjacent)"
+                 data-tip="Dental: $200–500+ / month">
+              <span class="val">$200–500+</span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="name">Medical &amp; aesthetic<small>same diary shape</small></div>
+          <div class="track">
+            <div class="bar" style="left:36.4%; right:9.1%; background: var(--series-adjacent)"
+                 data-tip="Medical and aesthetic clinics: $200–500+ / month">
+              <span class="val">$200–500+</span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="name">Legal<small>highest price point</small></div>
+          <div class="track">
+            <div class="bar" style="left:27.3%; right:27.3%; background: var(--series-adjacent)"
+                 data-tip="Legal: $150–400+ / month, typically $199–299">
+              <span class="val">$150–400+</span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="name">Restaurants<small>our first build</small></div>
+          <div class="track">
+            <div class="bar" style="left:18.2%; right:63.6%; background: var(--series-focus)"
+                 data-tip="Restaurants: roughly $100–200 / month">
+              <span class="val">~$100–200</span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="name">Trades &amp; home services<small>converts fastest</small></div>
+          <div class="track">
+            <div class="bar" style="left:9.1%; right:72.7%; background: var(--series-adjacent)"
+                 data-tip="Trades and home services: $50–150+ / month">
+              <span class="val">$50–150+</span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="name">Salons<small>our second build</small></div>
+          <div class="track">
+            <div class="bar" style="left:4.5%; right:80%; background: var(--series-focus)"
+                 data-tip="Salons: $25–110 / month — Fresha bundling at ~$80">
+              <span class="val">$25–110</span>
+            </div>
+          </div>
+        </div>
+        <div class="axis"><span>$0</span><span>$250</span><span>$550</span></div>
+      </div>
+
+      <figcaption>
+        Monthly subscription ranges reported across AI receptionist vendors in
+        2026. Restaurant and salon figures are anchored on published competitor
+        pricing; the clinic and legal bands come from vendor-reported spend by
+        vertical. Ranges, not averages — the spread is the point.
+      </figcaption>
+    </figure>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr><th>Vertical</th><th>Monthly range</th><th>Behaviour</th><th>For us</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Dental</strong></td><td class="num">$200–500+</td><td>Predictable call volume, longest retention of any vertical</td><td class="verdict v-good">Best target</td></tr>
+          <tr><td><strong>Medical &amp; aesthetic</strong></td><td class="num">$200–500+</td><td>High value per booking; strong in Dubai's clinic market</td><td class="verdict v-good">Best target</td></tr>
+          <tr><td><strong>Legal</strong></td><td class="num">$150–400+</td><td>Highest price point ($199–299 typical); no booking engine needed</td><td class="verdict v-mid">Different product</td></tr>
+          <tr><td><strong>Restaurants</strong></td><td class="num">~$100–200</td><td>Acute pain, but Slang.ai owns the category in the US</td><td class="verdict v-mid">Keep, don't lead</td></tr>
+          <tr><td><strong>Trades</strong></td><td class="num">$50–150+</td><td>Converts fastest — pain is immediate and calculable</td><td class="verdict v-mid">No booking depth</td></tr>
+          <tr><td><strong>Salons</strong></td><td class="num">$25–110</td><td>Fresha bundling an AI Belline at ~$80/location</td><td class="verdict v-bad">Avoid leading</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout bad">
+      <p>
+        <strong>Salons are the trap.</strong> Fresha has announced an AI Belline
+        at roughly $80 per location per month, and AgentZap sells at $109 with
+        Fresha, Vagaro and Boulevard integrations already built. Fresha is
+        bundling into software salons already pay for — that is distribution we
+        cannot outspend. At $80 with ~600 answered minutes we would clear about
+        $30 a month per salon before support costs.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Landscape</div>
+    <h2>Who is already here.</h2>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr><th>Market</th><th>Who holds it</th><th>How contested</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>US restaurants</strong></td>
+            <td>Slang.ai — purpose-built, OpenTable/SevenRooms/Tripleseat/Yelp integrations, Fast Company recognition, named restaurant groups on the site</td>
+            <td class="verdict v-bad">Owned</td>
+          </tr>
+          <tr>
+            <td><strong>Horizontal platforms</strong></td>
+            <td>Retell, Vapi, Bland — infrastructure, not vertical products. They sell the pipes we already built ourselves</td>
+            <td class="verdict v-mid">Not our fight</td>
+          </tr>
+          <tr>
+            <td><strong>DACH</strong></td>
+            <td>Parloa (raised $350M in Jan 2026 at a $3B valuation), Cognigy, and Fonio — an Austrian German-optimised phone agent, live in under ten minutes, 4.9/5 across 280+ reviews</td>
+            <td class="verdict v-bad">Crowded and funded</td>
+          </tr>
+          <tr>
+            <td><strong>Enterprise hospitality</strong></td>
+            <td>PolyAI — Fortune 500 logos, SOC 2 / HIPAA / GDPR, hotel and casino case studies</td>
+            <td class="verdict v-bad">Out of reach</td>
+          </tr>
+          <tr>
+            <td><strong>GCC / Arabic-first</strong></td>
+            <td>Dello AI, ARA (Hala) for clinics and restaurants, Creatrixe in Riyadh, Leadflownex, VoxGulf — several exist, all early-stage and small</td>
+            <td class="verdict v-good">Contested but immature</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <p>
+        <strong>The DACH assumption was wrong.</strong> Going in, German-language
+        voice AI looked like the thin-competition play. It is the opposite: DACH
+        is the fastest-growing region in European conversational AI, and it
+        already has a $3B-valuation incumbent plus a well-reviewed German-native
+        specialist. Entering there means competing with Parloa's balance sheet.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Where the gap is</div>
+    <h2>The UAE, and the reason is regulatory.</h2>
+
+    <p>
+      The single most useful fact in this study is that Twilio does not sell
+      +971 numbers, because the TDRA reserves inbound VoIP termination for the
+      licensed operators. That is an obstacle for us — and a wall around the
+      market.
+    </p>
+    <p>
+      Slang.ai, Retell and every other US-built product runs on Twilio-style
+      infrastructure. They cannot casually enter the UAE. Anyone who solves the
+      local telephony problem gets a market that the best-funded competitors
+      cannot follow them into without doing the same work.
+    </p>
+
+    <ul class="plain">
+      <li>Over 30,000 food outlets in the UAE, roughly 18,000–25,000 of them in Dubai, with more than 1,200 new restaurant licences issued in 2024 alone.</li>
+      <li>UAE foodservice growing from about $23B in 2025 toward a forecast $61B by 2031 — roughly 17.5% a year.</li>
+      <li>A dense, well-funded private clinic and aesthetic sector, with the same diary shape our salon engine already models.</li>
+      <li>Existing Arabic-first competitors are small and early — none has the booking depth we have already built.</li>
+      <li>Gulf dialect handling (Najdi, Hejazi, Khaleeji) matters far more than Modern Standard Arabic — a real quality bar, and a real barrier.</li>
+    </ul>
+
+    <div class="callout">
+      <p>
+        <strong>Recommended order:</strong> UAE clinics first, UAE restaurants
+        second, Switzerland third once the product is proven. Germany and Austria
+        are the largest markets and the last ones to enter — 79,855 hair and
+        beauty businesses and 37,527 dental practices in Germany are attractive
+        on paper and defended in practice.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">The obvious challenge</div>
+    <h2>Why not Latin America, Africa, or anywhere else?</h2>
+
+    <div class="callout warn">
+      <p>
+        <strong>A bias worth naming.</strong> The first draft of this study
+        recommended the UAE partly because that is where we are standing. That
+        is a real reason, but it is not market analysis, and it deserves to be
+        tested against the alternatives rather than assumed.
+      </p>
+    </div>
+
+    <h3 style="margin-top:26px">Latin America — the channel already moved</h3>
+    <p>
+      This is the strongest argument against LatAm and it is structural, not a
+      matter of degree. <strong>WhatsApp has eaten the business phone line.</strong>
+      98% of Brazilian smartphone users have it, 78% of Brazilian businesses
+      actively sell through it, and it carries 43% of the region's
+      conversational commerce. By 2027 an estimated 65% of LatAm WhatsApp
+      transactions will be AI-assisted.
+    </p>
+    <p>
+      Selling an inbound-call receptionist there means optimising a channel
+      businesses have already routed around. Twilio compounds it: Brazil and
+      Mexico offer toll-free numbers but not the local geographic numbers a
+      neighbourhood restaurant actually needs.
+    </p>
+    <p>
+      LatAm is not a smaller version of this opportunity. It is a
+      <em>different product</em> — a WhatsApp-native agent handling voice notes
+      in Portuguese and Spanish. Genuinely interesting, and a rewrite of the
+      entire transport layer.
+    </p>
+
+    <h3 style="margin-top:26px">Africa — easiest to launch, hardest to get paid</h3>
+    <p>
+      Kenya has the highest ChatGPT adoption rate in the world at 42.1% of adult
+      internet users. The African AI market is growing at 27.4% a year. And
+      unlike the UAE, <strong>Twilio sells local voice numbers in both Nigeria
+      and Kenya</strong> — so on the narrow question of "could we be live next
+      week", Nairobi beats Dubai outright.
+    </p>
+    <p>
+      The economics do not follow. Our model needs roughly $350 per venue per
+      month; global SMB SaaS sits at $50–200 and LatAm and African ARPU sit at
+      the bottom of that. A Nairobi clinic paying Dubai prices is not a
+      realistic assumption. Add grid instability in Lagos and Nairobi, payment
+      and collection friction, and language localisation as a named vendor
+      challenge, and you need five to ten times the customers for the same
+      revenue — while collecting from each of them is harder.
+    </p>
+
+    <h3 style="margin-top:26px">The United States — biggest, richest, closed</h3>
+    <p>
+      Highest willingness to pay, largest market, no regulatory wall. It is also
+      where Slang.ai already owns restaurant voice with named restaurant-group
+      logos and OpenTable and SevenRooms integrations shipped, and where Retell
+      and Vapi sell the infrastructure layer. Entering means outspending funded
+      incumbents from a standing start with no local presence.
+    </p>
+
+    <h3 style="margin-top:26px">Saudi Arabia — the one we under-weighted</h3>
+    <p>
+      Saudi foodservice is <strong>larger than the UAE's</strong> — about
+      $32.6B in 2026 against $27.3B — and hospitality is running at $29B toward
+      $40.6B by 2031. Licensed tourism hospitality facilities jumped 40.6% in a
+      single quarter of 2025. Vision 2030 targets 150 million annual visitors
+      and aims to take cafés from 258 to 1,000 per million people.
+    </p>
+    <p>
+      It carries the same Arabic-first requirement and the same regulatory wall
+      that keeps US competitors out, with roughly three times the population and
+      far more new venue formation. Dubai is our convenience; Riyadh is where
+      the growth is.
+    </p>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr><th>Market</th><th>Willingness to pay</th><th>Can we launch?</th><th>Competition</th><th>Verdict</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>UAE</strong></td><td>High</td><td>Blocked on telephony</td><td>Early-stage</td><td class="verdict v-good">First — proximity</td></tr>
+          <tr><td><strong>Saudi Arabia</strong></td><td>High</td><td>Same wall</td><td>Early-stage</td><td class="verdict v-good">Bigger prize</td></tr>
+          <tr><td><strong>United States</strong></td><td>Highest</td><td>Yes, easily</td><td>Owned</td><td class="verdict v-bad">Closed to us</td></tr>
+          <tr><td><strong>Switzerland</strong></td><td>High</td><td>Yes, with docs</td><td>Funded</td><td class="verdict v-mid">Third</td></tr>
+          <tr><td><strong>Brazil / Mexico</strong></td><td>Low–mid</td><td>Toll-free only</td><td>WhatsApp-native</td><td class="verdict v-bad">Wrong channel</td></tr>
+          <tr><td><strong>Kenya / Nigeria</strong></td><td>Low</td><td class="verdict v-good">Yes — easiest</td><td>Thin</td><td class="verdict v-bad">Economics fail</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <p>
+        <strong>So the honest reason for the UAE is not that it is the best
+        market — it is that it is the best market <em>for us, now</em>.</strong>
+        At zero customers the binding constraint is not addressable market, it
+        is the ability to sit in ten venues, watch someone use the thing, and
+        fix what breaks by Friday. That cannot be done remotely from São Paulo
+        or Nairobi.
+      </p>
+      <p>
+        Founder proximity is worth more than TAM until roughly the tenth paying
+        customer. After that the question genuinely reopens — and the answer at
+        that point is more likely Riyadh than Dubai.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Business case</div>
+    <h2>What the unit economics look like.</h2>
+
+    <p>
+      Variable cost is roughly <strong>$0.07–0.09 per answered minute</strong>
+      across telephony, speech-to-text, speech-to-speech and the model, plus
+      about $6 a month of hosting per deployment. Call volumes below are
+      assumptions to be replaced with real numbers from the first three pilots.
+    </p>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr><th>Per venue, per month</th><th>Clinic</th><th>Restaurant</th><th>Salon</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Answered calls <span class="muted">(assumed)</span></td><td class="num">450</td><td class="num">350</td><td class="num">250</td></tr>
+          <tr><td>Average call length</td><td class="num">3.0 min</td><td class="num">2.0 min</td><td class="num">2.5 min</td></tr>
+          <tr><td>Answered minutes</td><td class="num">1,350</td><td class="num">700</td><td class="num">625</td></tr>
+          <tr><td>Variable cost @ $0.08</td><td class="num">$108</td><td class="num">$56</td><td class="num">$50</td></tr>
+          <tr><td>Achievable price</td><td class="num">$350</td><td class="num">$250</td><td class="num">$80</td></tr>
+          <tr><td><strong>Gross margin</strong></td><td class="num verdict v-good">69%</td><td class="num verdict v-good">78%</td><td class="num verdict v-bad">37%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Restaurants show the better percentage; clinics show the better absolute
+      contribution — $242 a month against $194, on a customer that churns less.
+      Salons are thin enough that support costs could erase the margin entirely.
+    </p>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr><th>Scenario</th><th>Venues</th><th>MRR</th><th>ARR</th><th>Gross profit / yr</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>First pilots</td><td class="num">5</td><td class="num">$1,600</td><td class="num">$19k</td><td class="num">$13k</td></tr>
+          <tr><td>Proof of a business</td><td class="num">40</td><td class="num">$12,800</td><td class="num">$154k</td><td class="num">$106k</td></tr>
+          <tr><td>Worth funding</td><td class="num">120</td><td class="num">$38,400</td><td class="num">$461k</td><td class="num">$318k</td></tr>
+          <tr><td>$1M ARR</td><td class="num">260</td><td class="num">$83,200</td><td class="num">$998k</td><td class="num">$689k</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="muted" style="font-size: 0.87rem">
+      Blended at $320 a month and 69% gross margin. Excludes your own time,
+      support, and the cost of whatever local telephony arrangement the UAE
+      turns out to require — which is the largest unknown in this model.
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Recommendation</div>
+    <h2>What I would do next.</h2>
+
+    <ul class="plain">
+      <li><strong>Reposition to clinics, keep restaurants.</strong> Configure the existing salon engine for a dental or aesthetic clinic — services, practitioners, rooms, buffers are the same objects. Sell into Dubai clinics at $300–400.</li>
+      <li><strong>Solve UAE telephony properly.</strong> It is the moat, not just the obstacle. Until it is solved, nothing else about the UAE strategy is real. Start conversations with a licensed local SIP provider now, in parallel with the UK demo number.</li>
+      <li><strong>Do not lead with salons.</strong> Keep the capability — it costs nothing and it wins the occasional group deal — but do not build a go-to-market around a segment where Fresha is about to bundle at $80.</li>
+      <li><strong>Park DACH until the product is proven.</strong> Switzerland stays useful because of the entity and your network, but it is a second market, not a first one.</li>
+      <li><strong>Treat Saudi as the real prize, not Dubai.</strong> Larger foodservice market, faster venue formation, same regulatory wall protecting us. Dubai earns first place on proximity alone — revisit at ten paying customers.</li>
+      <li><strong>Get three pilots and replace every assumption above.</strong> Real call volumes, real handling times, real containment. Every number in the business case is a guess until then.</li>
+    </ul>
+
+    <div class="callout">
+      <p>
+        The thing worth protecting is not the voice pipeline — Retell and Vapi
+        sell that as a commodity. It is the availability logic and the guest
+        history, which are the parts a competitor cannot copy from a landing
+        page, and which get better the more real venues run on them.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Sources: slang.ai, retellai.com, poly.ai, cloudtalk.io, agentzap.ai,
+      bookingpro.ai, ainora.lt, echocall.de, onlim.com, imarcgroup.com,
+      restroworks.com, mordorintelligence.com, ibisworld.com, speechmatics.com,
+      dello.ai, araai.io, aurorainbox.com, scala-technologies.com, twilio.com,
+      alxafrica.com, nyamainexus.com, imarcgroup.com, culta.ai, businesswire.com.
+      Figures are vendor-reported or analyst estimates,
+      gathered September 2026, and should be re-checked before any of them
+      informs a commitment. Call volumes and prices in the business case are
+      explicitly assumptions.
+    </p>
+  </footer>
+
+</div>

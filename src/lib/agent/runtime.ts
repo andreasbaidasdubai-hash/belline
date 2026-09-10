@@ -1,0 +1,392 @@
+import Anthropic from "@anthropic-ai/sdk";
+import type { Call, Location, ToolTrace } from "../types";
+import { callContext, staticPrompt } from "./prompt";
+import { executeTool, toolsFor } from "./tools";
+import { findAvailability } from "../booking";
+import { guestBriefing, recallGuest } from "../guests";
+import { usesStaffDiary } from "../verticals";
+import { minutesToSpoken, parseClock, todayIn } from "../time";
+
+/**
+ * The turn engine.
+ *
+ * The thing that makes a voice agent feel alive is not the model — it is
+ * never waiting for a complete answer before speaking. We stream the reply,
+ * cut it at clause boundaries, and hand each fragment to the speech engine
+ * the moment it is whole enough to say. First audio leaves roughly a third of
+ * a second after the model starts producing text, instead of after the last
+ * token of the last sentence.
+ */
+
+export type AgentEvent =
+  | { type: "sentence"; text: string }
+  | { type: "tool"; trace: ToolTrace }
+  | { type: "control"; action: "end_call" | "transfer"; detail: string }
+  | { type: "turn_end"; text: string; firstAudioMs: number }
+  | { type: "error"; message: string };
+
+const MAX_TOOL_ROUNDS = 6;
+
+// ---------------------------------------------------------------------------
+// Sentence chunking
+// ---------------------------------------------------------------------------
+
+/**
+ * Cuts a token stream into speakable fragments.
+ *
+ * The first fragment is allowed to be short and to break on a comma — getting
+ * *something* into the caller's ear fast matters more than prosody on the
+ * opening clause. After that we prefer full sentences, which sound better.
+ */
+export class SentenceChunker {
+  private buf = "";
+  private emitted = 0;
+
+  push(delta: string): string[] {
+    this.buf += delta;
+    const out: string[] = [];
+    for (;;) {
+      const cut = this.findCut();
+      if (cut === -1) break;
+      const piece = this.buf.slice(0, cut).trim();
+      this.buf = this.buf.slice(cut);
+      if (piece) {
+        out.push(piece);
+        this.emitted++;
+      }
+    }
+    return out;
+  }
+
+  flush(): string | null {
+    const rest = this.buf.trim();
+    this.buf = "";
+    if (rest) this.emitted++;
+    return rest || null;
+  }
+
+  private findCut(): number {
+    const minLen = this.emitted === 0 ? 12 : 20;
+    const commaAt = this.emitted === 0 ? 30 : 90;
+
+    for (let i = 0; i < this.buf.length; i++) {
+      const ch = this.buf[i];
+      const next = this.buf[i + 1] ?? " ";
+
+      if (ch === "\n" && i + 1 >= minLen) return i + 1;
+
+      if (ch === "." || ch === "!" || ch === "?") {
+        // "7.30", "2.5" — a digit either side is a number, not a full stop.
+        if (ch === "." && /\d/.test(this.buf[i - 1] ?? "") && /\d/.test(next)) continue;
+        if (!/[\s"')\]]/.test(next) && next !== "") continue;
+        if (i + 1 >= minLen) return i + 1;
+      }
+
+      if ((ch === "," || ch === ";" || ch === ":") && i + 1 >= commaAt && /\s/.test(next)) {
+        return i + 1;
+      }
+    }
+    return -1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+function hasApiKey(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY);
+}
+
+let client: Anthropic | null = null;
+function anthropic(): Anthropic {
+  if (!client) client = new Anthropic();
+  return client;
+}
+
+export class AgentSession {
+  readonly location: Location;
+  readonly call: Call;
+  private readonly callerNumber?: string;
+  private messages: Anthropic.MessageParam[] = [];
+  private readonly tools: Anthropic.Tool[];
+  private ended = false;
+  /** What was actually said on pickup — the model must not repeat it. */
+  private spokenGreeting: string | null = null;
+
+  constructor(location: Location, call: Call, callerNumber?: string) {
+    this.location = location;
+    this.call = call;
+    this.callerNumber = callerNumber;
+    this.tools = toolsFor(location);
+  }
+
+  /**
+   * The opening line, spoken before the model is ever called. Saves the
+   * caller a second of silence on pickup, which is the single most noticeable
+   * second in the whole call.
+   */
+  greeting(): string {
+    const agent = this.location.agent;
+    const guest = this.callerNumber
+      ? recallGuest(this.location, this.callerNumber)
+      : null;
+
+    // Recognition has to happen in the opening line to land at all. By the
+    // time the model could produce it the caller has already started talking.
+    const base =
+      guest?.name && agent.returningGreeting?.trim()
+        ? agent.returningGreeting.replace(/\{name\}/g, guest.name)
+        : agent.greeting;
+
+    // On a public demo line the disclosure belongs in the first breath, not
+    // somewhere the caller has to ask for it.
+    const disclosure = this.location.demo?.enabled
+      ? this.location.demo.disclosure.trim()
+      : "";
+
+    this.spokenGreeting = disclosure ? `${disclosure} ${base}` : base;
+    return this.spokenGreeting;
+  }
+
+  get isEnded(): boolean {
+    return this.ended;
+  }
+
+  private systemBlocks(): Anthropic.TextBlockParam[] {
+    // Guest history goes in the volatile block, after the cache breakpoint —
+    // it is different for every caller, so putting it in the cached half
+    // would throw the venue's whole prompt out of cache on every call.
+    const guest = this.callerNumber
+      ? recallGuest(this.location, this.callerNumber)
+      : null;
+
+    return [
+      {
+        type: "text",
+        text: staticPrompt(this.location),
+        // Everything before this point is identical on every turn of every
+        // call at this venue, so it is served from cache from turn two on.
+        cache_control: { type: "ephemeral" },
+      },
+      {
+        type: "text",
+        text: `${callContext(this.location, {
+          callerNumber: this.callerNumber,
+          channel: this.call.channel,
+        })}
+
+You have already greeted the caller with: "${this.spokenGreeting ?? this.location.agent.greeting}" — do not greet them again.${
+          guest ? `\n\n${guestBriefing(this.location, guest)}` : ""
+        }`,
+      },
+    ];
+  }
+
+  async *respond(userText: string): AsyncGenerator<AgentEvent> {
+    this.messages.push({ role: "user", content: userText });
+
+    if (!hasApiKey()) {
+      yield* this.mockRespond(userText);
+      return;
+    }
+
+    const startedAt = Date.now();
+    let firstAudioMs = -1;
+    let spoken = "";
+
+    try {
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const chunker = new SentenceChunker();
+        const stream = anthropic().messages.stream({
+          model: this.location.agent.model,
+          max_tokens: 2048,
+          system: this.systemBlocks(),
+          tools: this.tools,
+          // Adaptive thinking with low effort: the model still reasons about
+          // which tool to call, but does not spend seconds deliberating over
+          // "a table for two at eight". Raise this in agent config if a venue
+          // has genuinely intricate policies.
+          thinking: { type: "adaptive" },
+          output_config: { effort: "low" },
+          messages: this.messages,
+        });
+
+        for await (const event of stream) {
+          if (
+            event.type === "content_block_delta" &&
+            event.delta.type === "text_delta"
+          ) {
+            for (const sentence of chunker.push(event.delta.text)) {
+              if (firstAudioMs < 0) firstAudioMs = Date.now() - startedAt;
+              spoken += (spoken ? " " : "") + sentence;
+              yield { type: "sentence", text: sentence };
+            }
+          }
+        }
+
+        const tail = chunker.flush();
+        if (tail) {
+          if (firstAudioMs < 0) firstAudioMs = Date.now() - startedAt;
+          spoken += (spoken ? " " : "") + tail;
+          yield { type: "sentence", text: tail };
+        }
+
+        const message = await stream.finalMessage();
+
+        if (message.stop_reason === "refusal") {
+          yield {
+            type: "sentence",
+            text: "I'm sorry, I can't help with that one. Let me take a message for the team.",
+          };
+          break;
+        }
+
+        // Thinking blocks must be replayed unchanged, so push the whole
+        // content array rather than picking the text out of it.
+        this.messages.push({ role: "assistant", content: message.content });
+
+        if (message.stop_reason !== "tool_use") break;
+
+        const toolUses = message.content.filter(
+          (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+        );
+        const results: Anthropic.ToolResultBlockParam[] = [];
+        let control: AgentEvent | null = null;
+
+        for (const use of toolUses) {
+          const t0 = Date.now();
+          let outcome;
+          let ok = true;
+          try {
+            outcome = await executeTool(
+              use.name,
+              use.input as Record<string, unknown>,
+              { location: this.location, call: this.call, callerNumber: this.callerNumber },
+            );
+          } catch (err) {
+            ok = false;
+            outcome = {
+              result: {
+                error: `The system did not respond. Apologise briefly and offer to take a message. (${
+                  err instanceof Error ? err.message : String(err)
+                })`,
+              },
+            };
+          }
+
+          const trace: ToolTrace = {
+            at: new Date().toISOString(),
+            name: use.name,
+            input: use.input,
+            output: outcome.result,
+            ms: Date.now() - t0,
+            ok,
+          };
+          this.call.toolCalls.push(trace);
+          yield { type: "tool", trace };
+
+          results.push({
+            type: "tool_result",
+            tool_use_id: use.id,
+            content: JSON.stringify(outcome.result),
+            is_error: !ok,
+          });
+
+          if (outcome.control) {
+            control = {
+              type: "control",
+              action: outcome.control.type === "end_call" ? "end_call" : "transfer",
+              detail:
+                outcome.control.type === "end_call"
+                  ? outcome.control.summary
+                  : outcome.control.reason,
+            };
+          }
+        }
+
+        // All results in one user message — splitting them teaches the model
+        // to stop making parallel calls.
+        this.messages.push({ role: "user", content: results });
+
+        if (control) {
+          this.ended = control.action === "end_call" || control.action === "transfer";
+          yield control;
+          break;
+        }
+      }
+    } catch (err) {
+      const message =
+        err instanceof Anthropic.RateLimitError
+          ? "rate limited"
+          : err instanceof Anthropic.APIConnectionError
+            ? "cannot reach the model"
+            : err instanceof Anthropic.APIError
+              ? `api error ${err.status}`
+              : err instanceof Error
+                ? err.message
+                : String(err);
+      yield { type: "error", message };
+      yield {
+        type: "sentence",
+        text: "I'm sorry, our system just dropped out. Let me put you through to the team.",
+      };
+    }
+
+    if (firstAudioMs >= 0) this.call.latenciesMs.push(firstAudioMs);
+    yield {
+      type: "turn_end",
+      text: spoken,
+      firstAudioMs: firstAudioMs < 0 ? 0 : firstAudioMs,
+    };
+  }
+
+  /**
+   * Keyless fallback. It is not trying to be clever — it exists so the
+   * booking engine, the tool trace, the transcript and the dashboard are all
+   * exercisable before anyone has signed up for an API key.
+   */
+  private async *mockRespond(userText: string): AsyncGenerator<AgentEvent> {
+    const text = userText.toLowerCase();
+    const time = text.match(/\b(\d{1,2})[:.]?(\d{2})?\s*(am|pm)?\b/);
+    const parsed = time ? parseClock(time[0].replace(/\s/g, "")) : null;
+    const party = Number(text.match(/\b(?:for|party of|table for)\s+(\d+)/)?.[1] ?? 2);
+    let reply: string;
+
+    if (parsed !== null) {
+      const date = todayIn(this.location.timezone);
+      const t0 = Date.now();
+      const slots = findAvailability(this.location, {
+        locationId: this.location.id,
+        date,
+        preferredMin: parsed,
+        partySize: party,
+        serviceIds: usesStaffDiary(this.location)
+          ? [this.location.salon?.services[0]?.id ?? ""]
+          : undefined,
+      });
+      const trace: ToolTrace = {
+        at: new Date().toISOString(),
+        name: "check_availability",
+        input: { date, time: parsed, party_size: party },
+        output: slots,
+        ms: Date.now() - t0,
+        ok: true,
+      };
+      this.call.toolCalls.push(trace);
+      yield { type: "tool", trace };
+      reply = slots.length
+        ? `Running without a model key, so this is the booking engine answering directly. Today I have ${slots
+            .slice(0, 3)
+            .map((s) => minutesToSpoken(s.startMin))
+            .join(", ")}. Set ANTHROPIC_API_KEY to hear the real agent.`
+        : "Running without a model key. The booking engine found nothing open at that time today.";
+    } else {
+      reply =
+        "No ANTHROPIC_API_KEY is set, so you are talking to a stub. Ask for a time, like \"table for two at eight\", and the real booking engine will answer.";
+    }
+
+    for (const sentence of reply.split(/(?<=\.)\s+/)) {
+      yield { type: "sentence", text: sentence };
+    }
+    yield { type: "turn_end", text: reply, firstAudioMs: 0 };
+  }
+}

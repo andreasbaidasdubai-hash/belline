@@ -1,0 +1,35 @@
+{
+  "name": "belline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --import tsx --env-file-if-exists=.env server.ts",
+    "build": "next build",
+    "start": "node --import tsx --env-file-if-exists=.env server.ts --prod",
+    "check": "node --import tsx scripts/check-booking.ts",
+    "demo": "node --import tsx scripts/seed-demo.ts",
+    "user": "node --import tsx --env-file-if-exists=.env scripts/user.ts",
+    "bench": "node --import tsx scripts/bench.ts",
+    "doctor": "node --import tsx --env-file-if-exists=.env scripts/doctor.ts",
+    "site": "node --import tsx scripts/build-site.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
+    "next": "^15.5.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.13",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/ws": "^8.18.1",
+    "tailwindcss": "^4.1.13",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.2"
+  }
+}

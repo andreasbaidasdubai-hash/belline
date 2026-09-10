@@ -1,0 +1,631 @@
+<title>Belline Go-Live Runbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ink: #FBFAF8;
+    --surface: #FFFFFF;
+    --surface-2: #F5F3EF;
+    --line: #E6E1D8;
+    --line-soft: #EFEBE4;
+    --text: #211E1A;
+    --muted: #7C756C;
+    --brass: #8A5C18;
+    --brass-soft: #F4EADA;
+    --sage: #2F6B4A;
+    --sage-soft: #E4EFE8;
+    --alarm: #A5372F;
+    --alarm-soft: #F9E9E7;
+    --shadow: 0 1px 2px rgba(33, 30, 26, 0.05);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: Manrope, ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+    font-weight: 400;
+    font-size: 1rem;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 780px; margin: 0 auto; padding: 0 22px; }
+
+  h1, h2, h3 { margin: 0; text-wrap: balance; font-family: inherit; }
+  h1 { font-size: clamp(2rem, 1.5rem + 2.2vw, 3.1rem); font-weight: 200; letter-spacing: -0.035em; line-height: 1.05; }
+  h2 { font-size: clamp(1.35rem, 1.2rem + 0.7vw, 1.75rem); font-weight: 300; letter-spacing: -0.026em; line-height: 1.2; }
+  h3 { font-size: 1.02rem; font-weight: 600; letter-spacing: -0.01em; }
+
+  p, li { max-width: 66ch; }
+  p { margin: 0 0 14px; }
+
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+
+  header.hero { padding: 60px 0 34px; border-bottom: 1px solid var(--line); }
+  header.hero p { font-size: 1.14rem; color: var(--muted); margin-top: 18px; }
+
+  .meta {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 22px;
+  }
+  .tag {
+    font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; letter-spacing: 0.08em;
+    text-transform: uppercase; border: 1px solid var(--line); background: var(--surface);
+    padding: 4px 10px; border-radius: 999px; color: var(--muted);
+  }
+
+  section { padding: 46px 0; border-bottom: 1px solid var(--line-soft); }
+  section:last-of-type { border-bottom: none; }
+
+  .part {
+    font-family: "IBM Plex Mono", monospace; font-size: 0.7rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--brass); margin-bottom: 12px;
+  }
+
+  /* The numbering is real: these are ordered and each depends on the last. */
+  ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 26px 0 0; display: grid; gap: 22px; }
+  ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 34px 1fr; gap: 16px; }
+  ol.steps > li::before {
+    content: counter(step);
+    font-family: "IBM Plex Mono", monospace; font-size: 0.78rem; font-weight: 500;
+    width: 27px; height: 27px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface); border: 1px solid var(--line); color: var(--brass);
+    margin-top: 2px;
+  }
+  ol.steps h3 { margin-bottom: 6px; }
+  ol.steps p { font-size: 0.95rem; margin-bottom: 9px; }
+  ol.steps p:last-child { margin-bottom: 0; }
+
+  pre {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px;
+    padding: 12px 14px; overflow-x: auto; margin: 10px 0;
+    font-family: "IBM Plex Mono", monospace; font-size: 0.8rem; line-height: 1.62;
+  }
+  code { font-family: "IBM Plex Mono", monospace; font-size: 0.87em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-soft); }
+  pre code { background: none; border: none; padding: 0; }
+
+  .note, .warn {
+    border-left: 3px solid var(--brass); background: var(--brass-soft);
+    padding: 14px 16px; border-radius: 0 9px 9px 0; margin: 16px 0;
+  }
+  .warn { border-left-color: var(--alarm); background: var(--alarm-soft); }
+  .note p:last-child, .warn p:last-child { margin-bottom: 0; }
+  .note strong, .warn strong { font-weight: 600; }
+  .note p, .warn p { font-size: 0.93rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin: 18px 0; }
+  th { text-align: left; font-size: 0.68rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 9px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  .scroller { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  .scroller table { margin: 0; }
+
+  .yes { color: var(--sage); font-weight: 500; }
+  .no { color: var(--alarm); font-weight: 500; }
+
+  ul.plain { padding-left: 0; list-style: none; display: grid; gap: 9px; margin: 14px 0; }
+  ul.plain li { display: grid; grid-template-columns: auto 1fr; gap: 11px; font-size: 0.95rem; align-items: baseline; }
+  ul.plain li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--brass); transform: translateY(-2px); }
+
+  footer { padding: 40px 0 60px; color: var(--muted); font-size: 0.86rem; }
+
+  @media (max-width: 560px) {
+    section { padding: 34px 0; }
+    ol.steps > li { grid-template-columns: 28px 1fr; gap: 12px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1>Getting Belline answering a real phone</h1>
+    <p>
+      Everything between what's on your laptop now and a number a Dubai
+      restaurant can put on their Google listing — in the order you have to do it.
+    </p>
+    <div class="meta">
+      <span class="tag">~2 hours of work</span>
+      <span class="tag">~$40 to start</span>
+      <span class="tag">Some steps wait on approvals</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="part">Read this first</div>
+    <h2>The UAE has a problem you need to know about before you spend anything.</h2>
+    <p>
+      Twilio does not sell <span class="mono">+971</span> numbers. VoIP termination
+      in the UAE sits with the licensed operators — Etisalat and du — and the TDRA
+      does not hand that out to international CPaaS providers. So the obvious plan
+      (buy a Dubai number, point it at Belline) is not available.
+    </p>
+    <p>Two things follow, and they are not the same problem:</p>
+    <ul class="plain">
+      <li><strong>For a demo you can hand to prospects today</strong> — buy a UK or US number. Anyone in the UAE can dial it; outbound international calling is not restricted, only inbound VoIP termination is. It costs the caller international rates, so it reads as a demo line rather than a business line, which for a demo is fine.</li>
+      <li><strong>For a Dubai venue actually using it in production</strong> — they keep their Etisalat or du number and forward it. Nobody ports anything. See Part 5, which is the part that answers "how do people install this on their number".</li>
+    </ul>
+    <div class="warn">
+      <p>
+        <strong>Verify before you buy.</strong> Number availability and regulatory
+        rules change. Check Twilio's console for the country you want before
+        committing — and treat every price below as approximate.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="part">Part 0 · Name and website</div>
+    <h2>Get the domain up before anything else.</h2>
+    <p class="muted" style="font-size:0.95rem">
+      About an hour, and it is the only part a prospect sees before they decide
+      whether to take your call seriously.
+    </p>
+
+    <ol class="steps">
+      <li>
+        <div>
+          <h3>Buy the domain</h3>
+          <p>
+            Namecheap, Porkbun or Cloudflare Registrar. Buy the
+            <span class="mono">.com</span> too if it is affordable, even if you
+            launch on something else — it stops someone else becoming you later.
+          </p>
+          <div class="warn">
+            <p>
+              A registry says a name is unregistered; it does not promise you can
+              have it. Premium pricing and registry reservations both bite at
+              checkout. Confirm in the cart before you commit to a name.
+            </p>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Build the static site</h3>
+          <pre><code>npm run site</code></pre>
+          <p>
+            Produces a <span class="mono">site/</span> folder: the landing page as
+            <span class="mono">index.html</span> plus the plan, market study and
+            this runbook. Four files, no build step, no dependencies.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Publish it</h3>
+          <p>
+            Drag <span class="mono">site/</span> onto
+            <a href="https://app.netlify.com/drop" style="color:var(--brass)">Netlify Drop</a>
+            — live in about ten seconds, free, no account needed to try. Or
+            <span class="mono">npx vercel deploy --prod site</span>.
+          </p>
+          <p>Then point the domain at it and let the host issue the certificate.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Split the two halves across subdomains</h3>
+          <p>
+            The website and the app are different things with different hosting
+            needs. Keep them apart from day one:
+          </p>
+          <pre><code>yourdomain.com       → the website        (Netlify / Vercel, static, free)
+app.yourdomain.com   → the dashboard      (Railway — needs a live process)</code></pre>
+          <p class="muted" style="font-size:0.9rem">
+            The app cannot go on Vercel: it holds a websocket open for the length
+            of every call, and a serverless function has no persistent socket.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="part">Part 1 · Keys</div>
+    <h2>Make it speak, locally.</h2>
+    <p class="muted" style="font-size:0.95rem">About 20 minutes. At the end of this you can talk to it through your laptop microphone.</p>
+
+    <ol class="steps">
+      <li>
+        <div>
+          <h3>Anthropic API key</h3>
+          <p><a href="https://console.anthropic.com" style="color:var(--brass)">console.anthropic.com</a> → API keys → create. Add about $20 of credit.</p>
+          <p class="muted">This is billed separately from your Claude Code subscription — they are different products on the same account.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Deepgram key</h3>
+          <p><a href="https://console.deepgram.com" style="color:var(--brass)">console.deepgram.com</a> → sign up → API keys. There is free starting credit, which is more than enough to get through testing.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>ElevenLabs key</h3>
+          <p><a href="https://elevenlabs.io" style="color:var(--brass)">elevenlabs.io</a> → Profile → API key. The free tier will not do — it lacks the low-latency streaming you need. Starter is enough to test.</p>
+          <p class="muted">Once this key is set, the Agent page loads every voice on your account, including any you clone, and the "Hear it" button speaks your venue's own greeting.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Put them in <code>.env</code></h3>
+          <p>In the <span class="mono">belline</span> folder, copy <code>.env.example</code> to <code>.env</code> and fill in the three keys. Then:</p>
+          <pre><code>npm run dev</code></pre>
+          <p>The startup banner now shows three ticks instead of three dots. Open the test console and press <strong>Speak</strong> — that is the real pipeline, end to end.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="part">Part 2 · Hosting</div>
+    <h2>Put it somewhere Twilio can reach.</h2>
+    <p>
+      A phone call arrives from the public internet, so the process has to live
+      there. It also has to be a <em>process</em> — the voice bridge holds a
+      websocket open for the length of every call, which is why this cannot go on
+      Vercel. Railway is the least friction; Fly and Render work identically.
+    </p>
+
+    <ol class="steps" start="5">
+      <li>
+        <div>
+          <h3>Put the code on GitHub</h3>
+          <pre><code>cd belline
+git init
+git add -A
+git commit -m "Belline: AI voice receptionist"
+gh repo create belline --private --source=. --push</code></pre>
+          <p class="muted">Private. The repo contains your venue configurations and, once running, your guests' phone numbers.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Deploy on Railway</h3>
+          <p><a href="https://railway.app" style="color:var(--brass)">railway.app</a> → New Project → Deploy from GitHub → pick the repo. It will find the <code>Dockerfile</code> and build.</p>
+          <p>Add the same three keys as environment variables, plus <code>PORT=3000</code>.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Attach a volume — do not skip this</h3>
+          <p>In Railway: Variables → add <code>DATA_DIR=/data</code>, then Settings → Volumes → mount one at <code>/data</code>.</p>
+          <div class="warn">
+            <p>
+              Without a volume, every deploy wipes the booking file. A venue
+              losing tonight's book because you pushed a change is the one
+              failure they will never forgive.
+            </p>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Note the public URL and set the websocket origin</h3>
+          <p>Railway gives you something like <span class="mono">belline-production.up.railway.app</span>. Add two more variables:</p>
+          <pre><code>PUBLIC_WS_ORIGIN=wss://belline-production.up.railway.app
+SESSION_SECRET=&lt;40+ random characters&gt;</code></pre>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Claim the owner account — immediately</h3>
+          <p>Open the URL. Because nobody has signed up yet, you get a <strong>create the owner account</strong> form. Fill it in now.</p>
+          <div class="warn">
+            <p>
+              That form is open to whoever loads the page first, and it has to
+              be — there is no account to authenticate against yet. It closes
+              permanently the moment one account exists. Do not deploy and then
+              go to lunch.
+            </p>
+          </div>
+          <p>After that, everything is behind a login. Add the rest of your team on the <strong>Team</strong> page: managers can change how the agent behaves at their venues, floor staff can only read the book and the calls.</p>
+        </div>
+      </li>
+    </ol>
+    <div class="note">
+      <p>
+        <strong>Locked out later?</strong> Passwords are reset from the server,
+        not by email — <code>npm run user -- reset you@example.com "a new long password"</code>
+        in a Railway shell. Shell access is the root of trust; there is no
+        password reset link to phish.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="part">Part 3 · The demo line</div>
+    <h2>Three numbers a prospect can ring.</h2>
+    <p>
+      One per trade, so a clinic owner hears a clinic rather than a restaurant
+      script or a keypad menu. The webhook already routes an incoming call by
+      the number that was dialled, so this is configuration, not code — and
+      three numbers cost about $3.50 a month in total.
+    </p>
+
+    <div class="note">
+      <p>
+        <strong>A public number is a spend endpoint.</strong> Anyone can dial it,
+        and every minute bills four vendors. Each demo venue is capped at 40
+        calls a day — refused in the webhook <em>before</em> any vendor connects
+        — with a four-minute maximum call, a disclosure in the opening line, and
+        the previous day's demo bookings cleared so the diary never reads as
+        full. Watch it on the <strong>Demo line</strong> page in the dashboard.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="part">Part 3b · Buying them</div>
+    <h2>From an empty Twilio account to a ringing phone.</h2>
+
+    <ol class="steps" start="9">
+      <li>
+        <div>
+          <h3>Twilio account</h3>
+          <p><a href="https://twilio.com" style="color:var(--brass)">twilio.com</a> → sign up → upgrade from trial (a trial number plays a warning message before every call, which ruins a demo). Load about $20.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Buy three numbers</h3>
+          <p>
+            Phone Numbers → Buy a number → United Kingdom → filter for
+            <strong>Voice</strong>. Roughly $1.15 a month each, no address
+            documentation, live in about a minute. Buy one for restaurants, one
+            for salons, one for clinics.
+          </p>
+          <p class="muted" style="font-size:0.9rem">
+            Not <span class="mono">+971</span>: Twilio does not sell UAE numbers.
+            Anyone in the UAE can dial a UK number normally — outbound
+            international calling is not what the TDRA restricts.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Tell each venue which number is its own</h3>
+          <p>
+            In the dashboard, open each venue and set its phone number to the
+            matching Twilio number. This is what the routing keys off — get it
+            wrong and a clinic prospect hears the restaurant.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Point all three at the webhook</h3>
+          <p>Open each number → Voice Configuration → <em>A call comes in</em> → Webhook, <strong>HTTP POST</strong>:</p>
+          <pre><code>https://app.yourdomain.com/api/twilio/voice</code></pre>
+          <p>Then add <code>TWILIO_AUTH_TOKEN</code> to your Railway variables — the webhook verifies Twilio's signature, and without that token anyone who guesses the URL can start calls that bill three vendors to you.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Check your work without guessing</h3>
+          <pre><code>npm run doctor</code></pre>
+          <p>
+            It calls every provider with your keys, lists each Twilio number and
+            whether its webhook actually points at Belline, warns you if the
+            account is still on trial, and POSTs to your own webhook from
+            outside to prove Twilio can reach it.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Ring all three, then put them on the website</h3>
+          <p>
+            Call each one from your phone. Book something, change it, try to
+            catch it out. Then replace the placeholder numbers in the
+            <strong>Hear it now</strong> section of the landing page, run
+            <span class="mono">npm run site</span>, and redeploy.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="part">Part 4 · The venue</div>
+    <h2>Set up a real restaurant or salon.</h2>
+    <p>
+      Everything a venue needs is editable without a deploy. Work through it with
+      them on the phone; it takes about half an hour and it is the part that makes
+      the agent sound like it works there.
+    </p>
+    <ul class="plain">
+      <li><strong>Tables</strong> — every table, its real minimum and maximum covers, and which section it is in. Or, for a salon: every service with its true duration, cleanup time and price, and which staff member can do what.</li>
+      <li><strong>Turn times</strong> — how long you actually hold a table by party size. Getting this wrong is how you double-seat.</li>
+      <li><strong>Pacing</strong> — the most covers the kitchen will take in any quarter hour. Ask the head chef, not the owner.</li>
+      <li><strong>Hours and last seating</strong> — per service, per weekday.</li>
+      <li><strong>House rules</strong> — deposits, large-party policy, what it must never promise. These become hard constraints.</li>
+      <li><strong>Common questions</strong> — parking, dress code, dietary, payment. In their words, as they would say them aloud.</li>
+      <li><strong>Voice and greeting</strong> — pick the voice, preview it saying the venue's own name.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="part">Part 5 · The bit everyone asks about</div>
+    <h2>How a venue puts this on the number they already have.</h2>
+    <p>
+      <strong>They never give up their number.</strong> No porting, no telling
+      customers to call something new, no changes to their Google listing or
+      their printed menus. They forward it.
+    </p>
+
+    <h3 style="margin-top:26px">Two ways to forward, and you should sell the second one</h3>
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>What happens</th><th>When to use it</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Unconditional</strong></td>
+            <td>Every call goes straight to Belline. The venue's phone never rings.</td>
+            <td>Venues who want the phone off the floor entirely, or out of hours.</td>
+          </tr>
+          <tr>
+            <td><strong>On no-answer / busy</strong></td>
+            <td>The phone rings at the host stand for 15–20 seconds. If nobody picks up, or the line is engaged, it rolls to Belline.</td>
+            <td class="yes">Start here, always.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p>
+        <strong>The second one is the whole sales pitch.</strong> The venue risks
+        nothing: staff answer exactly as they do today, and the AI only ever picks
+        up calls that would otherwise have gone to voicemail. You are not asking
+        them to replace their team. You are asking them to stop losing the calls
+        they were already losing.
+      </p>
+    </div>
+
+    <h3 style="margin-top:26px">On a mobile line</h3>
+    <p>Most single-site salons run on a mobile. These are standard GSM codes — the venue dials them like a phone number, on the handset itself:</p>
+    <pre><code># roll to Belline after 20 seconds of ringing
+**61*+441234567890*11*20#
+
+# roll to Belline when the line is engaged
+**67*+441234567890#
+
+# check what's currently set
+*#61#
+
+# turn it all off again
+##002#</code></pre>
+    <p class="muted" style="font-size:0.9rem">Replace the number with your Belline line. Confirm the exact codes with the operator — Etisalat, du, Swisscom and Telekom all support these, but occasionally with their own variations.</p>
+
+    <h3 style="margin-top:26px">On a landline or a PBX</h3>
+    <p>
+      Set in the operator's business portal, or in the PBX if they have one
+      (3CX, Cisco, Yealink, most cloud systems). If the venue has an IT company,
+      this is a five-minute job for them. If they do not, the operator's business
+      support line will do it.
+    </p>
+
+    <div class="warn">
+      <p>
+        <strong>Forwarding a UAE landline internationally costs the venue money</strong>
+        — every forwarded call becomes an outbound international call on their bill.
+        Check the per-minute rate with Etisalat or du before you promise a Dubai
+        venue this is free. It is the strongest single reason to pursue a
+        UAE-licensed SIP provider once you have paying customers.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="part">Part 6 · By country</div>
+    <h2>UAE, Switzerland, Germany, Austria.</h2>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr><th>Country</th><th>Number on Twilio</th><th>What it needs</th><th>Realistic lead time</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>UAE</strong> +971</td>
+            <td class="no">Not available</td>
+            <td>A UAE-licensed operator or SIP provider. TDRA restricts VoIP termination.</td>
+            <td>Weeks, and possibly a dead end. Use forwarding meanwhile.</td>
+          </tr>
+          <tr>
+            <td><strong>Switzerland</strong> +41</td>
+            <td class="yes">Available</td>
+            <td>A Swiss address on the regulatory bundle. Baidas &amp; Baidas AG covers this.</td>
+            <td>A few days for approval.</td>
+          </tr>
+          <tr>
+            <td><strong>Germany</strong> +49</td>
+            <td class="yes">Available</td>
+            <td>A German address — and for a geographic number, one in that area code's region. Strictest of the three.</td>
+            <td>Up to a couple of weeks.</td>
+          </tr>
+          <tr>
+            <td><strong>Austria</strong> +43</td>
+            <td class="yes">Available</td>
+            <td>An Austrian address on the bundle.</td>
+            <td>A few days to a week.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      For DACH the practical order is: get the <strong>Swiss</strong> number first,
+      since you already have the company there, and use forwarding for German and
+      Austrian venues until volume justifies local numbers. Forwarding works
+      identically in all three and costs the venue almost nothing within the EU.
+    </p>
+
+    <h3 style="margin-top:26px">Two things to sort before a European venue goes live</h3>
+    <ul class="plain">
+      <li><strong>Say it's an AI.</strong> The EU AI Act requires people to be told they are talking to an AI system. Put it in the greeting — "you're speaking to our automated assistant" — which is a one-line change on the Agent page. Do it for Switzerland too; it is good practice regardless of whether Swiss law compels it.</li>
+      <li><strong>Transcripts are personal data.</strong> Belline stores transcripts, not audio, but a transcript with a caller's name and number is personal data under GDPR — and under the UAE's PDPL. Germany in particular treats recording a call without consent as a criminal matter, so do not add audio recording without taking advice first.</li>
+    </ul>
+    <p class="muted" style="font-size:0.9rem">
+      None of this is legal advice — get it checked before a paying venue is live.
+      It is cheap to handle now and expensive to retrofit.
+    </p>
+  </section>
+
+  <section>
+    <div class="part">Part 7 · Money</div>
+    <h2>What it costs to run.</h2>
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr><th>Item</th><th>Roughly</th><th>Note</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Twilio number</td><td>$1.15 / month</td><td>Higher for Swiss and German numbers.</td></tr>
+          <tr><td>Inbound minutes</td><td>~$0.01 / min</td><td>Varies by country.</td></tr>
+          <tr><td>Speech-to-text</td><td>~$0.008 / min</td><td>Deepgram streaming.</td></tr>
+          <tr><td>Text-to-speech</td><td>~$0.02–0.03 / min</td><td>Depends on your ElevenLabs plan.</td></tr>
+          <tr><td>The model</td><td>~$0.02–0.03 / min</td><td>Opus 5 with prompt caching. Halves on Sonnet or Haiku.</td></tr>
+          <tr><td>Hosting</td><td>~$5 / month</td><td>Railway hobby tier.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Call it <strong>7 to 9 cents a minute</strong>, plus about $6 a month fixed.
+      A venue taking 300 calls a month at two minutes each costs you roughly $50
+      to serve. Against the AED 1,450 on the landing page, the model works — but
+      confirm every one of these rates yourself before you quote anyone.
+    </p>
+  </section>
+
+  <section>
+    <div class="part">Part 8 · Honest gaps</div>
+    <h2>What still has to exist before you can charge someone.</h2>
+    <p>None of these block a demo. All of them block an invoice.</p>
+    <ul class="plain">
+      <li><strong>A real database.</strong> The booking file works for one server. Two venues on one deploy is fine; two servers is not — and the login throttle is per-server memory, so it weakens the moment you scale out.</li>
+      <li><strong>Password reset by email.</strong> Today an owner resets a password from the server shell. Fine for your own team, awkward once a venue manager locks themselves out on a Saturday night.</li>
+      <li><strong>Two-factor.</strong> A single password now guards every guest phone number you hold. Worth adding before you have many.</li>
+      <li><strong>SMS confirmation.</strong> The booking reference is only ever spoken aloud. Callers write it down wrong.</li>
+      <li><strong>A PMS integration.</strong> Until Belline writes into SevenRooms or Fresha, it is a second book — which most established venues will not accept for long. Fresha first; salon penetration is highest there.</li>
+      <li><strong>Someone watching the calls.</strong> For the first few weeks at any venue, read every transcript the morning after. That is how you find the policy you forgot to write down.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <div class="wrap" style="padding:0">
+      Belline — AI voice reception for restaurants and salons.
+      Prices and regulatory details are approximate and change; verify before committing.
+    </div>
+  </footer>
+
+</div>

@@ -1,0 +1,441 @@
+<title>Belline 90-Day Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --page: #FFFFFF; --band: #F5F7F9; --card: #FFFFFF;
+    --line: #E1E6EB; --line-soft: #EDF0F3;
+    --text: #0F1A24; --text-2: #3A4753; --muted: #667380;
+    --navy: #12395C; --navy-soft: #E9EFF5;
+    --good: #1E7A5A; --good-soft: #E6F2EC;
+    --warn: #9A5B1E; --warn-soft: #FBF0E4;
+    --bad: #A5372F; --bad-soft: #FBEAE8;
+    --shadow: 0 1px 2px rgba(15,26,36,0.06);
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font-family: Manrope, ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px; line-height: 1.62; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+
+  h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.025em; }
+  h1 { font-size: clamp(2rem, 1.5rem + 2.2vw, 2.95rem); font-weight: 800; line-height: 1.06; }
+  h2 { font-size: clamp(1.35rem, 1.2rem + 0.8vw, 1.75rem); font-weight: 700; line-height: 1.2; }
+  h3 { font-size: 1rem; font-weight: 700; }
+  p { margin: 0 0 14px; max-width: 66ch; color: var(--text-2); }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  .muted { color: var(--muted); }
+
+  header.hero { padding: 58px 0 32px; border-bottom: 1px solid var(--line); }
+  header.hero p { font-size: 1.1rem; margin-top: 16px; }
+  .stamp {
+    display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--navy); background: var(--navy-soft);
+    padding: 5px 11px; border-radius: 999px; margin-bottom: 16px;
+  }
+
+  section { padding: 46px 0; border-bottom: 1px solid var(--line-soft); }
+  section:last-of-type { border-bottom: none; }
+
+  .phase {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px;
+  }
+  .when {
+    font-family: "IBM Plex Mono", monospace; font-size: 0.7rem; font-weight: 500;
+    letter-spacing: 0.1em; text-transform: uppercase; color: #fff;
+    background: var(--navy); padding: 4px 10px; border-radius: 5px;
+  }
+  .goal { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+
+  /* Numbered because these genuinely are sequential — each step depends on
+     the one before it. */
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 24px 0 0; display: grid; gap: 20px; }
+  ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 30px 1fr; gap: 15px; }
+  ol.steps > li::before {
+    content: counter(s);
+    font-family: "IBM Plex Mono", monospace; font-size: 0.76rem; font-weight: 500;
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--card); border: 1px solid var(--line); color: var(--navy); margin-top: 1px;
+  }
+  ol.steps h3 { margin-bottom: 5px; }
+  ol.steps p { font-size: 0.94rem; margin-bottom: 8px; }
+  ol.steps p:last-child { margin-bottom: 0; }
+
+  .why {
+    font-size: 0.87rem; color: var(--muted); border-left: 2px solid var(--line);
+    padding-left: 12px; margin-top: 10px;
+  }
+  .why strong { color: var(--text-2); }
+
+  pre {
+    background: var(--band); border: 1px solid var(--line); border-radius: 8px;
+    padding: 11px 13px; overflow-x: auto; margin: 10px 0;
+    font-family: "IBM Plex Mono", monospace; font-size: 0.79rem; line-height: 1.6;
+  }
+  code { font-family: "IBM Plex Mono", monospace; font-size: 0.87em; background: var(--band); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-soft); }
+  pre code { background: none; border: none; padding: 0; }
+
+  .callout { border-left: 3px solid var(--navy); background: var(--navy-soft); padding: 15px 17px; border-radius: 0 10px 10px 0; margin: 20px 0; }
+  .callout.good { border-left-color: var(--good); background: var(--good-soft); }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+  .callout p { margin: 0; font-size: 0.93rem; }
+  .callout p + p { margin-top: 9px; }
+
+  ul.plain { padding-left: 0; list-style: none; margin: 14px 0; }
+  ul.plain li { position: relative; padding-left: 22px; margin-bottom: 9px; font-size: 0.93rem; color: var(--text-2); max-width: 66ch; }
+  ul.plain li::before { content: "—"; position: absolute; left: 0; color: var(--muted); }
+  ul.plain li strong { color: var(--text); }
+
+  .scroller { overflow-x: auto; border: 1px solid var(--line); border-radius: 11px; background: var(--card); margin: 20px 0; box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th { text-align: left; font-size: 0.67rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 10px 13px; background: var(--band); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 11px 13px; border-bottom: 1px solid var(--line-soft); color: var(--text-2); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td strong { color: var(--text); }
+  .done { color: var(--good); font-weight: 700; white-space: nowrap; }
+  .todo { color: var(--muted); font-weight: 600; white-space: nowrap; }
+
+  footer { padding: 32px 0 60px; }
+  footer p { font-size: 0.8rem; color: var(--muted); }
+
+  @media (max-width: 560px) {
+    section { padding: 34px 0; }
+    ol.steps > li { grid-template-columns: 26px 1fr; gap: 11px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <span class="stamp">Operating plan · next 90 days</span>
+    <h1>From a working prototype to paying clinics</h1>
+    <p>
+      What to do, in order, and why each step comes where it does. The product
+      is further along than the business — so most of what follows is not
+      building.
+    </p>
+  </header>
+
+  <section>
+    <div class="eyebrow" style="font-size:0.7rem;font-weight:700;letter-spacing:0.13em;text-transform:uppercase;color:var(--navy);margin-bottom:12px">Where we are</div>
+    <h2>What exists today.</h2>
+
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Piece</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Voice pipeline</strong> — streaming, sentence chunking, barge-in, prompt caching</td><td class="done">Built</td></tr>
+          <tr><td><strong>Booking engine</strong> — restaurants, salons and now clinics, 28 tests</td><td class="done">Built</td></tr>
+          <tr><td><strong>Clinic vertical</strong> — practitioners, surgeries, treatment rooms, medical guardrails</td><td class="done">Built</td></tr>
+          <tr><td><strong>Guest recognition</strong> from caller ID, in the opening line</td><td class="done">Built</td></tr>
+          <tr><td><strong>Dashboard</strong> with transcripts, tool traces, latency</td><td class="done">Built</td></tr>
+          <tr><td><strong>Login</strong>, roles, venue scoping, team management</td><td class="done">Built</td></tr>
+          <tr><td><strong>SMS confirmations</strong> on booking and change</td><td class="done">Built</td></tr>
+          <tr><td><strong>A real phone call</strong> — nothing has ever rung</td><td class="todo">Not yet</td></tr>
+          <tr><td><strong>A customer</strong> — nobody has used it</td><td class="todo">Not yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout bad">
+      <p>
+        <strong>The honest read.</strong> Every remaining risk is commercial,
+        not technical. We do not know what a Dubai clinic pays today, whether
+        they would switch, or whether the UAE telephony problem is solvable at
+        all. Building more features before answering those is the most
+        expensive mistake available right now.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="phase">
+      <span class="when">Week 1</span>
+      <span class="goal">Goal: find out if anyone wants this — before spending another hour building</span>
+    </div>
+    <h2>Talk to ten clinics.</h2>
+
+    <ol class="steps">
+      <li>
+        <div>
+          <h3>Call ten dental and aesthetic clinics in Dubai</h3>
+          <p>
+            Not to sell. To ask five questions: who answers your phone, how many
+            calls do you think you miss, what happens to a missed call, what do
+            you pay that person, and would you pay for something that caught them.
+          </p>
+          <p class="why">
+            <strong>Why first:</strong> every financial number in the market study
+            is an assumption — call volume, handling time, price. One afternoon of
+            calls replaces all of them. If eight of ten say they never miss calls,
+            the whole thesis is wrong and you have saved three months.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Get the three API keys and hear it yourself</h3>
+          <p>
+            Anthropic, Deepgram, ElevenLabs into <code>.env</code>, then
+            <code>npm run dev</code> and press <strong>Speak</strong> in the test
+            console. Around $40 covers all of it.
+          </p>
+          <p class="why">
+            <strong>Why now:</strong> you have never actually heard this thing
+            talk. You cannot sell it, price it, or judge whether it is good
+            enough until you have had a conversation with it.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Pick the voice and read the clinic prompt aloud</h3>
+          <p>
+            On the Agent page, switch to <strong>Meridian Dental &amp;
+            Aesthetics</strong>, try voices with <strong>Hear it</strong>, and
+            read the compiled system prompt end to end.
+          </p>
+          <p class="why">
+            <strong>Why:</strong> the medical guardrails are written but never
+            pressure-tested. Ask it about chest pain, about whether a filling is
+            covered by insurance, about someone else's appointment. Fix what it
+            gets wrong before a real patient asks.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="phase">
+      <span class="when">Week 2</span>
+      <span class="goal">Goal: a number you can hand to a prospect</span>
+    </div>
+    <h2>Make it callable.</h2>
+
+    <ol class="steps">
+      <li>
+        <div>
+          <h3>Deploy and claim the owner account</h3>
+          <p>
+            Follow the go-live runbook: GitHub, Railway, a mounted volume at
+            <code>/data</code>, then open the URL and create the owner account
+            immediately — that form is open until somebody uses it.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Buy a UK number and point it at the webhook</h3>
+          <p>
+            About $1.15 a month, live in a minute, no documentation. Anyone in
+            the UAE dials it as a normal international call.
+          </p>
+          <p class="why">
+            <strong>Why not a UAE number:</strong> Twilio does not sell them —
+            the TDRA reserves inbound VoIP for Etisalat and du. This is the
+            single biggest unknown in the plan, which is why step 7 starts now
+            rather than later.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Add an SMS-capable number</h3>
+          <p>
+            Set <code>TWILIO_SMS_FROM</code> and every booking gets a written
+            confirmation automatically.
+          </p>
+          <p class="why">
+            <strong>Why it matters more than it sounds:</strong> a reference read
+            aloud gets written down wrong, and the caller rings back to check —
+            which costs the venue the exact call the agent just saved them.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="phase">
+      <span class="when">Weeks 2–6</span>
+      <span class="goal">Goal: turn the regulatory wall from a blocker into a moat</span>
+    </div>
+    <h2>Solve UAE telephony, in parallel with everything else.</h2>
+
+    <ol class="steps" start="7">
+      <li>
+        <div>
+          <h3>Open conversations with UAE-licensed providers now</h3>
+          <p>
+            Etisalat and du business divisions, and any TDRA-licensed SIP trunk
+            reseller. The question is narrow: can we terminate inbound calls to
+            a UAE number on our own infrastructure, and what does it take.
+          </p>
+          <p class="why">
+            <strong>Why it is the whole strategy:</strong> the same rule that
+            blocks us blocks Slang.ai, Retell and every US-built competitor. If
+            we solve it we own a market they cannot casually enter. If it turns
+            out to be unsolvable, we learn that in week three rather than month six.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Sell forwarding meanwhile — it works today</h3>
+          <p>
+            A clinic keeps its number and sets conditional forwarding on
+            no-answer and busy. Nothing about their setup changes.
+          </p>
+          <div class="callout warn" style="margin-top:12px">
+            <p>
+              Confirm the international forwarding rate with the venue's operator
+              before promising anything. Forwarding a UAE landline abroad puts an
+              international call on <em>their</em> bill.
+            </p>
+          </div>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="phase">
+      <span class="when">Weeks 4–8</span>
+      <span class="goal">Goal: three clinics using it on real calls, free</span>
+    </div>
+    <h2>Pilot with three, not thirty.</h2>
+
+    <ol class="steps" start="9">
+      <li>
+        <div>
+          <h3>Give it away to three clinics</h3>
+          <p>
+            Free, for eight weeks, in exchange for honest feedback and permission
+            to use them as a reference. Configure each one properly with the
+            practice manager: treatments, durations, practitioners, rooms,
+            policies, common questions. Budget half an hour each.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Read every transcript, every morning</h3>
+          <p>
+            All of them, for the first month. Each one shows you a policy nobody
+            thought to write down, a question you have no answer for, or a phrase
+            the agent uses that a clinic would never use.
+          </p>
+          <p class="why">
+            <strong>Why this is the real work:</strong> the difference between a
+            demo and a product is roughly two hundred small corrections that only
+            real callers reveal. Nothing else in this plan is as valuable per hour.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Replace every assumption with a measurement</h3>
+          <p>
+            Calls per month, average handling time, containment rate, bookings
+            per hundred calls, cost per call. The dashboard already records all
+            of it.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="phase">
+      <span class="when">Weeks 8–12</span>
+      <span class="goal">Goal: the first invoice</span>
+    </div>
+    <h2>Charge someone.</h2>
+
+    <ol class="steps" start="12">
+      <li>
+        <div>
+          <h3>Price from the pilot data, not from the landing page</h3>
+          <p>
+            You will know real minute volumes and real cost per venue. Price at a
+            clear multiple of what a missed booking is worth to them — which the
+            week-one calls told you.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Build exactly one integration — the one a paying customer demands</h3>
+          <p>
+            The seam is <code>BookingBackend</code>. Do not build speculatively
+            against four systems; build the one a clinic makes a condition of
+            paying.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Harden what a paying customer implies</h3>
+          <p>
+            Postgres instead of the JSON store, password reset by email, and
+            two-factor. All three are avoidable while it is a pilot and
+            indefensible once you hold real patient data for money.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>What not to do.</h2>
+    <ul class="plain">
+      <li><strong>Do not lead with salons.</strong> Fresha is bundling an AI Belline at roughly $80 a location into software salons already pay for. Keep the capability; do not build a go-to-market around it.</li>
+      <li><strong>Do not enter DACH yet.</strong> Parloa raised $350M in January 2026 at a $3B valuation and Fonio is a well-reviewed German-native specialist. Switzerland is a second market because of your entity, not a first one.</li>
+      <li><strong>Do not build outbound calling yet.</strong> No-show recovery is the obvious next feature and it is worthless until inbound is proven with real venues.</li>
+      <li><strong>Do not add languages before English is right.</strong> Gulf Arabic dialect handling is a genuine differentiator and a genuine quality bar — it deserves its own project once there is revenue to justify it.</li>
+      <li><strong>Do not deploy publicly and walk away.</strong> The first-run setup form creates the owner account for whoever loads it first.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>How you know it is working.</h2>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>By</th><th>You should have</th><th>If you do not</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Week 1</strong></td><td>Ten conversations and a real price expectation</td><td>The thesis is unvalidated — do not build</td></tr>
+          <tr><td><strong>Week 2</strong></td><td>A number that rings and books</td><td>A technical problem, and they are the easy ones</td></tr>
+          <tr><td><strong>Week 6</strong></td><td>A clear answer on UAE telephony</td><td>Pivot to Switzerland, where numbers are simply purchasable</td></tr>
+          <tr><td><strong>Week 8</strong></td><td>Three clinics live, real containment data</td><td>The product is not good enough yet — keep reading transcripts</td></tr>
+          <tr><td><strong>Week 12</strong></td><td>One paying customer</td><td>Re-examine the vertical before scaling the effort</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout good">
+      <p>
+        One paying clinic that renews is worth more than fifty features. Every
+        step above is arranged to reach that as early as possible and to fail
+        cheaply if it is not reachable.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Companion documents: the go-live runbook covers the technical setup in
+      steps 4–6; the market study covers the vertical and geography reasoning.
+      Prices and regulatory details change — verify before committing.
+    </p>
+  </footer>
+
+</div>
