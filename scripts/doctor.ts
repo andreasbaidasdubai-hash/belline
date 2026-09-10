@@ -250,4 +250,7 @@ if (blockers.length === 0) {
     `   ${blockers.length} thing${blockers.length === 1 ? "" : "s"} still between you and a ringing phone.\n`,
   );
 }
-process.exit(blockers.length === 0 ? 0 : 1);
+// exitCode rather than exit(): the provider checks leave sockets in flight,
+// and tearing the loop down under them trips a libuv assertion on Windows.
+// Setting the code lets Node drain and exit cleanly.
+process.exitCode = blockers.length === 0 ? 0 : 1;
