@@ -72,6 +72,13 @@ export default function Console({
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [from, setFrom] = useState("");
+  /**
+   * What the speaker is actually doing. "Cannot hear it" is the worst failure
+   * this product has, and without this the three causes — no audio sent, a
+   * suspended context, and a muted device — are indistinguishable.
+   */
+  const [audioState, setAudioState] = useState<string>("idle");
+  const [heardBytes, setHeardBytes] = useState(0);
 
   const socketRef = useRef<WebSocket | null>(null);
   const captureRef = useRef<{ ctx: AudioContext; stream: MediaStream } | null>(null);
@@ -98,13 +105,15 @@ export default function Console({
     if (!playRef.current) {
       playRef.current = { ctx: new AudioContext(), cursor: 0, nodes: [] };
     }
-    if (playRef.current.ctx.state === "suspended") {
+    const ctx = playRef.current.ctx;
+    if (ctx.state === "suspended") {
       try {
-        await playRef.current.ctx.resume();
+        await ctx.resume();
       } catch {
         setError("Your browser blocked audio. Click anywhere on the page, then start the call again.");
       }
     }
+    setAudioState(`${ctx.state} @ ${Math.round(ctx.sampleRate / 1000)}kHz`);
   }, []);
 
   const enqueueAudio = useCallback(async (bytes: ArrayBuffer) => {
@@ -140,6 +149,12 @@ export default function Console({
     const source = play.ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(play.ctx.destination);
+
+    setHeardBytes((n) => n + pcm.length * 2);
+    if (play.ctx.state !== "running") {
+      setAudioState(`${play.ctx.state} — blocked`);
+      void play.ctx.resume();
+    }
 
     const now = play.ctx.currentTime;
     // A small floor keeps consecutive chunks butted together rather than
@@ -369,6 +384,19 @@ export default function Console({
               <Capability on={status.stt} label="speech-in" />
               <Capability on={status.tts} label="speech-out" />
             </>
+          )}
+          {connected && (
+            <span
+              className="pill mono"
+              title="Web Audio state, and how much audio the browser has been handed"
+              style={{
+                color: audioState.startsWith("running") ? "var(--ok)" : "var(--bad)",
+                borderColor: audioState.startsWith("running") ? "var(--ok)" : "var(--bad)",
+              }}
+            >
+              🔊 {audioState}
+              {heardBytes > 0 ? ` · ${Math.round(heardBytes / 1024)}KB` : " · no audio yet"}
+            </span>
           )}
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             {!connected ? (
