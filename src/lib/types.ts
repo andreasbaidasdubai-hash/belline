@@ -334,6 +334,15 @@ export interface Call {
    * rules that were actually live when it happened.
    */
   brainVersion?: number;
+  /**
+   * When somebody dealt with what this call needed.
+   *
+   * Only ever set by a person clearing it from the Action Inbox — an item is
+   * derived from the call's own properties, so nothing else can decide it no
+   * longer needs attention.
+   */
+  attentionResolvedAt?: string;
+  attentionResolvedBy?: string;
 }
 
 // ---------------------------------------------------------------------------
