@@ -74,7 +74,10 @@
     z-index: 20;
   }
 
-  .top-in { display: flex; align-items: center; gap: 30px; padding: 15px 0; }
+  /* padding-block, not the `padding` shorthand: this element also carries
+     .wrap, and a shorthand here would wipe .wrap's horizontal padding and
+     pin the logo and the button to the screen edges. */
+  .top-in { display: flex; align-items: center; gap: 30px; padding-block: 15px; }
 
   .logo {
     display: flex; align-items: center; gap: 9px;
@@ -230,10 +233,27 @@
   @media (max-width: 720px) {
     section { padding: 52px 0; }
     .hero { padding: 46px 0 34px; }
-    .top nav { display: none; }
     .closer { padding: 38px 24px; }
     .handled-row { grid-template-columns: 1fr; gap: 5px; }
     .handled-row .a { text-align: left; }
+
+    /* The nav moves to its own scrollable row under the logo rather than
+       disappearing. Hiding it left the page with no way to reach the
+       sections, and a hamburger is more machinery than four links deserve. */
+    .top-in { flex-wrap: wrap; gap: 10px 16px; padding-block: 12px; }
+    .top .right { margin-left: auto; }
+    .top nav {
+      order: 3;
+      width: 100%;
+      margin-left: 0;
+      gap: 20px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 2px;
+    }
+    .top nav::-webkit-scrollbar { display: none; }
+    .top nav a { white-space: nowrap; padding: 2px 0; }
   }
 
   @media (prefers-reduced-motion: reduce) {
