@@ -176,12 +176,33 @@ function mergeOutreach(parent: unknown, child: unknown): unknown {
 // ---------------------------------------------------------------------------
 
 /**
+ * Fill anything the chain left unset from `DEFAULT_CONFIG`.
+ *
+ * Deliberately applied *after* the chain rather than as its first layer. The
+ * merge modes are one-way: `intersect` narrows and `sum_capped` takes a
+ * minimum. A default used as a layer therefore becomes a ceiling — a default
+ * of `channels: ["email"]` would silently delete the LinkedIn a country
+ * manager permits, and a default daily budget of $5 would cap every agent at
+ * $5 no matter what anyone configured. Defaults are a floor for what is
+ * missing, never a limit on what is present.
+ */
+function fillDefaults(value: unknown, defaults: unknown): unknown {
+  if (value === undefined) return defaults;
+  if (!isPlainObject(value) || !isPlainObject(defaults)) return value;
+  const out: AnyRecord = { ...value };
+  for (const [key, fallback] of Object.entries(defaults)) {
+    out[key] = fillDefaults(out[key], fallback);
+  }
+  return out;
+}
+
+/**
  * Merge a chain ordered outermost-first: [director, country, vertical].
  * Pure — no database, no environment. Every interesting property of the
  * hierarchy is a property of this function.
  */
 export function mergeChain(chain: PartialAgentConfig[]): PartialAgentConfig {
-  let acc: AnyRecord = { ...(DEFAULT_CONFIG as AnyRecord) };
+  let acc: AnyRecord = {};
 
   for (const layer of chain) {
     for (const [key, value] of Object.entries(layer)) {
@@ -196,7 +217,7 @@ export function mergeChain(chain: PartialAgentConfig[]): PartialAgentConfig {
       }
     }
   }
-  return acc as PartialAgentConfig;
+  return fillDefaults(acc, DEFAULT_CONFIG) as PartialAgentConfig;
 }
 
 export class ConfigError extends Error {

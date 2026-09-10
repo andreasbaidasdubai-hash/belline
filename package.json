@@ -19,7 +19,11 @@
                     "audit:ui":  "playwright test --ui",
                     "check:prospect":  "node --import tsx scripts/check-prospect.ts",
                     "check:authority":  "node --import tsx scripts/check-authority.ts",
-                    "voices":  "node --import tsx --env-file-if-exists=.env scripts/build-voices.ts"
+                    "voices":  "node --import tsx --env-file-if-exists=.env scripts/build-voices.ts",
+                    "sales:db":  "node --import tsx --env-file-if-exists=.env scripts/sales-db.ts",
+                    "worker":  "node --import tsx --env-file-if-exists=.env scripts/worker.ts",
+                    "check:queue":  "node --import tsx --env-file-if-exists=.env scripts/check-queue.ts",
+                    "check:sales":  "node --import tsx scripts/check-sales.ts"
                 },
     "dependencies":  {
                          "@anthropic-ai/sdk":  "^0.124.0",

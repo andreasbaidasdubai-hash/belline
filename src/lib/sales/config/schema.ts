@@ -67,6 +67,9 @@ const SendWindow = z.object({
 });
 export type SendWindow = z.infer<typeof SendWindow>;
 
+// All three sections optional: plenty of ICPs have nothing to exclude, and
+// requiring an empty object to say so is noise in every seed and every form
+// submission.
 const Icp = z.object({
   must: z
     .object({
@@ -92,7 +95,7 @@ const Icp = z.object({
       keywords_in_name: z.array(z.string()),
     })
     .partial(),
-});
+}).partial();
 export type Icp = z.infer<typeof Icp>;
 
 const QualificationRules = z.object({

@@ -196,25 +196,40 @@ basis recorded in `consent_record`.
 
 ## 7. Cost model per lead
 
-Planning figures for one lead taken from discovery through first contact:
+Model pricing per 1M tokens: **Opus 5** $5 in / $25 out · **Sonnet 5** $2 / $10 ·
+**Haiku 4.5** $1 / $5. Cache reads are ~0.1× input, which matters here because
+each agent's framing prompt is identical across every company it looks at and
+sits behind a cache breakpoint.
 
-| Step | Cost |
-| --- | --- |
-| Discovery (Places search + details) | ~$0.04 |
-| Email verification | ~$0.003 |
-| Research crawl (6 fetches) | ~$0 |
-| Research LLM (~15k in / 1k out, Sonnet) | ~$0.05 |
-| Decision-maker LLM | ~$0.01 |
-| Personalisation LLM (~4k in / 400 out) | ~$0.015 |
-| Email send | ~$0.001 |
-| **Subtotal, first touch** | **≈ $0.12** |
-| 3 follow-ups (personalised) | ~$0.04 |
-| Reply classification, if any | ~$0.005 |
-| **Full sequence** | **≈ $0.17** |
+The pipeline defaults to **Opus 5 for every task**, overridable per task by
+environment variable (`SALES_MODEL_RESEARCH`, `SALES_MODEL_PERSONALISE`, …).
+That is the expensive default and a deliberate one — quality per lead matters
+more than cost per lead until volume says otherwise. Both columns below, so the
+trade is a decision with numbers behind it:
 
-At 500 companies/month per agent that is roughly **$85/agent/month**, or about
-**$1,000/month across twelve agents** — before enrichment seats and email
-infrastructure. Add ~$100–200/month for sending infrastructure and enrichment.
+| Step | Opus 5 | Sonnet 5 |
+| --- | --- | --- |
+| Discovery (Places search + details) | ~$0.040 | ~$0.040 |
+| Email verification | ~$0.003 | ~$0.003 |
+| Research crawl (6 fetches) | $0 | $0 |
+| Research LLM (~15k in / 1k out) | ~$0.100 | ~$0.040 |
+| Decision-maker LLM (~5k / 300) | ~$0.033 | ~$0.013 |
+| Personalisation LLM (~4k / 400) | ~$0.030 | ~$0.012 |
+| Email send | ~$0.001 | ~$0.001 |
+| **Subtotal, first touch** | **≈ $0.21** | **≈ $0.11** |
+| 3 personalised follow-ups | ~$0.090 | ~$0.036 |
+| Reply classification, if any | ~$0.010 | ~$0.004 |
+| **Full sequence** | **≈ $0.31** | **≈ $0.15** |
+
+At 500 companies/month per agent: **≈$155/agent/month** on Opus 5, **≈$75** on
+Sonnet 5. Across twelve agents, roughly **$1,900/month** versus **$900** —
+before enrichment seats and email infrastructure, which add ~$100–200/month.
+
+The honest read: the gap is one meeting a month. Start on Opus 5, measure reply
+rate, and only trade down where a measured sample says quality holds — research
+first, since it is the largest line and its output is a structured extraction
+rather than prose a prospect reads. Personalisation is the last thing to
+downgrade.
 
 Sensitivities worth knowing before you tune anything:
 
@@ -256,5 +271,13 @@ CALENDAR_API_KEY=
 CALENDAR_WEBHOOK_SECRET=
 
 SALES_WORKER_CONCURRENCY=4
-SALES_DEFAULT_MODEL=claude-sonnet-5
+
+# Models. Everything defaults to claude-opus-5; override per task to trade down.
+SALES_DEFAULT_MODEL=
+SALES_MODEL_RESEARCH=
+SALES_MODEL_DECISION_MAKER=
+SALES_MODEL_PERSONALISE=
+SALES_MODEL_CLASSIFY=
+SALES_MODEL_BRIEFING=
+SALES_MODEL_DIRECTIVE=
 ```
