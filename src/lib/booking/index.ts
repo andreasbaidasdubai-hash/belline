@@ -15,6 +15,7 @@ import {
 import { minutesToSpoken, dateToSpoken } from "../time";
 import { checkRestaurantSlot, searchRestaurant } from "./restaurant";
 import { checkSalonSlot, chainDuration, resolveServices, searchSalon } from "./salon";
+import { bookingKey, describeWhat, findDuplicate, type BookingIdentity } from "./idempotency";
 
 /**
  * The booking facade the agent talks to.
@@ -47,7 +48,17 @@ export interface CreateInput {
 }
 
 export type BookingResult =
-  | { ok: true; booking: Booking }
+  | {
+      ok: true;
+      booking: Booking;
+      /**
+       * True when this booking already existed and was returned rather than
+       * created. The agent should read it back as a confirmation, not
+       * announce a second reservation — and the caller, who may simply have
+       * repeated themselves, should never learn there was a question.
+       */
+      duplicate?: boolean;
+    }
   | { ok: false; reason: string; detail: string; alternatives: Slot[] };
 
 // ---------------------------------------------------------------------------
@@ -62,6 +73,22 @@ export function findAvailability(location: Location, query: AvailabilityQuery): 
 export function createBooking(location: Location, input: CreateInput): BookingResult {
   const bookings = listBookings({ locationId: location.id });
   const now = new Date().toISOString();
+
+  // Before anything is held: is this booking already on the book? A retried
+  // tool call, a redelivered webhook, or a caller repeating themselves all
+  // arrive here looking like a fresh request, and a restaurant that finds two
+  // tables held for the same six people at eight o'clock does not forgive it.
+  const identity: BookingIdentity = {
+    locationId: location.id,
+    date: input.date,
+    startMin: input.startMin,
+    guestPhone: input.guestPhone,
+    guestName: input.guestName,
+    what: describeWhat(input),
+  };
+  const already = findDuplicate(location, identity);
+  if (already) return { ok: true, booking: already, duplicate: true };
+  const idempotencyKey = bookingKey(identity);
 
   if (location.vertical === "restaurant") {
     const partySize = input.partySize ?? 2;
@@ -99,6 +126,7 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
       tableIds: check.assignment.tableIds,
       source: input.source ?? "voice",
       callId: input.callId,
+      idempotencyKey,
       createdAt: now,
       updatedAt: now,
     };
@@ -145,6 +173,7 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
     resourceId: check.assignment.resourceId,
     source: input.source ?? "voice",
     callId: input.callId,
+    idempotencyKey,
     createdAt: now,
     updatedAt: now,
   };
@@ -197,6 +226,17 @@ export function modifyBooking(
       partySize,
       tableIds: check.assignment.tableIds,
       notes: changes.notes ?? booking.notes,
+      // The fingerprint describes where the booking *is*. Leaving the old one
+      // in place would make this booking look like a duplicate of the slot it
+      // just vacated, and block the next guest who genuinely wants it.
+      idempotencyKey: bookingKey({
+        locationId: location.id,
+        date,
+        startMin: check.assignment.startMin,
+        guestPhone: booking.guestPhone,
+        guestName: booking.guestName,
+        what: describeWhat({ partySize }),
+      }),
       updatedAt: new Date().toISOString(),
     };
     return { ok: true, booking: saveBooking(updated) };
@@ -234,6 +274,16 @@ export function modifyBooking(
     staffId: check.assignment.staffId,
     resourceId: check.assignment.resourceId,
     notes: changes.notes ?? booking.notes,
+    // As above: the fingerprint follows the booking to its new slot, or it
+    // would keep guarding the one this guest has just given up.
+    idempotencyKey: bookingKey({
+      locationId: location.id,
+      date,
+      startMin: check.assignment.startMin,
+      guestPhone: booking.guestPhone,
+      guestName: booking.guestName,
+      what: describeWhat({ serviceIds: check.assignment.serviceIds }),
+    }),
     updatedAt: new Date().toISOString(),
   };
   return { ok: true, booking: saveBooking(updated) };

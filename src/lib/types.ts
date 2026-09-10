@@ -238,6 +238,13 @@ export interface Booking {
   resourceId?: string;
   source: "voice" | "manual" | "web";
   callId?: string;
+  /**
+   * Fingerprint of what this booking *is* — venue, day, time, guest, party or
+   * services. A second request carrying the same fingerprint is the same
+   * booking arriving twice, whatever the transport did, and returns this one
+   * instead of holding a second table. See `booking/idempotency.ts`.
+   */
+  idempotencyKey?: string;
   createdAt: string;
   updatedAt: string;
 }

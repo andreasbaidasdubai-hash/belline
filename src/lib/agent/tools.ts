@@ -397,6 +397,23 @@ export async function executeTool(
       }
 
       ctx.call.bookingId = result.booking.id;
+
+      // This booking already existed — a retry, or a caller going round the
+      // houses and asking for the same thing twice. Confirm what they have
+      // rather than announcing a second one, and do not text them again: a
+      // duplicate confirmation reads as a duplicate booking to the guest.
+      if (result.duplicate) {
+        return {
+          result: {
+            booked: true,
+            already_booked: true,
+            ...bookingPayload(location, result.booking),
+            read_back: describeBooking(location, result.booking),
+            say: "They already have this booking. Confirm it back as theirs — do not suggest anything was booked twice.",
+          },
+        };
+      }
+
       const texted = await confirmByText(location, result.booking);
       return {
         result: {

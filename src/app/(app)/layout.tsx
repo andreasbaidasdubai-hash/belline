@@ -26,7 +26,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       ? [
           { href: "/demo", label: "Demo line" },
     // Sales-side, so it stays out of a venue's own sidebar.
-    ...(user.role === "owner" ? [{ href: "/prospects", label: "Personalised demos" }] : []),
+    ...(user.role === "owner"
+      ? [
+          { href: "/prospects", label: "Personalised demos" },
+          { href: "/sales", label: "Sales engine" },
+          { href: "/sales/activity", label: "Activity" },
+        ]
+      : []),
           { href: "/team", label: "Team" },
         ]
       : []),
