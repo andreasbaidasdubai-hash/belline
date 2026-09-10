@@ -1,3 +1,5 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Belline Go-Live Runbook</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -70,7 +72,11 @@
 
   /* The numbering is real: these are ordered and each depends on the last. */
   ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 26px 0 0; display: grid; gap: 22px; }
-  ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 34px 1fr; gap: 16px; }
+  /* minmax(0, 1fr), not 1fr: a bare 1fr refuses to shrink below the
+     min-content width of the <pre> blocks inside, so the whole page ends up
+     wider than a phone and `overflow-x: auto` on the pre never engages. */
+  ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 16px; }
+  ol.steps > li > div { min-width: 0; }
   ol.steps > li::before {
     content: counter(step);
     font-family: "IBM Plex Mono", monospace; font-size: 0.78rem; font-weight: 500;
@@ -118,7 +124,7 @@
 
   @media (max-width: 560px) {
     section { padding: 34px 0; }
-    ol.steps > li { grid-template-columns: 28px 1fr; gap: 12px; }
+    ol.steps > li { grid-template-columns: 28px minmax(0, 1fr); gap: 12px; }
   }
 </style>
 

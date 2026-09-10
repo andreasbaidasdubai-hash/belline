@@ -1,0 +1,37 @@
+# Netlify builds the public website from this repo.
+#
+# The repo holds both halves of Belline: the Next.js app (which needs a live
+# process and runs on Railway) and the marketing site (four static pages).
+# Netlify only ever builds the second — `npm run site` copies public/*.html
+# into site/ with the landing page promoted to index.html.
+
+[build]
+  command = "npm run site"
+  publish = "site"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# The landing page is public/landing.html in the repo but index.html on the
+# site. Anyone holding the old path should still land somewhere sensible.
+[[redirects]]
+  from = "/landing.html"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/index.html"
+  to = "/"
+  status = 301
+  force = true
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "SAMEORIGIN"
+    # The pages load fonts from Google and nothing else — no scripts from
+    # anywhere but this origin.
+    Content-Security-Policy = "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'self' 'unsafe-inline'; frame-ancestors 'self'"

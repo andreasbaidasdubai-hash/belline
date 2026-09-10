@@ -1,3 +1,5 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Belline 90-Day Plan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,7 +57,10 @@
   /* Numbered because these genuinely are sequential — each step depends on
      the one before it. */
   ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 24px 0 0; display: grid; gap: 20px; }
-  ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 30px 1fr; gap: 15px; }
+  /* minmax(0, 1fr) so the column can shrink below the min-content width of
+     the <pre> blocks it contains — a bare 1fr overflows the page on a phone. */
+  ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 15px; }
+  ol.steps > li > div { min-width: 0; }
   ol.steps > li::before {
     content: counter(s);
     font-family: "IBM Plex Mono", monospace; font-size: 0.76rem; font-weight: 500;
@@ -107,7 +112,7 @@
 
   @media (max-width: 560px) {
     section { padding: 34px 0; }
-    ol.steps > li { grid-template-columns: 26px 1fr; gap: 11px; }
+    ol.steps > li { grid-template-columns: 26px minmax(0, 1fr); gap: 11px; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
