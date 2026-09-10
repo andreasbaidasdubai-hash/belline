@@ -12,6 +12,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
+# The marketing site ships in the same image. It was on a separate static
+# host until that host's build allowance ran out and quietly stopped
+# publishing — the site stayed up, frozen, while every push was accepted by
+# git and ignored. One process serves both now, chosen by hostname.
+RUN npm run site
 
 FROM node:22-slim AS run
 WORKDIR /app
@@ -23,6 +28,7 @@ ENV DATA_DIR=/data
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
+COPY --from=build /app/site ./site
 COPY package.json next.config.mjs tsconfig.json server.ts ./
 COPY src ./src
 

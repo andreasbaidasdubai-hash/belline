@@ -15,6 +15,7 @@ import { reconcileStaleCalls, startCall } from "./src/lib/calls";
 import type { User } from "./src/lib/types";
 import { greetingFor } from "./src/lib/agent/runtime";
 import { checkDemoGate } from "./src/lib/demo";
+import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { VoiceSession } from "./src/lib/voice/session";
 import { BrowserTransport, TwilioTransport } from "./src/lib/voice/transports";
@@ -45,7 +46,15 @@ seedIfEmpty();
 const reconciled = reconcileStaleCalls();
 void warmGreetings();
 
+// Built at image time. Absent in a bare dev checkout, where the marketing
+// pages are served by Next out of public/ instead.
+const marketingReady = marketingSiteExists();
+
 const server = createServer((req, res) => {
+  // The website and the product share this process, chosen by hostname. See
+  // marketing.ts — anything that is not `app.` is the website, and a request
+  // it does not recognise falls through to Next rather than 404ing.
+  if (marketingReady && isMarketingHost(req.headers.host) && serveMarketing(req, res)) return;
   handle(req, res, parse(req.url ?? "/", true));
 });
 

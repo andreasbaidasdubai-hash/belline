@@ -94,11 +94,13 @@ interface DialPlan {
  * dependency and a lot of surface for a system that will never dial Brazil.
  */
 const PLANS: Record<string, DialPlan> = {
-  // Mobile 5X XXXXXXX, landline X XXXXXXX — 9 digits either way.
-  AE: { cc: "971", nsnLengths: [9] },
-  // Mobile 5X XXXXXXX (9), landline 1X XXXXXXX (9). Some legacy 8.
-  SA: { cc: "966", nsnLengths: [9, 8] },
-  // 9 digits nationally: 44 123 45 67 and mobiles 79 123 45 67.
+  // Two different lengths, and both are common in a clinic listing:
+  // mobile  05X XXX XXXX -> 9 digits (501234567)
+  // landline 0X XXX XXXX -> 8 digits (41234567), the area code is one digit.
+  AE: { cc: "971", nsnLengths: [9, 8] },
+  // Uniformly 9 under the current plan: mobile 5X XXXXXXX, landline 1X XXXXXXX.
+  SA: { cc: "966", nsnLengths: [9] },
+  // 9 nationally: landline 44 123 45 67, mobile 79 123 45 67.
   CH: { cc: "41", nsnLengths: [9] },
 };
 
