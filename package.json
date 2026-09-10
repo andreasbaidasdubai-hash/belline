@@ -24,7 +24,9 @@
                     "worker":  "node --import tsx --env-file-if-exists=.env scripts/worker.ts",
                     "check:queue":  "node --import tsx --env-file-if-exists=.env scripts/check-queue.ts",
                     "check:sales":  "node --import tsx scripts/check-sales.ts",
-                    "check:idempotency":  "node --import tsx scripts/check-idempotency.ts"
+                    "check:idempotency":  "node --import tsx scripts/check-idempotency.ts",
+                    "check:brain":  "node --import tsx scripts/check-brain.ts",
+                    "check:all":  "npm run check \u0026\u0026 npm run check:brain \u0026\u0026 npm run check:idempotency \u0026\u0026 npm run check:authority \u0026\u0026 npm run check:prospect"
                 },
     "dependencies":  {
                          "@anthropic-ai/sdk":  "^0.124.0",

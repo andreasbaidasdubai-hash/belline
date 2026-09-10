@@ -1,7 +1,7 @@
 import net from "node:net";
 import dns from "node:dns/promises";
 import Anthropic from "@anthropic-ai/sdk";
-import type { Location, Vertical } from "./types";
+import type { Location, Vertical, WeeklyHours } from "./types";
 import { upsertLocation, listLocations } from "./store";
 
 /**
@@ -228,10 +228,20 @@ export function slugify(name: string): string {
   );
 }
 
-/** A working week, so the diary has something to offer. */
-function weekdayHours(open: number, close: number) {
-  const day = { open, close };
-  return { mon: day, tue: day, wed: day, thu: day, fri: day, sat: day, sun: null };
+/**
+ * A working week, so the demo diary has something to offer.
+ *
+ * `WeeklyHours` is keyed by `Date.getDay()` — 0 is Sunday — and holds ranges,
+ * not an open/close pair. Getting this shape wrong does not fail loudly: the
+ * availability search simply finds nothing, and the demo tells the prospect
+ * their own business is fully booked forever.
+ */
+function weekdayHours(open: number, close: number): WeeklyHours {
+  const week: WeeklyHours = {};
+  for (let day = 0; day <= 6; day++) {
+    week[day] = day === 0 ? [] : [{ start: open, end: close }];
+  }
+  return week;
 }
 
 export function buildProspectLocation(found: Extracted, sourceUrl: string, slug: string): Location {
@@ -305,6 +315,14 @@ export function buildProspectLocation(found: Extracted, sourceUrl: string, slug:
               start: 18 * 60,
               end: 22 * 60,
               lastSeating: 21 * 60 + 30,
+              // Ordinary turn times. A demo with none holds every table for
+              // zero minutes, which makes the diary look infinitely free —
+              // the opposite of what this is meant to demonstrate.
+              turnTimes: [
+                { upTo: 2, minutes: 90 },
+                { upTo: 4, minutes: 105 },
+                { upTo: 8, minutes: 120 },
+              ],
             },
           ],
           maxCoversPerSlot: 12,
@@ -329,7 +347,7 @@ export function buildProspectLocation(found: Extracted, sourceUrl: string, slug:
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + DEMO_TTL_DAYS * 86_400_000).toISOString(),
     },
-  } as Location;
+  };
 }
 
 export async function createProspectDemo(rawUrl: string): Promise<Location> {

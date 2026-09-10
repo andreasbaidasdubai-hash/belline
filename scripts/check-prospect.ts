@@ -110,6 +110,57 @@ await test("a restaurant gets tables, a clinic gets a diary", () => {
   assert.ok(rest.restaurant && !rest.salon);
 });
 
+console.log("\nA generated venue must actually be bookable\n");
+
+// The shape of a venue is easy to get subtly wrong and impossible to notice:
+// a bad hours key or a missing turn time does not throw, it just means the
+// availability search finds nothing — and the demo tells a prospect their own
+// business is fully booked forever. Cast-free construction plus this test is
+// what stops that shipping.
+await test("a generated clinic offers real appointments", async () => {
+  const { findAvailability } = await import("../src/lib/booking");
+  const loc = buildProspectLocation(found, "https://x.example", "bookable-clinic");
+  // Scan a week: a venue that is shut on the day the test happened to pick is
+  // correct behaviour, not a bug. What must not happen is a whole week free of
+  // a single appointment.
+  let total = 0;
+  for (let day = 1; day <= 7; day++) {
+    const date = new Date();
+    date.setDate(date.getDate() + day);
+    total += findAvailability(loc, {
+      locationId: loc.id,
+      date: date.toISOString().slice(0, 10),
+      serviceIds: [loc.salon!.services[0].id],
+    }).length;
+  }
+  assert.ok(total > 0, "a generated clinic had no availability all week");
+});
+
+await test("a generated restaurant offers real tables", async () => {
+  const { findAvailability } = await import("../src/lib/booking");
+  const loc = buildProspectLocation(
+    { ...found, vertical: "restaurant" },
+    "https://x.example",
+    "bookable-restaurant",
+  );
+  const date = new Date();
+  date.setDate(date.getDate() + 3);
+  const slots = findAvailability(loc, {
+    locationId: loc.id,
+    date: date.toISOString().slice(0, 10),
+    partySize: 4,
+  });
+  assert.ok(slots.length > 0, "a generated restaurant had no availability at all");
+});
+
+await test("opening hours use the weekday-indexed shape the engine reads", () => {
+  const loc = buildProspectLocation(found, "https://x.example", "hours");
+  // Keyed by Date.getDay(), holding ranges — not { mon: { open, close } }.
+  assert.ok(Array.isArray(loc.hours[1]), "weekday 1 is not a list of ranges");
+  assert.ok(loc.hours[1].length > 0, "no opening hours on a Monday");
+  assert.equal(typeof loc.hours[1][0].start, "number");
+});
+
 console.log("\nFile hygiene\n");
 
 // A byte-order mark in package.json broke every production build while the

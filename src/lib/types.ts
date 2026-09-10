@@ -1,3 +1,5 @@
+import type { BrainVersion } from "./brain";
+
 // Domain model.
 //
 // Two deliberate choices shape everything below:
@@ -56,6 +58,16 @@ export interface Location {
   demo?: DemoConfig;
   /** Set when this venue was read off a prospect's website for a sales demo. */
   prospect?: ProspectConfig;
+  /**
+   * Every published configuration this venue has had, oldest first.
+   *
+   * The live fields above are what the agent reads on the next call; this is
+   * the record of how they got that way. See `brain.ts` — the questions asked
+   * after something goes wrong are who changed it, when, why, and which
+   * version handled the call being complained about, and a prompt cannot
+   * answer any of them.
+   */
+  brainHistory?: BrainVersion[];
 }
 
 /**
@@ -313,6 +325,15 @@ export interface Call {
    * show someone and a claim you can only make.
    */
   authorityRuleId?: string;
+  /**
+   * The Business Brain version that handled this call.
+   *
+   * "Which configuration said that?" is unanswerable once a venue has edited
+   * its policies twice, unless it was written down at the time. Recorded here
+   * so a complaint about a call from three weeks ago can be read against the
+   * rules that were actually live when it happened.
+   */
+  brainVersion?: number;
 }
 
 // ---------------------------------------------------------------------------

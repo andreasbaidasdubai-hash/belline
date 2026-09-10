@@ -1,5 +1,6 @@
 import type { Call, Location } from "./types";
 import { id, listCalls, saveCall } from "./store";
+import { currentVersion } from "./brain";
 
 export function startCall(
   location: Location,
@@ -17,6 +18,9 @@ export function startCall(
     transcript: [],
     toolCalls: [],
     latenciesMs: [],
+    // Stamped at the start, not read at the end: a venue edited mid-call must
+    // not retroactively change what this call was answered under.
+    brainVersion: currentVersion(location)?.number,
   };
   return saveCall(call);
 }

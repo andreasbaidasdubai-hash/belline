@@ -3,6 +3,7 @@ import { getLocation, upsertLocation } from "@/lib/store";
 import { canEditAgent } from "@/lib/auth";
 import { requireApiUser } from "@/lib/auth-server";
 import type { AgentConfig } from "@/lib/types";
+import { publish } from "@/lib/brain";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,8 @@ export async function PATCH(request: Request) {
   const body = (await request.json()) as {
     locationId?: string;
     agent?: Partial<AgentConfig>;
+    /** One line on what changed, kept with the version in the history. */
+    note?: string;
   };
 
   const location = body.locationId ? getLocation(body.locationId) : undefined;
@@ -54,5 +57,20 @@ export async function PATCH(request: Request) {
   };
 
   upsertLocation({ ...location, agent: next });
-  return NextResponse.json({ ok: true, agent: next });
+
+  // Record the change. Publishing after the save rather than instead of it
+  // keeps the live venue as the single source of truth for the next call,
+  // while the history answers who changed what, when, and why.
+  const published = publish(
+    location.id,
+    { id: auth.user.id, name: auth.user.name },
+    typeof body.note === "string" ? body.note : "Updated the agent",
+  );
+
+  return NextResponse.json({
+    ok: true,
+    agent: next,
+    version: published?.version.number,
+    changed: published?.changed ?? false,
+  });
 }

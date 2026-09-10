@@ -1,5 +1,6 @@
 import type { AgentConfig, Location, StaffMember, WeeklyHours } from "./types";
 import { isEmpty, listLocations, replaceAll, upsertLocation } from "./store";
+import { ensureBaseline } from "./brain";
 
 const H = (h: number, m = 0) => h * 60 + m;
 
@@ -437,8 +438,22 @@ function addMissingVenues(): void {
 export function seedIfEmpty(): void {
   if (isEmpty()) {
     replaceAll({ locations: FIXTURES, bookings: [], calls: [] });
+    baselineBrains();
     return;
   }
   addMissingVenues();
   backfillAgentDefaults();
+  baselineBrains();
+}
+
+/**
+ * Give every venue a version 1.
+ *
+ * Seeded venues and venues that predate the Business Brain have a
+ * configuration but no history. Without a baseline the first real edit reads
+ * as "everything changed" — true, and useless to anyone scanning the history
+ * for what somebody actually did.
+ */
+function baselineBrains(): void {
+  for (const location of listLocations()) ensureBaseline(location);
 }
