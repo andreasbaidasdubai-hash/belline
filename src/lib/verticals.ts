@@ -81,3 +81,34 @@ export function isRestaurant(location: Location): boolean {
 export function usesStaffDiary(location: Location): boolean {
   return location.vertical === "salon" || location.vertical === "clinic";
 }
+
+/** Deepgram caps the list, and the tail of it is the least useful part. */
+const MAX_KEYTERMS = 40;
+
+/**
+ * The words this venue says that a general speech model has never met: its own
+ * name, the sections of its room, its treatments, the people who work there.
+ *
+ * Every one of these is a word the caller will say early and the agent must
+ * get right — a misheard stylist's name derails the whole booking, and the
+ * caller experiences it as not being listened to rather than as a
+ * transcription error.
+ */
+export function speechKeyterms(location: Location): string[] {
+  const out = new Set<string>();
+
+  for (const word of location.name.split(/\s+/)) {
+    // Single letters and "The" boost nothing and crowd out real terms.
+    if (word.length > 2) out.add(word);
+  }
+  out.add(location.agent.displayName);
+
+  for (const table of location.restaurant?.tables ?? []) out.add(table.section);
+  for (const service of location.restaurant?.services ?? []) out.add(service.name);
+
+  for (const service of location.salon?.services ?? []) out.add(service.name);
+  for (const person of location.salon?.staff ?? []) out.add(person.name);
+  for (const resource of location.salon?.resources ?? []) out.add(resource.name);
+
+  return [...out].filter((t) => t.trim().length > 2).slice(0, MAX_KEYTERMS);
+}

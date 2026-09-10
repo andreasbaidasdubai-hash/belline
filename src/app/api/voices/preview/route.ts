@@ -25,7 +25,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json()) as { voiceId?: string; locationId?: string; text?: string };
+  const body = (await request.json()) as {
+    voiceId?: string;
+    voiceModel?: string;
+    locationId?: string;
+    text?: string;
+  };
   const voiceId = body.voiceId?.trim();
   if (!voiceId) {
     return NextResponse.json({ error: "No voice selected." }, { status: 400 });
@@ -41,6 +46,8 @@ export async function POST(request: Request) {
     const chunks: Buffer[] = [];
     for await (const chunk of speak(text.slice(0, 400), {
       voiceId,
+      // Preview what the caller will actually hear, not a house default.
+      modelId: body.voiceModel?.trim() || location?.agent.voiceModel,
       format: "mp3_44100_128",
     })) {
       chunks.push(chunk);

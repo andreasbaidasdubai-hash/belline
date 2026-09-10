@@ -21,6 +21,12 @@ export interface SttOptions {
   /** Caller started speaking, which is the barge-in trigger. */
   onSpeechStart?: () => void;
   onError?: (message: string) => void;
+  /**
+   * Words this venue expects to hear that a general model will not: its own
+   * name, its sections, its dishes and treatments. Deepgram weights these, so
+   * "a table on the Terrace" stops coming back as "on the terrorist".
+   */
+  keyterms?: string[];
 }
 
 export interface SttStream {
@@ -46,6 +52,13 @@ export function createSttStream(opts: SttOptions): SttStream {
     };
   }
 
+  // A phone line is 8 kHz µ-law over a lossy network and callers on one pause
+  // more — mid-sentence, to check a diary, because the line lags. The browser
+  // console is clean 16 kHz audio from someone sitting at a desk. Holding a
+  // desk-tuned endpointer against a phone call is how the agent ends up
+  // answering half a sentence, which the caller hears as not being listened to.
+  const phone = opts.encoding === "mulaw";
+
   const params = new URLSearchParams({
     model: "nova-3",
     language: "en",
@@ -55,12 +68,20 @@ export function createSttStream(opts: SttOptions): SttStream {
     interim_results: "true",
     smart_format: "true",
     punctuate: "true",
-    // 300ms of silence closes a thought. Below ~250 you clip people who
-    // pause to think; above ~500 the agent feels slow to react.
-    endpointing: "300",
+    // Digits as digits: party sizes, times and phone numbers all arrive as
+    // numbers people say aloud, and "twenty twenty five" is not a year.
+    numerals: "true",
+    // Silence that closes a thought. Below ~250 you clip people who pause to
+    // think; above ~600 the agent feels slow to react.
+    endpointing: phone ? "500" : "300",
     vad_events: "true",
-    utterance_end_ms: "1000",
+    // Backstop for a line noisy enough that the endpointer never fires.
+    utterance_end_ms: phone ? "1400" : "1000",
   });
+
+  for (const term of opts.keyterms ?? []) {
+    if (term.trim()) params.append("keyterm", term.trim());
+  }
 
   const socket = new WebSocket(`wss://api.deepgram.com/v1/listen?${params}`, {
     headers: { Authorization: `Token ${key}` },

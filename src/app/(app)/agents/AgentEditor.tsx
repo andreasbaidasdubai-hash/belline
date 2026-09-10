@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AgentConfig } from "@/lib/types";
+import { VOICE_MODELS, DEFAULT_VOICE_MODEL } from "@/lib/providers/tts";
+
+/** A few frames of silent MP3 — enough to unlock the element on a gesture. */
+const SILENCE =
+  "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tAwAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAADAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA//////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAASDs90hvAAAAAAAAAAAAAAAAAAAA//sQxAADwAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQxDsDwAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
 
 interface VoiceOption {
   id: string;
@@ -74,12 +79,25 @@ export default function AgentEditor({
   async function previewVoice() {
     setPreviewError(null);
     setPreviewing(true);
+
+    // Unlock playback *before* the network call. A browser only lets an audio
+    // element start on a user gesture, and awaiting a fetch ends that gesture
+    // — an element created afterwards is refused, on phones silently. Playing
+    // a moment of silence on the persistent element inside the click makes it
+    // a permitted element from then on.
+    const audio = audioRef.current;
+    if (audio) {
+      audio.src = SILENCE;
+      audio.play().catch(() => {});
+    }
+
     try {
       const res = await fetch("/api/voices/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           voiceId: agent.voiceId,
+          voiceModel: agent.voiceModel,
           locationId,
           // Preview the line this voice will actually open with.
           text: agent.greeting,
@@ -90,12 +108,19 @@ export default function AgentEditor({
         setPreviewError(error ?? `Preview failed (${res.status}).`);
         return;
       }
+      if (!audio) {
+        setPreviewError("This browser will not play audio here.");
+        return;
+      }
       const url = URL.createObjectURL(await res.blob());
-      audioRef.current?.pause();
-      const audio = new Audio(url);
-      audioRef.current = audio;
       audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
+      audio.src = url;
+      try {
+        await audio.play();
+      } catch {
+        // Refused despite the unlock — say so rather than look broken.
+        setPreviewError("Your browser blocked playback. Check the tab isn't muted, then try again.");
+      }
     } catch (err) {
       setPreviewError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -209,6 +234,29 @@ export default function AgentEditor({
               {previewError}
             </div>
           )}
+          {/* Lives in the DOM so the click that starts a preview can unlock it
+              before the network call — see previewVoice. */}
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <audio ref={audioRef} preload="none" style={{ display: "none" }} />
+        </Field>
+
+        <Field
+          label="Voice quality"
+          hint={
+            VOICE_MODELS.find((m) => m.id === (agent.voiceModel ?? DEFAULT_VOICE_MODEL))?.hint ??
+            "How much warmth to trade for speed. Preview it above after changing."
+          }
+        >
+          <select
+            value={agent.voiceModel ?? DEFAULT_VOICE_MODEL}
+            onChange={(e) => set("voiceModel", e.target.value)}
+          >
+            {VOICE_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <Field

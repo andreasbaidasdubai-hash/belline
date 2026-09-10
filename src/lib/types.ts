@@ -85,6 +85,11 @@ export interface AgentConfig {
   returningGreeting?: string;
   /** ElevenLabs voice id. */
   voiceId: string;
+  /**
+   * ElevenLabs model id — the latency/warmth trade. Unset falls back to
+   * `DEFAULT_VOICE_MODEL`; see `VOICE_MODELS` for what is worth offering.
+   */
+  voiceModel?: string;
   model: string;
   /** Free-text tone/personality guidance folded into the system prompt. */
   persona: string;

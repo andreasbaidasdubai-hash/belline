@@ -4,6 +4,7 @@ import { createSttStream, type SttStream } from "../providers/stt";
 import { speak, ttsEnabled, type TtsFormat } from "../providers/tts";
 import { saveCall } from "../store";
 import { maxCallSeconds } from "../demo";
+import { speechKeyterms } from "../verticals";
 
 /**
  * One live call.
@@ -20,6 +21,14 @@ import { maxCallSeconds } from "../demo";
  *   belongs to and output from a stale generation is dropped on the floor,
  *   so an interrupted answer can never leak into the next one.
  */
+
+/**
+ * How long the agent must have been speaking before a voice-activity blip
+ * counts as the caller interrupting. Long enough to cover the agent's own
+ * first syllable echoing back off a speakerphone, short enough that a caller
+ * who genuinely talks over the greeting is still obeyed.
+ */
+const BARGE_IN_GUARD_MS = 400;
 
 export interface Transport {
   /** Format the caller's audio arrives in. */
@@ -45,7 +54,7 @@ export class VoiceSession {
   private speaking = false;
   private thinking = false;
   private abort: AbortController | null = null;
-  private lastSpeechEndedAt = 0;
+  private speakingSince = 0;
   private closed = false;
   private timeout: NodeJS.Timeout | null = null;
 
@@ -69,6 +78,7 @@ export class VoiceSession {
       onPartial: (text) => this.transport.sendEvent({ type: "partial", text }),
       onFinal: (text) => void this.onCallerTurn(text),
       onError: (message) => this.transport.sendEvent({ type: "stt_error", message }),
+      keyterms: speechKeyterms(this.location),
     });
 
     this.transport.sendEvent({
@@ -106,10 +116,22 @@ export class VoiceSession {
   }
 
   private onSpeechStart(): void {
-    if (!this.speaking && !this.thinking) return;
-    // Deepgram fires SpeechStarted on noise too. Only treat it as barge-in
-    // once the agent has actually been talking for a moment, otherwise the
-    // agent's own first syllable through a speakerphone cuts itself off.
+    // Deepgram fires SpeechStarted on any speech-shaped energy: the tail of
+    // the caller's own sentence, a breath, line noise on a mobile. Two guards,
+    // because without them the agent silently drops the turn it is already
+    // working on and the caller hears nothing back.
+    //
+    // While merely thinking there is no audio to cut off, so a VAD blip has
+    // nothing to interrupt — and cancelling here would bin the turn the caller
+    // just finished. Real continued speech still arrives as a fresh final
+    // transcript, and `onCallerTurn` interrupts properly at that point.
+    if (!this.speaking) return;
+
+    // And once speaking, ignore the first moments: on a speakerphone the
+    // agent's own opening syllable comes back down the line and would cut
+    // itself off mid-word.
+    if (Date.now() - this.speakingSince < BARGE_IN_GUARD_MS) return;
+
     this.interrupt();
   }
 
@@ -193,9 +215,11 @@ export class VoiceSession {
     const controller = new AbortController();
     this.abort = controller;
     this.speaking = true;
+    this.speakingSince = Date.now();
     try {
       for await (const chunk of speak(text, {
         voiceId: this.location.agent.voiceId,
+        modelId: this.location.agent.voiceModel,
         format: this.transport.output,
         signal: controller.signal,
       })) {
@@ -211,10 +235,7 @@ export class VoiceSession {
       }
     } finally {
       if (this.abort === controller) this.abort = null;
-      if (gen === this.generation) {
-        this.speaking = false;
-        this.lastSpeechEndedAt = Date.now();
-      }
+      if (gen === this.generation) this.speaking = false;
     }
   }
 
