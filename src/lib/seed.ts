@@ -40,7 +40,11 @@ const restaurant: Location = {
     returningGreeting:
       "Good evening, Azure Table, this is Sofia. Lovely to hear from you again, {name} — what can I do for you?",
     voiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
-    model: "claude-opus-5",
+    // Haiku by default: measured at ~1.3s to the first spoken word against
+    // ~2.8s for Opus, and a caller reads three seconds of silence as a dead
+    // line. Switch a venue to Opus on the Agent page when its policies are
+    // intricate enough to be worth the wait.
+    model: "claude-haiku-4-5",
     persona:
       "Warm, efficient, and unhurried. You sound like a senior host who has worked the floor for years — never rushed, never robotic, never over-apologetic.",
     policies: [
@@ -176,7 +180,11 @@ const salon: Location = {
     returningGreeting:
       "Lumière, good morning — Elena here. Good to hear from you again, {name}. What can I book for you?",
     voiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
-    model: "claude-opus-5",
+    // Haiku by default: measured at ~1.3s to the first spoken word against
+    // ~2.8s for Opus, and a caller reads three seconds of silence as a dead
+    // line. Switch a venue to Opus on the Agent page when its policies are
+    // intricate enough to be worth the wait.
+    model: "claude-haiku-4-5",
     persona:
       "Calm, precise, and quietly upmarket. You never oversell. You confirm the price before booking because colour work surprises people.",
     policies: [
@@ -270,7 +278,11 @@ const clinic: Location = {
     returningGreeting:
       "Good morning, Meridian, this is Layla. Good to hear from you again, {name} — how can I help?",
     voiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
-    model: "claude-opus-5",
+    // Haiku by default: measured at ~1.3s to the first spoken word against
+    // ~2.8s for Opus, and a caller reads three seconds of silence as a dead
+    // line. Switch a venue to Opus on the Agent page when its policies are
+    // intricate enough to be worth the wait.
+    model: "claude-haiku-4-5",
     persona:
       "Composed, discreet and precise. You sound like an experienced practice coordinator: reassuring without being familiar, and never rushed, because people ringing a clinic are often anxious.",
     policies: [

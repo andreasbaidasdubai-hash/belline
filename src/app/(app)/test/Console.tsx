@@ -76,6 +76,8 @@ export default function Console({
   const socketRef = useRef<WebSocket | null>(null);
   const captureRef = useRef<{ ctx: AudioContext; stream: MediaStream } | null>(null);
   const playRef = useRef<{ ctx: AudioContext; cursor: number; nodes: AudioBufferSourceNode[] } | null>(null);
+  /** Trailing byte of a 16-bit sample split across two websocket frames. */
+  const carryRef = useRef<Uint8Array>(new Uint8Array(0));
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -83,6 +85,27 @@ export default function Console({
   }, [lines, partial]);
 
   // --- playback ------------------------------------------------------------
+
+  /**
+   * Open the audio device while a click is still on the stack.
+   *
+   * Browsers only let audio start from a user gesture. Creating the context
+   * lazily when the first chunk arrives puts it inside a websocket callback,
+   * where `resume()` is refused — the agent then speaks into a suspended
+   * context and the caller hears nothing at all, with no error anywhere.
+   */
+  const primeAudio = useCallback(async () => {
+    if (!playRef.current) {
+      playRef.current = { ctx: new AudioContext(), cursor: 0, nodes: [] };
+    }
+    if (playRef.current.ctx.state === "suspended") {
+      try {
+        await playRef.current.ctx.resume();
+      } catch {
+        setError("Your browser blocked audio. Click anywhere on the page, then start the call again.");
+      }
+    }
+  }, []);
 
   const enqueueAudio = useCallback(async (bytes: ArrayBuffer) => {
     if (!playRef.current) {
@@ -92,7 +115,21 @@ export default function Console({
     const play = playRef.current;
     if (play.ctx.state === "suspended") await play.ctx.resume();
 
-    const pcm = new Int16Array(bytes);
+    // The stream arrives in arbitrary chunks that routinely split a 16-bit
+    // sample down the middle. `new Int16Array(buffer)` throws outright on an
+    // odd byte length, so carry the stray byte into the next chunk — both to
+    // avoid the throw and to keep the samples aligned, since a one-byte slip
+    // turns the rest of the stream into noise.
+    const incoming = new Uint8Array(bytes);
+    const joined = new Uint8Array(carryRef.current.length + incoming.length);
+    joined.set(carryRef.current, 0);
+    joined.set(incoming, carryRef.current.length);
+
+    const usable = joined.length - (joined.length % 2);
+    carryRef.current = joined.slice(usable);
+    if (usable === 0) return;
+
+    const pcm = new Int16Array(joined.buffer, joined.byteOffset, usable / 2);
     if (pcm.length === 0) return;
     // Declaring the buffer at 16 kHz lets the graph resample it to whatever
     // the output device actually runs at.
@@ -128,6 +165,9 @@ export default function Console({
     }
     play.nodes = [];
     play.cursor = 0;
+    // A half-sample left over from the interrupted turn would misalign the
+    // start of the next one.
+    carryRef.current = new Uint8Array(0);
   }, []);
 
   // --- connection ----------------------------------------------------------
@@ -137,6 +177,9 @@ export default function Console({
     setError(null);
     setLines([]);
     setTraces([]);
+
+    // Must happen here, in the click handler, not when audio first arrives.
+    void primeAudio();
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(
@@ -151,7 +194,11 @@ export default function Console({
 
     ws.onmessage = (event) => {
       if (event.data instanceof ArrayBuffer) {
-        void enqueueAudio(event.data);
+        // Surface failures. Swallowing them here is how a silent agent looks
+        // identical to a working one.
+        enqueueAudio(event.data).catch((err) =>
+          setError(`Audio: ${err instanceof Error ? err.message : String(err)}`),
+        );
         return;
       }
       const msg = JSON.parse(event.data as string);
@@ -209,7 +256,7 @@ export default function Console({
       stopListening();
     };
     ws.onerror = () => setError("Connection failed.");
-  }, [locationId, from, enqueueAudio, stopAudio]);
+  }, [locationId, from, enqueueAudio, stopAudio, primeAudio]);
 
   const hangup = useCallback(() => {
     stopListening();

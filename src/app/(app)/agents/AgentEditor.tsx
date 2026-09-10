@@ -12,9 +12,9 @@ interface VoiceOption {
 }
 
 const MODELS = [
-  { id: "claude-opus-5", label: "Opus 5 — best judgement" },
-  { id: "claude-sonnet-5", label: "Sonnet 5 — faster, cheaper" },
-  { id: "claude-haiku-4-5", label: "Haiku 4.5 — fastest, simple venues" },
+  { id: "claude-haiku-4-5", label: "Haiku 4.5 — fastest (recommended)" },
+  { id: "claude-sonnet-5", label: "Sonnet 5 — balanced" },
+  { id: "claude-opus-5", label: "Opus 5 — best judgement, slowest" },
 ];
 
 function Field({
@@ -213,7 +213,7 @@ export default function AgentEditor({
 
         <Field
           label="Model"
-          hint="Opus reasons best about awkward calls. Haiku answers fastest. Latency difference on a simple booking is roughly 300 ms."
+          hint="Measured on a simple booking: Haiku answers in about 1.3 seconds, Opus in about 2.8. Callers read three seconds of silence as a dropped line, so start on Haiku and only move up if this venue's rules are genuinely intricate."
         >
           <select value={agent.model} onChange={(e) => set("model", e.target.value)}>
             {MODELS.map((m) => (

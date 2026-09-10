@@ -96,6 +96,34 @@ function hasApiKey(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
+/**
+ * Request shape for the chosen model.
+ *
+ * These parameters are not portable across the family, and getting them wrong
+ * is a hard API error rather than a degraded answer: Haiku 4.5 rejects both
+ * `output_config.effort` and adaptive thinking, so a venue that picked Haiku
+ * for speed would have had an agent that could not answer the phone at all.
+ *
+ * Latency is the whole point here. A caller waiting three seconds in silence
+ * assumes the line is dead, so the frontier models run at the lowest effort
+ * that still reasons about which tool to call, and Haiku skips thinking
+ * altogether.
+ */
+function modelParams(model: string): {
+  thinking?: Anthropic.ThinkingConfigParam;
+  output_config?: { effort: "low" | "medium" | "high" };
+} {
+  if (model.startsWith("claude-haiku")) {
+    // No thinking block, no effort — neither is supported, and Haiku is fast
+    // enough without deliberating.
+    return {};
+  }
+  return {
+    thinking: { type: "adaptive" },
+    output_config: { effort: "low" },
+  };
+}
+
 let client: Anthropic | null = null;
 function anthropic(): Anthropic {
   if (!client) client = new Anthropic();
@@ -201,12 +229,7 @@ You have already greeted the caller with: "${this.spokenGreeting ?? this.locatio
           max_tokens: 2048,
           system: this.systemBlocks(),
           tools: this.tools,
-          // Adaptive thinking with low effort: the model still reasons about
-          // which tool to call, but does not spend seconds deliberating over
-          // "a table for two at eight". Raise this in agent config if a venue
-          // has genuinely intricate policies.
-          thinking: { type: "adaptive" },
-          output_config: { effort: "low" },
+          ...modelParams(this.location.agent.model),
           messages: this.messages,
         });
 
@@ -320,10 +343,14 @@ You have already greeted the caller with: "${this.spokenGreeting ?? this.locatio
           : err instanceof Anthropic.APIConnectionError
             ? "cannot reach the model"
             : err instanceof Anthropic.APIError
-              ? `api error ${err.status}`
+              ? // Include what the API actually objected to. A bare status
+                // code cannot be acted on, and these are usually a bad
+                // parameter for the chosen model rather than a transient fault.
+                `api error ${err.status}: ${err.message}`
               : err instanceof Error
                 ? err.message
                 : String(err);
+      console.error(`[agent] ${this.location.name}: ${message}`);
       yield { type: "error", message };
       yield {
         type: "sentence",
