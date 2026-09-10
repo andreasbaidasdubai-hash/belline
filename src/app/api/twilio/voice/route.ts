@@ -60,11 +60,27 @@ export async function POST(request: Request) {
   // headers or the signature never matches.
   const signedUrl = new URL(url.toString());
   signedUrl.protocol = (request.headers.get("x-forwarded-proto") ?? "https").split(",")[0].trim() + ":";
+  // Clear the port before setting the host: the URL host setter leaves the
+  // existing port in place unless the new value carries one of its own, which
+  // would otherwise leave the internal :3000 glued to the public hostname.
+  signedUrl.port = "";
   signedUrl.host = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? url.host)
     .split(",")[0]
     .trim();
 
   if (!signatureValid(signedUrl.toString(), params, request.headers.get("x-twilio-signature"))) {
+    // A rejected call is silent from the caller's side — Twilio just plays its
+    // own failure message — so say why here or the next misconfigured host
+    // costs an afternoon. Never log the signature itself.
+    console.warn(
+      "[twilio] signature rejected. signed-url=%s raw-url=%s proto=%s fwd-host=%s host=%s params=%s",
+      signedUrl.toString(),
+      request.url,
+      request.headers.get("x-forwarded-proto"),
+      request.headers.get("x-forwarded-host"),
+      request.headers.get("host"),
+      Object.keys(params).sort().join(","),
+    );
     return new Response("Invalid signature", { status: 403 });
   }
 
