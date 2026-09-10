@@ -139,11 +139,29 @@
 
   /* --- hero -------------------------------------------------------------- */
 
-  .hero { padding: 78px 0 58px; }
-  .hero h1 { max-width: 17ch; }
-  .hero .lead { margin-top: 20px; max-width: 58ch; }
+  .hero { padding: 66px 0 54px; }
+  /* Copy left, the scene right. The picture does the explaining that another
+     paragraph of adjectives cannot. */
+  .hero-in { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.04fr); gap: 46px; align-items: center; }
+  .hero h1 { max-width: 15ch; }
+  .hero .lead { margin-top: 20px; max-width: 52ch; }
   .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
   .reassure { margin-top: 18px; font-size: 0.86rem; color: var(--muted); }
+
+  /* --- photography ------------------------------------------------------- */
+
+  .hero-art, .shot {
+    border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--line);
+    box-shadow: 0 18px 40px -22px rgba(15, 26, 36, 0.42);
+  }
+  .hero-art img, .shot img { display: block; width: 100%; height: auto; }
+
+  /* --- trades ------------------------------------------------------------ */
+
+  .trades { display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: 26px; margin-top: 38px; }
+  .trade h3 { margin: 18px 0 8px; }
+  .trade p { font-size: 0.93rem; margin: 0; }
 
   /* --- metric strip ------------------------------------------------------ */
 
@@ -245,6 +263,30 @@
   .closer p { color: #C3D2E0; margin: 16px auto 0; max-width: 52ch; }
   .closer .btn { background: #fff; color: var(--navy); border-color: #fff; margin-top: 26px; }
   .closer .btn:hover { background: #E9EFF5; border-color: #E9EFF5; color: var(--navy-dark); }
+  .closer .eyebrow { color: var(--gold); }
+
+  /* The number IS the call to action here, so it is sized like one and is a
+     tel: link — on the device most people will read this on, the whole point
+     is that it dials. */
+  .dial-cta {
+    display: inline-flex; flex-direction: column; align-items: center; gap: 6px;
+    margin-top: 30px; padding: 18px 34px; border-radius: 13px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    transition: background 0.14s ease, border-color 0.14s ease;
+  }
+  .dial-cta:hover { background: rgba(255, 255, 255, 0.13); border-color: rgba(255, 255, 255, 0.4); }
+  .dial-label { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase; color: var(--gold); }
+  .dial-number {
+    font-size: clamp(1.6rem, 1.2rem + 1.7vw, 2.4rem); font-weight: 800;
+    letter-spacing: -0.03em; color: #fff; font-variant-numeric: tabular-nums;
+  }
+  .closer .dial-note { font-size: 0.82rem; color: #9DB2C6; margin-top: 22px; max-width: 56ch; }
+
+  /* --- closing split ----------------------------------------------------- */
+
+  .split-cta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 46px; align-items: center; }
+  .split-cta .btn { margin-top: 26px; }
 
   /* --- footer ------------------------------------------------------------ */
 
@@ -252,10 +294,21 @@
   .foot-in { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
   footer p { font-size: 0.85rem; color: var(--muted); margin: 0; }
 
+  /* The two-column blocks give up well before the phone breakpoint — a
+     tablet column narrow enough to hyphenate the headline is worse than
+     stacking, and the artwork wants width to be worth showing at all. */
+  @media (max-width: 940px) {
+    .hero-in, .split-cta { grid-template-columns: 1fr; gap: 34px; }
+    .hero h1, .hero .lead { max-width: none; }
+    .hero-art { order: -1; }
+  }
+
   @media (max-width: 720px) {
     section { padding: 52px 0; }
     .hero { padding: 46px 0 34px; }
     .closer { padding: 38px 24px; }
+    .trades { gap: 30px; }
+    .dial-cta { padding: 16px 22px; width: 100%; }
     .handled-row { grid-template-columns: 1fr; gap: 5px; }
     .handled-row .a { text-align: left; }
 
@@ -344,10 +397,11 @@
   <div class="wrap top-in">
     <a class="logo" href="#"><img src="/logo.svg" alt="Belline"></a>
     <nav id="site-nav">
+      <a href="#trades">Who it's for</a>
       <a href="#how">How it works</a>
       <a href="#capability">What it does</a>
       <a href="#integrations">Integrations</a>
-      <a href="#try">Try it</a>
+      <a href="#try">Ring it</a>
       <a href="#faq">FAQ</a>
       <a class="signin-mobile" href="https://app.belline.ai">Sign in</a>
     </nav>
@@ -365,22 +419,31 @@
 <main>
 
   <section class="hero">
-    <div class="wrap">
-      <h1>The calls your team can't get to, answered.</h1>
-      <p class="lead">
-        Belline is an AI receptionist for restaurants and salons. It picks up
-        when your line is busy or nobody can reach the phone, checks your real
-        availability, and books the table or the appointment — then puts the
-        transcript in front of you.
-      </p>
-      <div class="cta-row">
-        <a class="btn" href="#demo">Book a demo</a>
-        <a class="btn ghost" href="#how">See how it works</a>
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <h1>The calls your team can't get to, answered.</h1>
+        <p class="lead">
+          Belline is an AI receptionist for restaurants, salons and clinics. It
+          picks up when your line is busy or nobody can reach the phone, checks
+          your real availability, and books the table or the appointment — then
+          puts the transcript in front of you.
+        </p>
+        <div class="cta-row">
+          <a class="btn" href="#demo">Book a demo</a>
+          <a class="btn ghost" href="#try">Ring the live line</a>
+        </div>
+        <p class="reassure">
+          Keep your existing number. No porting, no new hardware, nothing for
+          your guests to learn.
+        </p>
       </div>
-      <p class="reassure">
-        Keep your existing number. No porting, no new hardware, nothing for your
-        guests to learn.
-      </p>
+      <div class="hero-art">
+        <img src="/img/hero.jpg"
+             srcset="/img/hero-sm.jpg 900w, /img/hero.jpg 1600w"
+             sizes="(max-width: 860px) 92vw, 46vw"
+             width="1600" height="900" fetchpriority="high"
+             alt="A concierge bell on a reception counter, a call arriving on a phone beside it, with booking confirmations appearing around them.">
+      </div>
     </div>
   </section>
 
@@ -404,6 +467,72 @@
           <div class="k">to configure a venue</div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section id="trades">
+    <div class="wrap">
+      <div class="narrow">
+        <div class="eyebrow">Who it answers for</div>
+        <h2>One receptionist. Three trades that book nothing like each other.</h2>
+        <p style="margin-top:16px">
+          A table is not an appointment. A restaurant fills a room to a pacing
+          limit; a salon and a clinic fill a person's diary, with the right
+          qualification and the right room. Belline knows the difference, and
+          speaks in each trade's own words.
+        </p>
+      </div>
+
+      <div class="trades">
+        <article class="trade">
+          <div class="shot">
+            <img src="/img/restaurants.jpg" width="880" height="495" loading="lazy"
+                 alt="An evening restaurant service, a reservation being confirmed on the phone.">
+          </div>
+          <h3>Restaurants</h3>
+          <p>
+            Turn times by party size, the tightest table that fits, two tables
+            combined when they're in the same section, and a cap on covers per
+            slot so the kitchen isn't handed twelve tables at eight o'clock.
+          </p>
+        </article>
+
+        <article class="trade">
+          <div class="shot">
+            <img src="/img/salons.jpg" width="880" height="495" loading="lazy"
+                 alt="A salon reception desk, an appointment being booked with a named stylist.">
+          </div>
+          <h3>Salons &amp; spas</h3>
+          <p>
+            Only stylists qualified for the service are offered. Chains of
+            services run back to back, colour stations are shared, and the
+            cleanup buffer is held after the guest's time without ever being
+            quoted to them.
+          </p>
+        </article>
+
+        <article class="trade">
+          <div class="shot">
+            <img src="/img/clinics.jpg" width="880" height="495" loading="lazy"
+                 alt="A dental clinic reception, an appointment confirmed while a dentist treats a patient.">
+          </div>
+          <h3>Clinics &amp; dental</h3>
+          <p>
+            Practitioners, surgeries and treatment rooms as separate
+            constraints. A first visit books as a consultation, never as the
+            treatment itself. It will not discuss a diagnosis, and anything
+            urgent goes to a human immediately.
+          </p>
+        </article>
+      </div>
+
+      <p class="muted" style="font-size:0.9rem; margin-top:26px; max-width:70ch">
+        <strong style="color:var(--text)">Something else?</strong> Anything that
+        books people into time — veterinary, physiotherapy, opticians, driving
+        schools, tattoo studios, garages — runs on the same engine. The
+        vocabulary and the rules are configuration, not new code.
+        <a href="#demo" style="color:var(--navy); font-weight:600">Tell us your trade</a>.
+      </p>
     </div>
   </section>
 
@@ -686,55 +815,49 @@
 
   <section id="try">
     <div class="wrap">
-      <div class="narrow">
+      <div class="closer">
         <div class="eyebrow">Hear it now</div>
-        <h2>Don't take our word for it. Ring it.</h2>
-        <p style="margin-top:16px">
-          One line per trade, so you hear a receptionist for a business like
-          yours rather than a generic script. Book something, change it, then
-          try to catch it out. Nothing you book is real.
+        <h2>Be the caller.</h2>
+        <p>
+          This is a live line, answered by the same agent your guests would
+          reach. It is set up as a restaurant — Azure Table. Book a table for
+          six on Friday, then change it to four. Then try to catch it out.
+        </p>
+
+        <a class="dial-cta" href="tel:+15717785920">
+          <span class="dial-label">Call the demonstration line</span>
+          <span class="dial-number">+1 571 778&nbsp;5920</span>
+        </a>
+
+        <p class="dial-note">
+          Answered 24 hours a day. Nothing you book is real — the agent says so
+          itself. Calls last up to four minutes and the line is capped each day.
+          Your own call charges apply.
         </p>
       </div>
-
-      <!-- Replace these with the Twilio numbers once purchased. They must
-           match each venue's `phone` field, because the webhook routes an
-           incoming call by the number that was dialled. -->
-      <div class="steps" style="margin-top:30px">
-        <div class="step">
-          <h3>Restaurants</h3>
-          <p class="dial">+44 20 0000 0000</p>
-          <p>A table for six on Friday, then move it to four people.</p>
-        </div>
-        <div class="step">
-          <h3>Salons</h3>
-          <p class="dial">+44 20 0000 0001</p>
-          <p>A cut and colour with a particular stylist. Ask what it costs.</p>
-        </div>
-        <div class="step">
-          <h3>Clinics</h3>
-          <p class="dial">+44 20 0000 0002</p>
-          <p>A consultation. Then ask whether your insurance covers it.</p>
-        </div>
-      </div>
-
-      <p class="muted" style="font-size:0.86rem; margin-top:20px">
-        Answered 24 hours a day. Calls are capped and last up to four minutes.
-        Standard call charges apply.
-      </p>
     </div>
   </section>
 
   <section id="demo">
     <div class="wrap">
-      <div class="closer">
-        <h2>Be the caller.</h2>
-        <p>
-          The quickest way to judge this is to ring it yourself. We will set your
-          venue up — your tables or your service list, your hours, your policies
-          — and give you a number to try, before anything is pointed at your real
-          line.
-        </p>
-        <a class="btn" href="mailto:hello@belline.ai?subject=Belline%20demo">Book a demo</a>
+      <div class="split-cta">
+        <div>
+          <div class="eyebrow">Your own line</div>
+          <h2>Hear it answer as your business.</h2>
+          <p>
+            We set your venue up — your tables or your service list, your hours,
+            your policies, your words — and give you a number to ring, before
+            anything is pointed at your real line.
+          </p>
+          <a class="btn" href="mailto:hello@belline.ai?subject=Belline%20demo">Book a demo</a>
+        </div>
+        <div class="shot">
+          <img src="/img/platform.jpg"
+               srcset="/img/platform-sm.jpg 760w, /img/platform.jpg 1200w"
+               sizes="(max-width: 860px) 92vw, 44vw"
+               width="1200" height="675" loading="lazy"
+               alt="The Belline dashboard, with call volumes and bookings across a clinic, a salon and a restaurant.">
+        </div>
       </div>
     </div>
   </section>

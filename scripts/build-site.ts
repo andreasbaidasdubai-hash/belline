@@ -22,10 +22,26 @@ const RENAME: Record<string, string> = { "landing.html": "index.html" };
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 
-const everything = fs.readdirSync(SOURCE);
-const pages = everything.filter((f) => f.endsWith(".html"));
-/** Logos, icons and anything else the pages reference by URL. */
-const assets = everything.filter((f) => /\.(svg|png|jpg|jpeg|webp|ico|woff2?)$/i.test(f));
+const ASSET = /\.(svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
+
+/**
+ * Every asset under `public/`, as a path relative to it.
+ *
+ * Recursive on purpose: photography lives in `public/img/`, and a flat
+ * readdir would skip the whole folder without erroring — the site would
+ * deploy, and every image on it would be broken.
+ */
+function assetsUnder(dir: string, prefix = ""): string[] {
+  return fs.readdirSync(path.join(SOURCE, dir), { withFileTypes: true }).flatMap((entry) => {
+    const rel = path.posix.join(prefix, entry.name);
+    if (entry.isDirectory()) return assetsUnder(path.join(dir, entry.name), rel);
+    return ASSET.test(entry.name) ? [rel] : [];
+  });
+}
+
+const pages = fs.readdirSync(SOURCE).filter((f) => f.endsWith(".html"));
+/** Logos, icons, photography — anything the pages reference by URL. */
+const assets = assetsUnder(".");
 
 if (pages.length === 0) {
   console.error(`\n  No pages found in ${SOURCE}/\n`);
@@ -51,9 +67,11 @@ for (const page of pages) {
 // Without this the pages deploy with a broken logo and no favicon — the
 // HTML references /logo.svg and /icon.svg, which only exist if copied.
 for (const asset of assets) {
-  fs.copyFileSync(path.join(SOURCE, asset), path.join(OUT, asset));
-  bytes += fs.statSync(path.join(OUT, asset)).size;
-  console.log(`  ${asset.padEnd(16)} →  ${OUT}/${asset}`);
+  const target = path.join(OUT, asset);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(path.join(SOURCE, asset), target);
+  bytes += fs.statSync(target).size;
+  console.log(`  ${asset.padEnd(22)} →  ${OUT}/${asset}`);
 }
 
 console.log(
