@@ -24,10 +24,12 @@ const RENAME: Record<string, string> = { "landing.html": "index.html" };
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 
-// css and js belong here as much as the images do: the pages link
-// /site.css and /site.js, and leaving them out ships a site with no styles
-// and no behaviour while the build reports success.
-const ASSET = /\.(css|js|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
+// css, js and mp3 belong here as much as the images do: the pages link
+// /site.css, /site.js and the demo call's audio, and leaving any of them out
+// ships a site that is unstyled, inert or silent while the build reports
+// success. This filter has quietly broken the site twice; add to it whenever
+// a page starts referencing a new kind of file.
+const ASSET = /\.(css|js|mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
 
 /**
  * Every asset under `public/`, as a path relative to it.
@@ -45,8 +47,34 @@ function assetsUnder(dir: string, prefix = ""): string[] {
 }
 
 const pages = fs.readdirSync(SOURCE).filter((f) => f.endsWith(".html"));
-/** Logos, icons, photography — anything the pages reference by URL. */
+/** Logos, icons, photography, recordings — anything the pages reference. */
 const assets = assetsUnder(".");
+
+/**
+ * Clip filenames for a scene's lines, in order.
+ *
+ * Built by `npm run voices`, which needs a speech key; this build does not. A
+ * missing manifest drops the page back to the silent timed transcript rather
+ * than failing — the marketing site has to stay buildable on a machine with
+ * no vendor credentials, which is most of them.
+ *
+ * Declared here rather than beside its use: `const` has no hoisting, and
+ * reading it from the page loop above would be a temporal dead zone.
+ */
+const VOICE_MANIFEST: Record<string, string> = (() => {
+  const file = path.join(SOURCE, "audio", "manifest.json");
+  if (!fs.existsSync(file)) {
+    console.log("  (no audio manifest — run 'npm run voices' to give the demo a voice)");
+    return {};
+  }
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+})();
+
+/** Undefined unless every line in the scene has a clip: a half-voiced call is worse than a silent one. */
+function withAudio(scene: { turns: [string, string][] }) {
+  const audio = scene.turns.map(([, text]) => VOICE_MANIFEST[text] ?? null);
+  return audio.every((a) => a) ? audio : undefined;
+}
 
 if (pages.length === 0) {
   console.error(`\n  No pages found in ${SOURCE}/\n`);
@@ -70,7 +98,7 @@ for (const page of pages) {
   html = html.replace(
     '<script type="application/json" id="call-scenes"></script>',
     `<script type="application/json" id="call-scenes">${JSON.stringify(
-      VERTICALS.map((v) => ({ ...v.scenes[0], label: v.name })),
+      VERTICALS.map((v) => ({ ...v.scenes[0], label: v.name, audio: withAudio(v.scenes[0]) })),
     )}</script>`,
   );
 
@@ -186,6 +214,14 @@ function verticalPage(v: Vertical): string {
           <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
           <span class="call-status">Ringing</span>
           <span class="call-line">${esc(v.scenes[0].when)}</span>
+          <button class="call-listen" type="button" aria-pressed="false">
+            <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/>
+              <path d="M5 11a1 1 0 1 1 2 0 5 5 0 0 0 10 0 1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V21a1 1 0 1 1-2 0v-3.07A7 7 0 0 1 5 11Z"/>
+            </svg>
+            <span class="call-listen-label">Listen</span>
+          </button>
+          <audio class="call-audio" preload="none"></audio>
         </div>
         <div class="call-body" id="call-body" role="tabpanel" aria-live="polite"></div>
       </div>
@@ -262,7 +298,7 @@ function verticalPage(v: Vertical): string {
   </div>
 </footer>
 
-<script type="application/json" id="call-scenes">${JSON.stringify(v.scenes)}</script>
+<script type="application/json" id="call-scenes">${JSON.stringify(v.scenes.map((s) => ({ ...s, audio: withAudio(s) })))}</script>
 <script src="/site.js"></script>
 </body>
 </html>

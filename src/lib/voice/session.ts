@@ -5,6 +5,7 @@ import { speak, speakClip, ttsEnabled, type TtsFormat } from "../providers/tts";
 import { saveCall } from "../store";
 import { maxCallSeconds } from "../demo";
 import { speechKeyterms } from "../verticals";
+import { assessAuthority, type Assessment } from "../agent/authority";
 
 /**
  * One live call.
@@ -160,6 +161,18 @@ export class VoiceSession {
     this.spokenThisTurn = "";
     this.pushTranscript("caller", text);
     this.transport.sendEvent({ type: "transcript", role: "caller", text });
+
+    // Before the model, not after. For the handful of categories where being
+    // wrong once is unacceptable — someone describing an emergency, someone
+    // asking reception for clinical advice — the answer is fixed and the
+    // model is never consulted, so there is nothing for it to be talked out
+    // of. Everything else is its judgement, which is most turns.
+    const breach = assessAuthority(this.location, text);
+    if (breach) {
+      await this.enforce(breach, gen);
+      return;
+    }
+
     this.thinking = true;
 
     let endAfter: string | null = null;
@@ -210,6 +223,32 @@ export class VoiceSession {
         this.call.summary,
       );
     }
+  }
+
+  /**
+   * Carry out an authority rule.
+   *
+   * The words are the rule's own, verbatim, and the call ends or transfers
+   * according to the rule rather than according to how the conversation felt.
+   * Recorded on the call so there is an auditable answer to "why did it say
+   * that" — which is the question that actually gets asked afterwards.
+   */
+  private async enforce(breach: Assessment, gen: number): Promise<void> {
+    const { rule } = breach;
+    this.call.authorityRuleId = rule.id;
+
+    this.pushTranscript("agent", rule.say);
+    this.transport.sendEvent({ type: "transcript", role: "agent", text: rule.say });
+    this.transport.sendEvent({ type: "escalated", ruleId: rule.id, reason: rule.reason });
+
+    await this.say(rule.say, gen);
+    if (gen !== this.generation) return;
+
+    if (rule.then === "end_call") {
+      await this.end("escalated", rule.reason);
+      return;
+    }
+    await this.end(rule.then === "transfer" ? "transferred" : "message_taken", rule.reason);
   }
 
   /** Speak one fragment, abortable, dropping output from a stale generation. */

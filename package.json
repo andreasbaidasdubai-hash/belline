@@ -17,20 +17,25 @@
                     "serve:site":  "node --import tsx scripts/serve-site.ts",
                     "audit":  "playwright test",
                     "audit:ui":  "playwright test --ui",
-                    "check:prospect":  "node --import tsx scripts/check-prospect.ts"
+                    "check:prospect":  "node --import tsx scripts/check-prospect.ts",
+                    "check:authority":  "node --import tsx scripts/check-authority.ts",
+                    "voices":  "node --import tsx --env-file-if-exists=.env scripts/build-voices.ts"
                 },
     "dependencies":  {
                          "@anthropic-ai/sdk":  "^0.124.0",
                          "next":  "^15.5.4",
+                         "pg":  "^8.23.0",
                          "react":  "^19.1.0",
                          "react-dom":  "^19.1.0",
-                         "ws":  "^8.18.0"
+                         "ws":  "^8.18.0",
+                         "zod":  "^4.6.1"
                      },
     "devDependencies":  {
                             "@axe-core/playwright":  "^4.13.0",
                             "@playwright/test":  "^1.63.0",
                             "@tailwindcss/postcss":  "^4.1.13",
                             "@types/node":  "^22.20.2",
+                            "@types/pg":  "^8.23.1",
                             "@types/react":  "^19.1.0",
                             "@types/react-dom":  "^19.1.0",
                             "@types/ws":  "^8.18.1",

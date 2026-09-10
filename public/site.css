@@ -181,6 +181,23 @@
   }
   .call-line { margin-left: auto; font-size: 0.76rem; color: #7D93A8; font-variant-numeric: tabular-nums; }
 
+  /* Never automatic. Sound that starts on its own is hostile, and the whole
+     point is that the visitor chooses to hear it — so the control sits where
+     they are already looking, on the call itself. */
+  .call-listen {
+    display: inline-flex; align-items: center; gap: 6px;
+    appearance: none; cursor: pointer;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px; padding: 5px 11px 5px 9px;
+    font: inherit; font-size: 0.74rem; font-weight: 600; color: #fff;
+    transition: background 0.14s ease, border-color 0.14s ease;
+  }
+  .call-listen:hover { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.4); }
+  .call-listen:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .call-listen[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: var(--navy); }
+  .call-audio { display: none; }
+
   /* Five bars, the same mark as the logo. They only move while the agent is
      actually speaking, so the animation reports state instead of decorating. */
   .wave { display: flex; align-items: center; gap: 3px; height: 18px; }

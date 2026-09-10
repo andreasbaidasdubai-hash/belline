@@ -253,6 +253,12 @@ export type CallOutcome =
   | "answered_question"
   | "message_taken"
   | "transferred"
+  /**
+   * Sent somewhere else entirely — emergency care, most importantly. Distinct
+   * from "transferred" on purpose: nobody at the venue picked this call up,
+   * and counting it as a handled transfer would overstate what happened.
+   */
+  | "escalated"
   | "abandoned";
 
 export interface TranscriptTurn {
@@ -291,6 +297,15 @@ export interface Call {
   isDemo?: boolean;
   /** Set when the caller asked for something the agent could not do. */
   escalation?: string;
+  /**
+   * The authority rule that decided this call, when one did.
+   *
+   * "Why did it say that?" is the question asked afterwards, and on the calls
+   * where it matters most the answer is a named, versioned rule rather than a
+   * sentence in a prompt — which is the difference between a control you can
+   * show someone and a claim you can only make.
+   */
+  authorityRuleId?: string;
 }
 
 // ---------------------------------------------------------------------------

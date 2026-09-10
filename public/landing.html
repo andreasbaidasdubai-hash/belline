@@ -86,7 +86,14 @@
           <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
           <span class="call-status">Ringing</span>
           <span class="call-line">Tuesday, 19:47</span>
-        </div>
+          <button class="call-listen" type="button" aria-pressed="false">
+            <svg class="call-listen-icon" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/>
+              <path d="M5 11a1 1 0 1 1 2 0 5 5 0 0 0 10 0 1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V21a1 1 0 1 1-2 0v-3.07A7 7 0 0 1 5 11Z"/>
+            </svg>
+            <span class="call-listen-label">Listen</span>
+          </button>
+          <audio class="call-audio" preload="none"></audio>        </div>
         <div class="call-body" id="call-body" role="tabpanel" aria-live="polite"></div>
       </div>
     </div>

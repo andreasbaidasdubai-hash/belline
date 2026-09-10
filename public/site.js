@@ -35,6 +35,15 @@
   var current = scenes[0];
   var still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  /* --- audio ---------------------------------------------------------------
+     The page claims Belline sounds natural, and only the voice can make that
+     case. Never automatic: sound that starts on its own is hostile, and on a
+     phone the browser refuses it anyway. One element, reused, unlocked inside
+     the click — created afterwards it would be refused silently. */
+  var player = call.querySelector(".call-audio");
+  var listenBtn = call.querySelector(".call-listen");
+  var audible = false;
+
   function clearTimers() {
     timers.forEach(clearTimeout);
     timers = [];
@@ -72,7 +81,74 @@
     call.setAttribute("data-speaking", "false");
   }
 
+  /**
+   * Play the scene with its recordings, advancing on each clip ending.
+   *
+   * Driven by the audio rather than a timer, so the transcript cannot drift
+   * out of step with the voice — the failure that makes a demo like this feel
+   * fake. A clip that will not load is not fatal: the line still appears and
+   * the scene carries on, because a missing recording should cost sound, not
+   * the whole conversation.
+   */
+  function playAudible(scene) {
+    clearTimers();
+    current = scene;
+    lineEl.textContent = scene.when;
+    body.textContent = "";
+    statusEl.textContent = "Ringing";
+
+    var i = 0;
+    function next() {
+      if (i >= scene.turns.length) {
+        call.setAttribute("data-speaking", "false");
+        statusEl.textContent = scene.outcome.human ? "Transferred" : "Booked";
+        body.appendChild(outcomeEl(scene.outcome));
+        setListening(false);
+        return;
+      }
+      var turn = scene.turns[i];
+      var isAgent = turn[0] === "agent";
+      call.setAttribute("data-speaking", String(isAgent));
+      statusEl.textContent = isAgent
+        ? i > 0 && !scene.outcome.human
+          ? "Checking the book"
+          : "Answered"
+        : "Listening";
+      body.appendChild(turnEl(turn[0], turn[1]));
+
+      player.onended = function () {
+        i++;
+        next();
+      };
+      player.onerror = function () {
+        i++;
+        // A short beat so the lines do not all land at once.
+        timers.push(setTimeout(next, 900));
+      };
+      player.src = "/audio/" + scene.audio[i];
+      var started = player.play();
+      if (started && started.catch) {
+        started.catch(function () {
+          i++;
+          timers.push(setTimeout(next, 900));
+        });
+      }
+    }
+    next();
+  }
+
+  function setListening(on) {
+    audible = on;
+    if (!listenBtn) return;
+    listenBtn.setAttribute("aria-pressed", String(on));
+    listenBtn.querySelector(".call-listen-label").textContent = on ? "Stop" : "Listen";
+  }
+
   function play(scene) {
+    if (audible && scene.audio) {
+      playAudible(scene);
+      return;
+    }
     clearTimers();
     current = scene;
     lineEl.textContent = scene.when;
@@ -168,6 +244,27 @@
     body.setAttribute("aria-labelledby", tabs[0].id);
   } else {
     tabsEl.remove();
+  }
+
+  // The listen button only exists if there are recordings to play.
+  if (listenBtn) {
+    if (!scenes.some(function (s) { return s.audio; })) {
+      listenBtn.remove();
+      listenBtn = null;
+    } else {
+      listenBtn.addEventListener("click", function () {
+        if (audible) {
+          player.pause();
+          setListening(false);
+          paintAll(current);
+          return;
+        }
+        // Unlock inside the gesture, then start. Doing this after any await
+        // ends the gesture and the browser refuses, silently on phones.
+        setListening(true);
+        playAudible(current);
+      });
+    }
   }
 
   // Paint the first scene immediately so the page is never blank at rest,
