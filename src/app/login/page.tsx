@@ -20,15 +20,8 @@ export default async function LoginPage() {
     <div className="auth-shell">
       <div className="auth-card">
         <div className="auth-brand">
-          <span
-            style={{
-              width: 9,
-              height: 9,
-              borderRadius: 999,
-              background: "var(--accent)",
-            }}
-          />
-          Belline
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="Belline" style={{ height: 40, width: "auto" }} />
         </div>
         <p
           className="muted"

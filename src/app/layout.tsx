@@ -2,9 +2,10 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Belline — AI voice receptionist",
+  title: "Belline — AI reception",
   description:
-    "Proprietary AI voice agent for restaurants and salons: answers the phone, checks real availability, books, changes and cancels.",
+    "AI voice reception for restaurants, salons and clinics: answers the phone, checks real availability, books, changes and cancels.",
+  icons: { icon: "/icon.svg", apple: "/icon.svg" },
 };
 
 export const viewport: Viewport = {
@@ -13,7 +14,7 @@ export const viewport: Viewport = {
   // The console has a fixed input row at the bottom; letting the page zoom
   // out on a phone would push it off screen.
   maximumScale: 1,
-  themeColor: "#FBFAF8",
+  themeColor: "#0F2131",
 };
 
 /**

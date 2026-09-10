@@ -22,9 +22,10 @@ const RENAME: Record<string, string> = { "landing.html": "index.html" };
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 
-const pages = fs
-  .readdirSync(SOURCE)
-  .filter((f) => f.endsWith(".html"));
+const everything = fs.readdirSync(SOURCE);
+const pages = everything.filter((f) => f.endsWith(".html"));
+/** Logos, icons and anything else the pages reference by URL. */
+const assets = everything.filter((f) => /\.(svg|png|jpg|jpeg|webp|ico|woff2?)$/i.test(f));
 
 if (pages.length === 0) {
   console.error(`\n  No pages found in ${SOURCE}/\n`);
@@ -47,7 +48,15 @@ for (const page of pages) {
   console.log(`  ${page.padEnd(16)} →  ${OUT}/${target}`);
 }
 
+// Without this the pages deploy with a broken logo and no favicon — the
+// HTML references /logo.svg and /icon.svg, which only exist if copied.
+for (const asset of assets) {
+  fs.copyFileSync(path.join(SOURCE, asset), path.join(OUT, asset));
+  bytes += fs.statSync(path.join(OUT, asset)).size;
+  console.log(`  ${asset.padEnd(16)} →  ${OUT}/${asset}`);
+}
+
 console.log(
-  `\n  ${pages.length} pages, ${(bytes / 1024).toFixed(0)} KB. No build step, no dependencies.\n` +
+  `\n  ${pages.length} pages, ${assets.length} assets, ${(bytes / 1024).toFixed(0)} KB. No build step, no dependencies.\n` +
     `  Deploy: drag the ${OUT}/ folder onto Netlify Drop, or run 'npx vercel deploy --prod ${OUT}'.\n`,
 );

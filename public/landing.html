@@ -1,5 +1,8 @@
-<meta charset="utf-8">
+﻿<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<meta name="theme-color" content="#0F2131">
 <meta name="description" content="Belline is an AI receptionist for restaurants, salons and clinics. It answers the calls your team can't get to, checks real availability, and books.">
 <title>Belline</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,9 +22,15 @@
     --text: #0F1A24;
     --text-2: #3A4753;
     --muted: #667380;
-    --navy: #12395C;
-    --navy-dark: #0C2942;
-    --navy-soft: #E9EFF5;
+    /* Belline brand. Navy carries text and buttons; gold is reserved for the
+       mark and for accents on dark grounds — #CDAA70 on white is only about
+       2:1 and would fail as text. --gold-ink is the darkened gold that does
+       pass on a light surface. */
+    --navy: #0F2131;
+    --navy-dark: #223646;
+    --navy-soft: #E8ECF0;
+    --gold: #CDAA70;
+    --gold-ink: #986F43;
     --sage: #1E7A5A;
     --shadow: 0 1px 2px rgba(15, 26, 36, 0.06);
     --shadow-lg: 0 4px 20px rgba(15, 26, 36, 0.07);
@@ -79,17 +88,9 @@
      pin the logo and the button to the screen edges. */
   .top-in { display: flex; align-items: center; gap: 30px; padding-block: 15px; }
 
-  .logo {
-    display: flex; align-items: center; gap: 9px;
-    font-size: 1.1rem; font-weight: 800; letter-spacing: -0.03em;
-    color: var(--text); flex-shrink: 0;
-  }
-  .mark {
-    width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
-    background: var(--navy);
-    display: grid; place-items: center;
-  }
-  .mark span { width: 8px; height: 8px; border-radius: 50%; background: #fff; display: block; }
+  .logo { display: flex; align-items: center; flex-shrink: 0; }
+  .logo img { display: block; height: 38px; width: auto; }
+  footer .logo img { height: 34px; }
 
   .top nav { display: flex; gap: 24px; margin-left: 10px; }
   .top nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; }
@@ -263,7 +264,7 @@
 
 <header class="top">
   <div class="wrap top-in">
-    <a class="logo" href="#"><span class="mark"><span></span></span>Belline</a>
+    <a class="logo" href="#"><img src="/logo.svg" alt="Belline"></a>
     <nav>
       <a href="#how">How it works</a>
       <a href="#capability">What it does</a>
@@ -658,7 +659,7 @@
 
 <footer>
   <div class="wrap foot-in">
-    <a class="logo" href="#"><span class="mark"><span></span></span>Belline</a>
+    <a class="logo" href="#"><img src="/logo.svg" alt="Belline"></a>
     <p>AI reception for restaurants and salons.</p>
   </div>
 </footer>

@@ -34,29 +34,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <div
-            style={{
-              fontSize: 15,
-              fontWeight: 600,
-              letterSpacing: "-0.022em",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 999,
-                background: "var(--accent)",
-                display: "inline-block",
-              }}
-            />
-            Belline
-          </div>
-          <div className="muted brand-sub" style={{ fontSize: 11, marginTop: 4 }}>
-            AI voice receptionist
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="Belline" style={{ height: 30, width: "auto", display: "block" }} />
+          <div className="muted brand-sub" style={{ fontSize: 11, marginTop: 6 }}>
+            AI reception
           </div>
         </div>
 
