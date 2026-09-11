@@ -448,25 +448,50 @@ export default function Console({
     setDraft("");
   }
 
-  // Start on mount when asked. The tap that opened the panel was the
-  // decision; a second button inside it is the product asking twice.
+  /**
+   * Start on mount — but only when embedded.
+   *
+   * Inside the dock on belline.ai the tap that opened it was the decision,
+   * and a second button is the product asking twice. Opened directly the page
+   * has had no decision at all, and auto-starting would mean any crawler,
+   * link preview or stray visit opens a real call — burning the daily cap and
+   * spending with three vendors for a conversation nobody is having.
+   *
+   * `window.top` throws on a cross-origin parent in some browsers, hence the
+   * try: a failure there means framed, which is the safe reading.
+   */
+  const [framed, setFramed] = useState(false);
   useEffect(() => {
-    if (auto) answerAndListen();
-  }, [auto, answerAndListen]);
+    try {
+      setFramed(window.self !== window.top);
+    } catch {
+      setFramed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (auto && framed) answerAndListen();
+  }, [auto, framed, answerAndListen]);
 
   // --- render --------------------------------------------------------------
 
   if (minimal) {
     const sound = audioState.startsWith("running");
-    const state = !connected
-      ? "Connecting…"
-      : !sound
-        ? "Tap to turn sound on"
-        : speaking
-          ? "Belline is speaking"
-          : listening
-            ? "Listening — go ahead"
-            : "Microphone off";
+    // Opened directly rather than docked in the site: nothing has started, and
+    // "Connecting…" forever would be a lie. Offer the call instead.
+    const idle = auto && !framed && !connected;
+
+    const state = idle
+      ? "Ask it anything, or book a call with us"
+      : !connected
+        ? "Connecting…"
+        : !sound
+          ? "Tap to turn sound on"
+          : speaking
+            ? "Belline is speaking"
+            : listening
+              ? "Listening — go ahead"
+              : "Microphone off";
 
     return (
       <div className="callbar">
@@ -485,7 +510,11 @@ export default function Console({
           without a fresh gesture. Rather than leave somebody in silence
           wondering, this is one tap that fixes it.
         */}
-        {connected && !sound ? (
+        {idle ? (
+          <button className="callbar-go" onClick={answerAndListen}>
+            Talk to Belline
+          </button>
+        ) : connected && !sound ? (
           <button className="callbar-go" onClick={() => void primeAudio()}>
             Turn on sound
           </button>

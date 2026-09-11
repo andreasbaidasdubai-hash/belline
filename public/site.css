@@ -922,6 +922,10 @@
     outline-offset: 3px;
   }
   .bell-fab svg { width: 25px; height: 25px; display: block; flex-shrink: 0; }
+  /* `display: inline-flex` above beats the browser's own `[hidden]` rule, so
+     hiding it from script silently did nothing and the bell sat behind the
+     call it had just started. */
+  .bell-fab[hidden] { display: none; }
 
   /* The ring pulse and the shake are one event on one clock: a bell rocks
      because it has been struck, and the ring is the sound leaving it. Split
