@@ -1050,7 +1050,7 @@ body:has(.callbar) {
    sah er aus wie eine App-Überschrift, in der Antiqua wie ein Schild an einer
    Tür — und dasselbe Schild steht auf der Seite, von der der Anruf kam. */
 .callbar-text strong {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: "Fraunces", Georgia, serif;
   font-size: clamp(34px, 10vw, 52px);
   font-weight: 400;
   letter-spacing: -0.02em;

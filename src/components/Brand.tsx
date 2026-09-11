@@ -50,8 +50,9 @@ export default function Brand({
       {words && (
         <span
           style={{
-            fontFamily: '"Instrument Serif", Georgia, serif',
-            fontSize: Math.round(size * 1.62),
+            fontFamily: '"Fraunces", Georgia, serif',
+            fontSize: Math.round(size * 1.55),
+            fontWeight: 500,
             letterSpacing: "-0.015em",
             lineHeight: 1,
           }}

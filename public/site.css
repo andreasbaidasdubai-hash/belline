@@ -31,6 +31,11 @@
   --rule: rgba(20, 17, 13, 0.12);
   --rule-soft: rgba(20, 17, 13, 0.07);
 
+  /* Die Auszeichnungsschrift, an einer Stelle.
+     Vorher stand '"Instrument Serif", Georgia, serif' achtzehnmal im
+     Stylesheet; ein Wechsel war eine Suche, bei der man eine übersieht. */
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+
   color-scheme: light;
 }
 
@@ -53,27 +58,36 @@ body {
 .wrap { max-width: 1220px; margin: 0 auto; padding: 0 36px; }
 
 /* --- Typografie ------------------------------------------------------------
-   Instrument Serif für alles Große, Instrument Sans für alles Kleine. Eine
-   Familie in zwei Schnitten: sie sind füreinander gezeichnet, also passen die
-   Proportionen, ohne dass ich zwei fremde Schriften aneinander gewöhnen muss.
+   Fraunces für alles Große, Instrument Sans für alles Kleine.
+
+   Vorher stand hier Instrument Serif. Sie ist schön und sie hat genau einen
+   Schnitt, und der ist leicht — bei 76 px eine elegante Auszeichnungsschrift,
+   bei 21 bis 26 px dünn und eng. Und dort stand sie zwölfmal:
+   Zwischenüberschriften, Uhrzeiten, FAQ-Zeilen, Anrufernamen. Das war das,
+   was sich falsch anfühlte.
+
+   Fraunces hat eine Gewichtsachse und — wichtiger — eine optische Achse. Der
+   Browser wählt sie automatisch nach Schriftgröße (font-optical-sizing), also
+   wird der Strich kräftiger, sobald die Schrift kleiner wird, statt zu
+   verschwinden. Eine Familie, zwei Aufgaben, ohne zweite Datei.
 
    Und ausdrücklich nicht Manrope, Inter oder Space Grotesk. Die drei sind
    inzwischen die Standardantwort, und eine Standardantwort sieht aus wie
    eine Standardantwort. */
 
 .display {
-  font-family: "Instrument Serif", Georgia, "Times New Roman", serif;
+  font-family: var(--serif);
   font-weight: 400;
   /* Große Antiqua verträgt — und braucht — negative Laufweite und eine
      Zeilenhöhe unter 1. Auf Defaults gesetzt wirkt sie schlaff. */
-  letter-spacing: -0.02em;
-  line-height: 0.98;
+  letter-spacing: -0.015em;
+  line-height: 1.04;
   text-wrap: balance;
   margin: 0;
 }
 
-h1.display { font-size: clamp(3rem, 1.7rem + 6.4vw, 7.5rem); }
-h2.display { font-size: clamp(2.1rem, 1.4rem + 3vw, 3.6rem); }
+h1.display { font-size: clamp(2.6rem, 1.5rem + 4.4vw, 5.4rem); }
+h2.display { font-size: clamp(1.85rem, 1.25rem + 2.1vw, 2.9rem); }
 
 .eyebrow {
   font-size: 0.72rem;
@@ -120,7 +134,7 @@ a { color: inherit; }
    Marke, die man suchen muss, ist keine. */
 .brand svg { width: 34px; height: 34px; color: var(--brass); display: block; }
 .brand span {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-size: 2.05rem;
   letter-spacing: -0.015em;
 }
@@ -237,7 +251,7 @@ footer .brand span { font-size: 1.8rem; }
 .fact:first-child { padding-left: 0; }
 .fact:last-child { border-right: 0; }
 .fact .n {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-size: 2.4rem;
   line-height: 1;
   letter-spacing: -0.02em;
@@ -256,7 +270,7 @@ section { padding: 110px 0; }
    die so tut, als wäre sie Information. */
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 52px; margin-top: 64px; }
 .step .num {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-size: 1.5rem;
   color: var(--brass);
   border-bottom: 1px solid var(--rule);
@@ -284,7 +298,7 @@ section { padding: 110px 0; }
   border-bottom: 1px solid var(--rule-soft);
 }
 .handled-row .q {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-size: 1.42rem;
   letter-spacing: -0.015em;
   line-height: 1.25;
@@ -354,7 +368,7 @@ section { padding: 110px 0; }
     transform: none;
   }
   .top nav a {
-    font-family: "Instrument Serif", Georgia, serif;
+    font-family: var(--serif);
     font-size: 1.6rem;
     letter-spacing: -0.015em;
     color: var(--ink);
@@ -423,7 +437,7 @@ section { padding: 110px 0; }
 }
 /* 13ch, nicht 11: bei 11 brach "Someone always answers." dreizeilig, und
    drei Zeilen aus je einem Wort lesen als Gedicht, nicht als Aussage. */
-.hero h1 { max-width: 13ch; }
+.hero h1 { max-width: 15ch; }
 .hero .lead { max-width: 42ch; }
 
 /* --- Das gesetzte Gespräch -------------------------------------------------
@@ -446,7 +460,7 @@ section { padding: 110px 0; }
   color: var(--ink-3);
 }
 .script-head .at {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-size: 1.15rem;
   color: var(--brass);
   letter-spacing: -0.01em;
@@ -464,7 +478,7 @@ section { padding: 110px 0; }
 .script .line p { margin: 0; max-width: none; }
 
 .script .caller p {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-size: 1.42rem;
   line-height: 1.24;
   letter-spacing: -0.015em;
@@ -504,7 +518,7 @@ section { padding: 110px 0; }
   max-width: 60ch;
 }
 .aside h3 {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-weight: 400;
   font-size: 1.5rem;
   margin: 0 0 10px;
@@ -525,7 +539,7 @@ section { padding: 110px 0; }
 .plate figcaption { margin-top: 16px; font-size: 0.9rem; color: var(--ink-2); }
 .plate figcaption strong {
   display: block;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-weight: 400;
   font-size: 1.28rem;
   color: var(--ink);
@@ -620,7 +634,7 @@ section { padding: 110px 0; }
   margin-bottom: 14px;
 }
 .plan h3 {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-weight: 400;
   font-size: 1.6rem;
   margin: 0;
@@ -631,7 +645,7 @@ section { padding: 110px 0; }
 .plan-price { margin: 26px 0 24px; }
 .plan-price .amt {
   display: block;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-size: 2.9rem;
   line-height: 1;
   letter-spacing: -0.025em;
@@ -662,7 +676,7 @@ section { padding: 110px 0; }
   margin: 52px 0 0;
   max-width: none;
   text-align: center;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-size: 1.6rem;
   letter-spacing: -0.015em;
   color: var(--ink);
@@ -687,7 +701,7 @@ section { padding: 110px 0; }
   list-style: none;
   cursor: pointer;
   padding: 24px 0;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-size: 1.3rem;
   letter-spacing: -0.015em;
   display: flex;
@@ -888,7 +902,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 
 @media (max-width: 900px) {
   .hero-in { grid-template-columns: 1fr; gap: 46px; }
-  .hero h1 { max-width: 14ch; }
+  .hero h1 { max-width: 16ch; }
   .book-grid { grid-template-columns: 1fr; gap: 34px; }
   .f-row { grid-template-columns: 1fr; }
   .script .caller p { font-size: 1.25rem; }
@@ -936,7 +950,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .knows > div { padding: 28px 0; border-bottom: 1px solid var(--rule-soft); }
 .knows h3 {
   margin: 0 0 9px;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-weight: 400;
   font-size: 1.3rem;
   letter-spacing: -0.015em;
@@ -1091,7 +1105,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 }
 .call-body .said { display: block; }
 .call-body .caller .said {
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-size: 1.46rem;
   line-height: 1.24;
   letter-spacing: -0.015em;
@@ -1190,7 +1204,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 }
 .trades h3 {
   margin: 0 0 10px;
-  font-family: "Instrument Serif", Georgia, serif;
+  font-family: var(--serif);
   font-weight: 400;
   font-size: 1.34rem;
   letter-spacing: -0.015em;
@@ -1209,3 +1223,39 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 @media (max-width: 900px) {
   .trades { grid-template-columns: 1fr; gap: 28px; margin-top: 40px; }
 }
+
+
+/* --- Die Antiqua in kleinen Graden ------------------------------------------
+ * Fraunces' optische Achse macht den Strich kräftiger, je kleiner der Grad —
+ * aber sie kann das Gewicht nicht erraten. Alles zwischen 20 und 30 Pixeln
+ * ist hier eine Zwischenüberschrift oder eine Zahl, die gelesen werden muss,
+ * und bekommt deshalb 500 statt 400. Die großen Überschriften bleiben bei
+ * 400: dort ist der Grad das Gewicht.
+ *
+ * Gesammelt an einer Stelle statt an zwölf, damit "die Antiqua ist zu dünn"
+ * eine Zeile zu ändern ist und keine Suche.
+ */
+.brand span,
+.fact .n,
+.step .num,
+.handled-row .q,
+.plate figcaption strong,
+.trades h3,
+.knows h3,
+.faq summary,
+.compare,
+.script-head .at,
+.script .caller p,
+.call-head .call-line,
+.call-body .caller .said,
+.plan-price .amt,
+.sec-head .k,
+.rule-row .k {
+  font-weight: 500;
+}
+
+/* Die kleinsten Vorkommen — Uhrzeit und Betrag in einer Zeile mit Grotesk —
+   brauchen am meisten, weil daneben eine Grotesk mit gleichmäßigem Strich
+   steht und jeder Unterschied als "blass" gelesen wird. */
+.script-head .at,
+.call-head .call-line { font-weight: 600; }
