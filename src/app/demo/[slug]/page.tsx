@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { findProspect } from "@/lib/prospect";
 import { signStreamToken } from "@/lib/auth";
 import Console from "../../(app)/test/Console";
+import { findRecordedDemo, RecordedDemoPage } from "./Recorded";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,21 @@ export default async function ProspectDemoPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+
+  // Two kinds of demo share this path, because a prospect should never have to
+  // learn which one they were sent.
+  //
+  //   A *recording* — a 30-60 second simulated call, generated from their
+  //   website and emailed as a link. Built by the sales engine.
+  //
+  //   A *live venue* — a callable Belline configured as their business, built
+  //   by `createProspectDemo` from a pasted URL.
+  //
+  // Recordings are checked first: they are what the outbound funnel sends, and
+  // a live venue is only ever reached by a slug a person made by hand.
+  const recording = await findRecordedDemo(slug);
+  if (recording) return <RecordedDemoPage demo={recording} />;
+
   const location = findProspect(slug);
   if (!location) notFound();
 

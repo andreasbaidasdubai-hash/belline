@@ -19,7 +19,7 @@
 /** 1 AED = 100 fils. Every amount in this module is fils. */
 export const FILS = 100;
 
-export type PlanId = "starter" | "business";
+export type PlanId = "starter" | "business" | "enterprise";
 export type BillingCycle = "monthly" | "annual";
 
 export interface Feature {
@@ -40,10 +40,15 @@ export interface Plan {
   monthly: number;
   /** Charged once a year, in fils. Ten months' money for twelve months. */
   annual: number;
-  /** Minutes included each month, on either cycle. */
-  includedMinutes: number;
-  /** Charged per whole minute past the allowance, in fils. */
-  overagePerMinute: number;
+  /**
+   * Minutes included each month. `null` is unlimited.
+   *
+   * There is no per-minute overage anywhere in this product. A plan is a
+   * plan: use what it includes, and when you need more, move up. That is one
+   * fewer number for an operator to model, and it removes the failure this
+   * whole file was written to prevent — an invoice nobody saw coming.
+   */
+  includedMinutes: number | null;
   recommended?: boolean;
   summary: string;
   features: Feature[];
@@ -64,7 +69,6 @@ export const PLANS: Plan[] = [
     monthly: 179 * FILS,
     annual: 1790 * FILS,
     includedMinutes: 60,
-    overagePerMinute: 180,
     summary: "For a single venue that wants the phone answered properly.",
     features: [
       { text: "60 voice minutes a month", status: "live" },
@@ -99,7 +103,6 @@ export const PLANS: Plan[] = [
     monthly: 365 * FILS,
     annual: 3650 * FILS,
     includedMinutes: 180,
-    overagePerMinute: 145,
     recommended: true,
     summary: "For a venue where the phone is genuinely busy.",
     features: [
@@ -109,6 +112,30 @@ export const PLANS: Plan[] = [
       { text: "Every change versioned, with one-click revert", status: "live" },
       { text: "Waitlist — it offers a slot the moment one frees", status: "live" },
       { text: "Priority support", status: "live" },
+    ],
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    /**
+     * Unlimited, priced above the heaviest month we can plausibly see.
+     *
+     * A venue taking thirty calls a day at two minutes each runs to roughly
+     * 1,800 minutes a month. Our own cost is about AED 0.40 a minute across
+     * the three vendors, so that month costs us around AED 720 — and a price
+     * below that turns our best customer into our worst. AED 899 covers it
+     * with room, and still sits under what the UAE market charges for far
+     * less.
+     */
+    monthly: 899 * FILS,
+    annual: 8990 * FILS,
+    includedMinutes: null,
+    summary: "For a venue whose phone never stops, or one that would rather not count.",
+    features: [
+      { text: "Unlimited voice minutes", status: "live" },
+      { text: "Everything in Business", status: "live" },
+      { text: "One venue, no allowance to watch", status: "live" },
+      { text: "Named contact for onboarding and changes", status: "live" },
       {
         text: "Google Calendar and booking-system integrations",
         status: "not-yet",
@@ -126,6 +153,21 @@ export function planById(id: PlanId): Plan {
   const plan = PLANS.find((p) => p.id === id);
   if (!plan) throw new Error(`No such plan: ${id}`);
   return plan;
+}
+
+/**
+ * The cheapest plan that would carry this many minutes a month.
+ *
+ * Used to say "you want Business" rather than "you are over" — the second is
+ * a complaint, the first is an answer. Returns null when they are already on
+ * the right one.
+ */
+export function planFor(minutes: number, current: PlanId): Plan | null {
+  const fits = PLANS.find((p) => p.includedMinutes === null || minutes <= p.includedMinutes);
+  if (!fits || fits.id === current) return null;
+  // Never recommend downwards off the back of one quiet month.
+  const order = PLANS.map((p) => p.id);
+  return order.indexOf(fits.id) > order.indexOf(current) ? fits : null;
 }
 
 /** What a plan costs for one billing period, in fils. */

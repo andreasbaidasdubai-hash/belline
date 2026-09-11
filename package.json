@@ -44,7 +44,9 @@
                     "check:research":  "node --import tsx scripts/check-research.ts",
                     "photos":  "node --import tsx scripts/import-photos.ts",
                     "score":  "node --import tsx --env-file-if-exists=.env scripts/score.ts",
-                    "check:scoring":  "node --import tsx scripts/check-scoring.ts"
+                    "check:scoring":  "node --import tsx scripts/check-scoring.ts",
+                    "demos":  "node --import tsx --env-file-if-exists=.env scripts/build-demos.ts",
+                    "check:demos":  "node --import tsx scripts/check-demos.ts"
                 },
     "dependencies":  {
                          "@anthropic-ai/sdk":  "^0.124.0",

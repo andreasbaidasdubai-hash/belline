@@ -22,12 +22,23 @@ export const dynamic = "force-dynamic";
  * to drift away from the first.
  */
 
-function Bar({ used, included }: { used: number; included: number }) {
+function Bar({ used, included }: { used: number; included: number | null }) {
+  // Unlimited has no bar. A bar needs an end, and drawing one against an
+  // invented ceiling would be the page inventing a limit that does not exist.
+  if (included === null) {
+    return (
+      <div style={{ marginTop: 14, fontSize: 13.5 }}>
+        <strong style={{ fontVariantNumeric: "tabular-nums" }}>{used}</strong>{" "}
+        <span className="muted">minutes this period · unlimited</span>
+      </div>
+    );
+  }
+
   const share = included > 0 ? used / included : 0;
   const over = share > 1;
-  // The bar shows the allowance full-width; overage is drawn as a second
-  // segment past it rather than by rescaling, so "past your allowance" looks
-  // like what it is instead of a bar that quietly re-baselines.
+  // The allowance is the full width and anything past it is drawn beyond it,
+  // rather than rescaling — a bar that quietly re-baselines makes going over
+  // look like normal progress.
   const fill = Math.min(1, share);
   const spill = over ? Math.min(0.35, share - 1) : 0;
 
@@ -187,17 +198,18 @@ export default async function BillingPage({
               <Bar used={usage.minutes} included={usage.included} />
 
               <div style={{ marginTop: 18 }}>
-                <Row label="Calls billed" value={String(usage.calls)} />
+                <Row label="Calls counted" value={String(usage.calls)} />
                 <Row label="Minutes used" value={String(usage.minutes)} />
-                <Row label="Included" value={String(usage.included)} />
                 <Row
-                  label="Past the allowance"
-                  value={
-                    usage.overageMinutes > 0
-                      ? `${usage.overageMinutes} min at ${(plan.overagePerMinute / FILS).toFixed(2)}`
-                      : "None"
-                  }
+                  label="Included"
+                  value={usage.included === null ? "Unlimited" : String(usage.included)}
                 />
+                {usage.included !== null && (
+                  <Row
+                    label="Past the allowance"
+                    value={usage.overBy > 0 ? `${usage.overBy} min — not charged` : "None"}
+                  />
+                )}
                 {usage.projectedMinutes > usage.minutes && (
                   <Row
                     label="On this pace, by period end"
@@ -269,8 +281,12 @@ export default async function BillingPage({
                   Belline is billed in dirhams. Your own prices stay in {location.currency}.
                 </p>
               )}
-              <Row label="Overage" value={aed(bill.overage)} />
               <Row label="Invoiced now" value={aed(bill.dueNow)} strong />
+              <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0", lineHeight: 1.5 }}>
+                The plan fee and nothing else. There is no per-minute charge on any
+                plan — if the allowance runs short, the answer is a bigger plan, not
+                a bigger bill.
+              </p>
             </div>
           </div>
 

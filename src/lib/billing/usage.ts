@@ -3,9 +3,10 @@ import { listCalls } from "../store";
 import { callDurationSeconds } from "../calls";
 import {
   ANNUAL_MONTHS_FREE,
-  FILS,
+  aed,
   annualPerMonth,
   planById,
+  planFor,
   type Plan,
 } from "./plans";
 
@@ -18,11 +19,14 @@ import {
  *   A minute is defined once, here, and the website quotes this definition
  *   rather than paraphrasing it.
  *
- *   Every sum is integer fils. Money that has been through a float is money
- *   that eventually prints a wrong number on a document a customer keeps.
+ *   The invoice is the plan fee and nothing else. There is no metered charge
+ *   anywhere in this product: an allowance that runs out is a prompt to move
+ *   up a plan, never a second number on a bill. The moment anything else can
+ *   appear in `dueNow`, the promise stops being true.
  *
  *   Where the rule is genuinely ambiguous, the customer wins. Calls we broke
- *   are not billed; the projection rounds toward telling somebody sooner.
+ *   are not counted; the projection rounds toward telling somebody sooner;
+ *   and going past the allowance never stops the phone being answered.
  */
 
 // ---------------------------------------------------------------------------
@@ -127,10 +131,17 @@ export interface Usage {
   period: Period;
   calls: number;
   minutes: number;
-  /** Minutes this period includes: the plan's allowance, or the trial's. */
-  included: number;
-  overageMinutes: number;
-  /** Share of the allowance used. Above 1 means there is overage. */
+  /**
+   * Minutes this period includes: the plan's allowance, or the trial's.
+   * `null` on an unlimited plan — not a very large number, because a very
+   * large number renders as a progress bar and unlimited has no bar.
+   */
+  included: number | null;
+  /** Minutes past the allowance. Nothing is charged for them; see `upgrade`. */
+  overBy: number;
+  /** The plan they should be on, when this one no longer fits. */
+  upgrade: Plan | null;
+  /** Share of the allowance used. 0 when unlimited. */
   fraction: number;
   /**
    * Minutes this period will end on if the rest of it runs at the same pace.
@@ -146,8 +157,14 @@ export interface Bill {
   planFee: number;
   /** True on the annual cycle: the plan fee was paid up front for the year. */
   prepaid: boolean;
-  overage: number;
-  /** What will actually be invoiced at the end of this period, in fils. */
+  /**
+   * What will actually be invoiced at the end of this period, in fils.
+   *
+   * This is the plan fee and nothing else, ever. There is no metered charge
+   * in this product — going past the allowance is a prompt to move up a plan,
+   * not a line on a bill. It is the whole of what "no surprise invoices"
+   * means, and the moment a second number can appear here it stops being true.
+   */
   dueNow: number;
   state: Subscription["status"];
 }
@@ -193,22 +210,24 @@ export function accountFor(location: Location, today: string): Account | null {
 
   const minutes = calls.reduce((n, c) => n + billableMinutes(c), 0);
 
-  // A trial's allowance is its own, and it is the whole of what is on offer —
-  // there is no overage to charge somebody who has not yet agreed to pay.
   const trialing = sub.status === "trialing";
   const included = trialing ? (sub.trial?.minutes ?? 0) : plan.includedMinutes;
 
-  const overageMinutes = Math.max(0, minutes - included);
+  const overBy = included === null ? 0 : Math.max(0, minutes - included);
   const share = elapsed(period, today);
+  const projectedMinutes = Math.round(minutes / share);
 
   const usage: Usage = {
     period,
     calls: calls.length,
     minutes,
     included,
-    overageMinutes,
-    fraction: included > 0 ? minutes / included : 0,
-    projectedMinutes: Math.round(minutes / share),
+    overBy,
+    // Recommended off the projection, not off today's total: telling somebody
+    // to move up on the last day of the period is telling them too late.
+    upgrade: trialing ? null : planFor(Math.max(minutes, projectedMinutes), plan.id),
+    fraction: included && included > 0 ? minutes / included : 0,
+    projectedMinutes,
   };
 
   const planFee = trialing
@@ -217,14 +236,13 @@ export function accountFor(location: Location, today: string): Account | null {
       ? annualPerMonth(plan)
       : plan.monthly;
 
-  const overage = trialing ? 0 : overageMinutes * plan.overagePerMinute;
   const prepaid = !trialing && sub.cycle === "annual";
 
   const bill: Bill = {
     planFee,
     prepaid,
-    overage,
-    dueNow: prepaid ? overage : planFee + overage,
+    // Prepaid means the year is already paid: nothing further this period.
+    dueNow: prepaid || trialing ? 0 : planFee,
     state: sub.status,
   };
 
@@ -241,11 +259,12 @@ function notesFor(plan: Plan, sub: Subscription, usage: Usage, bill: Bill): stri
   const notes: string[] = [];
 
   if (sub.status === "trialing") {
-    const left = Math.max(0, usage.included - usage.minutes);
+    const allowance = usage.included ?? 0;
+    const left = Math.max(0, allowance - usage.minutes);
     notes.push(
       left > 0
-        ? `Trial: ${left} of ${usage.included} minutes left. Nothing is charged during the trial.`
-        : `Trial: all ${usage.included} minutes used. Nothing has been charged — pick a plan to keep going.`,
+        ? `Trial: ${left} of ${allowance} minutes left. Nothing is charged during the trial.`
+        : `Trial: all ${allowance} minutes used. Nothing has been charged — pick a plan to keep going.`,
     );
     return notes;
   }
@@ -254,24 +273,37 @@ function notesFor(plan: Plan, sub: Subscription, usage: Usage, bill: Bill): stri
     notes.push("Cancelled. Belline keeps answering until the end of this period, then stops.");
   }
 
-  if (usage.overageMinutes > 0) {
+  if (usage.included === null) {
+    notes.push("Unlimited minutes. Nothing to watch.");
+  } else if (usage.overBy > 0) {
+    // Deliberately not an apology and not a threat. The phone keeps being
+    // answered — a receptionist that stops answering because of an invoice is
+    // not a receptionist — and the answer is a bigger plan, not a bigger bill.
     notes.push(
-      `${usage.overageMinutes} minutes past the ${usage.included} included, ` +
-        `at ${(plan.overagePerMinute / FILS).toFixed(2)} a minute.`,
+      `${usage.overBy} minutes past the ${usage.included} on ${plan.name}. ` +
+        `Calls are still being answered and nothing extra has been charged.`,
     );
   } else if (usage.projectedMinutes > usage.included) {
     notes.push(
       `On this pace you will finish the period around ${usage.projectedMinutes} minutes, ` +
-        `which is past the ${usage.included} included. Told now rather than on the invoice.`,
+        `past the ${usage.included} on ${plan.name}. Told now rather than at the end.`,
     );
   } else if (usage.fraction >= 0.8) {
     notes.push(`${Math.round(usage.fraction * 100)}% of the allowance used.`);
   }
 
+  if (usage.upgrade) {
+    notes.push(
+      `${usage.upgrade.name} would cover it — ` +
+        `${usage.upgrade.includedMinutes === null ? "unlimited minutes" : `${usage.upgrade.includedMinutes} minutes`}, ` +
+        `${aed(usage.upgrade.monthly)} a month.`,
+    );
+  }
+
   if (bill.prepaid) {
     notes.push(
-      `The annual cycle is paid up front — ${ANNUAL_MONTHS_FREE} months free — so only ` +
-        `overage is invoiced during the year.`,
+      `Paid up front for the year — ${ANNUAL_MONTHS_FREE} months free — so there is ` +
+        `nothing to invoice this period.`,
     );
   }
 

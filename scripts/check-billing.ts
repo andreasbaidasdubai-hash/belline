@@ -162,36 +162,75 @@ function subscribe(over: Record<string, unknown>) {
   return getLocation(base.id)!;
 }
 
-test("inside the allowance there is no overage", () => {
+test("inside the allowance the invoice is just the plan", () => {
   const loc = subscribe({});
   const account = accountFor(loc, "2026-03-15")!;
-  assert.equal(account.usage.overageMinutes, 0);
-  assert.equal(account.bill.overage, 0);
+  assert.equal(account.usage.overBy, 0);
   assert.equal(account.bill.dueNow, planById("business").monthly);
 });
 
-test("overage is exact in fils, not a float that prints wrong", () => {
-  // 137 minutes at AED 1.45 is the classic IEEE 754 trap: 137 * 1.45 in
-  // floating point is 198.64999999999998, which on an invoice is indefensible.
-  const plan = planById("business");
-  const over = 137;
-  const fils = over * plan.overagePerMinute;
-  assert.equal(fils, 19865);
-  assert.equal(aed(fils), "AED 198.65");
-  assert.ok(Number.isInteger(fils), "overage left integer arithmetic");
+test("money is whole fils, so an invoice can never print a float artefact", () => {
+  for (const plan of PLANS) {
+    assert.ok(Number.isInteger(plan.monthly), `${plan.name} monthly is not whole fils`);
+    assert.ok(Number.isInteger(plan.annual), `${plan.name} annual is not whole fils`);
+  }
+  assert.equal(aed(89900), "AED 899");
+  assert.equal(aed(19865), "AED 198.65");
 });
 
-test("minutes past the allowance are charged at the plan's own rate", () => {
-  // Its own month. The earlier minute tests put calls in March, and a period
-  // shared between tests is a test that passes until somebody adds a call.
+test("going past the allowance costs nothing — it recommends a bigger plan", () => {
+  // The promise the pricing page makes is that the invoice is the plan fee and
+  // nothing else. This is the test that keeps it honest.
   const loc = subscribe({ startedOn: "2026-06-01" });
   const plan = planById("business");
   for (let i = 0; i < 200; i++) call(30, "2026-06-05");
   const account = accountFor(getLocation(loc.id)!, "2026-06-15")!;
   assert.equal(account.usage.minutes, 200);
-  assert.equal(account.usage.overageMinutes, 20);
-  assert.equal(account.bill.overage, 20 * plan.overagePerMinute);
-  assert.equal(account.bill.dueNow, plan.monthly + 20 * plan.overagePerMinute);
+  assert.equal(account.usage.overBy, 20);
+  assert.equal(account.bill.dueNow, plan.monthly, "a metered charge appeared on the bill");
+  assert.equal(account.usage.upgrade?.id, "enterprise", "no upgrade was suggested");
+  assert.match(account.notes.join(" "), /still being answered and nothing extra/);
+});
+
+test("the phone is never said to stop because of an allowance", () => {
+  const loc = subscribe({ startedOn: "2026-06-01" });
+  const account = accountFor(getLocation(loc.id)!, "2026-06-15")!;
+  const said = account.notes.join(" ");
+  assert.doesNotMatch(said, /stop answering|calls will stop|suspend/i);
+});
+
+test("an unlimited plan has no allowance to be past", () => {
+  const loc = subscribe({ planId: "enterprise", startedOn: "2026-06-01" });
+  const account = accountFor(getLocation(loc.id)!, "2026-06-15")!;
+  assert.equal(account.usage.included, null, "unlimited was given a number");
+  assert.equal(account.usage.overBy, 0);
+  assert.equal(account.usage.upgrade, null, "there is nothing above unlimited");
+  assert.equal(account.bill.dueNow, planById("enterprise").monthly);
+});
+
+test("the recommendation only ever points upwards", () => {
+  // A quiet month on Enterprise must not suggest dropping to Starter: that is
+  // a decision for the venue, and a dashboard nagging somebody to downgrade
+  // reads as us not wanting their business.
+  const quiet = listLocations().find((l) => l.vertical === "clinic")!;
+  upsertLocation({
+    ...quiet,
+    subscription: {
+      planId: "enterprise",
+      cycle: "monthly",
+      startedOn: "2026-06-01",
+      status: "active",
+    },
+  } as never);
+  const account = accountFor(getLocation(quiet.id)!, "2026-06-15")!;
+  assert.equal(account.usage.upgrade, null);
+});
+
+test("a Starter venue that is busy is pointed at Business, not Enterprise", () => {
+  const loc = subscribe({ planId: "starter", startedOn: "2026-08-01" });
+  for (let i = 0; i < 90; i++) call(30, "2026-08-02");
+  const account = accountFor(getLocation(loc.id)!, "2026-08-28")!;
+  assert.equal(account.usage.upgrade?.id, "business", `got ${account.usage.upgrade?.id}`);
 });
 
 test("calls from another period are not on this invoice", () => {
@@ -202,11 +241,11 @@ test("calls from another period are not on this invoice", () => {
   assert.equal(accountFor(getLocation(loc.id)!, "2026-03-15")!.usage.minutes, before);
 });
 
-test("the annual cycle is prepaid, so only overage is invoiced", () => {
+test("the annual cycle is prepaid, so nothing is invoiced during the year", () => {
   const loc = subscribe({ cycle: "annual" });
   const account = accountFor(getLocation(loc.id)!, "2026-03-15")!;
   assert.equal(account.bill.prepaid, true);
-  assert.equal(account.bill.dueNow, account.bill.overage, "an annual plan was billed twice");
+  assert.equal(account.bill.dueNow, 0, "an annual plan was billed twice");
   assert.equal(account.bill.planFee, annualPerMonth(planById("business")));
 });
 
@@ -228,7 +267,7 @@ test("a trial charges nothing, whatever it uses", () => {
   const account = accountFor(getLocation(loc.id)!, "2026-03-10")!;
   assert.equal(account.usage.included, 20);
   assert.equal(account.bill.dueNow, 0, "a trial was invoiced");
-  assert.equal(account.bill.overage, 0);
+  assert.equal(account.usage.upgrade, null, "a trial was upsold before it had finished");
   assert.match(account.notes.join(" "), /Nothing is charged|Nothing has been charged/);
 });
 
@@ -239,18 +278,18 @@ test("a venue with no subscription has no account rather than a zeroed one", () 
   assert.equal(accountFor(getLocation(base.id)!, "2026-03-15"), null);
 });
 
-test("somebody heading for an overage is told before the invoice, not after", () => {
+test("somebody heading past the allowance is told early, not at the end", () => {
   const loc = subscribe({ startedOn: "2026-07-01" });
   // One day into a 31-day period, 100 minutes already used against 180 — not
   // over yet, but obviously going to be.
   for (let i = 0; i < 100; i++) call(60, "2026-07-01");
   const account = accountFor(getLocation(loc.id)!, "2026-07-01")!;
-  assert.equal(account.usage.overageMinutes, 0, "already over — this tests the warning, not the charge");
+  assert.equal(account.usage.overBy, 0, "already over — this tests the warning, not the state");
   assert.ok(
-    account.usage.projectedMinutes > account.usage.included,
+    account.usage.projectedMinutes > account.usage.included!,
     `projected ${account.usage.projectedMinutes} against ${account.usage.included}`,
   );
-  assert.match(account.notes.join(" "), /Told now rather than on the invoice/);
+  assert.match(account.notes.join(" "), /Told now rather than at the end/);
 });
 
 console.log("\nWhat the website is allowed to say\n");
@@ -298,14 +337,21 @@ test("the prices on the page are the prices in the catalogue", () => {
       `${plan.name}: monthly price ${plan.monthly / FILS} is not on the page`,
     );
     assert.ok(
-      html.includes(String(plan.includedMinutes)),
+      plan.includedMinutes === null || html.includes(String(plan.includedMinutes)),
       `${plan.name}: included minutes are not on the page`,
     );
-    assert.ok(
-      html.includes((plan.overagePerMinute / FILS).toFixed(2)),
-      `${plan.name}: overage rate is not on the page`,
-    );
   }
+});
+
+test("the page never quotes a per-minute rate, because there is not one", () => {
+  // The old pricing had overage. If a rate ever creeps back onto the page
+  // without one existing in the engine, this is what catches it.
+  const html = fs.readFileSync(path.join(ROOT, "public", "landing.html"), "utf8");
+  assert.doesNotMatch(
+    html,
+    /AED\s*\d+\.\d{2}\s*(each|a minute|per minute)/i,
+    "a per-minute charge is advertised, and the billing engine has none",
+  );
 });
 
 test("the page explains what a minute is, in the engine's own words", () => {
