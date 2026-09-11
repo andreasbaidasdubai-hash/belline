@@ -18,7 +18,7 @@ import { checkDemoGate } from "./src/lib/demo";
 import { mayStreamTo } from "./src/lib/voice/entitlement";
 import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
-import { VoiceSession } from "./src/lib/voice/session";
+import { VoiceSession, greetingClip } from "./src/lib/voice/session";
 import { BrowserTransport, TwilioTransport } from "./src/lib/voice/transports";
 
 /**
@@ -325,14 +325,16 @@ async function warmGreetings(): Promise<void> {
     // `ulaw_8000` left every *browser* call paying full text-to-speech
     // latency for the greeting — which is precisely the call the bell on the
     // website makes, and the first thing anybody hears of the product.
+    //
+    // `greetingClip` rather than building the arguments here: the cache key is
+    // the text and the speed, and this used to compose both by hand. It asked
+    // for the raw greeting at the configured pace while the session asks for
+    // the `toSpoken` rewrite at a pace derived from it — so nothing ever hit,
+    // and the logs cheerfully reported a warm cache either way.
     for (const format of ["ulaw_8000", "pcm_16000"] as const) {
       try {
-        await speakClip(greetingFor(location), {
-          voiceId: location.agent.voiceId,
-          modelId: location.agent.voiceModel,
-          speed: location.agent.voiceSpeed,
-          format,
-        });
+        const { text, ...voice } = greetingClip(location, greetingFor(location), format);
+        await speakClip(text, voice);
       } catch {
         // Left cold on purpose; the first real call will fill it.
       }

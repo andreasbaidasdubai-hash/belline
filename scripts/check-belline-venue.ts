@@ -24,6 +24,10 @@ const { startCall } = await import("../src/lib/calls");
 const { executeTool, toolsFor } = await import("../src/lib/agent/tools");
 const { findAvailability } = await import("../src/lib/booking");
 const { mayStreamTo } = await import("../src/lib/voice/entitlement");
+const { greetingClip, voiceParams } = await import("../src/lib/voice/session");
+const { toSpoken } = await import("../src/lib/voice/spoken");
+const { greetingFor } = await import("../src/lib/agent/runtime");
+const { listLocations } = await import("../src/lib/store");
 const { todayIn } = await import("../src/lib/time");
 
 let passed = 0;
@@ -96,6 +100,43 @@ test("its policies forbid overstating the product", () => {
   const policies = belline.agent.policies.join(" ");
   assert.match(policies, /Never overstate/i);
   assert.match(policies, /card details|payment/i, "nothing stops it asking for a card");
+});
+
+console.log("\nThe greeting is actually warm\n");
+
+test("the warm-up asks for the same clip the call will ask for", () => {
+  // This was silently false for every call ever made through a browser. The
+  // clip cache is keyed on the text and the speed; the warm-up cached the raw
+  // greeting at the configured pace, while `say` asks for the toSpoken
+  // rewrite at a pace derived from it. Nothing ever hit, the greeting was
+  // re-rendered every time, and the boot log said "warmed" regardless.
+  const greeting = greetingFor(belline);
+  const warmed = greetingClip(belline, greeting, "pcm_16000");
+  const asked = voiceParams(belline, toSpoken(greeting), "pcm_16000");
+  assert.deepEqual(warmed, asked, "the warm-up and the call disagree about the clip");
+});
+
+test("it is warmed in the format the browser uses, not just the phone's", () => {
+  // Warming only ulaw_8000 left the bell on the website — the call most
+  // likely to be somebody's first impression — paying full latency.
+  const greeting = greetingFor(belline);
+  assert.notEqual(
+    greetingClip(belline, greeting, "pcm_16000").format,
+    greetingClip(belline, greeting, "ulaw_8000").format,
+  );
+  for (const format of ["pcm_16000", "ulaw_8000"] as const) {
+    assert.equal(greetingClip(belline, greeting, format).format, format);
+  }
+});
+
+test("Belline's own venue is one the warm-up walks", () => {
+  // Marking it internal dropped it out of listLocations(), and with it out of
+  // the boot warm-up — the one venue most likely to take the first call.
+  const warmed = listLocations({ includeInternal: true }).filter((l) => l.demo?.enabled);
+  assert.ok(
+    warmed.some((l) => l.id === BELLINE_LOCATION_ID),
+    "the venue behind the bell is never warmed",
+  );
 });
 
 console.log("\nWho a signed token may call\n");

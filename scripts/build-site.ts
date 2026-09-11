@@ -231,7 +231,7 @@ function navFor(active: string): string {
  * `/#book` rather than `#book`, because a vertical page has no booking form
  * of its own and `#book` on /dental would scroll to nothing.
  */
-const BELL_FAB = `<a class="bell-fab" href="https://app.belline.ai/call" data-call aria-label="Talk to Belline now">
+const BELL_FAB = `<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Talk to Belline now">
   <svg viewBox="355 180 490 430" aria-hidden="true" focusable="false">
     <g fill="currentColor">
       <rect x="555" y="190" width="90" height="35" rx="18"/>

@@ -84,6 +84,43 @@ export interface Transport {
   close(): void;
 }
 
+/**
+ * Exactly what the text-to-speech vendor is asked for.
+ *
+ * Shared with the boot-time greeting warm-up in server.ts, and that is the
+ * whole point of it existing. The clip cache is keyed on the text *and* the
+ * speed, and the warm-up used to build both itself: it cached the raw
+ * greeting at the venue's configured pace, while `say` asks for the
+ * `toSpoken` rewrite at a pace derived from it. The two never matched, so the
+ * greeting was re-rendered on every single call while the logs happily
+ * reported it warmed.
+ */
+export function voiceParams(
+  location: Location,
+  spoken: { text: string; speed: number },
+  format: TtsFormat,
+) {
+  return {
+    text: spoken.text,
+    voiceId: location.agent.voiceId,
+    modelId: location.agent.voiceModel,
+    // A venue's configured pace shifts the whole range rather than overriding
+    // it, so "slower for numbers" survives being tuned.
+    speed: spoken.speed * ((location.agent.voiceSpeed ?? 1.05) / 1.05),
+    format,
+  };
+}
+
+/**
+ * The greeting clip, in the form the first call will ask for it.
+ *
+ * `cache: true` on the greeting means `say` hands it over whole from the clip
+ * cache — but only if the key matches to the character and the decimal.
+ */
+export function greetingClip(location: Location, greeting: string, format: TtsFormat) {
+  return voiceParams(location, toSpoken(greeting), format);
+}
+
 export class VoiceSession {
   private readonly agent: AgentSession;
   private readonly call: Call;
@@ -436,12 +473,7 @@ export class VoiceSession {
     const spoken = toSpoken(text);
 
     const voice = {
-      voiceId: this.location.agent.voiceId,
-      modelId: this.location.agent.voiceModel,
-      // A venue's configured pace shifts the whole range rather than
-      // overriding it, so "slower for numbers" survives being tuned.
-      speed: spoken.speed * ((this.location.agent.voiceSpeed ?? 1.05) / 1.05),
-      format: this.transport.output,
+      ...voiceParams(this.location, spoken, this.transport.output),
       signal: controller.signal,
       previousText: this.spokenThisTurn || undefined,
     };

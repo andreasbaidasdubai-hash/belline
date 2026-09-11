@@ -460,28 +460,9 @@ export default function Console({
    * `window.top` throws on a cross-origin parent in some browsers, hence the
    * try: a failure there means framed, which is the safe reading.
    */
-  /**
-   * `null` until we know.
-   *
-   * This cannot be decided during render — the server has no window, and
-   * guessing produces a hydration mismatch. Guessing *false* also flashed a
-   * "Talk to Belline" button inside the dock for a frame, which is the second
-   * press this whole change exists to remove. Unknown shows "Connecting…",
-   * which is true either way.
-   */
-  const [framed, setFramed] = useState<boolean | null>(null);
   useEffect(() => {
-    try {
-      setFramed(window.self !== window.top);
-    } catch {
-      // A cross-origin parent throws on access, which means framed.
-      setFramed(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (auto && framed === true) answerAndListen();
-  }, [auto, framed, answerAndListen]);
+    if (auto) answerAndListen();
+  }, [auto, answerAndListen]);
 
   // --- render --------------------------------------------------------------
 
@@ -490,7 +471,10 @@ export default function Console({
     // Opened directly rather than docked in the site: nothing has started, and
     // "Connecting…" forever would be a lie. Offer the call instead.
     // Only once we know we are *not* framed. Unknown is treated as connecting.
-    const idle = auto && framed === false && !connected;
+    // Only when nothing was asked to start. With `auto` the call is already
+    // on its way, and offering a button for it is the second press this whole
+    // thing exists to remove.
+    const idle = !auto && !connected;
 
     const state = idle
       ? "Ask it anything, or book a call with us"

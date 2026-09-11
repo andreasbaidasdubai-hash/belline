@@ -34,13 +34,33 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function CallPage() {
+export default async function CallPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ start?: string }>;
+}) {
   seedIfEmpty();
 
   const location = getLocation(BELLINE_LOCATION_ID);
   if (!location) notFound();
 
   const token = signStreamToken(location.id, 60 * 60);
+
+  /**
+   * Ring straight away, or wait to be asked.
+   *
+   * Every link to this page from our own site carries `?start=1`, because the
+   * tap that followed the link *was* the decision — on a phone there is no
+   * panel, so the bell navigates here, and a second button on arrival is the
+   * product asking twice.
+   *
+   * Bare `/call` does not dial. A crawler, a link preview or somebody pasting
+   * the URL has decided nothing, and auto-starting for them opens a real
+   * conversation, burns the daily cap and spends with three vendors on
+   * nobody.
+   */
+  const { start } = await searchParams;
+  const auto = start === "1";
 
   /*
    * No chrome at all.
@@ -58,7 +78,7 @@ export default async function CallPage() {
       demoToken={token}
       compact
       minimal
-      auto
+      auto={auto}
     />
   );
 }
