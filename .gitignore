@@ -15,3 +15,5 @@ playwright-report/
 
 # Throwaway diagnostic scripts.
 *.tmp.mjs
+.vercel
+.env*
