@@ -351,7 +351,29 @@ export default function Console({
       socketRef.current = null;
       stopListening();
     };
-    ws.onerror = () => setError("Connection failed.");
+    /**
+     * Ask why, rather than shrugging.
+     *
+     * A failed websocket handshake tells JavaScript nothing — the browser
+     * hides the status, so a refused token, a line at its daily limit and a
+     * server that is simply down all arrive here identically. "Connection
+     * failed" was the result, which helps nobody and hid a real cause for a
+     * while. The status endpoint runs the same checks the upgrade does and
+     * answers in words.
+     */
+    ws.onerror = () => {
+      setError("Connection failed.");
+      if (!demoToken) return;
+      fetch(`/api/call/status?token=${encodeURIComponent(demoToken)}`)
+        .then((r) => r.json())
+        .then((why: { ok: boolean; say?: string }) => {
+          if (!why.ok && why.say) setError(why.say);
+        })
+        .catch(() => {
+          // The endpoint is unreachable too, so the network is the answer.
+          setError("We could not reach Belline just now. Try again in a moment.");
+        });
+    };
   }, [locationId, from, demoToken, enqueueAudio, stopAudio, primeAudio]);
 
   const hangup = useCallback(() => {
@@ -488,8 +510,21 @@ export default function Console({
               ? "Listening — go ahead"
               : "Microphone off";
 
+    /**
+     * Sound blocked: the whole screen becomes the tap target.
+     *
+     * Navigating to this page spends the gesture that got here, so on a phone
+     * the audio context can arrive suspended — Belline is talking and nobody
+     * can hear it. A 100px button in the corner is a poor answer to that when
+     * the entire screen is available and the instruction is "tap".
+     */
+    const blocked = connected && !sound;
+
     return (
-      <div className="callbar">
+      <div
+        className={`callbar${blocked ? " is-blocked" : ""}`}
+        onClick={blocked ? () => void primeAudio() : undefined}
+      >
         {/*
           The waveform and the name sit together in the middle, because on a
           voice call the sound is the subject and everything else is chrome.

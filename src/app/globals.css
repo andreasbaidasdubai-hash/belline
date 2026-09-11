@@ -942,6 +942,12 @@ body:has(.callbar) {
   color: #F3F6F8;
 }
 
+/* Sound blocked: the whole screen is the tap target. Navigating here spends
+   the gesture that got here, so on a phone the audio context can arrive
+   suspended — Belline talking with nobody able to hear it. A small button in
+   the corner is a poor answer when the instruction is simply "tap". */
+.callbar.is-blocked { cursor: pointer; }
+
 .callbar-main {
   display: flex;
   flex-direction: column;
