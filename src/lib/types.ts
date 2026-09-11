@@ -102,6 +102,16 @@ export interface Location {
    * bookings. `listLocations()` leaves it out unless asked for it directly.
    */
   internal?: boolean;
+  /**
+   * A logo to show behind the call.
+   *
+   * The voice widget is the one place a venue's own customer sees Belline
+   * rather than the venue, so it carries the venue's mark, not ours. Unset
+   * falls back to the Belline bell — on our own line that is the right
+   * answer, and on a venue with no logo to hand it is at least a bell rather
+   * than an empty rectangle.
+   */
+  logoUrl?: string;
 }
 
 /**

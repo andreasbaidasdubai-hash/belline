@@ -79,6 +79,7 @@ export default async function CallPage({
       compact
       minimal
       auto={auto}
+      logoUrl={location.logoUrl}
     />
   );
 }

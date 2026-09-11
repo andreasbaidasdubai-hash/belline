@@ -405,6 +405,15 @@
   .foot-in { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
   footer p { font-size: 0.85rem; color: var(--muted); margin: 0; }
 
+  /* Staff sign-in. Quiet enough that a visitor's eye passes over it and
+     findable enough that the team stops bookmarking the dashboard
+     separately. It is a door for people who already have a key, not a
+     call to action. */
+  .foot-staff { width: 100%; margin-top: 18px; font-size: 0.76rem; opacity: 0.5; }
+  .foot-staff a { color: var(--muted); text-decoration: none; }
+  .foot-staff a:hover { color: var(--navy); text-decoration: underline; }
+  .foot-staff a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
   /* The two-column blocks give up well before the phone breakpoint — a
      tablet column narrow enough to hyphenate the headline is worse than
      stacking, and the artwork wants width to be worth showing at all. */

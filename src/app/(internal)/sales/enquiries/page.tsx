@@ -116,6 +116,7 @@ export default async function EnquiriesPage() {
                   borderTop: "1px solid var(--border-soft)",
                 }}
               >
+                <Fact label="Wants" value={lead.intent} />
                 <Fact label="Trade" value={lead.vertical} />
                 <Fact label="Venues" value={lead.venues} />
                 <Fact label="Calls a day" value={lead.callVolume} />

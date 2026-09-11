@@ -948,6 +948,31 @@ body:has(.callbar) {
    the corner is a poor answer when the instruction is simply "tap". */
 .callbar.is-blocked { cursor: pointer; }
 
+/* The mark behind the call: the venue's own where we have one, the bell
+   otherwise. Enormous and very faint — it is a ground, not a participant, and
+   anything louder competes with the only thing on screen that matters. */
+.callbar-mark {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  overflow: hidden;
+}
+.callbar-mark svg,
+.callbar-mark img {
+  width: min(62vw, 340px);
+  height: auto;
+  opacity: 0.07;
+  color: #F3F6F8;
+  /* Lifted off centre so it sits behind the waveform rather than behind the
+     name, where it would fight the type for the same pixels. */
+  transform: translateY(-8%);
+}
+@media (max-height: 220px) {
+  .callbar-mark { display: none; }
+}
+
 .callbar-main {
   display: flex;
   flex-direction: column;

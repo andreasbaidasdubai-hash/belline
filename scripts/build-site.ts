@@ -219,8 +219,8 @@ function navFor(active: string): string {
       `<a href="/${v.slug}"${v.slug === active ? ' aria-current="page"' : ""}>${esc(v.name)}</a>`,
   ).join("\n      ");
   return `${links}
-      <a href="/#how">How it works</a>
-      <a href="/#try">Ring it</a>
+      <a href="/#capability">What it does</a>
+      <a href="/#pricing">Pricing</a>
       <a class="signin-mobile" href="https://app.belline.ai">Sign in</a>`;
 }
 
@@ -231,7 +231,7 @@ function navFor(active: string): string {
  * `/#book` rather than `#book`, because a vertical page has no booking form
  * of its own and `#book` on /dental would scroll to nothing.
  */
-const BELL_FAB = `<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Talk to Belline now">
+const BELL_FAB = `<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Hear Belline now">
   <svg viewBox="355 180 490 430" aria-hidden="true" focusable="false">
     <g fill="currentColor">
       <rect x="555" y="190" width="90" height="35" rx="18"/>
@@ -240,7 +240,7 @@ const BELL_FAB = `<a class="bell-fab" href="https://app.belline.ai/call?start=1"
       <path d="M365 570 C365 538 383 519 418 519 L500 519 C509 519 515 525 516 538 C521 579 542 595 600 595 C658 595 679 579 684 538 C685 525 691 519 700 519 L782 519 C817 519 835 538 835 570 C835 589 826 600 809 600 L391 600 C374 600 365 589 365 570 Z"/>
     </g>
   </svg>
-  <span class="bell-fab-say">Talk to Belline</span>
+  <span class="bell-fab-say">Hear Belline</span>
 </a>`;
 
 function verticalPage(v: Vertical): string {
@@ -283,7 +283,7 @@ function verticalPage(v: Vertical): string {
     </nav>
     <div class="right">
       <a class="signin" href="https://app.belline.ai">Sign in</a>
-      <a class="btn small" href="/#demo">Book a demo</a>
+      <a class="btn small" href="/#book">Get Belline</a>
       <button class="menu-toggle" type="button" aria-expanded="false"
               aria-controls="site-nav" aria-label="Open menu">
         <span class="bar"></span>
@@ -300,8 +300,8 @@ function verticalPage(v: Vertical): string {
         <h1>${esc(v.headline)}</h1>
         <p class="lead">${esc(v.lead)}</p>
         <div class="cta-row">
-          <a class="btn" href="/#try">Hear it answer</a>
-          <a class="btn ghost" href="/#demo">Build my Belline</a>
+          <a class="btn" href="https://app.belline.ai/call?start=1" data-call>Hear Belline</a>
+          <a class="btn ghost" href="/#book">Get Belline</a>
         </div>
         <p class="reassure">
           Keep your existing number. No porting, no new hardware, nothing for
@@ -360,7 +360,7 @@ function verticalPage(v: Vertical): string {
           <div class="moment"><span class="at">19:48</span><div class="eyebrow">Where it stops</div></div>
           <h2>The most important thing it does is know what it must not answer.</h2>
           <p style="margin-top:16px">${esc(v.boundary)}</p>
-          <a class="btn" href="/#demo">Build my Belline</a>
+          <a class="btn" href="/#book">Get Belline</a>
         </div>
         <div class="shot">
           <img src="${esc(v.image)}" width="880" height="495" loading="lazy" alt="${esc(v.imageAlt)}">

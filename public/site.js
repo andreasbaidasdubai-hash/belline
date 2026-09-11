@@ -346,8 +346,14 @@
    this throws — it simply navigates there and still works. Everything below
    only upgrades it to a panel. */
 (function () {
-  var bell = document.querySelector("[data-call]");
-  if (!bell) return;
+  // Every way in, not just the first. The hero button and the floating bell
+  // both open the same call, and `querySelector` quietly picked whichever
+  // came first in the markup — which meant adding the hero button left the
+  // bell inert and hid the wrong element on answer.
+  var triggers = [].slice.call(document.querySelectorAll("[data-call]"));
+  if (!triggers.length) return;
+
+  var bell = document.querySelector(".bell-fab") || triggers[0];
 
   // No panel on a small screen: a live call in a 340px iframe is worse than
   // the page it would cover, and the full page is a better phone experience.
@@ -410,12 +416,9 @@
     document.addEventListener("keydown", onKey);
   }
 
-  bell.addEventListener("click", open);
-
-  // The hero's "Hear it answer" should reach the same place — it is the same
-  // promise, and sending it somewhere else makes the page argue with itself.
-  var hero = document.querySelector('.hero a[href="#try"]');
-  if (hero) hero.addEventListener("click", open);
+  triggers.forEach(function (t) {
+    t.addEventListener("click", open);
+  });
 })();
 
 /* --- monthly / annual ------------------------------------------------------
@@ -640,7 +643,7 @@
 
   function send(emailConfirmed) {
     var payload = { emailConfirmed: emailConfirmed ? 1 : "" };
-    ["name", "company", "email", "phone", "website", "vertical", "venues",
+    ["name", "company", "email", "phone", "website", "vertical", "venues", "intent",
      "callVolume", "availability", "timezone", "notes", "source", "website2"
     ].forEach(function (field) {
       if (form.elements[field]) payload[field] = form.elements[field].value;

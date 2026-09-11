@@ -68,6 +68,7 @@ export default function Console({
   oneTap = false,
   auto = false,
   minimal = false,
+  logoUrl,
 }: {
   locationId: string;
   locationName: string;
@@ -115,6 +116,8 @@ export default function Console({
    * thing being demonstrated.
    */
   minimal?: boolean;
+  /** The venue's mark, shown behind the call. Falls back to the bell. */
+  logoUrl?: string;
 }) {
   const [connected, setConnected] = useState(false);
   const [listening, setListening] = useState(false);
@@ -531,6 +534,28 @@ export default function Console({
           Nine bars rather than five: at this size five read as a loading
           spinner, and the point is that it looks like something being said.
         */}
+        {/*
+          The mark behind the call. A venue's own, where they have given us
+          one — this widget is the single place their customer sees Belline
+          rather than them — and the bell otherwise. Faint and enormous, so it
+          reads as a ground rather than as a thing competing with the voice.
+        */}
+        <div className="callbar-mark" aria-hidden="true">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt="" />
+          ) : (
+            <svg viewBox="355 180 490 430" focusable="false">
+              <g fill="currentColor">
+                <rect x="555" y="190" width="90" height="35" rx="18" />
+                <rect x="572" y="213" width="56" height="47" rx="10" />
+                <path d="M380 505 C393 477 410 461 431 450 C444 327 506 258 600 258 C694 258 756 327 769 450 C790 461 807 477 820 505 L380 505 Z" />
+                <path d="M365 570 C365 538 383 519 418 519 L500 519 C509 519 515 525 516 538 C521 579 542 595 600 595 C658 595 679 579 684 538 C685 525 691 519 700 519 L782 519 C817 519 835 538 835 570 C835 589 826 600 809 600 L391 600 C374 600 365 589 365 570 Z" />
+              </g>
+            </svg>
+          )}
+        </div>
+
         <div className="callbar-main">
           <div className={`callbar-wave${speaking ? " is-on" : ""}`} aria-hidden="true">
             <span /><span /><span /><span /><span /><span /><span /><span /><span />
