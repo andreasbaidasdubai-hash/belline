@@ -27,9 +27,12 @@
                     "check:import":  "node --import tsx scripts/check-import.ts",
                     "check:idempotency":  "node --import tsx scripts/check-idempotency.ts",
                     "check:brain":  "node --import tsx scripts/check-brain.ts",
-                    "check:all":  "npm run check \u0026\u0026 npm run check:brain \u0026\u0026 npm run check:attention \u0026\u0026 npm run check:idempotency \u0026\u0026 npm run check:authority \u0026\u0026 npm run check:spoken \u0026\u0026 npm run check:prospect",
+                    "check:all":  "npm run check \u0026\u0026 npm run check:brain \u0026\u0026 npm run check:attention \u0026\u0026 npm run check:idempotency \u0026\u0026 npm run check:authority \u0026\u0026 npm run check:spoken \u0026\u0026 npm run check:speculation \u0026\u0026 npm run check:prospect",
                     "check:attention":  "node --import tsx scripts/check-attention.ts",
-                    "check:spoken":  "node --import tsx scripts/check-spoken.ts"
+                    "check:spoken":  "node --import tsx scripts/check-spoken.ts",
+                    "check:speculation":  "node --import tsx --env-file-if-exists=.env scripts/check-speculation.ts",
+                    "bench:latency":  "node --import tsx --env-file-if-exists=.env scripts/bench-latency.ts",
+                    "agents":  "node --import tsx --env-file-if-exists=.env scripts/agents.ts"
                 },
     "dependencies":  {
                          "@anthropic-ai/sdk":  "^0.124.0",

@@ -23,9 +23,21 @@ export type AgentEvent =
   | { type: "tool"; trace: ToolTrace }
   | { type: "control"; action: "end_call" | "transfer"; detail: string }
   | { type: "turn_end"; text: string; firstAudioMs: number }
+  /** A speculative turn reached for a tool that writes. Throw it away. */
+  | { type: "abandon" }
   | { type: "error"; message: string };
 
 const MAX_TOOL_ROUNDS = 6;
+
+/**
+ * Tools a guess may run.
+ *
+ * Both only read. Running check_availability twice costs a lookup; running
+ * `book` twice costs a table, and a caller who never asked for it. If a
+ * speculative turn reaches for anything outside this set it is thrown away
+ * and the real turn starts over.
+ */
+const READ_ONLY_TOOLS = new Set(["check_availability", "lookup_booking"]);
 
 // ---------------------------------------------------------------------------
 // Sentence chunking
@@ -97,19 +109,6 @@ function hasApiKey(): boolean {
 }
 
 /**
- * Request shape for the chosen model.
- *
- * These parameters are not portable across the family, and getting them wrong
- * is a hard API error rather than a degraded answer: Haiku 4.5 rejects both
- * `output_config.effort` and adaptive thinking, so a venue that picked Haiku
- * for speed would have had an agent that could not answer the phone at all.
- *
- * Latency is the whole point here. A caller waiting three seconds in silence
- * assumes the line is dead, so the frontier models run at the lowest effort
- * that still reasons about which tool to call, and Haiku skips thinking
- * altogether.
- */
-/**
  * The exact words the agent opens with.
  *
  * A free function, not just a method, because the server synthesises this at
@@ -134,6 +133,19 @@ export function greetingFor(location: Location, callerNumber?: string): string {
   return disclosure ? `${disclosure} ${base}` : base;
 }
 
+/**
+ * Request shape for the chosen model.
+ *
+ * These parameters are not portable across the family, and getting them wrong
+ * is a hard API error rather than a degraded answer: Haiku 4.5 rejects both
+ * `output_config.effort` and adaptive thinking, so a venue that picked Haiku
+ * for speed would have had an agent that could not answer the phone at all.
+ *
+ * Latency is the whole point here. A caller waiting three seconds in silence
+ * assumes the line is dead, so the frontier models run at the lowest effort
+ * that still reasons about which tool to call, and Haiku skips thinking
+ * altogether.
+ */
 function modelParams(model: string): {
   thinking?: Anthropic.ThinkingConfigParam;
   output_config?: { effort: "low" | "medium" | "high" };
@@ -162,6 +174,8 @@ export class AgentSession {
   private messages: Anthropic.MessageParam[] = [];
   private readonly tools: Anthropic.Tool[];
   private ended = false;
+  /** A successful speculation waiting to be adopted, or discarded. */
+  private pendingAdopt: { userText: string; messages: Anthropic.MessageParam[] } | null = null;
   /** What was actually said on pickup — the model must not repeat it. */
   private spokenGreeting: string | null = null;
 
@@ -184,6 +198,105 @@ export class AgentSession {
 
   get isEnded(): boolean {
     return this.ended;
+  }
+
+  /**
+   * Run a turn on a guess, changing nothing.
+   *
+   * Everything is local: a copy of the history, no writes to the call record,
+   * and read-only tools. Yields the same events as a real turn so the caller
+   * can buffer them, plus `abandon` when the guess turns out to need a tool
+   * that writes.
+   *
+   * `adopt()` is what makes the work count if the guess was right.
+   */
+  private async *speculate(userText: string): AsyncGenerator<AgentEvent> {
+    if (!hasApiKey()) return;
+
+    const messages: Anthropic.MessageParam[] = [
+      ...this.messages,
+      { role: "user", content: userText },
+    ];
+
+    try {
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const chunker = new SentenceChunker();
+        const stream = anthropic().messages.stream({
+          model: this.location.agent.model,
+          max_tokens: 2048,
+          system: this.systemBlocks(),
+          tools: this.tools,
+          ...modelParams(this.location.agent.model),
+          messages,
+        });
+
+        for await (const event of stream) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+            for (const sentence of chunker.push(event.delta.text)) {
+              yield { type: "sentence", text: sentence };
+            }
+          }
+        }
+        const tail = chunker.flush();
+        if (tail) yield { type: "sentence", text: tail };
+
+        const message = await stream.finalMessage();
+        if (message.stop_reason === "refusal") return;
+
+        messages.push({ role: "assistant", content: message.content });
+        if (message.stop_reason !== "tool_use") break;
+
+        const toolUses = message.content.filter(
+          (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+        );
+
+        // The line this whole mechanism turns on.
+        if (toolUses.some((use) => !READ_ONLY_TOOLS.has(use.name))) {
+          yield { type: "abandon" };
+          return;
+        }
+
+        const results: Anthropic.ToolResultBlockParam[] = [];
+        for (const use of toolUses) {
+          const outcome = await executeTool(
+            use.name,
+            use.input as Record<string, unknown>,
+            { location: this.location, call: this.call, callerNumber: this.callerNumber },
+          );
+          results.push({
+            type: "tool_result",
+            tool_use_id: use.id,
+            content: JSON.stringify(outcome.result),
+          });
+        }
+        messages.push({ role: "user", content: results });
+      }
+
+      // Handed over only on success, so a speculation that threw or was
+      // abandoned cannot be adopted by mistake.
+      this.pendingAdopt = { userText, messages };
+    } catch {
+      // A failed guess is not an error the caller should ever learn about.
+      this.pendingAdopt = null;
+    }
+  }
+
+  /**
+   * Take a successful speculation as the real turn.
+   *
+   * Only valid for the exact text that was speculated on: adopting a history
+   * built from a different sentence would leave the model believing the
+   * caller said something they did not.
+   */
+  adopt(userText: string): boolean {
+    if (!this.pendingAdopt || this.pendingAdopt.userText !== userText) return false;
+    this.messages = this.pendingAdopt.messages;
+    this.pendingAdopt = null;
+    return true;
+  }
+
+  discardSpeculation(): void {
+    this.pendingAdopt = null;
   }
 
 
@@ -217,7 +330,29 @@ You have already greeted the caller with: "${this.spokenGreeting ?? this.locatio
     ];
   }
 
-  async *respond(userText: string): AsyncGenerator<AgentEvent> {
+  /**
+   * Answer the caller.
+   *
+   * `speculative` runs the whole turn on a guess — the caller's interim
+   * transcript, before they have finished — so the model and the voice are
+   * already working during the silence the endpointer is waiting out. The
+   * result is held and only released if the guess proves right.
+   *
+   * A guess must never change anything. In speculative mode the conversation
+   * history is a copy, the call record is untouched, and the tools are
+   * restricted to the ones that only read. If the model reaches for `book`,
+   * `cancel_booking` or anything else that writes, the whole speculation is
+   * abandoned and the real turn runs from scratch — half a second of wasted
+   * tokens against the possibility of booking a table nobody asked for.
+   */
+  async *respond(
+    userText: string,
+    opts: { speculative?: boolean } = {},
+  ): AsyncGenerator<AgentEvent> {
+    if (opts.speculative) {
+      yield* this.speculate(userText);
+      return;
+    }
     this.messages.push({ role: "user", content: userText });
 
     if (!hasApiKey()) {

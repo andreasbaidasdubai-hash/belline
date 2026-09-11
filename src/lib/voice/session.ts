@@ -32,6 +32,45 @@ import { toSpoken } from "./spoken";
  */
 const BARGE_IN_GUARD_MS = 400;
 
+/**
+ * How settled an interim transcript must be before it is worth guessing on.
+ *
+ * Too eager and every syllable starts a turn that is immediately thrown away;
+ * too patient and the endpointer fires first and the work was pointless. A
+ * caller who has stopped producing new words for this long has almost always
+ * finished, which is the same judgement the endpointer is making — only this
+ * one is free to be wrong.
+ */
+const GUESS_AFTER_MS = 140;
+
+/** Below this a transcript is a filler word, not a turn. */
+const GUESS_MIN_CHARS = 10;
+
+interface Guess {
+  /** The interim transcript this was built from. */
+  text: string;
+  /** Fragments, already synthesised, waiting to be released. */
+  ready: { text: string; audio: Buffer }[];
+  /** Set when the model reached for a tool that writes, or the run failed. */
+  dead: boolean;
+  /** Resolves when the speculative run has finished one way or another. */
+  done: Promise<void>;
+  abort: AbortController;
+}
+
+/**
+ * Two transcripts of the same sentence.
+ *
+ * Deepgram's interim and final differ in punctuation and capitalisation far
+ * more often than in words, and a guess is only safe to use if the caller
+ * said the same thing — not something that merely starts the same way.
+ */
+function sameUtterance(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+  return norm(a) === norm(b);
+}
+
 export interface Transport {
   /** Format the caller's audio arrives in. */
   input: { encoding: "linear16" | "mulaw"; sampleRate: number };
@@ -59,6 +98,18 @@ export class VoiceSession {
   private speakingSince = 0;
   /** What has already been spoken this turn, to carry prosody across cuts. */
   private spokenThisTurn = "";
+  /**
+   * A turn being prepared on a guess, before the caller has finished.
+   *
+   * The endpointer waits half a second of silence before it will call a turn
+   * finished. That half second was dead time: nothing started until it
+   * elapsed, so the caller paid for it twice — once waiting to be understood,
+   * again waiting for an answer. Now the model and the voice run during it
+   * and the audio is held. If the guess was right it is already in the
+   * caller's ear the moment the endpointer agrees.
+   */
+  private guess: Guess | null = null;
+  private guessTimer: NodeJS.Timeout | null = null;
   private closed = false;
   private timeout: NodeJS.Timeout | null = null;
 
@@ -79,7 +130,10 @@ export class VoiceSession {
       encoding: this.transport.input.encoding,
       sampleRate: this.transport.input.sampleRate,
       onSpeechStart: () => this.onSpeechStart(),
-      onPartial: (text) => this.transport.sendEvent({ type: "partial", text }),
+      onPartial: (text) => {
+        this.transport.sendEvent({ type: "partial", text });
+        this.considerGuess(text);
+      },
       onFinal: (text) => void this.onCallerTurn(text),
       onError: (message) => this.transport.sendEvent({ type: "stt_error", message }),
       keyterms: speechKeyterms(this.location),
@@ -139,6 +193,113 @@ export class VoiceSession {
     this.interrupt();
   }
 
+  /**
+   * Start preparing an answer while the caller is still being listened to.
+   *
+   * Debounced on the transcript settling rather than on a timer from the last
+   * word, because a caller mid-sentence produces new text continuously and
+   * each new word should cancel the guess built on the old one.
+   */
+  private considerGuess(partial: string): void {
+    const text = partial.trim();
+    if (this.closed || this.speaking || this.thinking) return;
+    if (text.length < GUESS_MIN_CHARS) return;
+    if (this.guess && sameUtterance(this.guess.text, text)) return;
+
+    this.dropGuess();
+    if (this.guessTimer) clearTimeout(this.guessTimer);
+    this.guessTimer = setTimeout(() => this.startGuess(text), GUESS_AFTER_MS);
+  }
+
+  private startGuess(text: string): void {
+    if (this.closed || this.speaking || this.thinking) return;
+
+    const abort = new AbortController();
+    const guess: Guess = { text, ready: [], dead: false, done: Promise.resolve(), abort };
+    this.guess = guess;
+
+    guess.done = (async () => {
+      try {
+        for await (const event of this.agent.respond(text, { speculative: true })) {
+          if (abort.signal.aborted) return;
+          if (event.type === "abandon" || event.type === "error") {
+            guess.dead = true;
+            return;
+          }
+          if (event.type !== "sentence") continue;
+
+          // Synthesised now, held back. This is the half second being bought.
+          const spoken = toSpoken(event.text);
+          const chunks: Buffer[] = [];
+          for await (const chunk of speak(spoken.text, {
+            voiceId: this.location.agent.voiceId,
+            modelId: this.location.agent.voiceModel,
+            speed: spoken.speed * ((this.location.agent.voiceSpeed ?? 1.05) / 1.05),
+            format: this.transport.output,
+            signal: abort.signal,
+          })) {
+            chunks.push(chunk);
+          }
+          if (abort.signal.aborted) return;
+          guess.ready.push({ text: event.text, audio: Buffer.concat(chunks) });
+        }
+      } catch {
+        guess.dead = true;
+      }
+    })();
+  }
+
+  private dropGuess(): void {
+    if (this.guessTimer) {
+      clearTimeout(this.guessTimer);
+      this.guessTimer = null;
+    }
+    if (!this.guess) return;
+    this.guess.abort.abort();
+    this.guess = null;
+    this.agent.discardSpeculation();
+  }
+
+  /**
+   * Use a guess, if it turned out to be right.
+   *
+   * Everything has to line up: the caller said what we guessed, the run
+   * finished without reaching for a tool that writes, and the agent agrees
+   * the history it built belongs to this exact sentence. Anything short of
+   * that and the real turn runs from scratch — the cost of being wrong is
+   * some wasted tokens, and the cost of being wrong *and using it anyway* is
+   * answering a question nobody asked.
+   */
+  private async useGuess(text: string, gen: number): Promise<boolean> {
+    const guess = this.guess;
+    if (!guess || !sameUtterance(guess.text, text)) {
+      this.dropGuess();
+      return false;
+    }
+
+    await guess.done;
+    if (gen !== this.generation) return false;
+    if (guess.dead || guess.ready.length === 0 || !this.agent.adopt(guess.text)) {
+      this.dropGuess();
+      return false;
+    }
+
+    this.guess = null;
+    for (const fragment of guess.ready) {
+      if (gen !== this.generation) return true;
+      this.transport.sendEvent({ type: "transcript", role: "agent", text: fragment.text });
+      this.speaking = true;
+      this.speakingSince = Date.now();
+      this.transport.sendAudio(fragment.audio);
+      this.spokenThisTurn = `${this.spokenThisTurn} ${fragment.text}`.trim();
+    }
+    this.speaking = false;
+    this.appendAgentTurn(guess.ready.map((f) => f.text).join(" "), 0);
+    this.transport.sendEvent({ type: "turn_end", latencyMs: 0 });
+    saveCall(this.call);
+    return true;
+  }
+
   private interrupt(): void {
     this.generation++;
     this.abort?.abort();
@@ -146,6 +307,7 @@ export class VoiceSession {
     this.speaking = false;
     this.thinking = false;
     this.spokenThisTurn = "";
+    this.dropGuess();
     this.transport.clearAudio();
     this.transport.sendEvent({ type: "interrupted" });
   }
@@ -173,6 +335,10 @@ export class VoiceSession {
       await this.enforce(breach, gen);
       return;
     }
+
+    // The answer may already be synthesised and waiting, prepared while the
+    // endpointer was still deciding the caller had stopped.
+    if (await this.useGuess(text, gen)) return;
 
     this.thinking = true;
 
@@ -333,6 +499,7 @@ export class VoiceSession {
     if (this.closed) return;
     this.closed = true;
     if (this.timeout) clearTimeout(this.timeout);
+    this.dropGuess();
     this.abort?.abort();
     this.stt?.close();
 

@@ -368,6 +368,157 @@ tbody tr:hover {
   height: 72vh;
 }
 
+/* --- calendar -------------------------------------------------------------
+   Time down the side, the thing being booked along the top. Everything is
+   positioned by real minutes rather than by row, so the shape of the day is
+   legible without reading a single word of it. */
+
+.cal-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--lift);
+}
+
+.cal-inner {
+  display: grid;
+  min-width: max-content;
+}
+
+.cal-corner,
+.cal-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  padding: 9px 10px;
+}
+
+.cal-corner {
+  border-right: 1px solid var(--border);
+}
+
+.cal-head {
+  border-left: 1px solid var(--border-soft);
+  text-align: center;
+}
+
+.cal-head-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.cal-head-sub {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 1px;
+  min-height: 13px;
+}
+
+/* The hour labels sit on the line rather than between them, so a block's top
+   edge reads directly against a time. */
+.cal-gutter {
+  position: relative;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.cal-hour {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-lane {
+  position: relative;
+  border-left: 1px solid var(--border-soft);
+}
+
+.cal-rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border-soft);
+}
+
+.cal-block {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  border-radius: 7px;
+  overflow: hidden;
+  display: block;
+  text-decoration: none;
+  box-shadow: var(--lift);
+}
+
+.cal-block-body {
+  display: block;
+  background: var(--accent);
+  color: #fff;
+  padding: 4px 7px;
+  overflow: hidden;
+}
+
+.cal-block:hover .cal-block-body {
+  background: #223646;
+}
+
+.cal-block-time {
+  display: block;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.cal-block-name {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-block-detail {
+  display: block;
+  font-size: 10.5px;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The turnaround. Hatched rather than solid because it is not the guest's
+   time — the diary is held, but nobody was told about it. */
+.cal-block-buffer {
+  display: block;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--accent-soft),
+    var(--accent-soft) 4px,
+    var(--panel) 4px,
+    var(--panel) 8px
+  );
+  border-top: 1px solid var(--accent-line);
+}
+
+.cal-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--bad);
+  z-index: 2;
+  pointer-events: none;
+}
+
 /* --- prospect demo --------------------------------------------------------
    A public page carrying somebody else's trading name. It borrows none of the
    dashboard chrome: the visitor has never signed in, is not a user, and the
