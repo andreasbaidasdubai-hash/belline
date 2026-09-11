@@ -229,7 +229,7 @@ function navFor(active: string): string {
   return `${links}
       <a href="/#what">What it does</a>
       <a href="/#price">Pricing</a>
-      <a class="nav-cta" href="/#book">Get Belline</a>
+      <a class="nav-cta" href="https://app.belline.ai/start">Get Belline</a>
       <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>`;
 }
 
@@ -358,7 +358,7 @@ function verticalPage(v: Vertical): string {
             ${MARK}
             Hear Belline
           </a>
-          <a class="btn line" href="/#book">Get Belline</a>
+          <a class="btn line" href="https://app.belline.ai/start">Get Belline</a>
         </div>
 
         <p class="hero-note rise rise-4">
@@ -406,7 +406,7 @@ ${CALL_PANEL}
           <p class="eyebrow">Where it stops</p>
           <h2 class="display">The most important thing it does is know what it must not answer.</h2>
           <p style="margin-top:26px">${esc(v.boundary)}</p>
-          <a class="btn" href="/#book">Get Belline</a>
+          <a class="btn" href="https://app.belline.ai/start">Get Belline</a>
         </div>
         <figure class="plate">
           <img src="${esc(v.image)}" width="880" height="495" loading="lazy" alt="${esc(v.imageAlt)}">

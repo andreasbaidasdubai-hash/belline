@@ -724,3 +724,28 @@
       });
   }
 })();
+
+/* --- the buy bar -----------------------------------------------------------
+   On a phone the purchase has to be reachable from anywhere on the page. But
+   a bar that is there from the first frame covers the headline that is meant
+   to sell it, so it arrives once the hero is behind you and the visitor has
+   chosen to keep reading.
+
+   A class on <html> rather than an inline style, so the whole behaviour —
+   including the bell stepping aside — lives in the stylesheet. */
+(function () {
+  var hero = document.querySelector(".hero");
+  if (!hero || !document.querySelector(".buybar")) return;
+
+  if (!("IntersectionObserver" in window)) {
+    document.documentElement.classList.add("buybar-on");
+    return;
+  }
+
+  new IntersectionObserver(
+    function (entries) {
+      document.documentElement.classList.toggle("buybar-on", !entries[0].isIntersecting);
+    },
+    { rootMargin: "-72px 0px 0px 0px" },
+  ).observe(hero);
+})();

@@ -1259,3 +1259,225 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
    steht und jeder Unterschied als "blass" gelesen wird. */
 .script-head .at,
 .call-head .call-line { font-weight: 600; }
+
+/* --- Kaufen ----------------------------------------------------------------
+ *
+ * Eine Handlung, überall dieselbe, und sie sieht aus wie eine Handlung.
+ *
+ * Vorher standen im Hero zwei gleich große Knöpfe nebeneinander — und der
+ * gefüllte war die Demo. Die auffälligste Handlung auf der Startseite war
+ * "kauf noch nicht". Die Demo ist jetzt ein Link darunter: sie überzeugt,
+ * aber sie verkauft nicht, und sie darf dem Knopf, der es tut, nicht die
+ * Aufmerksamkeit wegnehmen.
+ */
+.btn-quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.95rem;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-bottom: 1px solid var(--brass-soft);
+  padding: 0 0 4px;
+  align-self: center;
+}
+.btn-quiet:hover { border-bottom-color: var(--brass); color: var(--ink); }
+.btn-quiet svg { width: 17px; height: 17px; color: var(--brass); }
+
+/* Drei Zahlen statt vier, und alle drei sind Ergebnisse. "Unter 1s bis zum
+   ersten gesprochenen Wort" ist eine Kennzahl für einen Entwickler. */
+.facts-3 { grid-template-columns: repeat(3, 1fr); }
+
+/* Vier Fähigkeiten, nicht zwölf Karten. */
+.does {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 64px;
+  margin-top: 52px;
+  border-top: 1px solid var(--rule);
+}
+.does > div { padding: 30px 0; border-bottom: 1px solid var(--rule-soft); }
+.does h3 {
+  margin: 0 0 9px;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.34rem;
+  letter-spacing: -0.015em;
+}
+.does p { margin: 0; font-size: 0.96rem; color: var(--ink-2); max-width: 42ch; }
+
+/* --- Ein Preis -------------------------------------------------------------
+ * Drei Pläne und ein Umschalter sind vier Entscheidungen vor einem Kauf. Der
+ * Preis, der für fast jeden gilt, steht vorn; die beiden anderen sind ein
+ * Satz für die Minderheit, die sie braucht.
+ */
+.price-one {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  gap: 64px;
+  margin-top: 10px;
+  align-items: start;
+}
+.price-list { list-style: none; padding: 0; margin: 26px 0 0; }
+.price-list li {
+  position: relative;
+  padding-left: 20px;
+  margin-bottom: 11px;
+  font-size: 0.96rem;
+  color: var(--ink-2);
+}
+.price-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 8px;
+  height: 1px;
+  background: var(--brass);
+}
+.price-aside {
+  padding: 28px 0 0;
+  border-top: 1px solid var(--rule);
+}
+.price-aside h3 {
+  margin: 0 0 10px;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.2rem;
+  letter-spacing: -0.015em;
+}
+.price-aside p { font-size: 0.92rem; margin: 0 0 16px; }
+.price-aside details { border-top: 1px solid var(--rule-soft); padding-top: 14px; }
+.price-aside summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.86rem;
+  color: var(--ink-2);
+}
+.price-aside summary::-webkit-details-marker { display: none; }
+.price-aside summary::after { content: " +"; color: var(--brass); }
+.price-aside details[open] summary::after { content: " –"; }
+.price-aside details p { font-size: 0.86rem; margin-top: 12px; color: var(--ink-3); }
+
+/* --- Der Beweis im Abschluss ----------------------------------------------- */
+.proof {
+  margin-top: 56px;
+  padding-top: 30px;
+  border-top: 1px solid var(--rule);
+  max-width: 54ch;
+}
+.proof h3 {
+  margin: 0 0 10px;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.4rem;
+  letter-spacing: -0.015em;
+}
+.proof p { font-size: 0.96rem; margin: 0 0 18px; }
+.dial {
+  display: inline-block;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.7rem;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--brass-soft);
+  padding-bottom: 3px;
+}
+.dial:hover { border-bottom-color: var(--brass); }
+.proof ul { list-style: none; padding: 0; margin: 20px 0 0; }
+.proof ul li {
+  font-size: 0.9rem;
+  color: var(--ink-3);
+  padding-left: 20px;
+  position: relative;
+  margin-bottom: 7px;
+}
+.proof ul li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 8px;
+  height: 1px;
+  background: var(--brass-soft);
+}
+
+/* --- Die Leiste für den Daumen ---------------------------------------------
+ *
+ * Nur auf dem Telefon, und dort erst, wenn der Hero vorbei ist — eine Leiste,
+ * die sofort erscheint, verdeckt genau die Überschrift, die sie verkaufen
+ * soll. Ausgelöst wird sie von .buybar-on, das site.js setzt.
+ */
+.buybar { display: none; }
+
+@media (max-width: 900px) {
+  .does { grid-template-columns: 1fr; gap: 0; margin-top: 40px; }
+  .price-one { grid-template-columns: 1fr; gap: 40px; }
+  .facts-3 { grid-template-columns: 1fr 1fr; }
+  .facts-3 .fact:last-child { border-right: 0; padding-left: 0; }
+  .cta-row { gap: 20px; }
+  .btn-quiet { align-self: flex-start; }
+
+  .buybar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--paper) 94%, transparent);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--rule);
+    transform: translateY(110%);
+    transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .buybar-on .buybar { transform: none; }
+  .buybar-cta {
+    flex: 1;
+    text-align: center;
+    padding: 15px 20px;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--paper);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 1rem;
+  }
+  .buybar-demo {
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--rule);
+    color: var(--brass);
+  }
+  .buybar-demo svg { width: 24px; height: 24px; }
+
+  /* Zwei runde Knöpfe in derselben Ecke sind einer zu viel. Die Glocke tritt
+     zurück, sobald die Leiste da ist — die Demo sitzt jetzt in ihr. */
+  .buybar-on .bell-fab { display: none; }
+
+  /* Platz, damit die Leiste den Abschluss nicht überdeckt. */
+  body { padding-bottom: 0; }
+  .closer { padding-bottom: 120px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .buybar { transition: none; }
+}
+
+/* Die beiden größeren Pläne und die Minutendefinition stehen zusammengeklappt
+   in der Randspalte. Sie müssen auf der Seite stehen — check:billing bricht
+   den Build, wenn eine lebende Funktion fehlt — aber sie müssen nicht vor dem
+   Knopf stehen. */
+.price-aside details + details { margin-top: 10px; }
+.price-aside .price-list { margin-top: 12px; }
+.price-aside .price-list li { font-size: 0.86rem; margin-bottom: 7px; color: var(--ink-3); }
+.price-aside summary { font-weight: 500; color: var(--ink); padding: 4px 0; }
