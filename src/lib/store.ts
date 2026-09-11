@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { Booking, Call, Location, Session, User } from "./types";
+import type { Booking, Call, Location, Session, User, WaitlistEntry } from "./types";
 
 /**
  * File-backed store.
@@ -25,12 +25,13 @@ const DATA_DIR = process.env.DATA_DIR
 interface Db {
   locations: Location[];
   bookings: Booking[];
+  waitlist: WaitlistEntry[];
   calls: Call[];
   users: User[];
   sessions: Session[];
 }
 
-const EMPTY: Db = { locations: [], bookings: [], calls: [], users: [], sessions: [] };
+const EMPTY: Db = { locations: [], bookings: [], waitlist: [], calls: [], users: [], sessions: [] };
 
 // Next's dev server re-evaluates modules on edit; the custom server holds the
 // voice sessions in the same process. A global pin keeps one instance of the
@@ -237,6 +238,37 @@ export function saveBooking(booking: Booking): Booking {
   else db.bookings[idx] = booking;
   persist("bookings");
   return booking;
+}
+
+// --- waitlist ---------------------------------------------------------------
+
+export function listWaitlist(filter?: {
+  locationId?: string;
+  date?: string;
+  status?: WaitlistEntry["status"];
+}): WaitlistEntry[] {
+  return load()
+    .waitlist.filter((w) => {
+      if (filter?.locationId && w.locationId !== filter.locationId) return false;
+      if (filter?.date && w.date !== filter.date) return false;
+      if (filter?.status && w.status !== filter.status) return false;
+      return true;
+    })
+    // Oldest first: whoever asked first gets the table.
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export function getWaitlistEntry(id: string): WaitlistEntry | undefined {
+  return load().waitlist.find((w) => w.id === id);
+}
+
+export function saveWaitlistEntry(entry: WaitlistEntry): WaitlistEntry {
+  const db = load();
+  const idx = db.waitlist.findIndex((w) => w.id === entry.id);
+  if (idx === -1) db.waitlist.push(entry);
+  else db.waitlist[idx] = entry;
+  persist("waitlist");
+  return entry;
 }
 
 // --- calls -----------------------------------------------------------------

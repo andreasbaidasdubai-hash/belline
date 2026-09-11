@@ -83,6 +83,9 @@ const restaurant: Location = {
   restaurant: {
     slotMinutes: 15,
     maxCoversPerSlot: 14,
+    // A manager who can see two tables putting their coats on may seat four
+    // more. The agent never can - pacing is what keeps the pass alive.
+    overbookPerSlot: 4,
     maxPartySize: 8,
     largePartyPolicy:
       "Parties of nine or more are handled by the events manager, who will call back the same day.",

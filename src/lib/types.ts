@@ -1,4 +1,5 @@
 import type { BrainVersion } from "./brain";
+import type { GoogleLink } from "./integrations/google";
 
 // Domain model.
 //
@@ -68,6 +69,8 @@ export interface Location {
    * answer any of them.
    */
   brainHistory?: BrainVersion[];
+  /** A connected Google Calendar, mirrored to one-way. */
+  google?: GoogleLink;
 }
 
 /**
@@ -179,6 +182,16 @@ export interface RestaurantConfig {
   maxPartySize: number;
   /** What the agent should say when a party exceeds `maxPartySize`. */
   largePartyPolicy: string;
+  /**
+   * Covers a manager may seat beyond the pacing cap, by hand.
+   *
+   * Never available to the agent — pacing exists so the pass survives eight
+   * o'clock, and a caller is the last person who should be able to override
+   * it. But a manager who knows two tables are about to leave, or that the
+   * kitchen has a spare pair of hands tonight, is making a judgement the
+   * software cannot. Zero means the cap is absolute.
+   */
+  overbookPerSlot?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +229,45 @@ export interface SalonConfig {
   staff: StaffMember[];
   resources: Resource[];
   slotMinutes: number;
+}
+
+// ---------------------------------------------------------------------------
+// Waitlist
+// ---------------------------------------------------------------------------
+
+export type WaitStatus = "waiting" | "offered" | "converted" | "expired" | "cancelled";
+
+/**
+ * Somebody who wanted a time that was gone.
+ *
+ * A full Friday is not a lost caller, it is a caller nobody wrote down. The
+ * difference between a restaurant that keeps a waitlist and one that does not
+ * is entirely in what happens when a table frees at five o'clock — and the
+ * thing Belline can do that a booking system cannot is ring them back itself.
+ */
+export interface WaitlistEntry {
+  id: string;
+  locationId: string;
+  guestName: string;
+  guestPhone: string;
+  date: DateStr;
+  /** The window they would accept, not a single time. */
+  earliestMin: Minutes;
+  latestMin: Minutes;
+  partySize?: number;
+  serviceIds?: string[];
+  /** Named a particular person, and will not take anyone else. */
+  staffId?: string;
+  status: WaitStatus;
+  notes: string;
+  /** The call this came from, so the conversation is one click away. */
+  callId?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** When a slot was found and they were told about it. */
+  offeredAt?: string;
+  /** The booking this turned into. */
+  bookingId?: string;
 }
 
 // ---------------------------------------------------------------------------

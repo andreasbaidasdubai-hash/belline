@@ -133,6 +133,7 @@ export default async function CalendarPage({
           view={view}
           locationId={location.id}
           isRestaurant={isRestaurant(location)}
+          overbookAllowed={(location.restaurant?.overbookPerSlot ?? 0) > 0}
           services={(location.salon?.services ?? []).map((s) => ({
             id: s.id,
             name: s.name,

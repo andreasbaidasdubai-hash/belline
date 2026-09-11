@@ -29,10 +29,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/calendar", label: "Calendar" },
     { href: "/calls", label: "Calls" },
     { href: "/bookings", label: "Bookings" },
+    { href: "/waitlist", label: "Waitlist" },
     { href: "/guests", label: "Guests" },
     { href: "/test", label: "Test console" },
     // Floor staff read the book; they do not rewrite the agent's rules.
-    ...(user.role !== "staff" ? [{ href: "/agents", label: "Agent" }] : []),
+    ...(user.role !== "staff"
+      ? [
+          { href: "/agents", label: "Agent" },
+          { href: "/integrations", label: "Integrations" },
+        ]
+      : []),
     ...(canManageUsers(user)
       ? [
           { href: "/demo", label: "Demo line" },

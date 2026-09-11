@@ -46,11 +46,13 @@ export default function Grid({
   view,
   locationId,
   isRestaurant,
+  overbookAllowed,
   services,
 }: {
   view: DayView;
   locationId: string;
   isRestaurant: boolean;
+  overbookAllowed: boolean;
   services: { id: string; name: string; durationMin: number }[];
 }) {
   const router = useRouter();
@@ -277,6 +279,7 @@ export default function Grid({
           columnId={booking.columnId}
           columnName={view.columns.find((c) => c.id === booking.columnId)?.name ?? ""}
           isRestaurant={isRestaurant}
+          overbookAllowed={overbookAllowed}
           services={services}
           onClose={() => setBooking(null)}
           onDone={(text) => {

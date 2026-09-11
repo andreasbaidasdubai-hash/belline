@@ -33,6 +33,8 @@ export async function POST(request: Request) {
     partySize?: number;
     serviceIds?: string[];
     notes?: string;
+    /** Seat past the pacing cap on purpose. Never available to the agent. */
+    overbook?: boolean;
   };
 
   const location = body.locationId ? getLocation(body.locationId) : undefined;
@@ -62,6 +64,8 @@ export async function POST(request: Request) {
     // assign, as with a move.
     staffId: isRestaurant(location) ? undefined : body.columnId,
     source: "manual",
+    // Only ever true because a person on the floor ticked it.
+    overbook: body.overbook === true,
   });
 
   if (!result.ok) {

@@ -147,7 +147,7 @@ console.log("\nClearing the list\n");
 test("marking something done removes it", () => {
   const before = attentionFor(clinic);
   assert.ok(before.length > 0);
-  resolveAttention(before[0].callId, "usr_1");
+  resolveAttention(before[0].callId!, "usr_1");
   const after = attentionFor(clinic);
   assert.ok(!after.some((i) => i.callId === before[0].callId), "a cleared item came back");
   assert.equal(after.length, before.length - 1);

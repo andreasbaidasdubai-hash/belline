@@ -138,7 +138,21 @@ function coversInSlot(
 export function checkRestaurantSlot(
   location: Location,
   bookings: Booking[],
-  query: { date: string; startMin: Minutes; partySize: number; excludeBookingId?: string },
+  query: {
+    date: string;
+    startMin: Minutes;
+    partySize: number;
+    excludeBookingId?: string;
+    /**
+     * A manager seating past the pacing cap on purpose.
+     *
+     * Never set from the phone line. Pacing exists so the pass survives eight
+     * o'clock, and the caller is the last person who should be able to
+     * overrule it — but a manager who can see two tables putting their coats
+     * on is making a judgement the software cannot.
+     */
+    overbook?: boolean;
+  },
 ): { ok: true; assignment: Assignment } | Unavailable {
   const config = location.restaurant!;
   const { date, startMin, partySize } = query;
@@ -175,7 +189,11 @@ export function checkRestaurantSlot(
   const dayBookings = activeBookings(bookings, date, query.excludeBookingId);
 
   const seated = coversInSlot(config, dayBookings, startMin);
-  if (seated + partySize > config.maxCoversPerSlot) {
+  // An overbooking allowance is a manager's, and it is finite: it raises the
+  // ceiling, it does not remove it.
+  const ceiling =
+    config.maxCoversPerSlot + (query.overbook ? (config.overbookPerSlot ?? 0) : 0);
+  if (seated + partySize > ceiling) {
     return {
       ok: false,
       reason: "pacing",

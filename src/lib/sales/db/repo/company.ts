@@ -222,6 +222,46 @@ export async function upsert(c: pg.PoolClient, input: CompanyInput): Promise<Ups
   }
 }
 
+/**
+ * Record a physical location, keyed on the source's own id.
+ *
+ * `external_id` carries `place_id` for Google, which is stable across runs —
+ * so re-running discovery over the same city writes nothing new here, and the
+ * unique index makes that guarantee rather than a hope. Silently does nothing
+ * when the row already exists, because that is the expected case.
+ */
+export async function addLocation(
+  c: pg.PoolClient,
+  companyId: number,
+  input: {
+    externalId?: string | null;
+    address?: string | null;
+    city?: string | null;
+    phoneE164?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    openingHours?: unknown;
+  },
+): Promise<void> {
+  if (!input.externalId) return;
+  await c.query(
+    `insert into sales.company_location
+       (company_id, external_id, address, city, phone_e164, lat, lng, opening_hours)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
+     on conflict (external_id) do nothing`,
+    [
+      companyId,
+      input.externalId,
+      input.address ?? null,
+      input.city ?? null,
+      input.phoneE164 ?? null,
+      input.lat ?? null,
+      input.lng ?? null,
+      input.openingHours ? JSON.stringify(input.openingHours) : null,
+    ],
+  );
+}
+
 export async function get(c: pg.PoolClient, id: number): Promise<CompanyRow | undefined> {
   const rows = await c.query<CompanyRow>(`select * from sales.company where id = $1`, [id]);
   return rows.rows[0];

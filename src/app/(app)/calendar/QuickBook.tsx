@@ -19,6 +19,7 @@ export default function QuickBook({
   columnId,
   columnName,
   isRestaurant,
+  overbookAllowed,
   services,
   onClose,
   onDone,
@@ -29,6 +30,7 @@ export default function QuickBook({
   columnId: string;
   columnName: string;
   isRestaurant: boolean;
+  overbookAllowed: boolean;
   services: { id: string; name: string; durationMin: number }[];
   onClose: () => void;
   onDone: (message: string) => void;
@@ -38,6 +40,7 @@ export default function QuickBook({
   const [partySize, setPartySize] = useState(2);
   const [serviceId, setServiceId] = useState(services[0]?.id ?? "");
   const [notes, setNotes] = useState("");
+  const [overbook, setOverbook] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -69,6 +72,7 @@ export default function QuickBook({
           partySize: isRestaurant ? partySize : undefined,
           serviceIds: isRestaurant ? undefined : serviceId ? [serviceId] : [],
           notes,
+          overbook,
         }),
       });
       const data = await res.json();
@@ -173,6 +177,36 @@ export default function QuickBook({
               disabled={busy}
             />
           </div>
+
+          {/* Offered only after the engine has already said no, so it reads as
+              the override it is rather than a box to tick by habit. */}
+          {isRestaurant && error && overbookAllowed && (
+            <label
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "flex-start",
+                textTransform: "none",
+                letterSpacing: 0,
+                fontSize: 12.5,
+                fontWeight: 400,
+                color: "var(--text-2)",
+                marginBottom: 12,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={overbook}
+                onChange={(e) => setOverbook(e.target.checked)}
+                style={{ width: "auto", marginTop: 2 }}
+                disabled={busy}
+              />
+              <span>
+                Seat them anyway. Past the kitchen&apos;s pacing cap — only if you can see
+                the room.
+              </span>
+            </label>
+          )}
 
           {error && (
             <div style={{ color: "var(--bad)", fontSize: 12.5, marginBottom: 12, lineHeight: 1.5 }}>

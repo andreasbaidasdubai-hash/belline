@@ -16,6 +16,7 @@ import { minutesToSpoken, dateToSpoken } from "../time";
 import { checkRestaurantSlot, searchRestaurant } from "./restaurant";
 import { checkSalonSlot, chainDuration, resolveServices, searchSalon } from "./salon";
 import { bookingKey, describeWhat, findDuplicate, type BookingIdentity } from "./idempotency";
+import { pushBooking } from "../integrations/google";
 
 /**
  * The booking facade the agent talks to.
@@ -45,6 +46,8 @@ export interface CreateInput {
   staffId?: string;
   callId?: string;
   source?: Booking["source"];
+  /** Set only from the calendar, by a person who can see the room. */
+  overbook?: boolean;
 }
 
 export type BookingResult =
@@ -96,6 +99,7 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
       date: input.date,
       startMin: input.startMin,
       partySize,
+      overbook: input.overbook,
     });
     if (!check.ok) {
       return {
@@ -130,7 +134,7 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
       createdAt: now,
       updatedAt: now,
     };
-    return { ok: true, booking: saveBooking(booking) };
+    return { ok: true, booking: mirrored(location, saveBooking(booking)) };
   }
 
   const check = checkSalonSlot(location, bookings, {
@@ -177,7 +181,7 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
     createdAt: now,
     updatedAt: now,
   };
-  return { ok: true, booking: saveBooking(booking) };
+  return { ok: true, booking: mirrored(location, saveBooking(booking)) };
 }
 
 export function modifyBooking(
@@ -239,7 +243,7 @@ export function modifyBooking(
       }),
       updatedAt: new Date().toISOString(),
     };
-    return { ok: true, booking: saveBooking(updated) };
+    return { ok: true, booking: mirrored(location, saveBooking(updated)) };
   }
 
   const serviceIds = changes.serviceIds ?? booking.serviceIds ?? [];
@@ -286,7 +290,7 @@ export function modifyBooking(
     }),
     updatedAt: new Date().toISOString(),
   };
-  return { ok: true, booking: saveBooking(updated) };
+  return { ok: true, booking: mirrored(location, saveBooking(updated)) };
 }
 
 export function cancelBooking(booking: Booking): Booking {
@@ -349,4 +353,16 @@ export function describeBooking(location: Location, booking: Booking): string {
   return `${booking.guestName}, ${services.map((s) => s.name).join(" + ")}${
     staff ? ` with ${staff.name}` : ""
   }, ${when}, ${location.currency} ${price} (ref ${booking.ref})`;
+}
+
+/**
+ * Mirror a booking into the venue's own calendar, if one is connected.
+ *
+ * Not awaited on purpose. The booking is already saved and is real either
+ * way; a slow or broken Google must never hold a caller on the line. Failures
+ * land on the connection so the dashboard can say so.
+ */
+function mirrored(location: Location, booking: Booking): Booking {
+  if (location.google) void pushBooking(location, booking);
+  return booking;
 }

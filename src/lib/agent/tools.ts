@@ -9,6 +9,7 @@ import {
   modifyBooking,
 } from "../booking";
 import { sendSms, smsEnabled } from "../providers/sms";
+import { join } from "../waitlist";
 import { chainDuration, resolveServices } from "../booking/salon";
 import {
   findBookingByRef,
@@ -159,6 +160,28 @@ export function toolsFor(location: Location): Anthropic.Tool[] {
           reason: { type: "string" },
         },
         required: ["booking_id"],
+      },
+    },
+    {
+      name: "join_waitlist",
+      description:
+        "Put the caller on the waitlist when the time they wanted is gone and no alternative " +
+        "suits them. Offer this instead of letting them ring off with nothing — if something " +
+        "frees up we will call them back. Ask for the window they would accept, not one time.",
+      input_schema: {
+        type: "object",
+        properties: {
+          guest_name: { type: "string" },
+          phone: { type: "string", description: "A number to ring back on." },
+          date: { type: "string", description: "YYYY-MM-DD." },
+          earliest: { type: "string", description: "Earliest they would come, e.g. 19:00." },
+          latest: { type: "string", description: "Latest they would come, e.g. 21:00." },
+          party_size: { type: "number" },
+          service_ids: { type: "array", items: { type: "string" } },
+          staff_id: { type: "string", description: "Only if they will not see anyone else." },
+          notes: { type: "string" },
+        },
+        required: ["guest_name", "phone", "date", "earliest", "latest"],
       },
     },
     {
@@ -529,6 +552,45 @@ export async function executeTool(
           cancelled: true,
           reference: updated.ref,
           say: "Cancelled. Confirm it back to the caller.",
+        },
+      };
+    }
+
+    case "join_waitlist": {
+      const date = resolveDate(String(input.date ?? ""), location.timezone);
+      const earliest = parseClock(String(input.earliest ?? ""));
+      const latest = parseClock(String(input.latest ?? ""));
+      const name = String(input.guest_name ?? "").trim();
+      const phone = String(input.phone ?? ctx.callerNumber ?? "").trim();
+
+      if (!date) return { result: { error: "Which day? Ask them to say it plainly." } };
+      if (earliest === null || latest === null) {
+        return { result: { error: "Ask what window would work — earliest and latest." } };
+      }
+      if (!name) return { result: { error: "Ask for a name first." } };
+      if (!phone) return { result: { error: "Ask for a number to ring back on." } };
+
+      const entry = join({
+        locationId: location.id,
+        guestName: name,
+        guestPhone: phone,
+        date,
+        earliestMin: earliest,
+        latestMin: latest,
+        partySize: Number(input.party_size) || undefined,
+        serviceIds: (input.service_ids as string[]) ?? undefined,
+        staffId: (input.staff_id as string) ?? undefined,
+        notes: String(input.notes ?? ""),
+        callId: ctx.call.id,
+      });
+
+      return {
+        result: {
+          waitlisted: true,
+          id: entry.id,
+          say:
+            "Tell them they are on the list and that we will ring if something frees up. " +
+            "Do not promise a slot — there may not be one.",
         },
       };
     }

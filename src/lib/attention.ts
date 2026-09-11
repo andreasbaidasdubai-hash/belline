@@ -2,6 +2,8 @@ import type { Call, Location } from "./types";
 import { listCalls, saveCall, getCall } from "./store";
 import { authorityRules } from "./agent/authority";
 import { terms } from "./verticals";
+import { matchesFor, markOffered, markCancelled } from "./waitlist";
+import { todayIn, minutesToSpoken } from "./time";
 
 /**
  * What still needs a person.
@@ -27,10 +29,15 @@ export type AttentionKind =
   | "transferred"
   | "message"
   | "booking_failed"
-  | "abandoned";
+  | "abandoned"
+  /** Somebody on the waitlist can now have what they asked for. */
+  | "waitlist_match";
 
 export interface AttentionItem {
-  callId: string;
+  /** The call this came from. Absent on a waitlist match, which has no call. */
+  callId?: string;
+  /** The waitlist entry, when that is what raised this. */
+  entryId?: string;
   locationId: string;
   kind: AttentionKind;
   /** Ordering. Higher is more urgent; an emergency outranks a hang-up. */
@@ -156,6 +163,27 @@ export function attentionFor(location: Location, includeResolved = false): Atten
       return [];
     });
 
+  // A slot has freed and somebody is waiting for exactly it. This is the one
+  // item on the list that makes money rather than repairing something, and it
+  // is time-critical in a way none of the others are — a table free at five is
+  // worth nothing by eight.
+  for (const match of matchesFor(location, todayIn(location.timezone))) {
+    items.push({
+      entryId: match.entry.id,
+      locationId: location.id,
+      kind: "waitlist_match",
+      urgency: 90,
+      who: match.entry.guestName,
+      what: match.say,
+      why: `They asked for ${minutesToSpoken(match.entry.earliestMin)} to ${minutesToSpoken(
+        match.entry.latestMin,
+      )} and it was full.`,
+      todo: "Ring them — this goes cold fast.",
+      at: match.entry.createdAt,
+      callbackNumber: match.entry.guestPhone,
+    });
+  }
+
   return items.sort((a, b) => b.urgency - a.urgency || b.at.localeCompare(a.at));
 }
 
@@ -187,6 +215,7 @@ export function reopenAttention(callId: string): Call | null {
 }
 
 export const KIND_LABEL: Record<AttentionKind, string> = {
+  waitlist_match: "Slot free",
   escalated: "Sent elsewhere",
   transferred: "Transferred",
   message: "Message",

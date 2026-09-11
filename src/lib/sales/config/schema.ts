@@ -171,9 +171,30 @@ const Budget = z.object({
 
 // ---------------------------------------------------------------------------
 
+/**
+ * How this agent finds companies.
+ *
+ * `search_terms` is what actually gets typed into a lead source, and it lives
+ * in configuration rather than in the connector precisely so that no vertical
+ * is named in code — adding "physiotherapists" is a form, not a deploy.
+ */
+const Discovery = z.object({
+  /**
+   * May be empty: an agent that names no terms inherits its vertical's
+   * defaults at run time. Requiring one here would make the shipped default
+   * config invalid, and "the agent has no search terms" is a runtime error
+   * with a useful message rather than a schema violation with a path.
+   */
+  search_terms: z.array(z.string()),
+  /** Cap per run, so a misconfigured agent cannot spend a month's budget. */
+  max_results_per_run: z.number().int().min(1).max(1000),
+  sources: z.array(z.string()).min(1),
+});
+
 /** What is stored on any single agent row. Everything optional. */
 export const PartialAgentConfig = z
   .object({
+    discovery: Discovery.partial(),
     regions: z.array(z.string()),
     languages: z.array(z.string()),
     default_language: z.string(),
@@ -192,6 +213,7 @@ export type PartialAgentConfig = z.infer<typeof PartialAgentConfig>;
 
 /** What the pipeline actually runs on, after Director → Country → Vertical. */
 export const ResolvedAgentConfig = z.object({
+  discovery: Discovery,
   regions: z.array(z.string()),
   languages: z.array(z.string()).min(1),
   default_language: z.string(),
@@ -224,6 +246,10 @@ export type ResolvedAgentConfig = z.infer<typeof ResolvedAgentConfig>;
 export type MergeMode = "override" | "deep" | "intersect" | "sum_capped" | "strictest";
 
 export const MERGE_MODES: Record<keyof PartialAgentConfig, MergeMode> = {
+  // `deep`, not `intersect`: a vertical agent's search terms are its own, and
+  // a country manager has no list of permitted terms to narrow against.
+  // `max_results_per_run` is handled as a cap by the deep-merge key modes.
+  discovery: "deep",
   regions: "intersect",
   languages: "intersect",
   default_language: "override",

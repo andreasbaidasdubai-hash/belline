@@ -15,6 +15,7 @@ import type { AttentionItem, AttentionKind } from "@/lib/attention";
  */
 
 const TONE: Record<AttentionKind, { border: string; ink: string; wash: string }> = {
+  waitlist_match: { border: "var(--ok)", ink: "var(--ok)", wash: "var(--ok-soft)" },
   escalated: { border: "var(--bad)", ink: "var(--bad)", wash: "var(--bad-soft)" },
   transferred: { border: "var(--warn)", ink: "var(--warn)", wash: "var(--warn-soft)" },
   message: { border: "var(--gold-ink)", ink: "var(--gold-ink)", wash: "var(--panel-2)" },
@@ -42,14 +43,15 @@ export default function Inbox({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function resolve(callId: string) {
-    setBusy(callId);
+  async function resolve(item: AttentionItem) {
+    const key = item.callId ?? item.entryId!;
+    setBusy(key);
     setError(null);
     try {
       const res = await fetch("/api/attention", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ callId }),
+        body: JSON.stringify({ callId: item.callId, entryId: item.entryId }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -102,7 +104,7 @@ export default function Inbox({
           const tone = TONE[item.kind];
           return (
             <article
-              key={item.callId}
+              key={item.callId ?? item.entryId}
               className="panel"
               style={{ borderLeft: `3px solid ${tone.border}`, padding: "15px 17px" }}
             >
@@ -137,19 +139,21 @@ export default function Inbox({
               <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
                 <button
                   className="btn btn-accent"
-                  onClick={() => resolve(item.callId)}
-                  disabled={busy === item.callId}
+                  onClick={() => resolve(item)}
+                  disabled={busy === (item.callId ?? item.entryId)}
                 >
-                  {busy === item.callId ? "…" : "Done"}
+                  {busy === (item.callId ?? item.entryId) ? "…" : "Done"}
                 </button>
                 {item.callbackNumber && item.callbackNumber !== "Unknown caller" && (
                   <a className="btn" href={`tel:${item.callbackNumber.replace(/\s/g, "")}`}>
                     Call {item.callbackNumber}
                   </a>
                 )}
-                <Link className="btn" href={`/calls/${item.callId}`}>
-                  Read the call
-                </Link>
+                {item.callId && (
+                  <Link className="btn" href={`/calls/${item.callId}`}>
+                    Read the call
+                  </Link>
+                )}
               </div>
             </article>
           );

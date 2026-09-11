@@ -18,6 +18,7 @@ import type { Channel, Compliance, PartialAgentConfig, SendWindow } from "./sche
  * regulator's letter.
  */
 export const DEFAULT_CONFIG: PartialAgentConfig = {
+  discovery: { search_terms: [], max_results_per_run: 50, sources: ["csv"] },
   regions: [],
   languages: ["en"],
   default_language: "en",
@@ -154,6 +155,15 @@ export interface VerticalSeed {
   slug: string;
   name: string;
   parent_slug?: string;
+  /**
+   * What to type into a lead source to find these businesses.
+   *
+   * Several terms per vertical because one never covers a market: a Dubai
+   * practice lists itself as a "dental clinic", a "dental centre" or a
+   * "dentist" more or less at random, and each term returns a different
+   * twenty results. The connector dedupes on place_id across them.
+   */
+  searchTerms: string[];
   /** Mirrors src/lib/verticals.ts so outreach copy uses the trade's own words. */
   terms: { customer: string; customers: string; staff: string; booking: string; venue: string };
   default_icp: PartialAgentConfig["ideal_customer_profile"];
@@ -163,6 +173,7 @@ export const VERTICALS: VerticalSeed[] = [
   {
     slug: "dentists",
     name: "Dental practices",
+    searchTerms: ["dental clinic", "dentist", "dental centre", "orthodontist"],
     terms: {
       customer: "patient",
       customers: "patients",
@@ -179,6 +190,7 @@ export const VERTICALS: VerticalSeed[] = [
   {
     slug: "clinics",
     name: "Medical clinics",
+    searchTerms: ["medical clinic", "polyclinic", "aesthetic clinic", "dermatology clinic"],
     terms: {
       customer: "patient",
       customers: "patients",
@@ -195,6 +207,7 @@ export const VERTICALS: VerticalSeed[] = [
   {
     slug: "salons",
     name: "Salons and spas",
+    searchTerms: ["hair salon", "beauty salon", "spa", "nail salon"],
     terms: {
       customer: "client",
       customers: "clients",
@@ -211,6 +224,7 @@ export const VERTICALS: VerticalSeed[] = [
   {
     slug: "restaurants",
     name: "Restaurants",
+    searchTerms: ["restaurant", "fine dining restaurant", "bistro"],
     terms: {
       customer: "guest",
       customers: "guests",
@@ -372,6 +386,13 @@ export const SEQUENCES = [
  * pipeline from one city.
  */
 export const FIRST_AGENT_CONFIG: PartialAgentConfig = {
+  discovery: {
+    search_terms: ["dental clinic", "dentist", "dental centre"],
+    // Deliberately small. The first runs are for reading the output by hand,
+    // not for filling a pipeline — and every result costs money.
+    max_results_per_run: 50,
+    sources: ["google_places", "csv"],
+  },
   regions: ["Dubai", "Abu Dhabi"],
   languages: ["en", "ar"],
   default_language: "en",
