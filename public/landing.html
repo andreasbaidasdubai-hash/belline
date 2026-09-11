@@ -5,11 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
-<meta name="theme-color" content="#0F2131">
-<title>Belline — Someone always answers</title>
-<meta name="description" content="Belline is an AI receptionist for clinics, dental practices, salons and restaurants. It answers the calls your team can't get to, checks real availability, and books.">
+<meta name="theme-color" content="#FBF9F5">
 <link rel="canonical" href="https://belline.ai/">
-
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Belline">
 <meta property="og:url" content="https://belline.ai/">
@@ -18,208 +15,126 @@
 <meta property="og:image" content="https://belline.ai/img/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="A concierge bell on a reception counter, a call arriving on a phone beside it.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Belline — Someone always answers">
 <meta name="twitter:description" content="An AI receptionist for clinics, dental practices, salons and restaurants.">
 <meta name="twitter:image" content="https://belline.ai/img/og.jpg">
+<title>Belline — Someone always answers</title>
+<meta name="description" content="An AI receptionist for clinics, dental practices, salons and restaurants. It answers the calls your team can't get to, checks real availability, and books.">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
 
 <header class="top">
   <div class="wrap top-in">
-    <a class="logo" href="#"><img src="/logo.svg" alt="Belline"></a>
-    <nav id="site-nav">
-      <a href="/dental">Dental</a>
-      <a href="/clinics">Clinics</a>
-      <a href="/salons">Salons</a>
-      <a href="/restaurants">Restaurants</a>
-      <a href="#capability">What it does</a>
-      <a href="#pricing">Pricing</a>
-      <a class="signin-mobile" href="https://app.belline.ai">Sign in</a>
+    <a class="brand" href="#">
+      <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
+        <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
+        <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
+      </svg>
+      <span>Belline</span>
+    </a>
+    <nav>
+      <a href="#what">What it does</a>
+      <a href="#trade">Your trade</a>
+      <a href="#price">Pricing</a>
+      <a href="#book">Get Belline</a>
     </nav>
-    <div class="right">
-      <a class="signin" href="https://app.belline.ai">Sign in</a>
-      <a class="btn small" href="#book">Get Belline</a>
-      <button class="menu-toggle" type="button" aria-expanded="false"
-              aria-controls="site-nav" aria-label="Open menu">
-        <span class="bar"></span>
-      </button>
-    </div>
   </div>
 </header>
 
 <main>
 
+  <!--
+    Der Hero.
+
+    Links die Behauptung, rechts der Beleg. Der Beleg ist ein gesetztes
+    Gespräch, kein Screenshot einer dunklen Box: dieselbe Sache, die das
+    Produkt tut, in derselben Sprache wie der Rest der Seite. Ein Interview in
+    einer Zeitschrift, nicht ein Chatfenster.
+  -->
   <section class="hero">
     <div class="wrap hero-in">
       <div class="hero-copy">
-        <h1>Someone always answers.</h1>
-        <p class="lead">
-          Belline is the receptionist your clinic, salon or restaurant can't
-          always spare. It picks up on the calls nobody reaches, checks what is
-          genuinely free, books it — and knows when to put the phone down and
-          fetch a person.
+        <p class="eyebrow rise">AI reception</p>
+        <h1 class="display rise rise-1">Someone always answers.</h1>
+        <p class="lead rise rise-2">
+          The receptionist your clinic, salon or restaurant can’t always spare.
+          It picks up the calls nobody reaches, checks what is genuinely free,
+          and books it.
         </p>
-        <!--
-          One primary ask, and it is the product itself. Nobody else can let
-          you talk to the thing on their own homepage, so that is the button.
-          The phone line stays available for anyone who would rather dial, but
-          quietly: a number set in display type reads as an advert, and it is
-          the second-best way to try this now that the first one works.
-        -->
-        <div class="cta-row">
-          <a class="btn" href="https://app.belline.ai/call?start=1" data-call>Hear Belline</a>
-          <a class="btn ghost" href="#book">Get Belline</a>
-        </div>
-        <p class="reassure">
-          Speaks back in about a second. Or ring it instead —
-          <a href="tel:+15717785920">+1 571 778 5920</a>, a real line answered by
-          the same agent. Keep your own number; nothing changes for your callers.
-        </p>
-      </div>
 
-      <!-- A real call, played out. Four trades, including one Belline refuses
-           to handle — an operator deciding whether to trust this is buying
-           that refusal more than the bookings. -->
-      <div class="call" id="call" data-speaking="false">
-        <div class="call-tabs" role="tablist" aria-label="Choose a trade"></div>
-        <div class="call-head">
-          <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
-          <span class="call-status">Ringing</span>
-          <span class="call-line">Tuesday, 19:47</span>
-          <button class="call-listen" type="button" aria-pressed="false">
-            <svg class="call-listen-icon" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/>
-              <path d="M5 11a1 1 0 1 1 2 0 5 5 0 0 0 10 0 1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V21a1 1 0 1 1-2 0v-3.07A7 7 0 0 1 5 11Z"/>
+        <div class="cta-row rise rise-3">
+          <a class="btn" href="https://app.belline.ai/call?start=1" data-call>
+            <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
+              <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
+              <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
             </svg>
-            <span class="call-listen-label">Listen</span>
-          </button>
-          <audio class="call-audio" preload="none"></audio>        </div>
-        <div class="call-body" id="call-body" role="tabpanel" aria-live="polite"></div>
-      </div>
-    </div>
-  </section>
+            Hear Belline
+          </a>
+          <a class="btn line" href="#book">Get Belline</a>
+        </div>
 
-  <section class="band" style="padding-top: 44px; padding-bottom: 44px;">
-    <div class="wrap">
-      <div class="metrics">
-        <div class="metric">
-          <div class="n">Under 1s</div>
-          <div class="k">to the first spoken word</div>
-        </div>
-        <div class="metric">
-          <div class="n">24/7</div>
-          <div class="k">including mid-service and after close</div>
-        </div>
-        <div class="metric">
-          <div class="n">Every call</div>
-          <div class="k">transcribed, logged and auditable</div>
-        </div>
-        <div class="metric">
-          <div class="n">~30 min</div>
-          <div class="k">to configure a venue</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="trades">
-    <div class="wrap">
-      <div class="narrow">
-        <div class="eyebrow">Your trade</div>
-        <h2>A table is not an appointment.</h2>
-        <p style="margin-top:16px">
-          A restaurant fills a room to a pacing limit. A salon and a clinic
-          fill a person's diary — the right qualification, the right room, the
-          cleanup nobody quotes. Belline knows the difference, and speaks in
-          each trade's own words.
+        <p class="hero-note rise rise-4">
+          Speaks back in about a second. Or ring it —
+          <a href="tel:+15717785920">+1 571 778 5920</a>. Keep your own number;
+          nothing changes for your callers.
         </p>
       </div>
 
-      <div class="trades">
-        <article class="trade">
-          <div class="shot">
-            <img src="/img/restaurants.jpg" width="880" height="495" loading="lazy"
-                 alt="A waiter pouring wine at a candlelit table in a grand dining room during evening service.">
-          </div>
-          <h3>Restaurants</h3>
-          <p>
-            Turn times by party size, the tightest table that fits, two tables
-            combined when they're in the same section, and a cap on covers per
-            slot so the kitchen isn't handed twelve tables at eight o'clock.
-          </p>
-        </article>
+      <figure class="script rise rise-2">
+        <figcaption class="script-head">
+          <span class="at">19:47</span>
+          <span>Tuesday · a dental practice</span>
+        </figcaption>
+        <div class="line caller">
+          <span class="who">Caller</span>
+          <p>I need to get my daughter in for a check-up. After school if you can.</p>
+        </div>
+        <div class="line agent">
+          <span class="who">Belline</span>
+          <p>Of course. I’ve got Thursday at quarter past four with Dr Reid, or Friday at half four.</p>
+        </div>
+        <div class="line caller">
+          <span class="who">Caller</span>
+          <p>Thursday’s better.</p>
+        </div>
+        <div class="line agent">
+          <span class="who">Belline</span>
+          <p>Thursday at four fifteen, then. Can I take her name and a mobile number?</p>
+        </div>
+        <div class="script-out">
+          <span class="tag">Booked</span>
+          <span>Thu 16:15 · Dr Reid · Check-up</span>
+        </div>
+      </figure>
+    </div>
 
-        <article class="trade">
-          <div class="shot">
-            <img src="/img/salons.jpg" width="880" height="495" loading="lazy"
-                 alt="A stylist blow-drying a client's hair in a bright modern salon.">
-          </div>
-          <h3>Salons &amp; spas</h3>
-          <p>
-            Only stylists qualified for the service are offered. Chains of
-            services run back to back, colour stations are shared, and the
-            cleanup buffer is held after the guest's time without ever being
-            quoted to them.
-          </p>
-        </article>
-
-        <article class="trade">
-          <div class="shot">
-            <!-- The dental photograph, not the clinics one: this card covers
-                 both trades, and a surgery mid-treatment says more about what
-                 the constraints below actually mean than a reception desk. -->
-            <img src="/img/dental.jpg" width="880" height="495" loading="lazy"
-                 alt="A dental surgery, a hygienist and a dentist treating a patient in a bright consulting room.">
-          </div>
-          <h3>Clinics &amp; dental</h3>
-          <p>
-            Practitioners, surgeries and treatment rooms as separate
-            constraints. A first visit books as a consultation, never as the
-            treatment itself. It will not discuss a diagnosis, and anything
-            urgent goes to a human immediately.
-          </p>
-        </article>
+    <div class="wrap">
+      <div class="facts">
+        <div class="fact"><div class="n">Under 1s</div><div class="k">to the first spoken word</div></div>
+        <div class="fact"><div class="n">24/7</div><div class="k">including mid-service and after close</div></div>
+        <div class="fact"><div class="n">Every call</div><div class="k">transcribed and auditable</div></div>
+        <div class="fact"><div class="n">~30 min</div><div class="k">to configure a venue</div></div>
       </div>
+    </div>
+  </section>
 
-      <!-- The four pages that go deeper, as a strip rather than four more
-           sections. Each one is written for its trade and is worth reading if
-           it is yours; nobody needs all four. -->
-      <div class="integrations" style="margin-top:26px">
-        <a class="chip" href="/dental">Dental</a>
-        <a class="chip" href="/clinics">Clinics</a>
-        <a class="chip" href="/salons">Salons &amp; spas</a>
-        <a class="chip" href="/restaurants">Restaurants</a>
-      </div>
-
-      <p class="muted" style="font-size:0.9rem; margin-top:20px; max-width:70ch">
-        <strong style="color:var(--text)">Something else?</strong> Anything that
-        books people into time — veterinary, physiotherapy, opticians, driving
-        schools, tattoo studios, garages — runs on the same engine. The
-        vocabulary and the rules are configuration, not new code.
-        <a href="#book" style="color:var(--navy); font-weight:600">Tell us your trade</a>.
+  <section id="what" class="rule">
+    <div class="wrap">
+      <p class="eyebrow">What it will and will not do</p>
+      <h2 class="display">It handles the call, or it hands it over.<br>It never guesses.</h2>
+      <p style="margin-top:26px; max-width:54ch">
+        The most important thing a receptionist does is know the edge of its own
+        competence. Belline takes the details and flags it rather than inventing
+        an answer.
       </p>
-    </div>
-  </section>
-
-  <section class="band" id="capability">
-    <div class="wrap">
-      <div class="narrow">
-        <div class="eyebrow">What it will and will not do</div>
-        <h2>It handles the call, or it hands it over. It never guesses.</h2>
-        <p style="margin-top:16px">
-          The most important thing a receptionist does is know the edge of its
-          own competence. Belline takes a message or flags it for a callback
-          rather than inventing an answer.
-        </p>
-      </div>
 
       <div class="handled">
         <div class="handled-row">
@@ -227,12 +142,8 @@
           <span class="a">Books it</span>
         </div>
         <div class="handled-row">
-          <span class="q">“I need to move my Tuesday appointment to next week.”</span>
+          <span class="q">“I need to move my Tuesday appointment.”</span>
           <span class="a">Finds it, moves it</span>
-        </div>
-        <div class="handled-row">
-          <span class="q">“Something's come up — can you cancel?”</span>
-          <span class="a">Cancels, confirms</span>
         </div>
         <div class="handled-row">
           <span class="q">“Is there parking, and do you do gluten free?”</span>
@@ -243,8 +154,8 @@
           <span class="a">Quotes the real price</span>
         </div>
         <div class="handled-row">
-          <span class="q">“We're twenty people for a corporate dinner.”</span>
-          <span class="a human">Takes a message, flags your team</span>
+          <span class="q">“We’re twenty people for a corporate dinner.”</span>
+          <span class="a human">Takes the details, flags your team</span>
         </div>
         <div class="handled-row">
           <span class="q">“I want to complain about last night.”</span>
@@ -252,68 +163,113 @@
         </div>
       </div>
 
-      <!--
-        The website bell, in four lines rather than a section of its own.
-        Honest about what is and is not built: the engine answering the phone
-        is the engine behind the bell in the corner of this page, and what is
-        missing is the piece that drops it into somebody else's site. "Coming
-        soon" here would be the half-truth an operator finds out about at the
-        worst possible moment.
-      -->
-      <div class="narrow" style="margin-top:34px">
+      <div class="aside">
         <h3>It does not only answer the phone.</h3>
-        <p style="margin-top:10px">
+        <p>
           The bell in the corner of this page is the same agent, in a browser —
-          tap it and it talks. For the people who would never have rung at all.
-          We can put one on your site; that part is not built yet, and we will
-          tell you where it is rather than sell you a date.
+          tap it and it talks. We can put one on your site; that part is not
+          built yet, and we will tell you where it is rather than sell you a date.
         </p>
-        <div class="chip-row">
-          <span class="chip live"><span class="dot"></span>On the phone, and here — today</span>
-          <span class="chip"><span class="dot"></span>On your own site — not yet</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="trade" class="rule">
+    <div class="wrap">
+      <p class="eyebrow">Your trade</p>
+      <h2 class="display">A table is not an appointment.</h2>
+      <p style="margin-top:26px; max-width:56ch">
+        A restaurant fills a room to a pacing limit. A salon and a clinic fill
+        a person’s diary — the right qualification, the right room, the cleanup
+        nobody quotes. Belline knows the difference, and speaks in each trade’s
+        own words.
+      </p>
+
+      <div class="plates">
+        <figure class="plate">
+          <img src="/img/restaurants.jpg" width="880" height="495" loading="lazy"
+               alt="A waiter pouring wine at a candlelit table in a grand dining room during evening service.">
+          <figcaption>
+            <strong>Restaurants</strong>
+            Turn times by party size, the tightest table that fits, and a cap on
+            covers per slot so the kitchen isn’t handed twelve tables at eight.
+          </figcaption>
+        </figure>
+        <figure class="plate">
+          <img src="/img/salons.jpg" width="880" height="495" loading="lazy"
+               alt="A stylist blow-drying a client's hair in a bright modern salon.">
+          <figcaption>
+            <strong>Salons &amp; spas</strong>
+            Only qualified stylists are offered. Services run back to back,
+            stations are shared, and the cleanup buffer is never quoted to the guest.
+          </figcaption>
+        </figure>
+        <figure class="plate">
+          <img src="/img/dental.jpg" width="880" height="495" loading="lazy"
+               alt="A dental surgery, a hygienist and a dentist treating a patient in a bright consulting room.">
+          <figcaption>
+            <strong>Clinics &amp; dental</strong>
+            Practitioners, surgeries and rooms as separate constraints. A first
+            visit books as a consultation. It will not discuss a diagnosis.
+          </figcaption>
+        </figure>
+      </div>
+
+      <div class="trade-links">
+        <a href="/dental">Dental</a>
+        <a href="/clinics">Clinics</a>
+        <a href="/salons">Salons &amp; spas</a>
+        <a href="/restaurants">Restaurants</a>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="num">01</div>
+          <h3>Forward your line</h3>
+          <p>Your phone rings at the host stand as it does today. After twenty seconds unanswered, it rolls to Belline. Your number never changes.</p>
+        </div>
+        <div class="step">
+          <div class="num">02</div>
+          <h3>It answers and books</h3>
+          <p>It knows your tables and turn times, or your services, staff and buffers. It never offers a time that isn’t genuinely free.</p>
+        </div>
+        <div class="step">
+          <div class="num">03</div>
+          <h3>You see everything</h3>
+          <p>Bookings land in your diary. Every call is transcribed with the decisions it made, so you can read back what was promised.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <section id="pricing">
+  <section id="price" class="rule">
     <div class="wrap">
-      <div class="narrow">
-        <div class="eyebrow">Pricing</div>
-        <h2>Simple pricing. Someone always answers.</h2>
-        <p class="lead" style="margin-top:16px">
-          Start for less than the cost of a missed booking. No setup fees.
-          No contracts. Upgrade only when you need more.
-        </p>
-      </div>
+      <p class="eyebrow">Pricing</p>
+      <h2 class="display">Simple pricing.<br>Someone always answers.</h2>
+      <p class="lead" style="margin-top:26px; max-width:48ch">
+        Start for less than the cost of a missed booking. No setup fees.
+        No contracts. Upgrade only when you need more.
+      </p>
 
       <div class="cycle" role="group" aria-label="Billing period">
-        <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">
-          Monthly
-        </button>
+        <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monthly</button>
         <button type="button" class="cycle-opt" data-cycle="annual" aria-pressed="false">
           Annual <span class="cycle-save">2 months free</span>
         </button>
       </div>
 
       <div class="plans">
-
         <div class="plan">
-          <div class="plan-head">
-            <h3>Starter</h3>
-            <p class="plan-sub">For a single venue that wants the phone answered properly.</p>
-          </div>
-
+          <div class="plan-tag" aria-hidden="true"></div>
+          <h3>Starter</h3>
+          <p class="plan-sub">For a single venue that wants the phone answered properly.</p>
           <div class="plan-price">
             <span class="amt" data-monthly="AED 179" data-annual="AED 149">AED 179</span>
             <span class="per">per month</span>
             <span class="billed" data-monthly="Billed monthly. Cancel anytime."
                   data-annual="AED 1,790 billed once a year.">Billed monthly. Cancel anytime.</span>
           </div>
-
-          <a class="btn ghost plan-cta" href="#book" data-plan="Starter">Start free</a>
-
-          <ul class="plan-feats">
+          <ul>
             <li>60 voice minutes a month</li>
             <li>One Belline receptionist, answering 24/7</li>
             <li>Books and changes appointments against your real availability</li>
@@ -322,27 +278,20 @@
             <li>Flags anything it should not handle for you to call back</li>
             <li>No setup fee</li>
           </ul>
-
-          <p class="plan-over">Need more than 60? Move up to Business.</p>
+          <a class="btn line" href="#book" data-plan="Starter">Get Belline</a>
         </div>
 
         <div class="plan is-best">
           <div class="plan-tag">Most popular</div>
-          <div class="plan-head">
-            <h3>Business</h3>
-            <p class="plan-sub">For a venue where the phone is genuinely busy.</p>
-          </div>
-
+          <h3>Business</h3>
+          <p class="plan-sub">For a venue where the phone is genuinely busy.</p>
           <div class="plan-price">
             <span class="amt" data-monthly="AED 365" data-annual="AED 304">AED 365</span>
             <span class="per">per month</span>
             <span class="billed" data-monthly="Billed monthly. Cancel anytime."
                   data-annual="AED 3,650 billed once a year.">Billed monthly. Cancel anytime.</span>
           </div>
-
-          <a class="btn plan-cta" href="#book" data-plan="Business">Start free</a>
-
-          <ul class="plan-feats">
+          <ul>
             <li>180 voice minutes a month</li>
             <li>Everything in Starter</li>
             <li>Your own rules about what it may and may not decide</li>
@@ -350,360 +299,176 @@
             <li>Waitlist — it offers a slot the moment one frees</li>
             <li>Priority support</li>
           </ul>
-
-          <p class="plan-over">Need more than 180? Move up to Enterprise.</p>
+          <a class="btn" href="#book" data-plan="Business">Get Belline</a>
         </div>
 
         <div class="plan">
-          <div class="plan-head">
-            <h3>Enterprise</h3>
-            <p class="plan-sub">For a venue whose phone never stops, or one that would rather not count.</p>
-          </div>
-
+          <div class="plan-tag" aria-hidden="true"></div>
+          <h3>Enterprise</h3>
+          <p class="plan-sub">For a venue whose phone never stops, or one that would rather not count.</p>
           <div class="plan-price">
             <span class="amt" data-monthly="AED 899" data-annual="AED 749">AED 899</span>
             <span class="per">per month</span>
             <span class="billed" data-monthly="Billed monthly. Cancel anytime."
                   data-annual="AED 8,990 billed once a year.">Billed monthly. Cancel anytime.</span>
           </div>
-
-          <a class="btn ghost plan-cta" href="#book" data-plan="Enterprise">Start free</a>
-
-          <ul class="plan-feats">
+          <ul>
             <li>Unlimited voice minutes</li>
             <li>Everything in Business</li>
             <li>One venue, no allowance to watch</li>
             <li>Named contact for onboarding and changes</li>
           </ul>
-
-          <p class="plan-over">Nothing to count, and nothing to upgrade to.</p>
+          <a class="btn line" href="#book" data-plan="Enterprise">Get Belline</a>
         </div>
-
       </div>
 
-      <div class="plan-more">
-        <div>
-          <h3>More than one venue?</h3>
-          <p>
-            Every plan is per venue. If you run several, or a group, tell us
-            what you need and we will price it properly rather than multiplying.
-          </p>
-        </div>
-        <a class="btn ghost" href="#book" data-plan="Multi-venue">Talk to us</a>
-      </div>
+      <p class="compare">A receptionist works office hours. Belline answers 24/7.</p>
 
-      <p class="plan-compare">
-        A receptionist works office hours. Belline answers 24/7.
-      </p>
-
-      <div class="plan-terms">
+      <div class="terms">
         <div>
           <h4>What counts as a voice minute</h4>
           <p>A voice minute is time Belline spends on a live call with your caller — from the moment it answers to the moment the call ends — rounded up to the next whole minute. Calls you make from your own test console do not count, and neither do calls cut short by a fault on our side.</p>
         </div>
         <div>
           <h4>No surprise invoices</h4>
-          <p>
-            There is no per-minute charge on any plan. The invoice is the plan
-            fee and nothing else — so if the allowance runs short, the answer
-            is a bigger plan, not a bigger bill. Your dashboard shows minutes
-            used against minutes included, and tells you before you run out.
-          </p>
+          <p>There is no per-minute charge on any plan. The invoice is the plan fee and nothing else — if the allowance runs short, the answer is a bigger plan, not a bigger bill.</p>
         </div>
         <div>
           <h4>14 days free</h4>
-          <p>
-            A limited number of live-call minutes, no card, nothing charged.
-            Standard onboarding is free — we set your venue up with you.
-          </p>
+          <p>A limited number of live-call minutes, no card, nothing charged. Standard onboarding is free — we set your venue up with you.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <section id="faq">
+  <section id="faq" class="rule">
     <div class="wrap">
-      <div class="narrow">
-        <div class="eyebrow">Questions</div>
-        <h2>What operators ask first.</h2>
-      </div>
-
+      <p class="eyebrow">Questions</p>
+      <h2 class="display">What operators ask first.</h2>
       <div class="faq">
         <details>
           <summary>Do we have to change our phone number?</summary>
-          <div class="answer">
-            <p>
-              No. You keep the number on your signage, your listing and your
-              menus. You set call forwarding on the line you already have, and
-              you can turn it off yourself at any time.
-            </p>
-          </div>
-        </details>
-        <details>
-          <summary>Will it answer calls our staff would have taken?</summary>
-          <div class="answer">
-            <p>
-              Only if you want it to. Most venues start with forwarding on
-              no-answer and busy, so the phone rings at the host stand exactly
-              as it does today and Belline only picks up calls that would
-              otherwise have gone to voicemail.
-            </p>
-          </div>
-        </details>
-        <details>
-          <summary>Can it double-book us?</summary>
-          <div class="answer">
-            <p>
-              It cannot state a time without checking availability first, and
-              availability is computed from your real tables, turn times and
-              pacing — or your staff, service durations and equipment. If a slot
-              isn't genuinely free, it isn't offered.
-            </p>
-          </div>
-        </details>
-        <details>
-          <summary>What happens when it doesn't know something?</summary>
-          <div class="answer">
-            <p>
-              It says so, and takes a message or transfers to a person. It is
-              instructed never to invent a price, a dish, a product or a policy.
-              You define the house rules it must follow, and it treats them as
-              hard constraints.
-            </p>
-          </div>
-        </details>
-        <details>
-          <summary>Does it sound like a robot?</summary>
-          <div class="answer">
-            <p>
-              You choose the voice and hear it saying your venue's own name
-              before you commit. It replies in under a second, and it stops
-              talking the moment a caller interrupts — which is the thing people
-              actually notice.
-            </p>
-          </div>
-        </details>
-        <details>
-          <summary>How long does setup take?</summary>
-          <div class="answer">
-            <p>
-              About thirty minutes on a call, going through your tables or your
-              service list, your hours, your policies and your common questions.
-              Changes after that take effect on the next call — there is no
-              waiting on a release.
-            </p>
-          </div>
-        </details>
-        <details>
-          <summary>Are callers told they're speaking to an AI?</summary>
-          <div class="answer">
-            <p>
-              Yes, in the greeting, and we recommend it everywhere. In the EU it
-              is a legal requirement. It is also simply better: callers who know
-              speak more clearly and are less annoyed when they find out.
-            </p>
-          </div>
-        </details>
-        <details>
-          <summary>What do you do with our guests' data?</summary>
-          <div class="answer">
-            <p>
-              Transcripts and bookings are stored so you can audit what was
-              said; call audio is not recorded. The data belongs to your venue
-              and is exportable. We are happy to sign whatever your legal
-              counsel requires.
-            </p>
-          </div>
-        </details>
-        <details>
-          <summary>What does it cost?</summary>
-          <div class="answer">
-            <p>
-              AED 179, AED 365 or AED 899 a month per venue, depending on how
-              busy your phone is. Minutes are included in the plan and there is
-              no per-minute charge on top of any of them. No setup fee.
-              <a href="#pricing">The full breakdown is above.</a>
-            </p>
-          </div>
+          <div class="answer"><p>No. You keep the number on your signage and your listings, and set call forwarding on the line you already have. You can turn it off yourself at any time.</p></div>
         </details>
         <details>
           <summary>What happens if we run out of minutes?</summary>
-          <div class="answer">
-            <p>
-              Belline keeps answering. A receptionist that stops picking up
-              because of an invoice is not a receptionist, so we do not build
-              one — your dashboard tells you that you have gone past, and which
-              plan would cover it.
-            </p>
-            <p>
-              You are never charged a penny more than the plan fee for that.
-              Moving up takes effect straight away, and if your phone is busy
-              enough that counting is a nuisance, Enterprise is unlimited.
-            </p>
-          </div>
+          <div class="answer"><p>Belline keeps answering. A receptionist that stops picking up because of an invoice is not a receptionist, so we do not build one — your dashboard tells you that you have gone past, and which plan would cover it. You are never charged a penny more than the plan fee for that.</p></div>
+        </details>
+        <details>
+          <summary>Will it answer calls our staff would have taken?</summary>
+          <div class="answer"><p>Only the ones nobody reaches. It sits behind your line: it picks up when the phone has rung unanswered, or when the line is engaged. Your team always gets first refusal.</p></div>
         </details>
         <details>
           <summary>Are we tied in?</summary>
-          <div class="answer">
-            <p>
-              No. Monthly plans are cancelled whenever you like and run to the
-              end of the period you have paid for. Annual is two months free in
-              exchange for paying up front. Standard onboarding costs nothing.
-            </p>
-          </div>
+          <div class="answer"><p>No. Monthly plans are cancelled whenever you like and run to the end of the period you have paid for. Annual is two months free in exchange for paying up front. Standard onboarding costs nothing.</p></div>
+        </details>
+        <details>
+          <summary>What do you do with our guests’ data?</summary>
+          <div class="answer"><p>Transcripts and bookings are stored so you can audit what was said; call audio is not recorded. The data belongs to your venue and is exportable. We are happy to sign whatever your legal counsel requires.</p></div>
         </details>
       </div>
     </div>
   </section>
 
-  <section class="band" id="book">
-    <div class="wrap">
-      <div class="book-grid">
-        <div class="book-intro">
-          <div class="eyebrow">Get started</div>
-          <h2>Two ways in.</h2>
-          <p style="margin-top:16px">
-            <strong>Start the free trial.</strong> Fourteen days, a limited
-            number of live-call minutes, no card. We set your venue up with
-            you — that part is free too.
-          </p>
-          <p>
-            <strong>Or book twenty minutes.</strong> A Zoom with our sales
-            director, who will have looked at your website first, so it is
-            twenty minutes about your venue rather than twenty minutes of
-            slides.
-          </p>
-          <p class="muted" style="font-size:0.9rem">
-            Either way it is the same form — tell us which below, and we will
-            take it from there.
-          </p>
-          <ul class="book-points">
-            <li>We build your venue into Belline before the call</li>
-            <li>You ring it yourself and hear it answer as you</li>
-            <li>If it is not right for you, we will say so</li>
-          </ul>
-          <p class="fineprint">
-            Prefer email? <a href="mailto:hello@belline.ai">hello@belline.ai</a>
-          </p>
+  <section id="book" class="rule closer">
+    <div class="wrap book-grid">
+      <div>
+        <p class="eyebrow">Get started</p>
+        <h2 class="display">Two ways in.</h2>
+        <p style="margin-top:26px">
+          <strong>Start the free trial.</strong> Fourteen days, a limited number
+          of live-call minutes, no card. We set your venue up with you.
+        </p>
+        <p>
+          <strong>Or book twenty minutes.</strong> A Zoom with our sales director,
+          who will have looked at your website first.
+        </p>
+        <p class="fine">
+          Prefer email? <a href="mailto:hello@belline.ai">hello@belline.ai</a>
+        </p>
+      </div>
+
+      <form class="book-form" id="book-form" novalidate>
+        <label class="f">
+          <span>What would you like?</span>
+          <select name="intent">
+            <option value="Start the free trial">Start the free trial</option>
+            <option value="Book a call with sales">Book twenty minutes with sales</option>
+            <option value="Not sure yet">Not sure yet — talk it through</option>
+          </select>
+        </label>
+
+        <div class="f-row">
+          <label class="f">
+            <span>Your name</span>
+            <input name="name" type="text" autocomplete="name" required maxlength="120">
+            <em class="f-err" hidden></em>
+          </label>
+          <label class="f">
+            <span>Business name</span>
+            <input name="company" type="text" autocomplete="organization" required maxlength="160">
+            <em class="f-err" hidden></em>
+          </label>
         </div>
 
-        <form class="book-form" id="book-form" novalidate>
-          <!-- Which of the two, asked once and first, so the reply is the
-               right one. It rides along in the enquiry rather than becoming a
-               second form nobody finishes. -->
+        <div class="f-row">
           <label class="f">
-            <span>What would you like?</span>
-            <select name="intent">
-              <option value="Start the free trial">Start the free trial</option>
-              <option value="Book a call with sales">Book twenty minutes with sales</option>
-              <option value="Not sure yet">Not sure yet — talk it through</option>
-            </select>
+            <span>Work email</span>
+            <input name="email" type="email" autocomplete="email" required maxlength="254" inputmode="email" spellcheck="false">
+            <em class="f-err" hidden></em>
           </label>
-
-          <div class="f-row">
-            <label class="f">
-              <span>Your name</span>
-              <input name="name" type="text" autocomplete="name" required maxlength="120">
-              <em class="f-err" hidden></em>
-            </label>
-            <label class="f">
-              <span>Business name</span>
-              <input name="company" type="text" autocomplete="organization" required maxlength="160">
-              <em class="f-err" hidden></em>
-            </label>
-          </div>
-
-          <div class="f-row">
-            <label class="f">
-              <span>Work email</span>
-              <input name="email" type="email" autocomplete="email" required maxlength="254"
-                     inputmode="email" spellcheck="false">
-              <em class="f-err" hidden></em>
-            </label>
-            <label class="f">
-              <span>Phone</span>
-              <input name="phone" type="tel" autocomplete="tel" required maxlength="32"
-                     placeholder="+971 50 123 4567" inputmode="tel">
-              <em class="f-err" hidden></em>
-            </label>
-          </div>
-
-          <div class="f-row">
-            <label class="f">
-              <span>Type of business</span>
-              <select name="vertical">
-                <option value="">Choose one</option>
-                <option>Restaurant</option>
-                <option>Clinic</option>
-                <option>Dental practice</option>
-                <option>Salon or spa</option>
-                <option>Something else</option>
-              </select>
-            </label>
-            <label class="f">
-              <span>Venues</span>
-              <select name="venues">
-                <option value="">Choose one</option>
-                <option>One</option>
-                <option>Two to five</option>
-                <option>Six or more</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="f-row">
-            <label class="f">
-              <span>Website <span class="opt">optional</span></span>
-              <input name="website" type="text" maxlength="300" spellcheck="false"
-                     placeholder="your-venue.ae">
-            </label>
-            <label class="f">
-              <span>Calls a day <span class="opt">roughly</span></span>
-              <select name="callVolume">
-                <option value="">Choose one</option>
-                <option>Under 10</option>
-                <option>10 to 30</option>
-                <option>30 to 80</option>
-                <option>More than 80</option>
-                <option>No idea</option>
-              </select>
-            </label>
-          </div>
-
           <label class="f">
-            <span>When suits you</span>
-            <select name="availability">
+            <span>Phone</span>
+            <input name="phone" type="tel" autocomplete="tel" required maxlength="32" placeholder="+971 50 123 4567" inputmode="tel">
+            <em class="f-err" hidden></em>
+          </label>
+        </div>
+
+        <div class="f-row">
+          <label class="f">
+            <span>Type of business</span>
+            <select name="vertical">
               <option value="">Choose one</option>
-              <option>Weekday mornings</option>
-              <option>Weekday afternoons</option>
-              <option>Weekday evenings</option>
-              <option>Weekend</option>
-              <option>Any time this week</option>
+              <option>Restaurant</option>
+              <option>Clinic</option>
+              <option>Dental practice</option>
+              <option>Salon or spa</option>
+              <option>Something else</option>
             </select>
           </label>
-
           <label class="f">
-            <span>Anything we should know <span class="opt">optional</span></span>
-            <textarea name="notes" rows="3" maxlength="2000"
-                      placeholder="What happens to your calls today?"></textarea>
+            <span>Calls a day <span class="opt">roughly</span></span>
+            <select name="callVolume">
+              <option value="">Choose one</option>
+              <option>Under 10</option>
+              <option>10 to 30</option>
+              <option>30 to 80</option>
+              <option>More than 80</option>
+              <option>No idea</option>
+            </select>
           </label>
+        </div>
 
-          <!-- Not a real field. A person never sees it; a bot fills it in. -->
-          <div class="hp" aria-hidden="true">
-            <label>Do not fill this in
-              <input name="website2" type="text" tabindex="-1" autocomplete="off">
-            </label>
-          </div>
-          <input type="hidden" name="timezone" value="">
-          <input type="hidden" name="source" value="website">
+        <label class="f">
+          <span>Anything we should know <span class="opt">optional</span></span>
+          <textarea name="notes" rows="3" maxlength="2000" placeholder="What happens to your calls today?"></textarea>
+        </label>
 
-          <button class="btn book-submit" type="submit">Book the call</button>
-          <p class="f-note" id="book-note">
-            We will email you a Zoom link with a couple of times. No card, no
-            commitment.
-          </p>
-        </form>
-      </div>
+        <!-- Kein echtes Feld. Ein Mensch sieht es nie, ein Bot füllt es aus. -->
+        <div class="hp" aria-hidden="true">
+          <label>Do not fill this in<input name="website2" type="text" tabindex="-1" autocomplete="off"></label>
+        </div>
+        <input type="hidden" name="timezone" value="">
+        <input type="hidden" name="source" value="website">
+        <input type="hidden" name="website" value="">
+        <input type="hidden" name="venues" value="">
+        <input type="hidden" name="availability" value="">
+
+        <button class="btn book-submit" type="submit">Send</button>
+        <p class="f-note" id="book-note">
+          We will come back to you the same day. No card, no commitment.
+        </p>
+      </form>
     </div>
   </section>
 
@@ -711,51 +476,32 @@
 
 <footer>
   <div class="wrap foot-in">
-    <a class="logo" href="#"><img src="/logo.svg" alt="Belline"></a>
+    <a class="brand" href="#">
+      <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
+        <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
+        <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
+      </svg>
+      <span>Belline</span>
+    </a>
     <p>
-      AI reception for clinics, dental practices, salons and restaurants.
-      <br>
-      Hear it: <a href="tel:+15717785920">+1 571 778 5920</a> ·
-      <a href="mailto:hello@belline.ai">hello@belline.ai</a>
-    </p>
-    <!--
-      Staff sign-in. Deliberately the quietest thing on the page: it is here so
-      the team can reach the dashboard from the site they already have open,
-      not because a visitor has any use for it. The header "Sign in" is the one
-      customers are meant to find.
-    -->
-    <p class="foot-staff">
+      AI reception for clinics, dental practices, salons and restaurants.<br>
+      <a href="tel:+15717785920">+1 571 778 5920</a> ·
+      <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
       <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>
     </p>
   </div>
 </footer>
 
-<!--
-  The bell, fixed to the corner of every page.
-
-  The thing a WhatsApp button is: always there, never in the way, one tap.
-  It is also the product being demonstrated on our own site — this is exactly
-  where a venue's own visitors would find theirs. Ours opens the booking form,
-  because what we want from a visitor is twenty minutes on a call.
-
-  Markup rather than script so it is present before any JavaScript runs, and a
-  plain anchor so it works with JavaScript off.
--->
-<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call
-   aria-label="Hear Belline now">
-  <svg viewBox="355 180 490 430" aria-hidden="true" focusable="false">
-    <g fill="currentColor">
-      <rect x="555" y="190" width="90" height="35" rx="18"/>
-      <rect x="572" y="213" width="56" height="47" rx="10"/>
-      <path d="M380 505 C393 477 410 461 431 450 C444 327 506 258 600 258 C694 258 756 327 769 450 C790 461 807 477 820 505 L380 505 Z"/>
-      <path d="M365 570 C365 538 383 519 418 519 L500 519 C509 519 515 525 516 538 C521 579 542 595 600 595 C658 595 679 579 684 538 C685 525 691 519 700 519 L782 519 C817 519 835 538 835 570 C835 589 826 600 809 600 L391 600 C374 600 365 589 365 570 Z"/>
-    </g>
+<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Hear Belline now">
+  <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+    <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
+    <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
+    <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
   </svg>
   <span class="bell-fab-say">Hear Belline</span>
 </a>
 
-<script type="application/json" id="call-scenes"></script>
 <script src="/site.js"></script>
-
 </body>
 </html>

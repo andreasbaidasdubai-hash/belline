@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Brand from "@/components/Brand";
 import { requireUser } from "@/lib/auth-server";
 import SignOutButton from "@/components/SignOutButton";
 
@@ -65,8 +66,7 @@ export default async function InternalLayout({ children }: { children: React.Rea
     <div className="shell">
       <aside className="sidebar" style={{ background: "var(--navy, #0B1F33)" }}>
         <div className="brand">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-dark.svg" alt="Belline" style={{ height: 26, width: "auto", display: "block" }} />
+          <Brand size={22} tone="var(--gold)" />
           <div
             style={{
               fontSize: 10,

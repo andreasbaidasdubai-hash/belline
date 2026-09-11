@@ -56,9 +56,15 @@ const DENTAL_SCENES: Scene[] = [
     turns: [
       ["caller", "I had a filling done yesterday and it's really painful. Is that normal?"],
       ["agent", "I'm not able to advise on that, and I'm not going to guess at it."],
-      ["agent", "I'm putting you through to the clinical team now — stay on the line."],
+      [
+        "agent",
+        "Let me take your number and exactly what you've told me — the clinical team will ring you back, and I'm marking it urgent.",
+      ],
     ],
-    outcome: { tag: "Transferred", what: "Clinical team · 8 seconds to answer", human: true },
+    // Kein "ich stelle Sie durch". Belline legt keine Anrufe zusammen; das ist
+    // nicht gebaut. Die Seite darf nur behaupten, was die Leitung tut — sonst
+    // erfährt es der Kunde beim ersten echten Anruf statt hier.
+    outcome: { tag: "Flagged urgent", what: "Clinical team · callback · nothing booked", human: true },
   },
 ];
 

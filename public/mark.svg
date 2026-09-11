@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="Belline">
+  <!--
+    Die Marke.
+
+    Eine Tischglocke aus drei Formen: Knopf, Kuppel, Sockel. Kein Verlauf,
+    keine Innenzeichnung, eine Farbe — `currentColor`, damit sie überall die
+    Farbe des Textes daneben annimmt und nicht in zwei Dateien gepflegt werden
+    muss.
+
+    Die alte Marke hatte einen Goldverlauf, Schallwellen in der Kuppel und
+    einen dunklen Sockel. Bei 16 Pixeln war davon nichts mehr zu erkennen, und
+    ein Zeichen, das als Favicon zu Matsch wird, ist kein Zeichen. Diese hier
+    ist auf 16px konstruiert und wächst nach oben, nicht umgekehrt.
+
+    Der Spalt zwischen Kuppel und Sockel ist Absicht: er macht die Silhouette
+    auch dann lesbar, wenn beides dieselbe Farbe hat.
+  -->
+  <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
+  <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
+  <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
+</svg>

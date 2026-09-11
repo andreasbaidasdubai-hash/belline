@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Brand from "@/components/Brand";
 import { hasNoUsers } from "@/lib/store";
 import { currentUser } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
@@ -20,8 +21,7 @@ export default async function LoginPage() {
     <div className="auth-shell">
       <div className="auth-card">
         <div className="auth-brand">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Belline" style={{ height: 40, width: "auto" }} />
+          <Brand size={30} />
         </div>
         <p
           className="muted"

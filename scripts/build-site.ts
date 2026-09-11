@@ -213,15 +213,46 @@ function esc(value: string): string {
   );
 }
 
+/**
+ * The header's links.
+ *
+ * The other three trades first — someone who landed on /salons from a search
+ * is one click from their own trade — then the two sections of the home page
+ * they would otherwise have to hunt for. Anchors are absolute (`/#price`, not
+ * `#price`), because those sections do not exist on this page and a bare hash
+ * would scroll to nothing.
+ */
 function navFor(active: string): string {
-  const links = VERTICALS.map(
-    (v) =>
-      `<a href="/${v.slug}"${v.slug === active ? ' aria-current="page"' : ""}>${esc(v.name)}</a>`,
-  ).join("\n      ");
+  const links = VERTICALS.filter((v) => v.slug !== active)
+    .map((v) => `<a href="/${v.slug}">${esc(v.name)}</a>`)
+    .join("\n      ");
   return `${links}
-      <a href="/#capability">What it does</a>
-      <a href="/#pricing">Pricing</a>
-      <a class="signin-mobile" href="https://app.belline.ai">Sign in</a>`;
+      <a href="/#price">Pricing</a>
+      <a href="/#book">Get Belline</a>`;
+}
+
+/** A scene, typeset — the same figure the home page's hero carries. */
+function scriptFor(scene: Vertical["scenes"][number], rise = false): string {
+  const lines = scene.turns
+    .map(
+      ([who, text]) => `        <div class="line ${who}">
+          <span class="who">${who === "agent" ? "Belline" : "Caller"}</span>
+          <p>${esc(text)}</p>
+        </div>`,
+    )
+    .join("\n");
+
+  return `      <figure class="script${rise ? " rise rise-2" : ""}">
+        <figcaption class="script-head">
+          <span class="at">${esc(scene.when.split(", ")[1] ?? scene.when)}</span>
+          <span>${esc(scene.when.split(", ")[0])}</span>
+        </figcaption>
+${lines}
+        <div class="script-out">
+          <span class="tag${scene.outcome.human ? " human" : ""}">${esc(scene.outcome.tag)}</span>
+          <span>${esc(scene.outcome.what)}</span>
+        </div>
+      </figure>`;
 }
 
 /**
@@ -231,19 +262,33 @@ function navFor(active: string): string {
  * `/#book` rather than `#book`, because a vertical page has no booking form
  * of its own and `#book` on /dental would scroll to nothing.
  */
+const MARK = `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+    <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
+    <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
+    <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
+  </svg>`;
+
 const BELL_FAB = `<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Hear Belline now">
-  <svg viewBox="355 180 490 430" aria-hidden="true" focusable="false">
-    <g fill="currentColor">
-      <rect x="555" y="190" width="90" height="35" rx="18"/>
-      <rect x="572" y="213" width="56" height="47" rx="10"/>
-      <path d="M380 505 C393 477 410 461 431 450 C444 327 506 258 600 258 C694 258 756 327 769 450 C790 461 807 477 820 505 L380 505 Z"/>
-      <path d="M365 570 C365 538 383 519 418 519 L500 519 C509 519 515 525 516 538 C521 579 542 595 600 595 C658 595 679 579 684 538 C685 525 691 519 700 519 L782 519 C817 519 835 538 835 570 C835 589 826 600 809 600 L391 600 C374 600 365 589 365 570 Z"/>
-    </g>
-  </svg>
+  ${MARK}
   <span class="bell-fab-say">Hear Belline</span>
 </a>`;
 
+/**
+ * One trade's page.
+ *
+ * The same page as the home page with different knowledge, which is why it is
+ * built from the same stylesheet and the same blocks rather than a second
+ * design: an operator who arrives on /salons from a search and then clicks
+ * through to the pricing should not feel handed to another company.
+ *
+ * Two scenes, deliberately in that order. The first is the booking, which is
+ * what they came to see. The second is the call Belline refuses, which is what
+ * they are actually deciding about — a receptionist that will say anything is
+ * worse than no receptionist, and every operator knows it.
+ */
 function verticalPage(v: Vertical): string {
+  const [books, hands] = v.scenes;
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -251,7 +296,7 @@ function verticalPage(v: Vertical): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
-<meta name="theme-color" content="#0F2131">
+<meta name="theme-color" content="#FBF9F5">
 <title>${esc(v.title)}</title>
 <meta name="description" content="${esc(v.description)}">
 <link rel="canonical" href="${ORIGIN}/${v.slug}">
@@ -270,137 +315,150 @@ function verticalPage(v: Vertical): string {
 <meta name="twitter:image" content="${ORIGIN}/img/og.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
 
 <header class="top">
   <div class="wrap top-in">
-    <a class="logo" href="/"><img src="/logo.svg" alt="Belline"></a>
-    <nav id="site-nav">
+    <a class="brand" href="/">
+      ${MARK}
+      <span>Belline</span>
+    </a>
+    <nav>
       ${navFor(v.slug)}
     </nav>
-    <div class="right">
-      <a class="signin" href="https://app.belline.ai">Sign in</a>
-      <a class="btn small" href="/#book">Get Belline</a>
-      <button class="menu-toggle" type="button" aria-expanded="false"
-              aria-controls="site-nav" aria-label="Open menu">
-        <span class="bar"></span>
-      </button>
-    </div>
   </div>
 </header>
 
 <main>
+
   <section class="hero">
     <div class="wrap hero-in">
       <div class="hero-copy">
-        <div class="eyebrow">Belline for ${esc(v.name.toLowerCase())}</div>
-        <h1>${esc(v.headline)}</h1>
-        <p class="lead">${esc(v.lead)}</p>
-        <div class="cta-row">
-          <a class="btn" href="https://app.belline.ai/call?start=1" data-call>Hear Belline</a>
-          <a class="btn ghost" href="/#book">Get Belline</a>
+        <p class="eyebrow rise">Belline for ${esc(v.name.toLowerCase())}</p>
+        <h1 class="display rise rise-1">${esc(v.headline)}</h1>
+        <p class="lead rise rise-2">${esc(v.lead)}</p>
+
+        <div class="cta-row rise rise-3">
+          <a class="btn" href="https://app.belline.ai/call?start=1" data-call>
+            ${MARK}
+            Hear Belline
+          </a>
+          <a class="btn line" href="/#book">Get Belline</a>
         </div>
-        <p class="reassure">
+
+        <p class="hero-note rise rise-4">
           Keep your existing number. No porting, no new hardware, nothing for
-          your callers to learn.
+          your callers to learn. Or ring it —
+          <a href="tel:+15717785920">+1 571 778 5920</a>.
         </p>
       </div>
 
-      <div class="call" id="call" data-speaking="false">
-        <div class="call-tabs" role="tablist" aria-label="Choose a call"></div>
-        <div class="call-head">
-          <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
-          <span class="call-status">Ringing</span>
-          <span class="call-line">${esc(v.scenes[0].when)}</span>
-          <button class="call-listen" type="button" aria-pressed="false">
-            <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/>
-              <path d="M5 11a1 1 0 1 1 2 0 5 5 0 0 0 10 0 1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V21a1 1 0 1 1-2 0v-3.07A7 7 0 0 1 5 11Z"/>
-            </svg>
-            <span class="call-listen-label">Listen</span>
-          </button>
-          <audio class="call-audio" preload="none"></audio>
-        </div>
-        <div class="call-body" id="call-body" role="tabpanel" aria-live="polite"></div>
-      </div>
+${scriptFor(books, true)}
     </div>
   </section>
 
-  <section class="band" id="constraints">
+  <section class="rule">
     <div class="wrap">
-      <div class="narrow">
-        <div class="moment"><span class="at">19:48</span><div class="eyebrow">What it checks</div></div>
-        <h2>Answering is the easy part. Knowing what is genuinely free is not.</h2>
-        <p style="margin-top:16px">
-          A voice agent that cannot see your book is an expensive answering
-          machine. Belline holds the constraints your team holds in their head,
-          which is why it can commit to a time without anyone checking it after.
-        </p>
-      </div>
-      <div class="trades" style="margin-top:34px">
+      <p class="eyebrow">What it checks</p>
+      <h2 class="display">Answering is the easy part.<br>Knowing what is genuinely free is not.</h2>
+      <p style="margin-top:26px; max-width:56ch">
+        A voice agent that cannot see your book is an expensive answering
+        machine. Belline holds the constraints your team holds in their head,
+        which is why it can commit to a time without anyone checking it after.
+      </p>
+
+      <div class="knows">
         ${v.constraints
           .map(
-            (c) => `<article class="trade">
+            (c) => `<div>
           <h3>${esc(c.head)}</h3>
           <p>${esc(c.body)}</p>
-        </article>`,
+        </div>`,
           )
           .join("\n        ")}
       </div>
     </div>
   </section>
 
-  <section id="boundary">
+  <section class="rule">
     <div class="wrap">
-      <div class="split-cta">
+      <div class="split">
         <div>
-          <div class="moment"><span class="at">19:48</span><div class="eyebrow">Where it stops</div></div>
-          <h2>The most important thing it does is know what it must not answer.</h2>
-          <p style="margin-top:16px">${esc(v.boundary)}</p>
+          <p class="eyebrow">Where it stops</p>
+          <h2 class="display">The most important thing it does is know what it must not answer.</h2>
+          <p style="margin-top:26px">${esc(v.boundary)}</p>
           <a class="btn" href="/#book">Get Belline</a>
         </div>
-        <div class="shot">
-          <img src="${esc(v.image)}" width="880" height="495" loading="lazy" alt="${esc(v.imageAlt)}">
+${scriptFor(hands)}
+      </div>
+
+      <figure class="plate solo">
+        <img src="${esc(v.image)}" width="880" height="495" loading="lazy" alt="${esc(v.imageAlt)}">
+      </figure>
+    </div>
+  </section>
+
+  <section class="rule closer">
+    <div class="wrap">
+      <p class="eyebrow">Hear it now</p>
+      <h2 class="display">Be the caller.</h2>
+      <p class="lead" style="margin-top:26px; max-width:50ch">
+        A live line, answered by the same agent your callers would reach. Book
+        something, change it, then try to catch it out.
+      </p>
+
+      <div class="cta-row" style="margin-top:34px">
+        <a class="btn" href="https://app.belline.ai/call?start=1" data-call>
+          ${MARK}
+          Hear Belline
+        </a>
+        <a class="btn line" href="tel:+15717785920">Ring +1 571 778 5920</a>
+      </div>
+
+      <p class="fine" style="max-width:56ch">
+        Answered 24 hours a day. Nothing you book is real — the agent says so
+        itself. Calls last up to six minutes and the line is capped each day.
+        Your own call charges apply.
+      </p>
+
+      <div class="terms">
+        <div>
+          <h4>Keep your number</h4>
+          <p>Belline sits behind the line you already have. Your team always gets first refusal; it picks up the calls nobody reaches.</p>
+        </div>
+        <div>
+          <h4>Nothing to install</h4>
+          <p>No new handset, no app for your staff, no change to what is printed on your door. Setting a venue up takes about half an hour.</p>
+        </div>
+        <div>
+          <h4>14 days free</h4>
+          <p>A limited number of live-call minutes, no card, nothing charged. Standard onboarding is free — we set your venue up with you.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="band">
-    <div class="wrap">
-      <div class="closer">
-        <div class="eyebrow">Hear it now</div>
-        <h2>Be the caller.</h2>
-        <p>
-          A live line, answered by the same agent your callers would reach.
-          Book something, change it, then try to catch it out.
-        </p>
-        <a class="dial-cta" href="tel:+15717785920">
-          <span class="dial-label">Call the demonstration line</span>
-          <span class="dial-number">+1 571 778&nbsp;5920</span>
-        </a>
-        <p class="dial-note">
-          Answered 24 hours a day. Nothing you book is real — the agent says so
-          itself. Calls last up to six minutes and the line is capped each day.
-          Your own call charges apply.
-        </p>
-      </div>
-    </div>
-  </section>
 </main>
 
 <footer>
   <div class="wrap foot-in">
-    <a class="logo" href="/"><img src="/logo.svg" alt="Belline"></a>
-    <p>AI reception for clinics, dental practices, salons and restaurants.</p>
+    <a class="brand" href="/">
+      ${MARK}
+      <span>Belline</span>
+    </a>
+    <p>
+      AI reception for clinics, dental practices, salons and restaurants.<br>
+      <a href="tel:+15717785920">+1 571 778 5920</a> ·
+      <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
+      <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>
+    </p>
   </div>
 </footer>
 
 ${BELL_FAB}
-<script type="application/json" id="call-scenes">${JSON.stringify(v.scenes.map((s) => ({ ...s, audio: withAudio(s) })))}</script>
 <script src="/site.js"></script>
 </body>
 </html>

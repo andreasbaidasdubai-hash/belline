@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Brand from "@/components/Brand";
 import { requireUser } from "@/lib/auth-server";
 import { canManageUsers, canSeeLocation } from "@/lib/auth";
 import { listLocations } from "@/lib/store";
@@ -61,8 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Belline" style={{ height: 30, width: "auto", display: "block" }} />
+          <Brand size={24} />
           <div className="muted brand-sub" style={{ fontSize: 11, marginTop: 6 }}>
             AI reception
           </div>

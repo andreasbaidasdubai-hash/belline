@@ -9,31 +9,41 @@
    --------------------------------------------------------------------------- */
 
 :root {
-  /* Belline. Navy carries every primary action so the dashboard and the
-     website read as one product. Gold is the brand's accent but only about
-     2:1 against white, so it is reserved for the logo and for small
-     highlights on dark; --gold-ink is the darkened version that survives on
-     a light surface. */
-  --bg: #F6F7F9;
-  --panel: #FFFFFF;
-  --panel-2: #F1F3F6;
-  --border: #E1E6EB;
-  --border-soft: #EDF0F3;
-  --text: #0F2131;
-  --text-2: #3A4753;
-  --muted: #606972;
-  --accent: #0F2131;
-  --accent-soft: #E8ECF0;
-  --accent-line: #C3CDD6;
-  --gold: #CDAA70;
-  --gold-ink: #986F43;
-  --ok: #1E7A5A;
-  --ok-soft: #E4EFE8;
-  --warn: #9A5B1E;
-  --warn-soft: #F7EBDC;
-  --bad: #A5372F;
-  --bad-soft: #F7E5E3;
-  --lift: 0 1px 2px rgba(15, 33, 49, 0.05);
+  /* Dieselbe Palette wie die Website: warmes Papier, Tinte, Messing.
+     Vorher war das Dashboard Navy und die Website Navy-mit-Gold — zwei
+     Varianten derselben Idee, die nebeneinander wie zwei Produkte aussahen.
+     Die Namen bleiben, damit nichts anderes angefasst werden muss; nur die
+     Werte ändern sich. */
+  --bg: #F4F0E8;
+  --panel: #FBF9F5;
+  --panel-2: #F0EBE1;
+  --border: rgba(20, 17, 13, 0.13);
+  --border-soft: rgba(20, 17, 13, 0.07);
+  --text: #14110D;
+  --text-2: #4A443C;
+  /* #7D7469 lag auf beiden Untergründen knapp unter 4.5:1 — auf der Website
+     ist derselbe Ton durch die WCAG-Prüfung gefallen. Hier prüft nichts
+     automatisch, also steht der geprüfte Wert. */
+  --muted: #746C63;
+  --accent: #14110D;
+  --accent-soft: #EAE3D6;
+  --accent-line: #C9BEAC;
+  /* Messing wie in public/site.css. Die Marke wechselt beim Klick von der
+     Website ins Dashboard; zwei Messingtöne über diese Grenze sieht man. */
+  --gold: #8A672E;
+  --gold-ink: #8A6432;
+  --brass: #8A672E;
+  /* Messing auf Tinte statt auf Papier. Der dunkle Ton oben ist für Text auf
+     hellem Grund abgedunkelt; auf der schwarzen Anrufleiste wäre er fast
+     unsichtbar, und ein Fokusrahmen, den man nicht sieht, ist keiner. */
+  --gold-lit: #CDAA70;
+  --ok: #2F6B4F;
+  --ok-soft: #E2EBE4;
+  --warn: #8A5A1E;
+  --warn-soft: #F3E8D8;
+  --bad: #A33327;
+  --bad-soft: #F4E3E0;
+  --lift: 0 1px 2px rgba(20, 17, 13, 0.05);
 
   color-scheme: light;
 }
@@ -48,7 +58,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: Manrope, ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -159,8 +169,8 @@ details > summary::marker {
 }
 
 .btn-accent:hover:not(:disabled) {
-  background: #223646;
-  border-color: #223646;
+  background: #2F2822;
+  border-color: #2F2822;
   color: #fff;
 }
 
@@ -467,7 +477,7 @@ tbody tr:hover {
 }
 
 .cal-block:hover .cal-block-body {
-  background: #223646;
+  background: #2F2822;
 }
 
 .cal-block-time {
@@ -786,7 +796,7 @@ tbody tr:hover {
 }
 
 .prospect-btn:hover {
-  background: #223646;
+  background: #2F2822;
 }
 
 .prospect-foot {
@@ -926,20 +936,26 @@ body:has(.callbar) {
   padding: 32px 24px calc(32px + env(safe-area-inset-bottom, 0px));
   text-align: center;
 
-  /* A quiet, modern ground rather than a flat panel. Two soft pools of
-     colour and a faint grid — enough that the screen looks considered, not
-     so much that it competes with the one thing on it. A venue putting this
-     on their own site can drop a photograph behind it by overriding
-     --callbar-art; it sits under the wash, so any image stays legible. */
-  background-color: #0E1C29;
+  /* Dunkel, und zwar bewusst: das hier ist ein Anruf, kein Dokument. Die
+     Seite drumherum ist Papier, diese Fläche ist Tinte — ein Wechsel, der
+     sagt, dass gerade etwas anderes passiert.
+
+     Vorher war der Grund Navy mit einem grünen Pool unten, beides aus der
+     alten Palette. Jetzt Tinte mit zwei Messingtönen: derselbe Akzent wie
+     überall sonst, nur auf der anderen Seite des Kontrasts.
+
+     Ein Kunde, der das auf seine eigene Seite stellt, legt über
+     --callbar-art ein Foto darunter; die Wäsche liegt darüber, also bleibt
+     jedes Bild lesbar. */
+  background-color: #14110D;
   background-image:
     var(--callbar-art, none),
-    radial-gradient(ellipse 90% 60% at 50% 8%, rgba(205, 170, 112, 0.22), transparent 68%),
-    radial-gradient(ellipse 70% 55% at 50% 104%, rgba(30, 122, 90, 0.26), transparent 70%),
-    linear-gradient(180deg, #14283A 0%, #0E1C29 58%, #0B1722 100%);
+    radial-gradient(ellipse 90% 60% at 50% 8%, rgba(205, 170, 112, 0.20), transparent 68%),
+    radial-gradient(ellipse 70% 55% at 50% 104%, rgba(138, 103, 46, 0.22), transparent 70%),
+    linear-gradient(180deg, #251F17 0%, #14110D 58%, #0C0A07 100%);
   background-size: cover, auto, auto, auto;
   background-position: center, center, center, center;
-  color: #F3F6F8;
+  color: #FBF9F5;
 }
 
 /* Sound blocked: the whole screen is the tap target. Navigating here spends
@@ -963,11 +979,13 @@ body:has(.callbar) {
 .callbar-mark img {
   width: min(62vw, 340px);
   height: auto;
-  opacity: 0.07;
-  color: #F3F6F8;
+  opacity: 0.085;
+  color: #FBF9F5;
   /* Lifted off centre so it sits behind the waveform rather than behind the
-     name, where it would fight the type for the same pixels. */
-  transform: translateY(-8%);
+     name, where it would fight the type for the same pixels.
+     Der Versatz ist größer als vorher: das neue Zeichen sitzt in einem
+     quadratischen viewBox statt in einem breiten, also steht es tiefer. */
+  transform: translateY(-34%);
 }
 @media (max-height: 220px) {
   .callbar-mark { display: none; }
@@ -996,7 +1014,7 @@ body:has(.callbar) {
   width: 8px;
   height: 14px;
   border-radius: 5px;
-  background: rgba(243, 246, 248, 0.28);
+  background: rgba(251, 249, 245, 0.28);
   transition: background 0.2s ease;
 }
 .callbar-wave.is-on span {
@@ -1027,15 +1045,20 @@ body:has(.callbar) {
   gap: 8px;
   min-width: 0;
 }
+/* Der Name des Betriebs in der Antiqua der Marke, nicht in einer fetten
+   Grotesk. Das ist der einzige große Text auf dieser Fläche; in 800er Grotesk
+   sah er aus wie eine App-Überschrift, in der Antiqua wie ein Schild an einer
+   Tür — und dasselbe Schild steht auf der Seite, von der der Anruf kam. */
 .callbar-text strong {
-  font-size: clamp(30px, 9vw, 44px);
-  font-weight: 800;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(34px, 10vw, 52px);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 .callbar-text span {
   font-size: 15.5px;
-  color: rgba(243, 246, 248, 0.72);
+  color: rgba(251, 249, 245, 0.72);
   line-height: 1.4;
 }
 
@@ -1047,14 +1070,14 @@ body:has(.callbar) {
   padding: 15px 34px;
   border-radius: 999px;
   cursor: pointer;
-  border: 1px solid rgba(243, 246, 248, 0.26);
-  background: rgba(243, 246, 248, 0.06);
-  color: #F3F6F8;
+  border: 1px solid rgba(251, 249, 245, 0.26);
+  background: rgba(251, 249, 245, 0.06);
+  color: #FBF9F5;
   white-space: nowrap;
 }
 .callbar-end:hover { border-color: #E98A80; color: #E98A80; }
 .callbar-end[disabled] { opacity: 0.4; cursor: default; }
-.callbar-go { background: #CDAA70; border-color: #CDAA70; color: #0E1C29; }
+.callbar-go { background: var(--gold-lit); border-color: var(--gold-lit); color: #14110D; }
 
 /* --- docked in the corner of the site -------------------------------------
    Under ~220px of height this is the 76px iframe on belline.ai, not a screen
@@ -1129,7 +1152,7 @@ body:has(.callbar) {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(243, 246, 248, 0.55);
+  color: rgba(251, 249, 245, 0.55);
   margin-bottom: 10px;
 }
 
@@ -1143,7 +1166,7 @@ body:has(.callbar) {
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  scrollbar-color: rgba(243, 246, 248, 0.28) transparent;
+  scrollbar-color: rgba(251, 249, 245, 0.28) transparent;
   /* Start-aligned, not centred. Centring a row that overflows pushes the
      earliest time off the left edge, and the earliest time is the one most
      people want. */
@@ -1151,7 +1174,7 @@ body:has(.callbar) {
 }
 .callbar-slots-row::-webkit-scrollbar { height: 5px; }
 .callbar-slots-row::-webkit-scrollbar-thumb {
-  background: rgba(243, 246, 248, 0.28);
+  background: rgba(251, 249, 245, 0.28);
   border-radius: 3px;
 }
 
@@ -1171,9 +1194,9 @@ body:has(.callbar) {
   justify-content: center;
   padding: 10px 14px;
   border-radius: 12px;
-  border: 1px solid rgba(243, 246, 248, 0.2);
-  background: rgba(243, 246, 248, 0.07);
-  color: #F3F6F8;
+  border: 1px solid rgba(251, 249, 245, 0.2);
+  background: rgba(251, 249, 245, 0.07);
+  color: #FBF9F5;
   font-family: inherit;
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
@@ -1187,16 +1210,16 @@ body:has(.callbar) {
 .callbar-slot em {
   font-style: normal;
   font-size: 11px;
-  color: rgba(243, 246, 248, 0.6);
+  color: rgba(251, 249, 245, 0.6);
   white-space: nowrap;
 }
 .callbar-slot:hover {
   background: rgba(205, 170, 112, 0.18);
-  border-color: var(--gold, #CDAA70);
+  border-color: var(--gold-lit, #CDAA70);
 }
 .callbar-slot:active { transform: scale(0.97); }
 .callbar-slot:focus-visible {
-  outline: 2px solid var(--gold, #CDAA70);
+  outline: 2px solid var(--gold-lit, #CDAA70);
   outline-offset: 2px;
 }
 

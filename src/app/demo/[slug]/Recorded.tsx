@@ -1,4 +1,5 @@
 import { isConfigured, query } from "@/lib/sales/db/client";
+import Brand from "@/components/Brand";
 import DemoPlayer, { type Clip } from "./DemoPlayer";
 import PlayReporter from "./PlayReporter";
 
@@ -81,8 +82,7 @@ export function RecordedDemoPage({ demo }: { demo: RecordedDemo }) {
       <style>{CSS}</style>
 
       <header className="prospect-top">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="Belline" />
+        <Brand size={22} />
         <span className="prospect-badge">Demonstration</span>
       </header>
 

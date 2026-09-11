@@ -1,46 +1,7 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!--
-  Belline horizontal lockup, for light backgrounds.
-
-  Derived from belline-logo-horizontal-dark.svg with the wordmark recoloured
-  to brand navy and the "AI CONCIERGE" tagline removed - the descriptor is
-  positioning language and does not belong in the master logo. The viewBox is
-  cropped to the artwork so the file can be dropped into a header without
-  fighting a pile of empty space on the right.
--->
-<svg width="1116" height="378" viewBox="44 0 1116 378" version="1.1"
-     xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Belline">
-  <defs>
-    <linearGradient id="goldGrad" x1="0%" y1="15%" x2="100%" y2="85%">
-      <stop offset="0%" stop-color="#EBD4A9" />
-      <stop offset="45%" stop-color="#CDAA70" />
-      <stop offset="100%" stop-color="#986F43" />
-    </linearGradient>
-    <linearGradient id="navyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#223646" />
-      <stop offset="100%" stop-color="#0F2131" />
-    </linearGradient>
-  </defs>
-
-  <g transform="translate(-235 -135) scale(0.82)">
-    <rect x="572" y="213" width="56" height="47" rx="10" fill="url(#goldGrad)" />
-    <rect x="555" y="190" width="90" height="35" rx="18" fill="url(#goldGrad)" />
-    <path d="M380 505 C393 477 410 461 431 450 C444 327 506 258 600 258 C694 258 756 327 769 450 C790 461 807 477 820 505 L380 505 Z"
-          fill="url(#goldGrad)" />
-    <path d="M442 423 C457 333 511 286 565 271" fill="none" stroke="#FFFFFF"
-          stroke-width="18" stroke-linecap="round" opacity="0.95" />
-    <g fill="#FFFFFF">
-      <rect x="522" y="382" width="22" height="52" rx="11" />
-      <rect x="558" y="357" width="22" height="88" rx="11" />
-      <rect x="594" y="326" width="24" height="150" rx="12" />
-      <rect x="632" y="357" width="22" height="88" rx="11" />
-      <rect x="668" y="382" width="22" height="52" rx="11" />
-    </g>
-    <path d="M365 570 C365 538 383 519 418 519 L500 519 C509 519 515 525 516 538 C521 579 542 595 600 595 C658 595 679 579 684 538 C685 525 691 519 700 519 L782 519 C817 519 835 538 835 570 C835 589 826 600 809 600 L391 600 C374 600 365 589 365 570 Z"
-          fill="url(#navyGrad)" />
-  </g>
-
-  <path d="m 523.84277,285 h 64.49707 c 34.45313,0 52.5,-17.94434 52.5,-42.14355 0,-22.66114 -16.20117,-36.19629 -33.42773,-37.01661 v -1.53808 c 15.68848,-3.48633 27.48047,-14.66309 27.48047,-32.8125 0,-22.86621 -16.91895,-39.27246 -50.44922,-39.27246 h -60.60059 z m 31.27442,-25.7373 v -41.42579 h 27.89062 c 15.68848,0 25.63477,9.22852 25.63477,22.0459 0,11.58692 -8.10059,19.37989 -26.45508,19.37989 z m 0,-62.85645 v -38.65723 h 25.32715 c 14.66308,0 22.76367,7.58789 22.76367,18.76465 0,12.30469 -9.94629,19.89258 -23.37891,19.89258 z m 151.73047,90.84961 c 26.66015,0 44.91211,-12.40723 50.55175,-31.47949 l -27.89062,-5.2295 c -3.28125,8.81836 -11.38184,13.53516 -22.14844,13.53516 -15.4834,0 -25.94238,-9.63867 -26.66015,-28.40332 h 78.44238 v -8.61328 c 0,-39.16992 -23.8916,-58.13965 -53.83301,-58.13965 -33.53027,0 -55.06348,23.99414 -55.06348,59.37012 0,36.19629 21.53321,58.95996 56.60157,58.95996 z m -25.94239,-70.85449 c 1.23047,-14.15039 10.04883,-24.30176 24.71192,-24.30176 14.25293,0 22.35351,9.33105 23.8916,24.30176 z M 803.9248,132.2168 H 773.16309 V 285 h 30.76171 z m 49.90918,0 H 823.07227 V 285 h 30.76171 z M 872.98145,285 h 30.76171 V 170.36133 H 872.98145 Z M 888.3623,155.39062 c 9.22852,0 16.91895,-6.97265 16.91895,-15.79101 0,-8.71582 -7.69043,-15.79102 -16.91895,-15.79102 -9.33105,0 -16.91894,7.0752 -16.91894,15.79102 0,8.81836 7.58789,15.79101 16.91894,15.79101 z m 65.29004,63.26661 c 0,-15.17578 9.12598,-23.99414 22.25098,-23.99414 12.91992,0 20.71289,8.51074 20.71289,22.76367 V 285 h 30.76169 v -72.90527 c 0,-26.86524 -15.5859,-43.16895 -39.37497,-43.16895 -17.63672,0 -29.22363,9.12598 -35.68359,25.12207 l -0.41016,-23.68652 H 922.89062 V 285 h 30.76172 z m 144.75786,68.59863 c 26.6601,0 44.9121,-12.40723 50.5517,-31.47949 l -27.8906,-5.2295 c -3.2813,8.81836 -11.3818,13.53516 -22.1484,13.53516 -15.4834,0 -25.9424,-9.63867 -26.6602,-28.40332 h 78.4424 v -8.61328 c 0,-39.16992 -23.8916,-58.13965 -53.833,-58.13965 -33.5303,0 -55.0635,23.99414 -55.0635,59.37012 0,36.19629 21.5332,58.95996 56.6016,58.95996 z m -25.9424,-70.85449 c 1.2304,-14.15039 10.0488,-24.30176 24.7119,-24.30176 14.2529,0 22.3535,9.33105 23.8916,24.30176 z"
-        style="font-weight:700;font-size:210px;font-family:Inter, Arial, sans-serif;letter-spacing:-7;fill:#0F2131" />
-  <circle cx="1085" cy="150" r="22" fill="#CDAA70" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="Belline">
+  <!-- Die Marke für helle Gründe. Für Stellen, an denen ein <img> nötig ist;
+       überall sonst wird sie inline gesetzt und erbt die Textfarbe. -->
+  <circle cx="24" cy="9.5" r="3.5" fill="#14110D"/>
+  <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="#14110D"/>
+  <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="#14110D"/>
 </svg>

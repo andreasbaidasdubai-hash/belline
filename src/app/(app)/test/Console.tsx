@@ -598,12 +598,16 @@ export default function Console({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt="" />
           ) : (
-            <svg viewBox="355 180 490 430" focusable="false">
+            // Dieselbe Geometrie wie public/mark.svg und components/Brand.tsx.
+            // Vorher stand hier die alte, gerundete Glocke: wer auf der Seite
+            // auf das neue Zeichen tippt, bekam das alte in Bildschirmgröße
+            // präsentiert — dieselbe Marke in zwei Zeichnungen, einen Klick
+            // voneinander entfernt.
+            <svg viewBox="0 0 48 48" focusable="false">
               <g fill="currentColor">
-                <rect x="555" y="190" width="90" height="35" rx="18" />
-                <rect x="572" y="213" width="56" height="47" rx="10" />
-                <path d="M380 505 C393 477 410 461 431 450 C444 327 506 258 600 258 C694 258 756 327 769 450 C790 461 807 477 820 505 L380 505 Z" />
-                <path d="M365 570 C365 538 383 519 418 519 L500 519 C509 519 515 525 516 538 C521 579 542 595 600 595 C658 595 679 579 684 538 C685 525 691 519 700 519 L782 519 C817 519 835 538 835 570 C835 589 826 600 809 600 L391 600 C374 600 365 589 365 570 Z" />
+                <circle cx="24" cy="9.5" r="3.5" />
+                <path d="M9 31.5a15 15 0 0 1 30 0Z" />
+                <rect x="5" y="35" width="38" height="5.5" rx="2.75" />
               </g>
             </svg>
           )}

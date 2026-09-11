@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Brand from "@/components/Brand";
 import { notFound } from "next/navigation";
 import { findProspect } from "@/lib/prospect";
 import { signStreamToken } from "@/lib/auth";
@@ -55,8 +56,7 @@ export default async function ProspectDemoPage({
   return (
     <div className="prospect">
       <header className="prospect-top">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="Belline" />
+        <Brand size={22} />
         <span className="prospect-badge">Demonstration</span>
       </header>
 
