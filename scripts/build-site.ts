@@ -227,33 +227,37 @@ function navFor(active: string): string {
     .map((v) => `<a href="/${v.slug}">${esc(v.name)}</a>`)
     .join("\n      ");
   return `${links}
+      <a href="/#what">What it does</a>
       <a href="/#price">Pricing</a>
-      <a href="/#book">Get Belline</a>`;
+      <a class="nav-cta" href="/#book">Get Belline</a>
+      <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>`;
 }
 
-/** A scene, typeset — the same figure the home page's hero carries. */
-function scriptFor(scene: Vertical["scenes"][number], rise = false): string {
-  const lines = scene.turns
-    .map(
-      ([who, text]) => `        <div class="line ${who}">
-          <span class="who">${who === "agent" ? "Belline" : "Caller"}</span>
-          <p>${esc(text)}</p>
-        </div>`,
-    )
-    .join("\n");
-
-  return `      <figure class="script${rise ? " rise rise-2" : ""}">
-        <figcaption class="script-head">
-          <span class="at">${esc(scene.when.split(", ")[1] ?? scene.when)}</span>
-          <span>${esc(scene.when.split(", ")[0])}</span>
-        </figcaption>
-${lines}
-        <div class="script-out">
-          <span class="tag${scene.outcome.human ? " human" : ""}">${esc(scene.outcome.tag)}</span>
-          <span>${esc(scene.outcome.what)}</span>
+/**
+ * The call panel, for the generated pages.
+ *
+ * The same markup and the same site.js as the home page's hero — the scenes
+ * differ, the machinery does not. Two tabs here rather than four: the call
+ * this trade's line takes, and the one it refuses. An operator deciding
+ * whether to trust this is buying the second one.
+ */
+const CALL_PANEL = `      <div class="call rise rise-2" id="call" data-speaking="false">
+        <div class="call-tabs" role="tablist" aria-label="Choose a call"></div>
+        <div class="call-head">
+          <span class="call-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="call-status">Ringing</span>
+          <span class="call-line"></span>
+          <button class="call-listen" type="button" aria-pressed="false">
+            <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/>
+              <path d="M5 11a1 1 0 1 1 2 0 5 5 0 0 0 10 0 1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V21a1 1 0 1 1-2 0v-3.07A7 7 0 0 1 5 11Z"/>
+            </svg>
+            <span class="call-listen-label">Listen</span>
+          </button>
+          <audio class="call-audio" preload="none"></audio>
         </div>
-      </figure>`;
-}
+        <div class="call-body" id="call-body" role="tabpanel" aria-live="polite"></div>
+      </div>`;
 
 /**
  * The floating bell, for the generated pages.
@@ -287,8 +291,6 @@ const BELL_FAB = `<a class="bell-fab" href="https://app.belline.ai/call?start=1"
  * worse than no receptionist, and every operator knows it.
  */
 function verticalPage(v: Vertical): string {
-  const [books, hands] = v.scenes;
-
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -326,9 +328,19 @@ function verticalPage(v: Vertical): string {
       ${MARK}
       <span>Belline</span>
     </a>
-    <nav>
+    <nav id="site-nav" data-open="false">
       ${navFor(v.slug)}
     </nav>
+    <!--
+      Das Menü fürs Telefon. Vorher stand hier nichts: unter 900 px hat die
+      Navigation schlicht "display: none" bekommen, und damit gab es auf einem
+      Telefon keinen Weg zu Preisen oder Anmeldung außer scrollen. Das ist kein
+      aufgeräumter Kopf, das ist ein fehlender.
+    -->
+    <button class="menu-toggle" type="button" aria-expanded="false"
+            aria-controls="site-nav" aria-label="Open menu">
+      <span class="bar"></span>
+    </button>
   </div>
 </header>
 
@@ -356,19 +368,23 @@ function verticalPage(v: Vertical): string {
         </p>
       </div>
 
-${scriptFor(books, true)}
+${CALL_PANEL}
     </div>
   </section>
 
   <section class="rule">
     <div class="wrap">
-      <p class="eyebrow">What it checks</p>
-      <h2 class="display">Answering is the easy part.<br>Knowing what is genuinely free is not.</h2>
-      <p style="margin-top:26px; max-width:56ch">
-        A voice agent that cannot see your book is an expensive answering
-        machine. Belline holds the constraints your team holds in their head,
-        which is why it can commit to a time without anyone checking it after.
-      </p>
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">What it checks</p>
+          <h2 class="display">Answering is the easy part.<br>Knowing what is genuinely free is not.</h2>
+        </div>
+        <p class="sec-lead">
+          A voice agent that cannot see your book is an expensive answering
+          machine. Belline holds the constraints your team holds in their head,
+          which is why it can commit to a time without anyone checking it after.
+        </p>
+      </div>
 
       <div class="knows">
         ${v.constraints
@@ -392,12 +408,10 @@ ${scriptFor(books, true)}
           <p style="margin-top:26px">${esc(v.boundary)}</p>
           <a class="btn" href="/#book">Get Belline</a>
         </div>
-${scriptFor(hands)}
+        <figure class="plate">
+          <img src="${esc(v.image)}" width="880" height="495" loading="lazy" alt="${esc(v.imageAlt)}">
+        </figure>
       </div>
-
-      <figure class="plate solo">
-        <img src="${esc(v.image)}" width="880" height="495" loading="lazy" alt="${esc(v.imageAlt)}">
-      </figure>
     </div>
   </section>
 
@@ -459,6 +473,7 @@ ${scriptFor(hands)}
 </footer>
 
 ${BELL_FAB}
+<script type="application/json" id="call-scenes">${JSON.stringify(v.scenes.map((sc) => ({ ...sc, audio: withAudio(sc) })))}</script>
 <script src="/site.js"></script>
 </body>
 </html>

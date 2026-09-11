@@ -39,12 +39,24 @@
       </svg>
       <span>Belline</span>
     </a>
-    <nav>
+    <nav id="site-nav" data-open="false">
       <a href="#what">What it does</a>
       <a href="#trade">Your trade</a>
       <a href="#price">Pricing</a>
-      <a href="#book">Get Belline</a>
+      <a href="#faq">Questions</a>
+      <a class="nav-cta" href="#book">Get Belline</a>
+      <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>
     </nav>
+    <!--
+      Das Menü fürs Telefon. Vorher stand hier nichts: unter 900 px hat die
+      Navigation schlicht "display: none" bekommen, und damit gab es auf einem
+      Telefon keinen Weg zu Preisen oder Anmeldung außer scrollen. Das ist kein
+      aufgeräumter Kopf, das ist ein fehlender.
+    -->
+    <button class="menu-toggle" type="button" aria-expanded="false"
+            aria-controls="site-nav" aria-label="Open menu">
+      <span class="bar"></span>
+    </button>
   </div>
 </header>
 
@@ -88,32 +100,35 @@
         </p>
       </div>
 
-      <figure class="script rise rise-2">
-        <figcaption class="script-head">
-          <span class="at">19:47</span>
-          <span>Tuesday · a dental practice</span>
-        </figcaption>
-        <div class="line caller">
-          <span class="who">Caller</span>
-          <p>I need to get my daughter in for a check-up. After school if you can.</p>
+      <!--
+        Der Anruf im Hero.
+
+        Nicht abgetippt, sondern abgespielt: site.js baut die Reiter aus dem
+        JSON am Seitenende, lässt die Zeilen im Sprechtempo eintreffen und
+        spielt über "Listen" die echte Aufnahme. Vier Gewerbe, vier Anrufe,
+        alle aus derselben Datei, aus der auch die Gewerbeseiten kommen — eine
+        Zeile, die das Produkt nicht mehr sagt, kann hier nicht überleben.
+
+        Der Block darunter ist leer und wird beim Bauen gefüllt. Serviert die
+        App die Datei direkt, holt site.js /call-scenes.json nach.
+      -->
+      <div class="call rise rise-2" id="call" data-speaking="false">
+        <div class="call-tabs" role="tablist" aria-label="Choose a call"></div>
+        <div class="call-head">
+          <span class="call-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="call-status">Ringing</span>
+          <span class="call-line">Tuesday, 19:47</span>
+          <button class="call-listen" type="button" aria-pressed="false">
+            <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/>
+              <path d="M5 11a1 1 0 1 1 2 0 5 5 0 0 0 10 0 1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V21a1 1 0 1 1-2 0v-3.07A7 7 0 0 1 5 11Z"/>
+            </svg>
+            <span class="call-listen-label">Listen</span>
+          </button>
+          <audio class="call-audio" preload="none"></audio>
         </div>
-        <div class="line agent">
-          <span class="who">Belline</span>
-          <p>Of course. I’ve got Thursday at quarter past four with Dr Reid, or Friday at half four.</p>
-        </div>
-        <div class="line caller">
-          <span class="who">Caller</span>
-          <p>Thursday’s better.</p>
-        </div>
-        <div class="line agent">
-          <span class="who">Belline</span>
-          <p>Thursday at four fifteen, then. Can I take her name and a mobile number?</p>
-        </div>
-        <div class="script-out">
-          <span class="tag">Booked</span>
-          <span>Thu 16:15 · Dr Reid · Check-up</span>
-        </div>
-      </figure>
+        <div class="call-body" id="call-body" role="tabpanel" aria-live="polite"></div>
+      </div>
     </div>
 
     <div class="wrap">
@@ -128,13 +143,17 @@
 
   <section id="what" class="rule">
     <div class="wrap">
-      <p class="eyebrow">What it will and will not do</p>
-      <h2 class="display">It handles the call, or it hands it over.<br>It never guesses.</h2>
-      <p style="margin-top:26px; max-width:54ch">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">What it will and will not do</p>
+          <h2 class="display">It handles the call, or it hands it over.<br>It never guesses.</h2>
+        </div>
+        <p class="sec-lead">
         The most important thing a receptionist does is know the edge of its own
         competence. Belline takes the details and flags it rather than inventing
         an answer.
       </p>
+      </div>
 
       <div class="handled">
         <div class="handled-row">
@@ -176,44 +195,56 @@
 
   <section id="trade" class="rule">
     <div class="wrap">
-      <p class="eyebrow">Your trade</p>
-      <h2 class="display">A table is not an appointment.</h2>
-      <p style="margin-top:26px; max-width:56ch">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Your trade</p>
+          <h2 class="display">A table is not an appointment.</h2>
+        </div>
+        <p class="sec-lead">
         A restaurant fills a room to a pacing limit. A salon and a clinic fill
         a person’s diary — the right qualification, the right room, the cleanup
         nobody quotes. Belline knows the difference, and speaks in each trade’s
         own words.
       </p>
-
-      <div class="plates">
-        <figure class="plate">
-          <img src="/img/restaurants.jpg" width="880" height="495" loading="lazy"
-               alt="A waiter pouring wine at a candlelit table in a grand dining room during evening service.">
-          <figcaption>
-            <strong>Restaurants</strong>
-            Turn times by party size, the tightest table that fits, and a cap on
-            covers per slot so the kitchen isn’t handed twelve tables at eight.
-          </figcaption>
-        </figure>
-        <figure class="plate">
-          <img src="/img/salons.jpg" width="880" height="495" loading="lazy"
-               alt="A stylist blow-drying a client's hair in a bright modern salon.">
-          <figcaption>
-            <strong>Salons &amp; spas</strong>
-            Only qualified stylists are offered. Services run back to back,
-            stations are shared, and the cleanup buffer is never quoted to the guest.
-          </figcaption>
-        </figure>
-        <figure class="plate">
-          <img src="/img/dental.jpg" width="880" height="495" loading="lazy"
-               alt="A dental surgery, a hygienist and a dentist treating a patient in a bright consulting room.">
-          <figcaption>
-            <strong>Clinics &amp; dental</strong>
-            Practitioners, surgeries and rooms as separate constraints. A first
-            visit books as a consultation. It will not discuss a diagnosis.
-          </figcaption>
-        </figure>
       </div>
+
+      <!--
+        Ein Bild statt drei.
+
+        Vorher standen hier drei Fotos — ein Restaurant, ein Salon, eine
+        Praxis — und alle drei waren erzeugt: erfundene Menschen, die in eine
+        Kamera lächeln, auf einer Seite, deren ganzes Argument ist, dass
+        Belline nichts vortäuscht.
+
+        Das hier ist eine Glocke auf einem leeren Tresen. Es ist unsere Marke
+        als Fotografie und es ist der Moment, um den es geht: jemand steht
+        davor, und niemand ist da. Ein gutes Bild schlägt drei mittelmäßige,
+        und der Unterschied zwischen den Gewerben steht ohnehin daneben —
+        in Worten, die genauer sind als ein Foto es sein könnte.
+      -->
+      <div class="trades">
+        <div>
+          <h3>Restaurants</h3>
+          <p>Turn times by party size, the tightest table that fits, and a cap on
+          covers per slot so the kitchen isn’t handed twelve tables at eight.</p>
+        </div>
+        <div>
+          <h3>Salons &amp; spas</h3>
+          <p>Only qualified stylists are offered. Services run back to back,
+          stations are shared, and the cleanup buffer is never quoted to the guest.</p>
+        </div>
+        <div>
+          <h3>Clinics &amp; dental</h3>
+          <p>Practitioners, surgeries and rooms as separate constraints. A first
+          visit books as a consultation. It will not discuss a diagnosis.</p>
+        </div>
+      </div>
+
+      <figure class="plate">
+        <img src="/img/bell.jpg" width="1200" height="1800" loading="lazy"
+             alt="A brass service bell on an empty reception counter, the room behind it out of focus.">
+        <figcaption>Somebody is standing at the counter. Nobody is behind it.</figcaption>
+      </figure>
 
       <div class="trade-links">
         <a href="/dental">Dental</a>
@@ -244,12 +275,16 @@
 
   <section id="price" class="rule">
     <div class="wrap">
-      <p class="eyebrow">Pricing</p>
-      <h2 class="display">Simple pricing.<br>Someone always answers.</h2>
-      <p class="lead" style="margin-top:26px; max-width:48ch">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Pricing</p>
+          <h2 class="display">Simple pricing.<br>Someone always answers.</h2>
+        </div>
+        <p class="sec-lead lead">
         Start for less than the cost of a missed booking. No setup fees.
         No contracts. Upgrade only when you need more.
       </p>
+      </div>
 
       <div class="cycle" role="group" aria-label="Billing period">
         <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monthly</button>
@@ -502,6 +537,7 @@
   <span class="bell-fab-say">Hear Belline</span>
 </a>
 
+<script type="application/json" id="call-scenes"></script>
 <script src="/site.js"></script>
 </body>
 </html>

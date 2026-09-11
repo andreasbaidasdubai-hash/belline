@@ -157,7 +157,7 @@ export const VERTICALS: Vertical[] = [
     lead:
       "Belline answers when the chair is occupied and after you close. It books against the real diary — the right surgery, the right clinician, the right length — and it does not answer a clinical question, ever.",
     image: "/img/dental.jpg",
-    imageAlt: "A dental surgery, a hygienist and a dentist treating a patient in a bright consulting room.",
+    imageAlt: "A dental treatment room between patients — the chair empty, the light off.",
     constraints: [
       {
         head: "Clinicians, not slots",
@@ -190,7 +190,7 @@ export const VERTICALS: Vertical[] = [
     lead:
       "Belline answers out of hours and while your team is with patients. It books consultations against the practitioners and rooms that are genuinely free — and it knows the difference between an enquiry and an emergency.",
     image: "/img/clinics.jpg",
-    imageAlt: "A clinic reception desk, a consultation being confirmed on the phone.",
+    imageAlt: "A reception sign and a service bell on a counter, nobody behind it.",
     constraints: [
       {
         head: "Practitioners and rooms, separately",
@@ -223,7 +223,7 @@ export const VERTICALS: Vertical[] = [
     lead:
       "Belline answers mid-service and after close. It knows which stylist can do which service, how long the chain actually takes, and which policies it is not allowed to bend.",
     image: "/img/salons.jpg",
-    imageAlt: "A stylist blow-drying a client's hair in a bright modern salon.",
+    imageAlt: "A brass service bell on a wooden reception counter.",
     constraints: [
       {
         head: "Only stylists qualified for the service",
@@ -256,7 +256,7 @@ export const VERTICALS: Vertical[] = [
     lead:
       "Belline answers through service. It holds the same constraints your host holds — turn times, pacing, which table actually fits — so it can commit to a time without anyone checking it afterwards.",
     image: "/img/restaurants.jpg",
-    imageAlt: "A waiter pouring wine at a candlelit table in a grand dining room during evening service.",
+    imageAlt: "A restaurant counter being laid before service, the room still dark.",
     constraints: [
       {
         head: "Turn times grow with the party",

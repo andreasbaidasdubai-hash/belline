@@ -41,12 +41,16 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 17px;
+  /* 18px, nicht 17. Auf einem Laptop in Armlänge ist der Unterschied genau
+     der zwischen "lesbar" und "angenehm"; die ganze Seite ist Fließtext mit
+     einer Antiqua daneben, und die Antiqua wirkt nur groß, wenn die Grotesk
+     daneben nicht schrumpft. */
+  font-size: 18px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
-.wrap { max-width: 1140px; margin: 0 auto; padding: 0 32px; }
+.wrap { max-width: 1220px; margin: 0 auto; padding: 0 36px; }
 
 /* --- Typografie ------------------------------------------------------------
    Instrument Serif für alles Große, Instrument Sans für alles Kleine. Eine
@@ -112,14 +116,18 @@ a { color: inherit; }
   text-decoration: none;
   color: var(--ink);
 }
-.brand svg { width: 26px; height: 26px; color: var(--brass); display: block; }
+/* 34 statt 26. In einer 1220-px-Leiste war das Zeichen ein Detail; eine
+   Marke, die man suchen muss, ist keine. */
+.brand svg { width: 34px; height: 34px; color: var(--brass); display: block; }
 .brand span {
   font-family: "Instrument Serif", Georgia, serif;
-  font-size: 1.6rem;
+  font-size: 2.05rem;
   letter-spacing: -0.015em;
 }
+footer .brand svg { width: 30px; height: 30px; }
+footer .brand span { font-size: 1.8rem; }
 
-.top nav { display: flex; gap: 28px; margin-left: auto; }
+.top nav { display: flex; align-items: center; gap: 26px; margin-left: auto; }
 .top nav a {
   text-decoration: none;
   font-size: 0.92rem;
@@ -128,6 +136,51 @@ a { color: inherit; }
   border-bottom: 1px solid transparent;
 }
 .top nav a:hover { border-bottom-color: var(--brass); color: var(--ink); }
+
+/* Die eine Handlung im Kopf sieht aus wie eine Handlung. Fünf gleich graue
+   Wörter nebeneinander sind eine Liste, kein Angebot. */
+.top nav .nav-cta {
+  padding: 9px 20px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  border-bottom: 0;
+}
+.top nav .nav-cta:hover { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.top nav .nav-quiet { display: none; }
+
+/* Der Aufklapper. Auf dem Laptop unsichtbar, auf dem Telefon das Einzige
+   rechts. Ein Strich, der sich zum Kreuz dreht — kein Drei-Strich-Symbol,
+   weil die Seite sonst nirgends mehrere parallele Linien benutzt. */
+.menu-toggle {
+  display: none;
+  margin-left: auto;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+  position: relative;
+}
+.menu-toggle .bar,
+.menu-toggle .bar::before,
+.menu-toggle .bar::after {
+  position: absolute;
+  left: 50%;
+  width: 18px;
+  height: 1.5px;
+  background: var(--ink);
+  transform: translateX(-50%);
+  transition: transform 0.2s ease, opacity 0.15s ease;
+}
+.menu-toggle .bar { top: 50%; margin-top: -0.75px; }
+.menu-toggle .bar::before { content: ""; top: -6px; }
+.menu-toggle .bar::after { content: ""; top: 6px; }
+.menu-toggle[aria-expanded="true"] .bar { transform: translateX(-50%) rotate(45deg); }
+.menu-toggle[aria-expanded="true"] .bar::before { transform: translateX(-50%) translateY(6px) rotate(-90deg); }
+.menu-toggle[aria-expanded="true"] .bar::after { opacity: 0; }
 
 /* --- Buttons ---------------------------------------------------------------
    Kein 8px-Radius auf allem. Die primäre Handlung ist eine gefüllte Pille,
@@ -216,21 +269,27 @@ section { padding: 110px 0; }
 /* Frage und Antwort als Satzpaare mit einer Linie dazwischen. Der Inhalt ist
    ein Dialog; ein Raster aus Kacheln würde ihn zerlegen. */
 .handled { margin-top: 56px; border-top: 1px solid var(--rule); }
+/* Die Antwort gehört neben die Frage, nicht an den anderen Rand des
+   Bildschirms. Bei 1220 px Breite standen zwischen "Do you have anything
+   Friday?" und "Books it" gut 700 px Nichts, und das Auge muss die beiden
+   Hälften erst wieder zusammensetzen. Die Zeile hört jetzt dort auf, wo ein
+   Satz aufhört. */
+.handled { max-width: 920px; }
 .handled-row {
   display: grid;
-  grid-template-columns: 1.55fr 1fr;
-  gap: 32px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 40px;
   align-items: baseline;
   padding: 22px 0;
   border-bottom: 1px solid var(--rule-soft);
 }
 .handled-row .q {
   font-family: "Instrument Serif", Georgia, serif;
-  font-size: 1.35rem;
+  font-size: 1.42rem;
   letter-spacing: -0.015em;
   line-height: 1.25;
 }
-.handled-row .a { font-size: 0.9rem; color: var(--ink-3); text-align: right; }
+.handled-row .a { font-size: 0.9rem; color: var(--ink-3); text-align: right; white-space: nowrap; }
 .handled-row .a.human { color: var(--brass); }
 
 /* --- Fotografie ------------------------------------------------------------
@@ -259,7 +318,67 @@ section { padding: 110px 0; }
   .handled-row { grid-template-columns: 1fr; gap: 6px; }
   .handled-row .a { text-align: left; }
   section { padding: 72px 0; }
-  .top nav { display: none; }
+
+  /* --- Das Menü auf dem Telefon -------------------------------------------
+     Ein Blatt, das unter der Kopfzeile herunterkommt, nicht ein
+     Vollbild-Overlay: die Seite bleibt sichtbar, also weiß man, wo man ist.
+     Die Einträge stehen in der Antiqua und in Daumengröße — ein Menü, das
+     man auf einem Telefon bedient, ist kein 13-px-Text. */
+  .menu-toggle { display: block; }
+  .top-in { gap: 16px; }
+
+  .top nav {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 4px 22px calc(22px + env(safe-area-inset-bottom, 0px));
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    box-shadow: 0 18px 34px -22px rgba(20, 17, 13, 0.5);
+
+    /* Zu, und zwar so, dass es für Tastatur und Vorleseprogramm auch zu ist:
+       visibility, nicht nur opacity. Ein unsichtbarer Link, den man antabben
+       kann, ist eine Falle. */
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+  }
+  .top nav[data-open="true"] {
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+  }
+  .top nav a {
+    font-family: "Instrument Serif", Georgia, serif;
+    font-size: 1.6rem;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+    padding: 17px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .top nav a:last-child { border-bottom: 0; }
+  .top nav .nav-cta {
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 500;
+    text-align: center;
+    padding: 16px 24px;
+    margin-top: 18px;
+    border-bottom: 0;
+  }
+  .top nav .nav-quiet {
+    display: block;
+    font-family: inherit;
+    font-size: 0.88rem;
+    color: var(--ink-3);
+    padding: 16px 0 0;
+    border-bottom: 0;
+  }
 }
 
 /* --- Auftritt -------------------------------------------------------------
@@ -662,30 +781,73 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   box-shadow: 0 0 0 4px var(--paper), 0 14px 34px -14px rgba(20, 17, 13, 0.5);
   transition: transform 0.16s ease;
 }
-.bell-fab:hover { transform: translateY(-2px); }
+.bell-fab { isolation: isolate; }
 .bell-fab[hidden] { display: none; }
-.bell-fab svg { width: 22px; height: 22px; display: block; color: var(--brass-soft); }
+.bell-fab svg { width: 27px; height: 27px; display: block; color: var(--brass-soft); }
 
-/* Zwölf Schwingungen in den ersten 0,4 s eines 2,4-s-Takts. Eine Glocke
-   schwingt und steht dann still; die Frequenz gehört in den Anschlag, nicht
-   in den Abstand zwischen zwei Anschlägen. */
-.bell-fab svg { animation: bell-shake 2.4s ease-in-out 1.2s infinite; }
+/* Ein Telefon, das klingelt.
+ *
+ * Drei Dinge auf demselben Takt, weil eins allein zu wenig war: das Zeichen
+ * schwingt, der Knopf ruckt mit, und ein Ring läuft nach außen weg. Der Ring
+ * ist der Teil, den man aus dem Augenwinkel sieht — eine 27-px-Glocke, die
+ * sich dreht, sieht nur, wer ohnehin schon hinschaut.
+ *
+ * Der Takt ist 1,5 s statt 2,4 s und der Ausschlag 22° statt 15°. Die
+ * Schwingung selbst bleibt schnell und klingt ab: eine Glocke schwingt und
+ * steht dann still. */
+.bell-fab svg { animation: bell-shake 1.5s ease-in-out 0.7s infinite; }
 @keyframes bell-shake {
-  0%, 17%, 100% { transform: rotate(0deg); }
-  1.2% { transform: rotate(-15deg); }
-  2.5% { transform: rotate(15deg); }
-  3.7% { transform: rotate(-13deg); }
-  5.0% { transform: rotate(13deg); }
-  6.2% { transform: rotate(-11deg); }
-  7.5% { transform: rotate(11deg); }
-  8.7% { transform: rotate(-8deg); }
-  10.0% { transform: rotate(8deg); }
-  11.2% { transform: rotate(-6deg); }
-  12.5% { transform: rotate(6deg); }
-  13.7% { transform: rotate(-3deg); }
-  15.0% { transform: rotate(3deg); }
+  0%, 27%, 100% { transform: rotate(0deg); }
+  2% { transform: rotate(-22deg); }
+  4% { transform: rotate(22deg); }
+  6% { transform: rotate(-19deg); }
+  8% { transform: rotate(19deg); }
+  10% { transform: rotate(-15deg); }
+  12% { transform: rotate(15deg); }
+  14% { transform: rotate(-11deg); }
+  16% { transform: rotate(11deg); }
+  18% { transform: rotate(-8deg); }
+  20% { transform: rotate(8deg); }
+  22% { transform: rotate(-4deg); }
+  24% { transform: rotate(4deg); }
 }
-.bell-fab:hover svg { animation: none; }
+
+.bell-fab { animation: bell-nudge 1.5s ease-in-out 0.7s infinite; }
+@keyframes bell-nudge {
+  0%, 14%, 100% { transform: translateY(0) rotate(0deg); }
+  3% { transform: translateY(-2px) rotate(-1.6deg); }
+  7% { transform: translateY(-2px) rotate(1.6deg); }
+  11% { transform: translateY(-1px) rotate(-0.8deg); }
+}
+
+/* Der Ring. Liegt hinter dem Knopf (z-index: -1 in einem eigenen
+   Stapelkontext), damit er nicht über der Schrift landet, und ist
+   pointer-events: none, damit er den Klick nicht abfängt. */
+.bell-fab::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid var(--brass);
+  pointer-events: none;
+  opacity: 0;
+  z-index: -1;
+  animation: bell-ring 1.5s ease-out 0.7s infinite;
+}
+@keyframes bell-ring {
+  0%   { transform: scale(1); opacity: 0.55; }
+  55%  { transform: scale(1.28); opacity: 0; }
+  100% { transform: scale(1.28); opacity: 0; }
+}
+
+/* Beim Überfahren hört es auf zu klingeln — wer den Zeiger darauf hat, ist
+   schon aufmerksam geworden, und weiter zu wackeln macht das Ziel kleiner. */
+.bell-fab:hover,
+.bell-fab:focus-visible { animation: none; transform: translateY(-2px); }
+.bell-fab:hover svg,
+.bell-fab:focus-visible svg,
+.bell-fab:hover::after,
+.bell-fab:focus-visible::after { animation: none; }
 
 /* --- Das angedockte Gespräch ------------------------------------------------ */
 
@@ -744,8 +906,13 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise, .bell-fab svg { animation: none; }
+  .rise,
+  .bell-fab,
+  .bell-fab svg,
+  .bell-fab::after,
+  .call-wave i { animation: none; }
   .bell-fab { transition: none; }
+  .bell-fab::after { opacity: 0; }
 }
 
 /* --- Handelsseiten ----------------------------------------------------------
@@ -797,4 +964,245 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 @media (max-width: 900px) {
   .knows { grid-template-columns: 1fr; gap: 0; margin-top: 40px; }
   .split { grid-template-columns: 1fr; gap: 42px; }
+}
+
+/* --- Der Anruf, der läuft ---------------------------------------------------
+ *
+ * Im Hero stand zuletzt ein gesetztes Gespräch, das stillstand. Es las sich
+ * wie ein Screenshot, und ein Screenshot ist genau das, was diese Seite nicht
+ * sein will: das Produkt ist eine Stimme, die antwortet, und ein Bild davon
+ * überzeugt niemanden.
+ *
+ * Also läuft es wieder — dieselbe Mechanik wie vorher (site.js, unverändert),
+ * nur nicht mehr als dunkles Chatfenster, sondern in der Typografie des Rests
+ * der Seite: Haarlinien, der Anrufer in der Antiqua, Belline in der Grotesk.
+ * Die Zeilen kommen in dem Tempo, in dem sie gesprochen werden, der Status
+ * sagt "Checking the book", wenn das Ding tatsächlich den Kalender liest, und
+ * "Listen" spielt die echte Aufnahme.
+ *
+ * Der Ruhezustand ist die fertige Unterhaltung: site.js malt sie sofort und
+ * spielt sie erst, wenn sie im Bild ist. Wer nie scrollt, sieht trotzdem
+ * alles — wie bei .rise ist die Bewegung eine Zugabe, keine Bedingung. */
+
+.call { margin: 8px 0 0; border-top: 1px solid var(--ink); }
+
+/* Die Reiter. Auf der Startseite vier Gewerbe, auf einer Gewerbeseite die
+   beiden Seiten derselben Leitung — gebucht und abgelehnt. */
+.call-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 16px 0 0;
+}
+.call-tab {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  padding: 0 0 5px;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.call-tab:hover { color: var(--ink); }
+.call-tab[aria-selected="true"] { color: var(--brass); border-bottom-color: var(--brass); }
+
+/* Kopfzeile: die Uhrzeit, was gerade passiert, und der Knopf für den Ton. */
+.call-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0 20px;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+.call-status {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+.call-line { margin-left: 2px; }
+.call-listen {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: none;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+.call-listen:hover { border-color: var(--ink); color: var(--ink); }
+.call-listen[aria-pressed="true"] { border-color: var(--brass); color: var(--brass); }
+
+/* Die Kurve. Neun Striche, die nur laufen, während Belline spricht — das ist
+   der einzige Unterschied zwischen "es antwortet" und "es steht da". */
+.call-wave { display: inline-flex; align-items: flex-end; gap: 3px; height: 15px; }
+.call-wave i {
+  display: block;
+  width: 2px;
+  height: 4px;
+  background: var(--ink-3);
+  border-radius: 1px;
+  transition: background 0.2s ease;
+}
+[data-speaking="true"] .call-wave i {
+  background: var(--brass);
+  animation: call-wave 0.9s ease-in-out infinite;
+}
+.call-wave i:nth-child(2) { animation-delay: 0.08s; }
+.call-wave i:nth-child(3) { animation-delay: 0.16s; }
+.call-wave i:nth-child(4) { animation-delay: 0.24s; }
+.call-wave i:nth-child(5) { animation-delay: 0.32s; }
+.call-wave i:nth-child(6) { animation-delay: 0.40s; }
+.call-wave i:nth-child(7) { animation-delay: 0.48s; }
+.call-wave i:nth-child(8) { animation-delay: 0.56s; }
+.call-wave i:nth-child(9) { animation-delay: 0.64s; }
+@keyframes call-wave {
+  0%, 100% { height: 4px; }
+  50% { height: 15px; }
+}
+
+/* Der Mitschnitt. Dieselben zwei Stimmen in zwei Schriften wie im gesetzten
+   Gespräch — ein gedrucktes Interview, kein Chatfenster mit Sprechblasen.
+
+   min-height, damit die Seite nicht springt, während die Zeilen eintreffen:
+   ein Layout, das unter dem Text wegrutscht, liest sich als Fehler. */
+.call-body { min-height: 268px; }
+.call-body .turn { padding: 0 0 22px; }
+.call-body .who {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 7px;
+}
+.call-body .said { display: block; }
+.call-body .caller .said {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 1.46rem;
+  line-height: 1.24;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.call-body .agent {
+  padding-left: 26px;
+  border-left: 1px solid var(--rule);
+}
+.call-body .agent .said { font-size: 1rem; color: var(--ink-2); line-height: 1.5; }
+
+/* Jede Zeile kommt von unten herein, nie aus dem Nichts — dieselbe Regel wie
+   bei .rise: bewegen, nicht einblenden. */
+.call-body .turn,
+.call-body .call-out { animation: call-in 0.34s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes call-in {
+  from { transform: translateY(8px); }
+  to { transform: none; }
+}
+
+.call-out {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+  font-size: 0.86rem;
+  color: var(--ink-2);
+}
+.call-out .tag {
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brass);
+  border: 1px solid var(--brass-soft);
+  border-radius: 999px;
+  padding: 5px 11px;
+  white-space: nowrap;
+}
+.call-out .tag.human { color: var(--ink-2); border-color: var(--rule); }
+
+@media (max-width: 900px) {
+  .call-body { min-height: 0; }
+  .call-body .caller .said { font-size: 1.3rem; }
+  .call-head { flex-wrap: wrap; gap: 10px 12px; }
+  .call-listen { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-body .turn,
+  .call-body .call-out,
+  [data-speaking="true"] .call-wave i { animation: none; }
+}
+
+/* --- Die Kopfzeile eines Abschnitts -----------------------------------------
+ *
+ * Überschrift links, Einleitung rechts, beide auf derselben Grundlinie unten.
+ *
+ * Vorher stand beides untereinander in der linken Hälfte und die rechte Hälfte
+ * blieb leer. Das liest sich nicht als Großzügigkeit, sondern als eine Seite,
+ * die für ein Telefon gebaut und auf einem Laptop geöffnet wurde: die Schrift
+ * wirkt klein, weil das Maß halb so breit ist wie der Bildschirm.
+ *
+ * align-items: end, damit die letzte Zeile der Einleitung mit der letzten
+ * Zeile der Überschrift abschließt — zwei Spalten, die oben beginnen, aber
+ * unten unterschiedlich enden, sehen aus, als hätte sie niemand gesetzt. */
+.sec-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 24px 64px;
+  align-items: end;
+}
+.sec-head > div { min-width: 0; }
+.sec-head .eyebrow { margin-bottom: 18px; }
+.sec-head .sec-lead { margin: 0; max-width: 46ch; }
+
+@media (max-width: 900px) {
+  .sec-head { grid-template-columns: 1fr; gap: 22px; }
+  .sec-head .sec-lead { max-width: none; }
+}
+
+/* Die drei Gewerbe als Notizen nebeneinander, ohne Bild. Der Unterschied
+   zwischen einem Tisch und einem Termin ist eine Sache von Sätzen, nicht von
+   Fotos — und drei mittelmäßige Fotos nebeneinander sagen weniger als eins,
+   das etwas kann. */
+.trades {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 40px;
+  margin-top: 56px;
+  padding-top: 34px;
+  border-top: 1px solid var(--rule);
+}
+.trades h3 {
+  margin: 0 0 10px;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-weight: 400;
+  font-size: 1.34rem;
+  letter-spacing: -0.015em;
+}
+.trades p { margin: 0; font-size: 0.94rem; color: var(--ink-2); }
+
+/* Das eine Bild. Hochformat auf ein Band beschnitten: die Glocke sitzt im
+   unteren Drittel der Aufnahme, also zeigt object-position dorthin statt in
+   die Mitte, wo nur Decke wäre. */
+.plate img { object-fit: cover; }
+#trade .plate img {
+  height: clamp(280px, 34vw, 460px);
+  object-position: 50% 78%;
+}
+
+@media (max-width: 900px) {
+  .trades { grid-template-columns: 1fr; gap: 28px; margin-top: 40px; }
 }

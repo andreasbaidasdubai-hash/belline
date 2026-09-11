@@ -183,7 +183,6 @@
       return;
     }
 
-    body.textContent = "";
     statusEl.textContent = "Ringing";
     call.setAttribute("data-speaking", "false");
 
@@ -191,6 +190,11 @@
     scene.turns.forEach(function (t, i) {
       timers.push(
         setTimeout(function () {
+          // Geleert wird erst, wenn die erste Zeile da ist — nicht vorher.
+          // Vorher stand hier ein halbe Sekunde langes leeres Feld, und ein
+          // leeres Feld im Hero ist das, was ein Screenshot, eine Vorschau und
+          // jeder, der schnell scrollt, von der Seite mitnimmt.
+          if (i === 0) body.textContent = "";
           if (t[0] === "agent") {
             call.setAttribute("data-speaking", "true");
             // A caller who has just named a date hears a real pause while the
