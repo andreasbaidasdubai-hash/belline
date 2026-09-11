@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { isConfigured, one, query } from "../db/client";
 import type { DemoScript } from "./script";
 
 /**
@@ -125,17 +126,30 @@ export async function renderScript(
     const id = clipId(line.role, line.text);
     const file = path.join(root, `${id}.mp3`);
 
-    if (fs.existsSync(file)) {
-      const bytes = fs.statSync(file).size;
-      clips.push({ id, role: line.role, text: line.text, bytes, reused: true });
+    // Reuse only when the clip is in the database — the disk copy alone is not
+    // enough, because that is exactly the state that produced a silent demo in
+    // production.
+    const stored = await clipSize(id);
+    if (stored !== null) {
+      if (!fs.existsSync(file)) {
+        const audio = await loadClip(id);
+        if (audio) fs.writeFileSync(file, audio);
+      }
+      clips.push({ id, role: line.role, text: line.text, bytes: stored, reused: true });
       reusedCount++;
-      totalBytes += bytes;
+      totalBytes += stored;
       continue;
     }
 
     const audio = await synthesise(line.role, line.text);
-    // Temp file then rename: a half-written clip whose name is a hash of its
-    // intended content would be cached forever as correct.
+
+    // The database is the source of truth, because a demo built on a laptop
+    // has to play from a container that shares no filesystem with it.
+    await storeClip(id, line.role, line.text, audio);
+
+    // Disk is a local cache on top of that. Temp file then rename: a
+    // half-written clip whose name is a hash of its intended content would be
+    // cached forever as correct.
     const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, audio);
     fs.renameSync(tmp, file);
@@ -154,6 +168,59 @@ export function clipPath(id: string): string | null {
   if (!/^[0-9a-f]{16}$/.test(id)) return null;
   const file = path.join(demoRoot(), `${id}.mp3`);
   return fs.existsSync(file) ? file : null;
+}
+
+/** A clip id is a 16-character hex hash and nothing else. */
+export function isClipId(id: string): boolean {
+  return /^[0-9a-f]{16}$/.test(id);
+}
+
+export async function storeClip(
+  id: string,
+  role: Role,
+  text: string,
+  audio: Buffer,
+): Promise<void> {
+  if (!isConfigured()) return;
+  await query(
+    `insert into sales.demo_clip (id, role, text, bytes)
+     values ($1, $2, $3, $4)
+     on conflict (id) do nothing`,
+    [id, role, text, audio],
+  );
+}
+
+async function clipSize(id: string): Promise<number | null> {
+  if (!isConfigured()) return null;
+  try {
+    const row = await one<{ size_bytes: number }>(
+      `select size_bytes from sales.demo_clip where id = $1`,
+      [id],
+    );
+    return row?.size_bytes ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A clip's audio, from the database.
+ *
+ * The route handler tries disk first — it is a local cache and saves a round
+ * trip — and falls back to here, which is what makes a demo built on a laptop
+ * play from a container that has never seen the file.
+ */
+export async function loadClip(id: string): Promise<Buffer | null> {
+  if (!isClipId(id) || !isConfigured()) return null;
+  try {
+    const row = await one<{ bytes: Buffer }>(
+      `select bytes from sales.demo_clip where id = $1`,
+      [id],
+    );
+    return row?.bytes ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
