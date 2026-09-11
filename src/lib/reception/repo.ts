@@ -81,6 +81,7 @@ interface ConversationRow {
   state: ConversationState;
   language: string | null;
   booking_id: string | null;
+  call_id: string | null;
   last_message_at: Date;
   created_at: Date;
   updated_at: Date;
@@ -104,6 +105,7 @@ function toConversation(r: ConversationRow): Conversation {
     state: r.state ?? {},
     language: r.language ?? undefined,
     bookingId: r.booking_id ?? undefined,
+    callId: r.call_id ?? undefined,
     lastMessageAt: r.last_message_at.toISOString(),
     createdAt: r.created_at.toISOString(),
     updatedAt: r.updated_at.toISOString(),
@@ -684,6 +686,112 @@ export async function transition(
     ],
   );
   return row && toConversation(row);
+}
+
+/**
+ * The model's own history of this conversation.
+ *
+ * Opaque on purpose — it holds tool calls, tool results and thinking blocks,
+ * and the API rejects a history that has been tidied. Nothing above this layer
+ * should be tempted to read or edit it; the *legible* record of what was said
+ * is the `message` rows.
+ */
+export async function agentHistory(
+  tenantId: string,
+  conversationId: number,
+): Promise<unknown[]> {
+  const row = await one<{ agent_history: unknown[] }>(
+    "select agent_history from conversation where tenant_id = $1 and id = $2",
+    [tenantId, conversationId],
+  );
+  return row?.agent_history ?? [];
+}
+
+export interface TurnCommit {
+  /** What Belline decided to say. Empty means it said nothing, which is valid. */
+  reply?: string;
+  history: unknown[];
+  statePatch?: Partial<ConversationState>;
+  /** The venue's own episode record, created on the first turn. */
+  callId?: string;
+  bookingId?: string;
+  /** Set when the turn ended in a handoff rather than a reply. */
+  handoff?: { reason: string; summary: string };
+}
+
+/**
+ * Commit a turn, but only if Belline is still allowed to speak.
+ *
+ * The lock is taken *after* the model has produced its answer, not around it.
+ * Holding a Postgres transaction open across a multi-second model call would
+ * pin a connection for the whole of it; the race that actually matters is
+ * narrower than that — it is whether a person took the conversation over while
+ * Belline was thinking, and that is decided here, in one statement, before the
+ * reply is written.
+ *
+ * Returns undefined when they did. The caller throws the generated reply away
+ * and sends nothing, which costs a few hundred tokens and is the correct price
+ * for never talking over a member of staff.
+ *
+ * The outbound message is written as `queued` and committed *before* it is
+ * sent. Sending is an external side effect that cannot be rolled back, so the
+ * row has to exist first: a message that went out and was never recorded is
+ * invisible to the inbox, and a member of staff would answer a question
+ * Belline had already answered.
+ */
+export async function commitAiTurn(
+  tenantId: string,
+  conversationId: number,
+  turn: TurnCommit,
+): Promise<{ conversation: Conversation; messageId?: number } | undefined> {
+  return tx(async (client) => {
+    const { rows } = await client.query<ConversationRow>(
+      "select * from conversation where tenant_id = $1 and id = $2 for update",
+      [tenantId, conversationId],
+    );
+    const current = rows[0];
+    if (!current || current.status !== "AI_ACTIVE") return undefined;
+
+    let messageId: number | undefined;
+    if (turn.reply?.trim()) {
+      const { rows: inserted } = await client.query<{ id: number }>(
+        `insert into message
+           (tenant_id, conversation_id, sender, direction, content_type, body, delivery_status)
+         values ($1,$2,'ai','out','text',$3,'queued')
+         returning id`,
+        [tenantId, conversationId, turn.reply.trim()],
+      );
+      messageId = inserted[0]?.id;
+    }
+
+    const { rows: updated } = await client.query<ConversationRow>(
+      `update conversation set
+         agent_history   = $3::jsonb,
+         state           = state || $4::jsonb,
+         call_id         = coalesce($5, call_id),
+         booking_id      = coalesce($6, booking_id),
+         status          = case when $7::text is not null then 'HANDOFF_REQUESTED' else status end,
+         handoff_reason  = coalesce($7, handoff_reason),
+         handoff_summary = coalesce($8, handoff_summary),
+         handoff_at      = case when $7::text is not null then now() else handoff_at end,
+         last_message_at = now(),
+         updated_at      = now()
+       where tenant_id = $1 and id = $2
+       returning *`,
+      [
+        tenantId,
+        conversationId,
+        JSON.stringify(turn.history),
+        JSON.stringify(turn.statePatch ?? {}),
+        turn.callId ?? null,
+        turn.bookingId ?? null,
+        turn.handoff?.reason ?? null,
+        turn.handoff?.summary ?? null,
+      ],
+    );
+
+    return { conversation: toConversation(updated[0]), messageId };
+  });
 }
 
 /**

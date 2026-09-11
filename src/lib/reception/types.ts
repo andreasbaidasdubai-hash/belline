@@ -134,6 +134,15 @@ export interface Conversation {
   state: ConversationState;
   language?: string;
   bookingId?: string;
+  /**
+   * The venue's own episode record.
+   *
+   * A WhatsApp conversation produces a Call like a telephone one does, because
+   * "what did Belline do for me this week" must not have two answers depending
+   * on the channel. This is the link; the call itself lives in the JSON book
+   * with every other call.
+   */
+  callId?: string;
   lastMessageAt: string;
   createdAt: string;
   updatedAt: string;

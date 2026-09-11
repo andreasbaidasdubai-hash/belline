@@ -440,7 +440,7 @@ export interface Booking {
   serviceIds?: string[];
   staffId?: string;
   resourceId?: string;
-  source: "voice" | "manual" | "web";
+  source: "voice" | "manual" | "web" | "whatsapp";
   callId?: string;
   /**
    * Fingerprint of what this booking *is* — venue, day, time, guest, party or
@@ -492,7 +492,17 @@ export interface ToolTrace {
 export interface Call {
   id: string;
   locationId: string;
-  channel: "browser" | "phone";
+  /**
+   * Which way Belline dealt with this person.
+   *
+   * A "call" here means an episode, not a telephone line — a WhatsApp
+   * conversation produces one too. The dashboard's whole premise is "what did
+   * Belline do for me this week", and that question must not have two answers
+   * depending on which channel somebody happened to use.
+   *
+   * Only  is billable; see billing/usage.ts, which checks this.
+   */
+  channel: "browser" | "phone" | "whatsapp";
   from: string;
   startedAt: string;
   endedAt?: string;

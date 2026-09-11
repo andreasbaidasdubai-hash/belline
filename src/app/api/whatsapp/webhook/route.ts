@@ -3,6 +3,7 @@ import { isConfigured } from "@/lib/db/client";
 import { metaAdapter } from "@/lib/reception/channel/meta";
 import { twilioAdapter } from "@/lib/reception/channel/twilio";
 import { acceptInbound, acceptStatus } from "@/lib/reception/inbound";
+import { respondTo } from "@/lib/reception/respond";
 import { newTraceId } from "@/lib/reception/events";
 import type { ChannelAdapter } from "@/lib/reception/channel";
 
@@ -153,9 +154,16 @@ async function handle(
         `[whatsapp ${traceId}] conversation ${result.accepted.conversationId} ` +
           `<- ${inbound.content.type} from ${inbound.fromE164}`,
       );
-      // Answering is the next step. Until it lands, a message is stored,
-      // visible, and waiting — which is a worse product than one that replies
-      // and a much better one than a webhook that 500s.
+      const outcome = await respondTo(result.accepted);
+      if (!outcome.sent) {
+        // Never rethrown and never a 500: the provider must not be asked to
+        // send this again. A message Belline could not answer is one a person
+        // picks up, which is what the inbox is for.
+        console.warn(
+          `[whatsapp ${traceId}] no reply — ` +
+            ("skipped" in outcome ? outcome.skipped : outcome.failed),
+        );
+      }
     } catch (err) {
       console.error(`[whatsapp ${traceId}] ${inbound.providerMessageId}:`, err);
     }
