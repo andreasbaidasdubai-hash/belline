@@ -193,6 +193,81 @@ export async function seed(): Promise<SeedResult> {
   };
 }
 
+/**
+ * Push the configs in `defaults.ts` onto the agents that already exist.
+ *
+ * `seed` deliberately never touches an existing agent's config — an
+ * afternoon of tuning in the dashboard must not be reverted by a redeploy.
+ * But during development the defaults *are* the source of truth and there has
+ * to be a way to apply a change to them, so this is that way: explicit,
+ * separate, and audited.
+ *
+ * Every change writes a new `agent_config_version` row, so the previous
+ * configuration is recoverable and "what were the rules when this lead was
+ * scored?" stays answerable.
+ */
+export async function reconfigure(): Promise<{ name: string; version: number }[]> {
+  const updated: { name: string; version: number }[] = [];
+
+  const targets: { name: string; config: PartialAgentConfig }[] = [
+    {
+      name: "Belline Sales Director",
+      config: {
+        belline_services: SERVICES.map((s) => s.slug),
+        compliance: { min_days_between_touches: 2, company_touch_cap_90d: 6 },
+      },
+    },
+    ...COUNTRIES.map((country) => ({
+      name: `${country.name} Manager`,
+      config: {
+        default_language: country.default_languages[0],
+        compliance: country.compliance_profile,
+        outreach_strategy: {
+          channels: country.channels,
+          send_window: country.send_window,
+        },
+      } as PartialAgentConfig,
+    })),
+    { name: "UAE Dental Agent", config: FIRST_AGENT_CONFIG },
+  ];
+
+  for (const target of targets) {
+    const agent = await one<{ id: number; config: unknown }>(
+      `select id, config from sales.agent where name = $1`,
+      [target.name],
+    );
+    if (!agent) continue;
+
+    const next = JSON.stringify(target.config);
+    if (JSON.stringify(agent.config) === next) continue;
+
+    const version = await one<{ v: number }>(
+      `select coalesce(max(version), 0) + 1 as v
+         from sales.agent_config_version where agent_id = $1`,
+      [agent.id],
+    );
+
+    await query(
+      `insert into sales.agent_config_version (agent_id, version, config, changed_by, note)
+       values ($1, $2, $3, 'system', 'reconfigure from defaults.ts')`,
+      [agent.id, version!.v, next],
+    );
+    await query(`update sales.agent set config = $2, updated_at = now() where id = $1`, [
+      agent.id,
+      next,
+    ]);
+    await query(
+      `insert into sales.audit_log (actor, action, entity, entity_id, before, after)
+       values ('system', 'reconfigure', 'agent', $1, $2, $3)`,
+      [String(agent.id), JSON.stringify(agent.config), next],
+    );
+
+    updated.push({ name: target.name, version: version!.v });
+  }
+
+  return updated;
+}
+
 interface UpsertAgent {
   kind: "director" | "country_manager" | "vertical_agent";
   name: string;

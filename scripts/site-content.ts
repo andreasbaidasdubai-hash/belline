@@ -150,8 +150,8 @@ export const VERTICALS: Vertical[] = [
     headline: "The practice is with a patient. The phone still rings.",
     lead:
       "Belline answers when the chair is occupied and after you close. It books against the real diary — the right surgery, the right clinician, the right length — and it does not answer a clinical question, ever.",
-    image: "/img/clinics.jpg",
-    imageAlt: "A dental practice reception, an appointment confirmed while a dentist treats a patient.",
+    image: "/img/dental.jpg",
+    imageAlt: "A dental surgery, a hygienist and a dentist treating a patient in a bright consulting room.",
     constraints: [
       {
         head: "Clinicians, not slots",
@@ -217,7 +217,7 @@ export const VERTICALS: Vertical[] = [
     lead:
       "Belline answers mid-service and after close. It knows which stylist can do which service, how long the chain actually takes, and which policies it is not allowed to bend.",
     image: "/img/salons.jpg",
-    imageAlt: "A salon reception desk, an appointment being booked with a named stylist.",
+    imageAlt: "A stylist blow-drying a client's hair in a bright modern salon.",
     constraints: [
       {
         head: "Only stylists qualified for the service",
@@ -250,7 +250,7 @@ export const VERTICALS: Vertical[] = [
     lead:
       "Belline answers through service. It holds the same constraints your host holds — turn times, pacing, which table actually fits — so it can commit to a time without anyone checking it afterwards.",
     image: "/img/restaurants.jpg",
-    imageAlt: "An evening restaurant service, a reservation being confirmed on the phone.",
+    imageAlt: "A waiter pouring wine at a candlelit table in a grand dining room during evening service.",
     constraints: [
       {
         head: "Turn times grow with the party",

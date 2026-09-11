@@ -281,6 +281,34 @@ test("what the form captured is kept, so whoever rings back has the context", as
   }
 });
 
+console.log("\nThe form can actually reach us\n");
+
+test("every origin the site fetches is allowed by the site's CSP", () => {
+  // This one nearly shipped. The marketing site is served from belline.ai with
+  // `connect-src 'self'`, and the form posts to app.belline.ai — so the browser
+  // would have blocked every submission, in production only, with nothing
+  // wrong locally and no error anybody would see but the visitor.
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.slice(1)), "..");
+  const js = fs.readFileSync(path.join(root, "public", "site.js"), "utf8");
+  const config = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
+
+  const csp: string = config.headers
+    .flatMap((h: { headers: { key: string; value: string }[] }) => h.headers)
+    .find((h: { key: string }) => h.key === "Content-Security-Policy")?.value ?? "";
+
+  const connect = csp.split(";").find((d) => d.trim().startsWith("connect-src")) ?? "";
+
+  const origins = [...js.matchAll(/["'](https?:\/\/[^"'/]+)/g)].map((m) => m[1]);
+  assert.ok(origins.length > 0, "no absolute fetch origin found — has the form moved?");
+
+  for (const origin of new Set(origins)) {
+    assert.ok(
+      connect.includes(origin),
+      `site.js talks to ${origin}, which connect-src does not allow: ${connect.trim()}`,
+    );
+  }
+});
+
 queue.then(() => {
   fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
   console.log(

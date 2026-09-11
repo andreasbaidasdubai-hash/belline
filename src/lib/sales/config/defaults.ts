@@ -425,9 +425,15 @@ export const FIRST_AGENT_CONFIG: PartialAgentConfig = {
     "unanswered calls, hold times or difficulty booking. Note the languages the practice advertises.",
   scoring: {
     weights: {
+      // Two location signals on purpose. `multi_location` asks the yes/no
+      // question; `location_count` grades it, so a thirteen-branch group
+      // outranks a two-branch one instead of tying with it. Without the
+      // second, the largest prospects in the market are invisible.
       multi_location: 15,
+      location_count: 10,
       review_volume: 12,
       long_hours: 10,
+      weekend_open: 6,
       appointment_based: 12,
       high_ticket: 8,
       practitioner_count: 8,

@@ -1,6 +1,6 @@
 import { close, isConfigured, query } from "../src/lib/sales/db/client";
 import { migrate } from "../src/lib/sales/db/migrate";
-import { seed } from "../src/lib/sales/db/seed";
+import { reconfigure, seed } from "../src/lib/sales/db/seed";
 
 /**
  * `npm run sales:db -- migrate | seed | status | reset`
@@ -51,6 +51,18 @@ ${result.agentsCreated.length ? result.agentsCreated.map((n) => `    + ${n}`).jo
       break;
     }
 
+    case "reconfigure": {
+      const updated = await reconfigure();
+      console.log(
+        updated.length
+          ? `\n  Updated from defaults.ts:\n${updated
+              .map((u) => `    ${u.name} → config version ${u.version}`)
+              .join("\n")}\n\n  Re-score to apply: npm run score -- "UAE Dental"\n`
+          : "\n  Every agent already matches defaults.ts.\n",
+      );
+      break;
+    }
+
     case "status": {
       const applied = await query<{ name: string; applied_at: Date }>(
         `select name, applied_at from sales_migration order by name`,
@@ -95,7 +107,9 @@ ${result.agentsCreated.length ? result.agentsCreated.map((n) => `    + ${n}`).jo
     }
 
     default:
-      console.error(`\n  Unknown command "${command}". Use: migrate | seed | status | reset\n`);
+      console.error(
+        `\n  Unknown command "${command}". Use: migrate | seed | reconfigure | status | reset\n`,
+      );
       process.exit(1);
   }
 } catch (err) {
