@@ -248,7 +248,10 @@ export async function addLocation(
     `insert into sales.company_location
        (company_id, external_id, address, city, phone_e164, lat, lng, opening_hours)
      values ($1, $2, $3, $4, $5, $6, $7, $8)
-     on conflict (external_id) do nothing`,
+     -- The predicate is not decoration: company_location_ext_uq is a *partial*
+     -- unique index, and Postgres refuses to infer a conflict target from one
+     -- unless the ON CONFLICT clause repeats its WHERE exactly.
+     on conflict (external_id) where external_id is not null do nothing`,
     [
       companyId,
       input.externalId,
