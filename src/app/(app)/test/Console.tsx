@@ -66,6 +66,8 @@ export default function Console({
     "Actually can you make that six people?",
   ],
   oneTap = false,
+  auto = false,
+  minimal = false,
 }: {
   locationId: string;
   locationName: string;
@@ -96,6 +98,23 @@ export default function Console({
    * inside the click because browsers only grant it from a real gesture.
    */
   oneTap?: boolean;
+  /**
+   * Start the call as soon as this mounts.
+   *
+   * For the panel the website's bell opens: the tap that opened it was the
+   * decision, and asking for a second one inside is the product making the
+   * visitor say yes twice.
+   */
+  auto?: boolean;
+  /**
+   * Just the call, no transcript.
+   *
+   * A running transcript is operator tooling — a venue auditing what its
+   * agent said. On our own site it turns a phone call into a chat window and
+   * invites people to read instead of listen, which is the opposite of the
+   * thing being demonstrated.
+   */
+  minimal?: boolean;
 }) {
   const [connected, setConnected] = useState(false);
   const [listening, setListening] = useState(false);
@@ -113,6 +132,8 @@ export default function Console({
    */
   const [audioState, setAudioState] = useState<string>("idle");
   const [heardBytes, setHeardBytes] = useState(0);
+  /** Belline is mid-sentence. Drives the call bar; see the effect below. */
+  const [speaking, setSpeaking] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const captureRef = useRef<{ ctx: AudioContext; stream: MediaStream } | null>(null);
@@ -124,6 +145,27 @@ export default function Console({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [lines, partial]);
+
+  /**
+   * Is Belline talking right now?
+   *
+   * Read off the playback queue rather than from a message, because the
+   * server says "here is some audio" long before the speaker finishes
+   * playing it. `cursor` is the audio-context time the queue runs dry, so
+   * anything before that is speech still coming out. Polled rather than
+   * scheduled: chunks arrive continuously and each one moves the target.
+   */
+  useEffect(() => {
+    if (!connected) {
+      setSpeaking(false);
+      return;
+    }
+    const id = setInterval(() => {
+      const play = playRef.current;
+      setSpeaking(Boolean(play && play.ctx.currentTime < play.cursor - 0.05));
+    }, 120);
+    return () => clearInterval(id);
+  }, [connected]);
 
   // --- playback ------------------------------------------------------------
 
@@ -406,7 +448,60 @@ export default function Console({
     setDraft("");
   }
 
+  // Start on mount when asked. The tap that opened the panel was the
+  // decision; a second button inside it is the product asking twice.
+  useEffect(() => {
+    if (auto) answerAndListen();
+  }, [auto, answerAndListen]);
+
   // --- render --------------------------------------------------------------
+
+  if (minimal) {
+    const sound = audioState.startsWith("running");
+    const state = !connected
+      ? "Connecting…"
+      : !sound
+        ? "Tap to turn sound on"
+        : speaking
+          ? "Belline is speaking"
+          : listening
+            ? "Listening — go ahead"
+            : "Microphone off";
+
+    return (
+      <div className="callbar">
+        <div className={`callbar-wave${speaking ? " is-on" : ""}`} aria-hidden="true">
+          <span /><span /><span /><span /><span />
+        </div>
+
+        <div className="callbar-text">
+          <strong>{locationName}</strong>
+          <span>{error ?? state}</span>
+        </div>
+
+        {/*
+          Sound can be blocked despite everything: a permission granted long
+          ago means no prompt, and some browsers still will not start audio
+          without a fresh gesture. Rather than leave somebody in silence
+          wondering, this is one tap that fixes it.
+        */}
+        {connected && !sound ? (
+          <button className="callbar-go" onClick={() => void primeAudio()}>
+            Turn on sound
+          </button>
+        ) : (
+          <button
+            className="callbar-end"
+            onClick={hangup}
+            disabled={!connected}
+            aria-label="End the call"
+          >
+            End
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={compact ? undefined : "split split-wide"}>

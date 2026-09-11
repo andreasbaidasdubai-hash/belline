@@ -42,45 +42,23 @@ export default async function CallPage() {
 
   const token = signStreamToken(location.id, 60 * 60);
 
+  /*
+   * No chrome at all.
+   *
+   * This is framed as a small bar docked in the corner of belline.ai, and
+   * everything that is not the call competes with it — a logo the site
+   * already shows, a heading nobody reads mid-sentence, and a transcript that
+   * turns a phone call into a chat window and invites people to read instead
+   * of listen. The page it sits in provides all the context there is.
+   */
   return (
-    <div className="widget">
-      <div className="widget-head">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="Belline" />
-        <span className="widget-live">
-          <span className="widget-dot" />
-          Live call
-        </span>
-      </div>
-
-      <p className="widget-lead">
-        This is the same agent that answers our customers&apos; phones. Ask it
-        anything about Belline, or let it book you twenty minutes with our
-        sales director. Try to catch it out — that is rather the point.
-      </p>
-
-      <Console
-        locationId={location.id}
-        locationName={location.name}
-        demoToken={token}
-        compact
-        // One button. A stranger who came here to hear it talk should not
-        // have to make three decisions before anybody speaks.
-        oneTap
-        // A question and then the thing we actually want them to do. The
-        // default prompts are a restaurant booking, which on our own line was
-        // inviting visitors to ask us for a table for four.
-        prompts={[
-          "What does Belline cost?",
-          "Can you book me in with your sales director?",
-        ]}
-      />
-
-      <p className="widget-foot">
-        Belline books the call and takes your email, so it will ask you to
-        spell it back. Nothing you say here reaches anyone until a booking is
-        made, and there is nothing to pay.
-      </p>
-    </div>
+    <Console
+      locationId={location.id}
+      locationName={location.name}
+      demoToken={token}
+      compact
+      minimal
+      auto
+    />
   );
 }

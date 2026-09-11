@@ -923,8 +923,11 @@
   }
   .bell-fab svg { width: 25px; height: 25px; display: block; flex-shrink: 0; }
 
-  /* The gold ring is the one flourish: it reads as a bell being struck, and
-     it is the only thing on the page that moves on its own. */
+  /* The ring pulse and the shake are one event on one clock: a bell rocks
+     because it has been struck, and the ring is the sound leaving it. Split
+     across two timings they drift apart within a minute and stop reading as
+     a single thing. Every 3.2s — often enough to catch the eye the way an
+     unanswered phone does, with a long enough gap that it is not a fidget. */
   .bell-fab::after {
     content: "";
     position: absolute;
@@ -932,14 +935,32 @@
     border-radius: inherit;
     border: 2px solid var(--gold);
     opacity: 0;
-    animation: bell-ring 5s ease-out 2s infinite;
+    animation: bell-ring 3.2s ease-out 1.5s infinite;
     pointer-events: none;
   }
   @keyframes bell-ring {
-    0% { opacity: 0.75; transform: scale(1); }
-    18% { opacity: 0; transform: scale(1.22); }
-    100% { opacity: 0; transform: scale(1.22); }
+    0% { opacity: 0.8; transform: scale(1); }
+    22% { opacity: 0; transform: scale(1.26); }
+    100% { opacity: 0; transform: scale(1.26); }
   }
+
+  /* Only the bell rocks, never the label — a moving word is unreadable, and
+     the icon alone is what a ringing handset actually does. */
+  .bell-fab svg { animation: bell-shake 3.2s ease-in-out 1.5s infinite; }
+  @keyframes bell-shake {
+    0%, 16%, 100% { transform: rotate(0deg); }
+    2% { transform: rotate(-13deg); }
+    4% { transform: rotate(11deg); }
+    6% { transform: rotate(-9deg); }
+    8% { transform: rotate(7deg); }
+    10% { transform: rotate(-5deg); }
+    12% { transform: rotate(3deg); }
+    14% { transform: rotate(-1deg); }
+  }
+  /* Stop once they are hovering it: they have found it, and a button that
+     keeps twitching under the cursor is harder to click, not easier. */
+  .bell-fab:hover svg,
+  .bell-fab:hover::after { animation: none; }
 
   @media (max-width: 620px) {
     /* A circle on a phone. 52px clears the 44px tap target with room, and
@@ -970,53 +991,57 @@
      to do it, and a call they can close is a call they are more willing to
      start. */
 
-  .call-panel {
+  .call-dock {
     position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: grid;
-    place-items: center;
-    padding: 24px;
-    background: rgba(15, 26, 36, 0.55);
-    backdrop-filter: blur(3px);
-    animation: call-in 0.18s ease-out;
+    right: 24px;
+    bottom: 24px;
+    z-index: 50;
+    width: min(360px, calc(100vw - 32px));
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 18px 44px -14px rgba(15, 26, 36, 0.5);
+    animation: call-rise 0.2s ease-out;
   }
-  @keyframes call-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
+  @keyframes call-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
   }
 
-  .call-sheet {
-    position: relative;
-    width: min(560px, 100%);
-    height: min(680px, 100%);
-    background: var(--page);
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 30px 70px -20px rgba(15, 26, 36, 0.6);
-  }
-  .call-frame { width: 100%; height: 100%; border: 0; display: block; }
+  /* Fixed height: the bar inside is one line of status, and letting the frame
+     size itself makes it jump as the wording changes. */
+  .call-frame { width: 100%; height: 58px; border: 0; display: block; }
 
   .call-shut {
     position: absolute;
-    top: 10px;
-    right: 12px;
-    z-index: 2;
-    width: 34px;
-    height: 34px;
+    top: -9px;
+    right: -9px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     border: 1px solid var(--line);
     background: var(--card);
-    color: var(--text-2);
-    font-size: 1.25rem;
+    color: var(--muted);
+    font-size: 1rem;
     line-height: 1;
     cursor: pointer;
+    box-shadow: var(--shadow);
   }
   .call-shut:hover { border-color: var(--navy); color: var(--navy); }
 
+  @media (max-width: 620px) {
+    .call-dock {
+      right: 16px;
+      left: 16px;
+      width: auto;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .bell-fab::after { animation: none; }
-    .call-panel { animation: none; }
+    .bell-fab::after,
+    .bell-fab svg { animation: none; }
+    .call-dock { animation: none; }
   }
 
   @media print {

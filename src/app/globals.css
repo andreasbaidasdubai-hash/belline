@@ -898,71 +898,92 @@ tbody tr:hover {
   }
 }
 
-/* --- the embedded call widget ---------------------------------------------
-   /call, opened in a panel from belline.ai. Chrome is deliberately minimal:
-   the frame it sits in is only 560px wide, and everything that is not the
-   conversation is competing with it. */
+/* --- the docked call bar ---------------------------------------------------
+   Rendered inside a small borderless iframe docked in the corner of
+   belline.ai, so it has to read as part of that page rather than a second
+   website. No logo, no heading, no transcript: the site around it already
+   says who we are, and a running transcript turns a phone call into a chat
+   window and invites people to read instead of listen. */
 
-.widget {
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 20px 20px 26px;
+body:has(.callbar) {
+  background: transparent;
 }
 
-.widget-head {
+.callbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-  /* Room for the panel's close button, which belongs to the page framing this
-     one and lands squarely on top of the "live call" badge without it. */
-  padding-right: 40px;
-}
-.widget-head img {
-  height: 26px;
-  width: auto;
-  display: block;
+  gap: 13px;
+  padding: 13px 14px;
 }
 
-.widget-live {
-  display: inline-flex;
+/* Five bars that move only while Belline is actually speaking. It reports
+   state rather than decorating: silence has to look like silence, or the one
+   thing a caller needs to know — whose turn it is — stops being legible. */
+.callbar-wave {
+  display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ok);
+  gap: 3px;
+  height: 24px;
+  flex-shrink: 0;
 }
-.widget-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+.callbar-wave span {
+  width: 3px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background 0.2s ease;
+}
+.callbar-wave.is-on span {
   background: var(--ok);
-  animation: widget-pulse 2s ease-in-out infinite;
+  animation: callbar-bounce 0.9s ease-in-out infinite;
 }
-@keyframes widget-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+.callbar-wave.is-on span:nth-child(2) { animation-delay: 0.12s; }
+.callbar-wave.is-on span:nth-child(3) { animation-delay: 0.24s; }
+.callbar-wave.is-on span:nth-child(4) { animation-delay: 0.36s; }
+.callbar-wave.is-on span:nth-child(5) { animation-delay: 0.48s; }
+
+@keyframes callbar-bounce {
+  0%, 100% { height: 5px; }
+  50% { height: 19px; }
 }
 
-.widget-lead {
+.callbar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.callbar-text strong {
   font-size: 13.5px;
-  line-height: 1.6;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.callbar-text span {
+  font-size: 12px;
   color: var(--muted);
-  margin: 0 0 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.widget-foot {
-  font-size: 11.5px;
-  line-height: 1.55;
-  color: var(--muted);
-  margin: 16px 0 0;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-soft);
+.callbar-end,
+.callbar-go {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
 }
+.callbar-end:hover { border-color: var(--bad); color: var(--bad); }
+.callbar-end[disabled] { opacity: 0.45; cursor: default; }
+.callbar-go { border-color: var(--accent); color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) {
-  .widget-dot { animation: none; }
+  .callbar-wave.is-on span { animation: none; height: 14px; }
 }

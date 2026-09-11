@@ -126,8 +126,13 @@ export const bellineVenue: Location = {
   },
   agent: {
     displayName: "Belle",
-    greeting:
-      "Hello, this is Belle at Belline. Ask me anything about what we do — or I can book you twenty minutes with our sales director. What would you like?",
+    /**
+     * Short on purpose. This is the first thing anybody hears of the product,
+     * and three sentences of preamble before the caller may speak is the
+     * thing that makes an agent sound like a phone menu. Two clauses, a
+     * contraction, and a question that hands the turn straight back.
+     */
+    greeting: "Hi, you're through to Belline — I'm Belle. What can I tell you?",
     returningGreeting:
       "Hello again, this is Belle at Belline. Good to hear from you, {name} — what can I do?",
     voiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",

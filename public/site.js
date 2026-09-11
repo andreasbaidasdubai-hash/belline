@@ -353,66 +353,61 @@
   // the page it would cover, and the full page is a better phone experience.
   if (!window.matchMedia("(min-width: 760px)").matches) return;
 
-  var panel = null;
-  var frame = null;
-  var opener = null;
+  var dock = null;
 
   function close() {
-    if (!panel) return;
-    panel.remove();
-    panel = null;
-    frame = null;
-    document.body.style.overflow = "";
+    if (!dock) return;
+    dock.remove();
+    dock = null;
+    bell.hidden = false;
     document.removeEventListener("keydown", onKey);
-    // Hanging up must not dump the visitor at the top of the page.
-    if (opener && opener.focus) opener.focus();
+    bell.focus();
   }
 
   function onKey(e) {
     if (e.key === "Escape") close();
   }
 
+  /**
+   * Dock the call where the bell was, rather than over the page.
+   *
+   * A modal says "you have left what you were doing". A call does not need
+   * that — somebody halfway down the pricing section who wants to ask a
+   * question should keep their place while they ask it, exactly as they would
+   * with a phone against their ear.
+   */
   function open(e) {
     e.preventDefault();
-    opener = e.currentTarget;
+    if (dock) return;
 
-    panel = document.createElement("div");
-    panel.className = "call-panel";
-    panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-modal", "true");
-    panel.setAttribute("aria-label", "Talk to Belline");
+    // The bell becomes the call: two of them on screen at once would be the
+    // page offering to ring somebody it is already talking to.
+    bell.hidden = true;
 
-    var sheet = document.createElement("div");
-    sheet.className = "call-sheet";
+    dock = document.createElement("div");
+    dock.className = "call-dock";
+    dock.setAttribute("role", "region");
+    dock.setAttribute("aria-label", "Call with Belline");
 
-    var shut = document.createElement("button");
-    shut.type = "button";
-    shut.className = "call-shut";
-    shut.setAttribute("aria-label", "End the call");
-    shut.textContent = "×";
-    shut.addEventListener("click", close);
-
-    frame = document.createElement("iframe");
+    var frame = document.createElement("iframe");
     frame.src = bell.getAttribute("href");
-    frame.title = "Talk to Belline";
+    frame.title = "Call with Belline";
     // Without this the microphone is blocked inside the frame and the call is
     // silent with no error a visitor could act on.
     frame.allow = "microphone";
     frame.className = "call-frame";
 
-    sheet.appendChild(shut);
-    sheet.appendChild(frame);
-    panel.appendChild(sheet);
+    var shut = document.createElement("button");
+    shut.type = "button";
+    shut.className = "call-shut";
+    shut.setAttribute("aria-label", "Close the call");
+    shut.textContent = "×";
+    shut.addEventListener("click", close);
 
-    // Clicking the backdrop closes; clicking inside the sheet must not.
-    panel.addEventListener("click", function (ev) {
-      if (ev.target === panel) close();
-    });
-
-    document.body.appendChild(panel);
-    document.body.style.overflow = "hidden";
+    dock.appendChild(frame);
+    dock.appendChild(shut);
+    document.body.appendChild(dock);
     document.addEventListener("keydown", onKey);
-    shut.focus();
   }
 
   bell.addEventListener("click", open);
