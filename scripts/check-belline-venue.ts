@@ -185,11 +185,16 @@ function fakeSocket(answersPings: boolean) {
   const s = {
     isAlive: undefined as boolean | undefined,
     pings: 0,
+    sent: [] as string[],
+    readyState: 1,
     terminated: false,
     handlers: [] as (() => void)[],
     on(_e: "pong", fn: () => void) {
       s.handlers.push(fn);
       return s;
+    },
+    send(data: string) {
+      s.sent.push(data);
     },
     ping() {
       s.pings++;
@@ -222,6 +227,27 @@ test("a socket nobody watched is killed on the second sweep", () => {
   assert.equal(ws.terminated, false, "killed on the very first sweep");
   sweepLiveness([ws]);
   assert.equal(ws.terminated, true);
+});
+
+test("each sweep sends an application frame, not just a protocol ping", () => {
+  // Measured in production: the server pinged four times, the client answered
+  // every one, and the proxy still killed the connection at 96.9s with code
+  // 1006 because no *application* data had crossed since 1.7s. Control frames
+  // do not reset a proxy's idle timer. This one does.
+  const ws = fakeSocket(true);
+  watchLiveness(ws);
+  sweepLiveness([ws]);
+  sweepLiveness([ws]);
+  assert.equal(ws.sent.length, 2, "the line was pinged but nothing was sent");
+  assert.equal(JSON.parse(ws.sent[0]).type, "keepalive");
+});
+
+test("nothing is sent to a socket that is already closing", () => {
+  const ws = fakeSocket(true);
+  watchLiveness(ws);
+  ws.readyState = 2; // CLOSING
+  sweepLiveness([ws]);
+  assert.equal(ws.sent.length, 0);
 });
 
 test("a socket that stops answering is dropped", () => {

@@ -42,10 +42,31 @@ export function mayStreamTo(location: Location | undefined): boolean {
  */
 export interface Liveness {
   isAlive?: boolean;
+  readyState?: number;
   on(event: "pong", listener: () => void): unknown;
   ping(): void;
+  send(data: string): void;
   terminate(): void;
 }
+
+/**
+ * What the sweep sends to keep a proxy from closing the line.
+ *
+ * A protocol-level ping is the obvious thing and it is not enough. Measured
+ * against production: the server pinged at 21.7s, 46.7s, 71.7s and 96.7s, the
+ * client answered every one, and the connection still died at 96.9s with
+ * close code 1006 — an abnormal termination with no close frame, which is
+ * what a proxy killing an idle connection looks like from the inside. The
+ * last *application* data had been at 1.7s.
+ *
+ * So the proxy counts application frames toward idle and ignores control
+ * frames. This is an application frame. The client has no case for it and
+ * ignores it, which is exactly what it is for.
+ */
+export const KEEPALIVE_FRAME = JSON.stringify({ type: "keepalive" });
+
+/** ws.OPEN. Written out so this module needs no dependency on `ws`. */
+const OPEN = 1;
 
 /** Mark a socket live and keep it marked. Call this per connection. */
 export function watchLiveness(ws: Liveness): void {
@@ -70,7 +91,17 @@ export function sweepLiveness(clients: Iterable<Liveness>): number {
       continue;
     }
     client.isAlive = false;
+    // The ping is for us — it is how we learn the far end is still there.
     client.ping();
+    // The frame is for whatever sits between us. See KEEPALIVE_FRAME.
+    if (client.readyState === undefined || client.readyState === OPEN) {
+      try {
+        client.send(KEEPALIVE_FRAME);
+      } catch {
+        // A socket that has gone since the readyState check. The next sweep
+        // terminates it; failing to keep it warm is not worth throwing over.
+      }
+    }
   }
   return dropped;
 }
