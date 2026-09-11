@@ -57,7 +57,8 @@
     "migrate": "node --import tsx --env-file-if-exists=.env scripts/migrate.ts",
     "check:reception": "node --import tsx --env-file-if-exists=.env scripts/check-reception.ts",
     "check:channel": "node --import tsx scripts/check-channel.ts",
-    "check:whatsapp": "node --import tsx --env-file-if-exists=.env scripts/check-whatsapp.ts"
+    "check:whatsapp": "node --import tsx --env-file-if-exists=.env scripts/check-whatsapp.ts",
+    "whatsapp": "node --import tsx --env-file-if-exists=.env scripts/whatsapp-connect.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
