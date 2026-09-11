@@ -919,6 +919,29 @@
   </div>
 </footer>
 
+<!--
+  The bell, fixed to the corner of every page.
+
+  The thing a WhatsApp button is: always there, never in the way, one tap.
+  It is also the product being demonstrated on our own site — this is exactly
+  where a venue's own visitors would find theirs. Ours opens the booking form,
+  because what we want from a visitor is twenty minutes on a call.
+
+  Markup rather than script so it is present before any JavaScript runs, and a
+  plain anchor so it works with JavaScript off.
+-->
+<a class="bell-fab" href="#book" data-plan="Floating bell" aria-label="Book a call with Belline">
+  <svg viewBox="355 180 490 430" aria-hidden="true" focusable="false">
+    <g fill="currentColor">
+      <rect x="555" y="190" width="90" height="35" rx="18"/>
+      <rect x="572" y="213" width="56" height="47" rx="10"/>
+      <path d="M380 505 C393 477 410 461 431 450 C444 327 506 258 600 258 C694 258 756 327 769 450 C790 461 807 477 820 505 L380 505 Z"/>
+      <path d="M365 570 C365 538 383 519 418 519 L500 519 C509 519 515 525 516 538 C521 579 542 595 600 595 C658 595 679 579 684 538 C685 525 691 519 700 519 L782 519 C817 519 835 538 835 570 C835 589 826 600 809 600 L391 600 C374 600 365 589 365 570 Z"/>
+    </g>
+  </svg>
+  <span class="bell-fab-say">Book a call</span>
+</a>
+
 <script type="application/json" id="call-scenes"></script>
 <script src="/site.js"></script>
 

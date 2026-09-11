@@ -44,6 +44,16 @@ for (const page of PAGES) {
         failedRequests.push(`${r.url()} — ${r.failure()?.errorText ?? "failed"}`),
       );
 
+      // A 404 is a perfectly successful *request*, so `requestfailed` never
+      // sees it — and a missing image is precisely how this build has broken
+      // three times: the asset scanner misses a file type, every page still
+      // loads, and the site deploys with holes in it. Now that asset names
+      // carry a content hash there is one more way to get it wrong, so the
+      // check is on the status code rather than on the network layer.
+      browser.on("response", (r) => {
+        if (r.status() >= 400) failedRequests.push(`${r.url()} — HTTP ${r.status()}`);
+      });
+
       await browser.setViewportSize({ width: bp.width, height: bp.height });
 
       // Not `networkidle`. These pages preload 28 audio clips, so under

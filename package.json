@@ -46,7 +46,10 @@
                     "score":  "node --import tsx --env-file-if-exists=.env scripts/score.ts",
                     "check:scoring":  "node --import tsx scripts/check-scoring.ts",
                     "demos":  "node --import tsx --env-file-if-exists=.env scripts/build-demos.ts",
-                    "check:demos":  "node --import tsx scripts/check-demos.ts"
+                    "check:demos":  "node --import tsx scripts/check-demos.ts",
+                    "draft":  "node --import tsx --env-file-if-exists=.env scripts/draft.ts",
+                    "check:outreach":  "node --import tsx scripts/check-outreach.ts",
+                    "enrich":  "node --import tsx --env-file-if-exists=.env scripts/enrich.ts"
                 },
     "dependencies":  {
                          "@anthropic-ai/sdk":  "^0.124.0",

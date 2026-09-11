@@ -881,6 +881,96 @@
     .bell-say { text-align: left; }
   }
 
+  /* --- the floating bell -------------------------------------------------
+     What a WhatsApp button is: always there, never in the way, one tap. It
+     collapses to a circle on a phone, where the label would eat a third of
+     the width and a thumb only needs the target. */
+
+  .bell-fab {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 20px 13px 17px;
+    border-radius: 999px;
+    background: var(--navy);
+    color: #fff;
+    text-decoration: none;
+    font-size: 0.92rem;
+    font-weight: 600;
+    /* The white ring is not decoration. This button floats over whatever the
+       page happens to be showing, and the call panel is the same navy it is —
+       scrolled over that, an unringed button disappears completely. Invisible
+       against the white page, separating against the dark one. */
+    box-shadow:
+      0 0 0 3px rgba(255, 255, 255, 0.92),
+      0 10px 28px -10px rgba(15, 26, 36, 0.6);
+    transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  }
+  .bell-fab:hover {
+    background: var(--navy-dark);
+    transform: translateY(-2px);
+    box-shadow:
+      0 0 0 3px rgba(255, 255, 255, 0.92),
+      0 16px 34px -12px rgba(15, 26, 36, 0.66);
+  }
+  .bell-fab:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 3px;
+  }
+  .bell-fab svg { width: 22px; height: 22px; display: block; flex-shrink: 0; }
+
+  /* The gold ring is the one flourish: it reads as a bell being struck, and
+     it is the only thing on the page that moves on its own. */
+  .bell-fab::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    border: 2px solid var(--gold);
+    opacity: 0;
+    animation: bell-ring 5s ease-out 2s infinite;
+    pointer-events: none;
+  }
+  @keyframes bell-ring {
+    0% { opacity: 0.75; transform: scale(1); }
+    18% { opacity: 0; transform: scale(1.22); }
+    100% { opacity: 0; transform: scale(1.22); }
+  }
+
+  @media (max-width: 620px) {
+    /* A circle on a phone. 52px clears the 44px tap target with room, and
+       sits above the iOS home indicator rather than under it. */
+    .bell-fab {
+      right: 16px;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      width: 54px;
+      height: 54px;
+      padding: 0;
+      justify-content: center;
+      gap: 0;
+    }
+    .bell-fab-say {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bell-fab::after { animation: none; }
+  }
+
+  @media print {
+    .bell-fab { display: none; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
   }

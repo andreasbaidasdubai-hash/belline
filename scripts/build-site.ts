@@ -12,6 +12,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { VERTICALS, type Vertical } from "./site-content";
 
 const SOURCE = "public";
@@ -108,6 +109,51 @@ if (pages.length === 0) {
   process.exit(1);
 }
 
+/**
+ * Content-addressed filenames.
+ *
+ * vercel.json serves /img/* and /audio/* with `immutable, max-age=31536000`,
+ * which is correct and also a trap: replacing a photograph at the same path
+ * means every browser that has ever visited keeps the old one for a year.
+ * That is exactly what happened — new photography went live, the server
+ * returned it, and returning visitors saw the previous pictures.
+ *
+ * Immutable caching is only safe when the URL changes with the bytes. So it
+ * does now: salons.jpg becomes salons.6466fc3e.jpg, and a new photograph is a
+ * new URL by construction rather than by anyone remembering to rename it.
+ *
+ * Text assets are rewritten rather than hashed-and-forgotten, because a path
+ * can appear in HTML, in site.js (the call-scenes fallback) and inside
+ * call-scenes.json itself.
+ */
+const TEXT = /\.(html|css|js|json)$/i;
+const HASHED = /\.(mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
+
+const hashedName = new Map<string, string>();
+for (const asset of assets) {
+  if (!HASHED.test(asset)) continue;
+  const bytes = fs.readFileSync(path.join(SOURCE, asset));
+  const hash = crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 8);
+  const ext = path.posix.extname(asset);
+  hashedName.set(asset, `${asset.slice(0, -ext.length)}.${hash}${ext}`);
+}
+
+/**
+ * Point every reference at its hashed name.
+ *
+ * Longest first: `/img/hero.jpg` and `/img/hero-sm.jpg` both start with the
+ * same eleven characters, and replacing the shorter one first would corrupt
+ * the longer.
+ */
+const rewrites = [...hashedName.entries()].sort((a, b) => b[0].length - a[0].length);
+
+function repoint(text: string): string {
+  for (const [from, to] of rewrites) {
+    text = text.split(`/${from}`).join(`/${to}`);
+  }
+  return text;
+}
+
 let bytes = 0;
 for (const page of pages) {
   const target = RENAME[page] ?? page;
@@ -127,6 +173,8 @@ for (const page of pages) {
     `<script type="application/json" id="call-scenes">${JSON.stringify(LANDING_SCENES)}</script>`,
   );
 
+  html = repoint(html);
+
   fs.writeFileSync(path.join(OUT, target), html, "utf8");
   bytes += Buffer.byteLength(html);
   console.log(`  ${page.padEnd(16)} →  ${OUT}/${target}`);
@@ -135,11 +183,20 @@ for (const page of pages) {
 // Without this the pages deploy with a broken logo and no favicon — the
 // HTML references /logo.svg and /icon.svg, which only exist if copied.
 for (const asset of assets) {
-  const target = path.join(OUT, asset);
+  const name = hashedName.get(asset) ?? asset;
+  const target = path.join(OUT, name);
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.copyFileSync(path.join(SOURCE, asset), target);
+
+  if (TEXT.test(asset)) {
+    // site.js fetches /call-scenes.json, and call-scenes.json names the audio
+    // files. Both have to follow the rename or the Listen button goes quiet.
+    fs.writeFileSync(target, repoint(fs.readFileSync(path.join(SOURCE, asset), "utf8")), "utf8");
+  } else {
+    fs.copyFileSync(path.join(SOURCE, asset), target);
+  }
+
   bytes += fs.statSync(target).size;
-  console.log(`  ${asset.padEnd(22)} →  ${OUT}/${asset}`);
+  console.log(`  ${asset.padEnd(22)} →  ${OUT}/${name}`);
 }
 
 // --- vertical pages ---------------------------------------------------------
@@ -166,6 +223,25 @@ function navFor(active: string): string {
       <a href="/#try">Ring it</a>
       <a class="signin-mobile" href="https://app.belline.ai">Sign in</a>`;
 }
+
+/**
+ * The floating bell, for the generated pages.
+ *
+ * Same markup as the landing page's, with one difference: the href is
+ * `/#book` rather than `#book`, because a vertical page has no booking form
+ * of its own and `#book` on /dental would scroll to nothing.
+ */
+const BELL_FAB = `<a class="bell-fab" href="/#book" data-plan="Floating bell" aria-label="Book a call with Belline">
+  <svg viewBox="355 180 490 430" aria-hidden="true" focusable="false">
+    <g fill="currentColor">
+      <rect x="555" y="190" width="90" height="35" rx="18"/>
+      <rect x="572" y="213" width="56" height="47" rx="10"/>
+      <path d="M380 505 C393 477 410 461 431 450 C444 327 506 258 600 258 C694 258 756 327 769 450 C790 461 807 477 820 505 L380 505 Z"/>
+      <path d="M365 570 C365 538 383 519 418 519 L500 519 C509 519 515 525 516 538 C521 579 542 595 600 595 C658 595 679 579 684 538 C685 525 691 519 700 519 L782 519 C817 519 835 538 835 570 C835 589 826 600 809 600 L391 600 C374 600 365 589 365 570 Z"/>
+    </g>
+  </svg>
+  <span class="bell-fab-say">Book a call</span>
+</a>`;
 
 function verticalPage(v: Vertical): string {
   return `<!doctype html>
@@ -323,6 +399,7 @@ function verticalPage(v: Vertical): string {
   </div>
 </footer>
 
+${BELL_FAB}
 <script type="application/json" id="call-scenes">${JSON.stringify(v.scenes.map((s) => ({ ...s, audio: withAudio(s) })))}</script>
 <script src="/site.js"></script>
 </body>
@@ -334,7 +411,10 @@ for (const v of VERTICALS) {
   // A directory with an index, so the URL is /dental rather than /dental.html.
   const dir = path.join(OUT, v.slug);
   fs.mkdirSync(dir, { recursive: true });
-  const html = verticalPage(v);
+  // Repointed like the copied pages: these carry /img/… straight out of
+  // site-content.ts, and without this every vertical page would ask for a
+  // filename the build no longer writes.
+  const html = repoint(verticalPage(v));
   fs.writeFileSync(path.join(dir, "index.html"), html, "utf8");
   bytes += Buffer.byteLength(html);
   console.log(`  ${v.slug.padEnd(22)} →  ${OUT}/${v.slug}/index.html`);
