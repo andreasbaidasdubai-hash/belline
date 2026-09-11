@@ -2,6 +2,7 @@ import type { AgentConfig, Location, StaffMember, WeeklyHours } from "./types";
 import { isEmpty, listLocations, replaceAll, upsertLocation } from "./store";
 import { ensureBaseline } from "./brain";
 import { bellineVenue } from "./seed-belline";
+import { DEFAULT_TENANT_ID, businessIdForLocation, ensureTenancy } from "./tenancy";
 
 const H = (h: number, m = 0) => h * 60 + m;
 
@@ -27,6 +28,8 @@ function weekdaysOnly(
 
 const restaurant: Location = {
   id: "loc_azure",
+  tenantId: DEFAULT_TENANT_ID,
+  businessId: businessIdForLocation("loc_azure"),
   name: "Azure Table",
   vertical: "restaurant",
   timezone: "Asia/Dubai",
@@ -176,6 +179,8 @@ const stylist = (
 
 const salon: Location = {
   id: "loc_lumiere",
+  tenantId: DEFAULT_TENANT_ID,
+  businessId: businessIdForLocation("loc_lumiere"),
   name: "Lumière Hair & Beauty",
   vertical: "salon",
   timezone: "Europe/Zurich",
@@ -284,6 +289,8 @@ const salon: Location = {
 
 const clinic: Location = {
   id: "loc_meridian",
+  tenantId: DEFAULT_TENANT_ID,
+  businessId: businessIdForLocation("loc_meridian"),
   name: "Meridian Dental & Aesthetics",
   vertical: "clinic",
   timezone: "Asia/Dubai",
@@ -491,11 +498,15 @@ function refreshInternalVenues(): void {
 export function seedIfEmpty(): void {
   if (isEmpty()) {
     replaceAll({ locations: FIXTURES, bookings: [], calls: [] });
+    ensureTenancy();
     baselineBrains();
     return;
   }
   addMissingVenues();
   backfillAgentDefaults();
+  // Before the brains: a baseline is written against a venue, and a venue
+  // without an owner is not one we want to write history for.
+  ensureTenancy();
   baselineBrains();
 }
 

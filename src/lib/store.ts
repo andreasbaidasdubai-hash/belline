@@ -1,7 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { Booking, Call, Location, Session, User, WaitlistEntry } from "./types";
+import type {
+  Booking,
+  Business,
+  Call,
+  Location,
+  Session,
+  Tenant,
+  User,
+  WaitlistEntry,
+} from "./types";
 import type { Lead } from "./leads";
 
 /**
@@ -24,6 +33,8 @@ const DATA_DIR = process.env.DATA_DIR
   : path.join(process.cwd(), "data");
 
 interface Db {
+  tenants: Tenant[];
+  businesses: Business[];
   locations: Location[];
   bookings: Booking[];
   waitlist: WaitlistEntry[];
@@ -34,6 +45,8 @@ interface Db {
 }
 
 const EMPTY: Db = {
+  tenants: [],
+  businesses: [],
   locations: [],
   bookings: [],
   waitlist: [],
@@ -184,6 +197,70 @@ export function bookingRef(): string {
     out += alphabet[crypto.randomInt(alphabet.length)];
   }
   return out;
+}
+
+// --- tenants and businesses -------------------------------------------------
+
+export function listTenants(): Tenant[] {
+  return load().tenants;
+}
+
+export function getTenant(tenantId: string): Tenant | undefined {
+  return load().tenants.find((t) => t.id === tenantId);
+}
+
+export function saveTenant(tenant: Tenant): Tenant {
+  const db = load();
+  const i = db.tenants.findIndex((t) => t.id === tenant.id);
+  if (i >= 0) db.tenants[i] = tenant;
+  else db.tenants.push(tenant);
+  persist("tenants");
+  return tenant;
+}
+
+/**
+ * The businesses in one tenant.
+ *
+ * The tenant id is the first argument and there is no overload without it.
+ * Every accessor below that can cross a tenant boundary is shaped the same
+ * way, so the mistake this guards against — a query written next year that
+ * forgets — is a type error rather than a data leak.
+ */
+export function listBusinesses(tenantId: string): Business[] {
+  return load().businesses.filter((b) => b.tenantId === tenantId);
+}
+
+export function getBusiness(tenantId: string, businessId: string): Business | undefined {
+  return load().businesses.find((b) => b.id === businessId && b.tenantId === tenantId);
+}
+
+export function saveBusiness(business: Business): Business {
+  const db = load();
+  const i = db.businesses.findIndex((b) => b.id === business.id);
+  if (i >= 0) db.businesses[i] = business;
+  else db.businesses.push(business);
+  persist("businesses");
+  return business;
+}
+
+/** The venues of one tenant. Internal venues are excluded as everywhere else. */
+export function listLocationsFor(
+  tenantId: string,
+  opts?: { includeInternal?: boolean },
+): Location[] {
+  return listLocations(opts).filter((l) => l.tenantId === tenantId);
+}
+
+/**
+ * A venue, but only if it belongs to the tenant asking.
+ *
+ * `getLocation` by bare id still exists because the voice stream resolves a
+ * venue from a signed token that names one, and the token is the entitlement.
+ * Anything reached from a *session* should come through here instead.
+ */
+export function getLocationFor(tenantId: string, locationId: string): Location | undefined {
+  const location = getLocation(locationId);
+  return location && location.tenantId === tenantId ? location : undefined;
 }
 
 // --- locations -------------------------------------------------------------

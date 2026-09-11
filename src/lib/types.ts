@@ -42,8 +42,73 @@ export type WeeklyHours = Record<number, TimeRange[]>;
 // Tenant
 // ---------------------------------------------------------------------------
 
+/**
+ * A customer of Belline's.
+ *
+ * Everything a tenant owns carries its id, and every query in the data layer
+ * takes one. That is not belt-and-braces — it is the only property a business
+ * buying multi-tenant software will actually ask about, and the failure being
+ * designed against is not an attack but a developer in six months writing a
+ * query that forgets. A signature that makes forgetting impossible is worth
+ * more than a review that catches it most of the time.
+ *
+ * Introduced after the fact, in 2026-09, because the product started as one
+ * venue group and grew into SaaS. Existing data was migrated into a single
+ * tenant, so nothing observable changed the day it landed — see
+ * `ensureTenancy` in seed.ts.
+ */
+export interface Tenant {
+  id: string;
+  name: string;
+  status: "active" | "suspended";
+  createdAt: string;
+  /**
+   * Ours, not a customer's. Holds Belline's own demo venue, which runs on the
+   * same engine as everybody else's and must never appear in anybody's data.
+   */
+  internal?: boolean;
+}
+
+/**
+ * One business, which may have several locations.
+ *
+ * The layer the old model skipped. "Dental Group" with branches in Marina,
+ * Jumeirah and Downtown is one business and three diaries: the services, the
+ * staff and the hours differ per branch, the name, the category and the
+ * policies do not. Without this, "which of your branches is closest?" has
+ * nowhere to be answered from.
+ */
+export interface Business {
+  id: string;
+  tenantId: string;
+  name: string;
+  /** What the business is, in a word: "Dental practice", "Salon", "Restaurant". */
+  category?: string;
+  description?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  /**
+   * Whether this business may appear in a consumer search.
+   *
+   * Off unless a merchant turns it on, and off is the value a business gets by
+   * existing. The future consumer product reads businesses with this set and
+   * nothing else; a business that has never heard of it is not in it.
+   */
+  discoverable?: boolean;
+  createdAt: string;
+}
+
 export interface Location {
   id: string;
+  /**
+   * Who owns this venue, and which of their businesses it belongs to.
+   *
+   * Both are backfilled for data that predates tenancy, so they can be relied
+   * on everywhere rather than defended against at each call site.
+   */
+  tenantId: string;
+  businessId: string;
   name: string;
   vertical: Vertical;
   timezone: string;
@@ -485,10 +550,19 @@ export type Role = "owner" | "manager" | "staff";
 
 export interface User {
   id: string;
+  /**
+   * The one tenant this person belongs to.
+   *
+   * Checked before `locationIds` and before any route-level rule: a venue id
+   * from another tenant is refused even if it somehow appears in this user's
+   * list. The list narrows access within a tenant; it cannot widen it across
+   * one.
+   */
+  tenantId: string;
   email: string;
   name: string;
   role: Role;
-  /** Empty means every venue — only meaningful for an owner. */
+  /** Empty means every venue in the tenant — only meaningful for an owner. */
   locationIds: string[];
   /** scrypt digest; never leaves the server. */
   passwordHash: string;

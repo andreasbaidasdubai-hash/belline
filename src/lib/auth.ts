@@ -4,6 +4,7 @@ import {
   deleteSessions,
   findUserByEmail,
   getSession,
+  getLocation,
   getUser,
   id,
   listLocations,
@@ -11,6 +12,7 @@ import {
   saveSession,
   saveUser,
 } from "./store";
+import { DEFAULT_TENANT_ID, userCanSeeLocation } from "./tenancy";
 
 /**
  * Authentication.
@@ -122,6 +124,8 @@ export function createUser(input: {
   password: string;
   role: Role;
   locationIds?: string[];
+  /** The tenant they belong to. Unset means the one everything was migrated into. */
+  tenantId?: string;
 }): { ok: true; user: User } | { ok: false; error: string } {
   const email = input.email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -135,6 +139,10 @@ export function createUser(input: {
 
   const user: User = {
     id: id("usr"),
+    // A user created by somebody belongs to their tenant. The very first owner
+    // has no creator, so they land in the tenant every existing venue was
+    // migrated into — which is what makes the migration invisible.
+    tenantId: input.tenantId ?? DEFAULT_TENANT_ID,
     email,
     name: input.name.trim() || email,
     role: input.role,
@@ -227,14 +235,29 @@ export function sessionIdFromCookieHeader(header: string | undefined): string | 
 
 // --- authorisation ---------------------------------------------------------
 
+/**
+ * Can this person open this venue?
+ *
+ * Two changes from the version this replaces, both of which were leaks.
+ *
+ * An owner used to return `true` for any id at all. Inside one venue group
+ * that was true by definition; across tenants it is the whole of the isolation
+ * problem in one line — an owner of tenant A asking about a venue of tenant B
+ * got a yes. The tenant is now checked first and the role cannot override it.
+ *
+ * And an id that matches no venue used to return `true` as well, so every
+ * "does this belong to me?" check passed for anything mistyped. It returns
+ * false now: a venue that does not exist is not one you can see.
+ */
 export function canSeeLocation(user: User, locationId: string): boolean {
-  if (user.role === "owner" || user.locationIds.length === 0) return true;
-  return user.locationIds.includes(locationId);
+  const location = getLocation(locationId);
+  if (!location) return false;
+  return userCanSeeLocation(user, location);
 }
 
 /** Venues this user is allowed to open. */
 export function visibleLocations(user: User): Location[] {
-  return listLocations().filter((l) => canSeeLocation(user, l.id));
+  return listLocations().filter((l) => userCanSeeLocation(user, l));
 }
 
 /** Only owners and managers change how the agent behaves. */

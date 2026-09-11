@@ -3,6 +3,7 @@ import dns from "node:dns/promises";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Location, Vertical, WeeklyHours } from "./types";
 import { upsertLocation, listLocations } from "./store";
+import { BELLINE_TENANT_ID } from "./tenancy";
 
 /**
  * Personalised demos.
@@ -267,6 +268,11 @@ export function buildProspectLocation(found: Extracted, sourceUrl: string, slug:
 
   return {
     id: `prospect_${slug}`,
+    // Ours. A demo built by reading somebody's website is sales material: it
+    // impersonates a business that has signed up for nothing, and it must
+    // never appear inside a paying customer's tenant.
+    tenantId: BELLINE_TENANT_ID,
+    businessId: `biz_prospect_${slug}`,
     name: found.name,
     address: found.address,
     phone: "",

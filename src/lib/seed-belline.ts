@@ -1,4 +1,5 @@
 import type { Location } from "./types";
+import { BELLINE_TENANT_ID } from "./tenancy";
 
 /**
  * Belline, as a venue.
@@ -90,6 +91,8 @@ const FAQS = [
 
 export const bellineVenue: Location = {
   id: BELLINE_LOCATION_ID,
+  tenantId: BELLINE_TENANT_ID,
+  businessId: "biz_belline",
   name: "Belline",
   vertical: "clinic",
   timezone: "Asia/Dubai",
