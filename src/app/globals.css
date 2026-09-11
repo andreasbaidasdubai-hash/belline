@@ -903,32 +903,51 @@ tbody tr:hover {
    belline.ai, so it has to read as part of that page rather than a second
    website. No logo, no heading, no transcript: the site around it already
    says who we are, and a running transcript turns a phone call into a chat
-   window and invites people to read instead of listen. */
+   window and invites people to read instead of listen.
+
+   Composed around the sound. On a voice call the waveform is the subject —
+   it is the only thing on screen that tells you whether it is your turn — so
+   it sits in the middle at a size you can read at a glance, with the name
+   beside it and the controls pushed to the edge. */
 
 body:has(.callbar) {
   background: transparent;
 }
 
 .callbar {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 13px;
-  padding: 13px 14px;
+  min-height: 76px;
+  /* Right padding clears the End button, which is taken out of the flow so
+     the waveform and name stay optically centred rather than centred in
+     whatever space the button happens to leave. */
+  padding: 12px 92px 12px 20px;
 }
 
-/* Five bars that move only while Belline is actually speaking. It reports
-   state rather than decorating: silence has to look like silence, or the one
-   thing a caller needs to know — whose turn it is — stops being legible. */
+.callbar-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Nine bars, and they move only while Belline is actually speaking. This
+   reports state rather than decorating: silence has to look like silence, or
+   the one thing a caller needs to know — whose turn it is — stops being
+   legible at a glance. */
 .callbar-wave {
   display: flex;
   align-items: center;
   gap: 3px;
-  height: 24px;
+  height: 34px;
   flex-shrink: 0;
 }
 .callbar-wave span {
-  width: 3px;
-  height: 5px;
+  width: 3.5px;
+  height: 6px;
   border-radius: 2px;
   background: var(--border);
   transition: background 0.2s ease;
@@ -937,31 +956,39 @@ body:has(.callbar) {
   background: var(--ok);
   animation: callbar-bounce 0.9s ease-in-out infinite;
 }
-.callbar-wave.is-on span:nth-child(2) { animation-delay: 0.12s; }
-.callbar-wave.is-on span:nth-child(3) { animation-delay: 0.24s; }
-.callbar-wave.is-on span:nth-child(4) { animation-delay: 0.36s; }
-.callbar-wave.is-on span:nth-child(5) { animation-delay: 0.48s; }
+/* Staggered, and not evenly: a bar chart marching left to right reads as a
+   progress indicator. Speech is lumpier than that. */
+.callbar-wave.is-on span:nth-child(1) { animation-delay: 0.00s; }
+.callbar-wave.is-on span:nth-child(2) { animation-delay: 0.22s; }
+.callbar-wave.is-on span:nth-child(3) { animation-delay: 0.08s; }
+.callbar-wave.is-on span:nth-child(4) { animation-delay: 0.34s; }
+.callbar-wave.is-on span:nth-child(5) { animation-delay: 0.14s; }
+.callbar-wave.is-on span:nth-child(6) { animation-delay: 0.40s; }
+.callbar-wave.is-on span:nth-child(7) { animation-delay: 0.04s; }
+.callbar-wave.is-on span:nth-child(8) { animation-delay: 0.28s; }
+.callbar-wave.is-on span:nth-child(9) { animation-delay: 0.18s; }
 
 @keyframes callbar-bounce {
-  0%, 100% { height: 5px; }
-  50% { height: 19px; }
+  0%, 100% { height: 6px; }
+  50% { height: 30px; }
 }
 
 .callbar-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
-  flex: 1;
 }
 .callbar-text strong {
-  font-size: 13.5px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
 }
 .callbar-text span {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -969,21 +996,25 @@ body:has(.callbar) {
 
 .callbar-end,
 .callbar-go {
-  flex-shrink: 0;
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 8px 14px;
+  padding: 9px 16px;
   border-radius: 999px;
   cursor: pointer;
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
+  white-space: nowrap;
 }
 .callbar-end:hover { border-color: var(--bad); color: var(--bad); }
 .callbar-end[disabled] { opacity: 0.45; cursor: default; }
 .callbar-go { border-color: var(--accent); color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) {
-  .callbar-wave.is-on span { animation: none; height: 14px; }
+  .callbar-wave.is-on span { animation: none; height: 18px; }
 }

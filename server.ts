@@ -62,6 +62,52 @@ const server = createServer((req, res) => {
 const browserWss = new WebSocketServer({ noServer: true });
 const twilioWss = new WebSocketServer({ noServer: true });
 
+/**
+ * Keep the socket alive through a silence.
+ *
+ * A voice call is mostly one side listening, and while somebody is thinking
+ * about what to ask, nothing crosses the wire in either direction. Every
+ * proxy in front of this — Railway's included — closes an idle connection
+ * after a minute or so, which the caller experiences as the line going dead
+ * mid-conversation for no reason they can see.
+ *
+ * A ping every 25 seconds is well inside any of those timeouts. The pong also
+ * gives us liveness: a browser that was closed without a clean handshake, or
+ * a laptop that went to sleep, stops answering, and the socket is terminated
+ * on the next sweep rather than being held open with a voice session and
+ * three vendor connections attached to it.
+ */
+const HEARTBEAT_MS = 25_000;
+
+type Alive = WebSocket & { isAlive?: boolean };
+
+function keepAlive(wss: WebSocketServer): void {
+  wss.on("connection", (ws: Alive) => {
+    ws.isAlive = true;
+    ws.on("pong", () => {
+      ws.isAlive = true;
+    });
+  });
+
+  const sweep = setInterval(() => {
+    for (const client of wss.clients as Set<Alive>) {
+      if (client.isAlive === false) {
+        client.terminate();
+        continue;
+      }
+      client.isAlive = false;
+      client.ping();
+    }
+  }, HEARTBEAT_MS);
+
+  // Never hold the process open on this alone.
+  sweep.unref?.();
+  wss.on("close", () => clearInterval(sweep));
+}
+
+keepAlive(browserWss);
+keepAlive(twilioWss);
+
 server.on("upgrade", (req, socket, head) => {
   const { pathname, query } = parse(req.url ?? "/", true);
 
@@ -261,7 +307,12 @@ function handleTwilio(ws: WebSocket): void {
  */
 async function warmGreetings(): Promise<void> {
   if (!ttsEnabled()) return;
-  for (const location of listLocations().filter((l) => l.demo?.enabled)) {
+  // `includeInternal` matters: Belline's own venue is the one behind the bell
+  // on the website, so it is the single most likely first call after a deploy
+  // — and marking it internal quietly dropped it out of this loop.
+  for (const location of listLocations({ includeInternal: true }).filter(
+    (l) => l.demo?.enabled,
+  )) {
     // Which voice is actually live is otherwise invisible from outside the
     // container — the store sits on a mounted disk, and "is it set to the
     // voice I picked?" is a question worth being able to answer from the logs.
@@ -270,15 +321,21 @@ async function warmGreetings(): Promise<void> {
         location.agent.voiceModel ?? "default"
       } speed=${location.agent.voiceSpeed ?? "default"}`,
     );
-    try {
-      await speakClip(greetingFor(location), {
-        voiceId: location.agent.voiceId,
-        modelId: location.agent.voiceModel,
-        speed: location.agent.voiceSpeed,
-        format: "ulaw_8000",
-      });
-    } catch {
-      // Left cold on purpose; the first real call will fill it.
+    // Both formats. The cache key includes the format, so warming only
+    // `ulaw_8000` left every *browser* call paying full text-to-speech
+    // latency for the greeting — which is precisely the call the bell on the
+    // website makes, and the first thing anybody hears of the product.
+    for (const format of ["ulaw_8000", "pcm_16000"] as const) {
+      try {
+        await speakClip(greetingFor(location), {
+          voiceId: location.agent.voiceId,
+          modelId: location.agent.voiceModel,
+          speed: location.agent.voiceSpeed,
+          format,
+        });
+      } catch {
+        // Left cold on purpose; the first real call will fill it.
+      }
     }
   }
 }

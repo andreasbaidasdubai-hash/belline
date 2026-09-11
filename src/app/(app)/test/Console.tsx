@@ -460,17 +460,27 @@ export default function Console({
    * `window.top` throws on a cross-origin parent in some browsers, hence the
    * try: a failure there means framed, which is the safe reading.
    */
-  const [framed, setFramed] = useState(false);
+  /**
+   * `null` until we know.
+   *
+   * This cannot be decided during render — the server has no window, and
+   * guessing produces a hydration mismatch. Guessing *false* also flashed a
+   * "Talk to Belline" button inside the dock for a frame, which is the second
+   * press this whole change exists to remove. Unknown shows "Connecting…",
+   * which is true either way.
+   */
+  const [framed, setFramed] = useState<boolean | null>(null);
   useEffect(() => {
     try {
       setFramed(window.self !== window.top);
     } catch {
+      // A cross-origin parent throws on access, which means framed.
       setFramed(true);
     }
   }, []);
 
   useEffect(() => {
-    if (auto && framed) answerAndListen();
+    if (auto && framed === true) answerAndListen();
   }, [auto, framed, answerAndListen]);
 
   // --- render --------------------------------------------------------------
@@ -479,7 +489,8 @@ export default function Console({
     const sound = audioState.startsWith("running");
     // Opened directly rather than docked in the site: nothing has started, and
     // "Connecting…" forever would be a lie. Offer the call instead.
-    const idle = auto && !framed && !connected;
+    // Only once we know we are *not* framed. Unknown is treated as connecting.
+    const idle = auto && framed === false && !connected;
 
     const state = idle
       ? "Ask it anything, or book a call with us"
@@ -495,13 +506,21 @@ export default function Console({
 
     return (
       <div className="callbar">
-        <div className={`callbar-wave${speaking ? " is-on" : ""}`} aria-hidden="true">
-          <span /><span /><span /><span /><span />
-        </div>
+        {/*
+          The waveform and the name sit together in the middle, because on a
+          voice call the sound is the subject and everything else is chrome.
+          Nine bars rather than five: at this size five read as a loading
+          spinner, and the point is that it looks like something being said.
+        */}
+        <div className="callbar-main">
+          <div className={`callbar-wave${speaking ? " is-on" : ""}`} aria-hidden="true">
+            <span /><span /><span /><span /><span /><span /><span /><span /><span />
+          </div>
 
-        <div className="callbar-text">
-          <strong>{locationName}</strong>
-          <span>{error ?? state}</span>
+          <div className="callbar-text">
+            <strong>{locationName}</strong>
+            <span>{error ?? state}</span>
+          </div>
         </div>
 
         {/*

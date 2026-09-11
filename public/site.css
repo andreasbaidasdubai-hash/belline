@@ -939,27 +939,36 @@
     border-radius: inherit;
     border: 2px solid var(--gold);
     opacity: 0;
-    animation: bell-ring 3.2s ease-out 1.5s infinite;
+    animation: bell-ring 2.4s ease-out 1.2s infinite;
     pointer-events: none;
   }
   @keyframes bell-ring {
     0% { opacity: 0.8; transform: scale(1); }
-    22% { opacity: 0; transform: scale(1.26); }
-    100% { opacity: 0; transform: scale(1.26); }
+    20% { opacity: 0; transform: scale(1.28); }
+    100% { opacity: 0; transform: scale(1.28); }
   }
 
   /* Only the bell rocks, never the label — a moving word is unreadable, and
-     the icon alone is what a ringing handset actually does. */
-  .bell-fab svg { animation: bell-shake 3.2s ease-in-out 1.5s infinite; }
+     the icon alone is what a ringing handset actually does.
+     Twelve oscillations packed into the first 0.4s of a 2.4s cycle: a real
+     bell buzzes and then hangs still, so the frequency lives inside the burst
+     rather than in how often the burst comes round. Spreading the same
+     movement across the whole cycle would read as a wobble, not a ring. */
+  .bell-fab svg { animation: bell-shake 2.4s ease-in-out 1.2s infinite; }
   @keyframes bell-shake {
-    0%, 16%, 100% { transform: rotate(0deg); }
-    2% { transform: rotate(-13deg); }
-    4% { transform: rotate(11deg); }
-    6% { transform: rotate(-9deg); }
-    8% { transform: rotate(7deg); }
-    10% { transform: rotate(-5deg); }
-    12% { transform: rotate(3deg); }
-    14% { transform: rotate(-1deg); }
+    0%, 17%, 100% { transform: rotate(0deg); }
+    1.2% { transform: rotate(-15deg); }
+    2.5% { transform: rotate(15deg); }
+    3.7% { transform: rotate(-13deg); }
+    5.0% { transform: rotate(13deg); }
+    6.2% { transform: rotate(-11deg); }
+    7.5% { transform: rotate(11deg); }
+    8.7% { transform: rotate(-8deg); }
+    10.0% { transform: rotate(8deg); }
+    11.2% { transform: rotate(-6deg); }
+    12.5% { transform: rotate(6deg); }
+    13.7% { transform: rotate(-3deg); }
+    15.0% { transform: rotate(3deg); }
   }
   /* Stop once they are hovering it: they have found it, and a button that
      keeps twitching under the cursor is harder to click, not easier. */
@@ -1000,7 +1009,7 @@
     right: 24px;
     bottom: 24px;
     z-index: 50;
-    width: min(360px, calc(100vw - 32px));
+    width: min(400px, calc(100vw - 32px));
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 14px;
@@ -1012,9 +1021,9 @@
     to { opacity: 1; transform: none; }
   }
 
-  /* Fixed height: the bar inside is one line of status, and letting the frame
-     size itself makes it jump as the wording changes. */
-  .call-frame { width: 100%; height: 58px; border: 0; display: block; }
+  /* Fixed height, matching the bar's own min-height. Letting the frame size
+     itself makes the dock jump every time the status wording changes. */
+  .call-frame { width: 100%; height: 76px; border: 0; display: block; }
 
   .call-shut {
     position: absolute;
