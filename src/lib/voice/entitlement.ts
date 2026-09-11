@@ -23,6 +23,13 @@ import type { Location } from "../types";
  */
 export function mayStreamTo(location: Location | undefined): boolean {
   if (!location) return false;
+  // A customer's own website widget. Deliberately a separate clause rather
+  // than a loosening of the one below: the demo rule exists to stop a stranger
+  // spending a customer's minutes, and the widget is an explicit decision by
+  // that customer to let strangers do exactly that — bounded by an origin
+  // allowlist and a daily cap. See embed.ts.
+  if (location.embed?.enabled) return true;
+
   const ours = Boolean(location.prospect || location.internal);
   return ours && Boolean(location.demo?.enabled);
 }

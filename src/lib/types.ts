@@ -178,6 +178,14 @@ export interface Location {
    */
   internal?: boolean;
   /**
+   * Belline on this venue's own website.
+   *
+   * Absent means the widget is off, which is the state every venue starts in:
+   * a public button that spends money is a decision somebody has to make, not
+   * a default they discover.
+   */
+  embed?: EmbedConfig;
+  /**
    * A logo to show behind the call.
    *
    * The voice widget is the one place a venue's own customer sees Belline
@@ -248,6 +256,24 @@ export interface DemoConfig {
   clearBookingsDaily: boolean;
   /** Appended to the greeting so nobody thinks they booked a real table. */
   disclosure: string;
+}
+
+/**
+ * Belline on the venue's own website.
+ *
+ * A public widget spends real money on every tap, so the shape here is mostly
+ * brakes: the key is public by design, the origin allowlist is what actually
+ * controls who can open it, and the two caps are the backstop for an
+ * allowlisted page being refreshed by somebody bored on a slow afternoon.
+ */
+export interface EmbedConfig {
+  /** Public. It sits in the customer's page source; see embed.ts. */
+  key: string;
+  enabled: boolean;
+  /** Origins allowed to frame it, scheme and host only. Empty allows nothing. */
+  allowedOrigins: string[];
+  maxCallsPerDay: number;
+  maxCallSeconds: number;
 }
 
 export interface AgentConfig {

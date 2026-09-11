@@ -1481,3 +1481,36 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .price-aside .price-list { margin-top: 12px; }
 .price-aside .price-list li { font-size: 0.86rem; margin-bottom: 7px; color: var(--ink-3); }
 .price-aside summary { font-weight: 500; color: var(--ink); padding: 4px 0; }
+
+/* --- Wo sie antwortet --------------------------------------------------------
+ * Zwei Kanäle, weil zwei stimmen. WhatsApp ist gebaut, ausgeliefert und
+ * getestet und hängt an keiner Nummer — es steht deshalb nicht auf der Seite.
+ * Am Tag, an dem eine Nummer antwortet, bekommt dieser Block eine dritte
+ * Spalte statt einer Entschuldigung.
+ */
+.channels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 64px;
+  margin-top: 52px;
+  border-top: 1px solid var(--rule);
+}
+.channels > div { padding: 32px 0; border-bottom: 1px solid var(--rule-soft); }
+.channels h3 {
+  margin: 0 0 12px;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.5rem;
+  letter-spacing: -0.015em;
+}
+.channels p { margin: 0 0 14px; font-size: 0.96rem; max-width: 44ch; }
+/* Die Zeile, die die Angst nimmt: wie viel Arbeit ist das für mich? */
+.channel-how {
+  margin: 0 !important;
+  font-size: 0.86rem !important;
+  color: var(--brass);
+}
+
+@media (max-width: 900px) {
+  .channels { grid-template-columns: 1fr; gap: 0; margin-top: 40px; }
+}
