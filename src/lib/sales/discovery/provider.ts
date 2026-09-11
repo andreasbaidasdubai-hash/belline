@@ -48,6 +48,8 @@ export interface RawCompany {
   reviewCount?: number | null;
   openingHours?: unknown;
   bookingUrl?: string | null;
+  /** True when the source shows the business takes contact over WhatsApp. */
+  hasWhatsapp?: boolean | null;
   /** The source's own stable id — `place_id` for Google. Exact, free dedup. */
   externalId?: string | null;
   lat?: number | null;

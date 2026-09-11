@@ -104,9 +104,16 @@ export function toRawCompany(
 
   if (place.businessStatus === "CLOSED_PERMANENTLY") return null;
 
+  // A clinic whose "website" is a wa.me link has told us something useful —
+  // it books over WhatsApp — but it has not given us a site to read. Storing
+  // it as a website sends the research crawler to a redirect and gets nothing;
+  // storing it as a signal feeds the scoring model instead.
+  const whatsapp = isWhatsappLink(place.websiteUri);
+
   return {
     name,
-    website: place.websiteUri ?? null,
+    website: whatsapp ? null : (place.websiteUri ?? null),
+    hasWhatsapp: whatsapp ? true : null,
     // Places returns E.164-ish with spaces ("+971 4 123 4567"); our own
     // normaliser handles the rest and owns the dedup key.
     phone: place.internationalPhoneNumber ?? null,
@@ -125,6 +132,17 @@ export function toRawCompany(
     sourceUrl: place.googleMapsUri ?? null,
     status: place.businessStatus === "CLOSED_TEMPORARILY" ? "closed" : "active",
   };
+}
+
+/** The links businesses list as a "website" that are really a chat thread. */
+function isWhatsappLink(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    return host === "wa.me" || host === "api.whatsapp.com" || host === "whatsapp.com";
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -87,6 +87,21 @@ try {
 
   const seconds = Math.round((Date.now() - started) / 100) / 10;
 
+  if (result.sample.length > 0) {
+    console.log("");
+    for (const c of result.sample) {
+      const stars = c.rating ? `${c.rating}★ ${c.reviewCount ?? 0}` : "no rating";
+      console.log(`  ${c.name}`);
+      console.log(
+        `    ${[c.city, c.subVertical, stars].filter(Boolean).join(" · ")}`,
+      );
+      console.log(
+        `    ${c.website ?? "(no website)"}   ${c.phone ?? "(no phone)"}`,
+      );
+    }
+    console.log("");
+  }
+
   console.log(`  found              ${result.found}`);
   if (!dryRun) {
     console.log(`  new companies      ${result.companiesCreated}`);

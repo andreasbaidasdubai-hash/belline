@@ -37,6 +37,14 @@ export interface RunResult {
   conflicts: { company: string; heldBy: string }[];
   skipped: { company: string; reason: string }[];
   costUsd: number;
+  /**
+   * What was actually found, for a human to read.
+   *
+   * The point of a dry run is to see whether "dental clinic in Dubai" returns
+   * clinics or dental *suppliers* — a count of ten tells you nothing about
+   * that, and getting the search terms wrong poisons every stage downstream.
+   */
+  sample: RawCompany[];
 }
 
 export interface RunOptions {
@@ -101,6 +109,7 @@ export async function discover(options: RunOptions): Promise<RunResult> {
     conflicts: [],
     skipped: [],
     costUsd: 0,
+    sample: [],
   };
 
   try {
@@ -116,6 +125,7 @@ export async function discover(options: RunOptions): Promise<RunResult> {
     for await (const raw of stream) {
       result.found++;
       result.costUsd += provider.costPerResultUsd;
+      if (result.sample.length < 25) result.sample.push(raw);
 
       if (options.dryRun) continue;
 
@@ -192,6 +202,7 @@ async function persist(
       rating: raw.rating,
       reviewCount: raw.reviewCount,
       bookingUrl: raw.bookingUrl,
+      hasWhatsapp: raw.hasWhatsapp,
       sourceSlug: ctx.sourceSlug,
       sourceUrl: raw.sourceUrl,
     });

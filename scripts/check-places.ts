@@ -107,6 +107,28 @@ test("a genuine zero review count survives as zero", () => {
   assert.strictEqual(c!.rating, null);
 });
 
+test("a wa.me 'website' becomes a WhatsApp signal, not a site to crawl", () => {
+  // Seen on the first live run: a Dubai clinic listing wa.me as its website.
+  // Crawling it yields nothing; recording it tells the scoring model the
+  // practice books over WhatsApp, which is a positive signal.
+  for (const url of [
+    "https://wa.me/971524620562",
+    "https://api.whatsapp.com/send?phone=971524620562",
+    "https://www.wa.me/971524620562",
+  ]) {
+    const c = toRawCompany({ ...PLACE, websiteUri: url }, ctx);
+    assert.ok(c);
+    assert.strictEqual(c.website, null, `${url} should not be stored as a website`);
+    assert.strictEqual(c.hasWhatsapp, true);
+  }
+});
+
+test("a real website is not mistaken for WhatsApp", () => {
+  const c = toRawCompany(PLACE, ctx)!;
+  assert.strictEqual(c.website, "https://www.smiledental.ae/");
+  assert.strictEqual(c.hasWhatsapp, null, "unknown, not false — we did not check");
+});
+
 console.log("\n  Handing off to dedup\n");
 
 test("the mapped phone and website produce the right match keys", () => {
