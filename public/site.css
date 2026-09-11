@@ -1134,7 +1134,10 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .call-out .tag.human { color: var(--ink-2); border-color: var(--rule); }
 
 @media (max-width: 900px) {
-  .call-body { min-height: 0; }
+  /* Kleiner reserviert, aber reserviert: ohne min-height wächst das Feld,
+     während die Zeilen eintreffen, und alles darunter rutscht mit. Ein
+     Layout, das unter dem Daumen wegspringt, liest sich als Fehler. */
+  .call-body { min-height: 210px; }
   .call-body .caller .said { font-size: 1.3rem; }
   .call-head { flex-wrap: wrap; gap: 10px 12px; }
   .call-listen { margin-left: 0; }
