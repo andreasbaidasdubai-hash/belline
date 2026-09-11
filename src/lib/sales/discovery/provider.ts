@@ -62,8 +62,17 @@ export interface RawCompany {
 
 export interface LeadSourceProvider {
   readonly slug: string;
-  /** Planning figure used for budget headroom before a run. */
-  readonly costPerResultUsd: number;
+  /**
+   * What one *billable call* costs.
+   *
+   * Per request, not per result — because that is how these APIs actually
+   * charge, and a run's cost must not drift with how many rows a page
+   * happened to return. Cost-per-customer is the number this whole business
+   * is tuned on; metering the wrong denominator corrupts it quietly.
+   */
+  readonly costPerRequestUsd: number;
+  /** Billable calls made so far. Read after a run to meter it exactly. */
+  readonly requestCount: number;
   /** False when the provider's key is missing. Never throws. */
   available(): boolean;
   /** Why it is unavailable, for the dashboard. */

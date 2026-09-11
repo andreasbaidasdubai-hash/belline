@@ -32,6 +32,11 @@ const restaurant: Location = {
   phone: "+971 4 555 0142",
   address: "Marina Walk, Dubai Marina",
   currency: "AED",
+  // A plan, so the billing page has something real to show in a demo. The
+  // anniversary is the 1st, which keeps the worked example legible; the
+  // period arithmetic is exercised properly against the awkward dates in
+  // scripts/check-billing.ts rather than here.
+  subscription: { planId: "business", cycle: "monthly", startedOn: "2026-09-01", status: "active" },
   hours: everyDay(H(12), H(23, 30)),
   closures: [],
   agent: {
@@ -176,6 +181,16 @@ const salon: Location = {
   phone: "+41 44 555 21 80",
   address: "Bahnhofstrasse 42, 8001 Zürich",
   currency: "CHF",
+  // On trial, and in a venue whose own currency is not the one we bill in —
+  // both are states the billing page has to get right, so the demo data
+  // exercises them rather than showing three copies of the happy path.
+  subscription: {
+    planId: "starter",
+    cycle: "monthly",
+    startedOn: "2026-09-04",
+    status: "trialing",
+    trial: { endsOn: "2026-09-18", minutes: 25 },
+  },
   hours: salonHours,
   closures: [],
   agent: {

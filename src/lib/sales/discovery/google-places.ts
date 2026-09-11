@@ -170,11 +170,20 @@ export class GooglePlacesProvider implements LeadSourceProvider {
   readonly slug = "google_places";
 
   /**
-   * Planning figure only — the real charge comes from Google. Configurable
-   * because the SKU price changes and a stale constant silently misreports
-   * cost-per-lead, which is the number the whole model is tuned on.
+   * Per Text Search request, Enterprise SKU. Configurable because the price
+   * changes and a stale constant silently misreports cost-per-lead.
+   *
+   * One request returns up to 20 places, so this is roughly 20× the per-result
+   * figure — which is exactly the confusion that makes per-result metering a
+   * bad idea.
    */
-  readonly costPerResultUsd = Number(process.env.GOOGLE_PLACES_COST_PER_RESULT ?? 0.0035);
+  readonly costPerRequestUsd = Number(process.env.GOOGLE_PLACES_COST_PER_REQUEST ?? 0.035);
+
+  private requests = 0;
+
+  get requestCount(): number {
+    return this.requests;
+  }
 
   private readonly apiKey = process.env.GOOGLE_PLACES_API_KEY ?? "";
 
@@ -247,6 +256,10 @@ export class GooglePlacesProvider implements LeadSourceProvider {
 
     for (let attempt = 0; attempt < 3; attempt++) {
       let response: Response;
+      // Counted before the call, not after: a request that times out or 500s
+      // was still made, and on Maps Platform a failed request can still be
+      // billable. Under-counting spend is the wrong direction to be wrong in.
+      this.requests++;
       try {
         response = await fetch(ENDPOINT, {
           method: "POST",

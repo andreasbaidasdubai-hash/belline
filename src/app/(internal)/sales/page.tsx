@@ -13,6 +13,7 @@ import {
   STAGE_ORDER,
   type AgentSummary,
 } from "@/lib/sales/kpi/overview";
+import { recentRuns } from "@/lib/sales/kpi/leads";
 import Setup from "./Setup";
 import { ActivityFeed, Stat, statusTone } from "./ui";
 
@@ -42,12 +43,13 @@ export default async function SalesOverview() {
     );
   }
 
-  const [agents, queue, activity, spend, stages] = await Promise.all([
+  const [agents, queue, activity, spend, stages, runs] = await Promise.all([
     agentSummaries(),
     queueHealth(),
     recentActivity(12),
     spendByCategory(30),
     pipelineCounts(),
+    recentRuns(8),
   ]);
 
   const workers = agents.filter((a) => a.kind === "vertical_agent");
@@ -173,14 +175,80 @@ export default async function SalesOverview() {
       </div>
 
       <div className="split" style={{ marginTop: 18 }}>
-        <div className="panel">
-          <div className="panel-head">
-            Recent activity
-            <Link href="/sales/activity" className="muted" style={{ fontWeight: 400, marginLeft: "auto", fontSize: 12 }}>
-              See all
-            </Link>
+        <div>
+          {/* What the agents have actually *done*, as discrete pieces of work
+              with a cost and an outcome. The activity feed below shows events;
+              this shows runs — the unit you judge an agent on. */}
+          <div className="panel" style={{ marginBottom: 18 }}>
+            <div className="panel-head">Agent runs</div>
+            {runs.length === 0 ? (
+              <p className="muted" style={{ padding: "22px 16px", fontSize: 13, margin: 0 }}>
+                No runs yet.
+              </p>
+            ) : (
+              <table>
+                <tbody>
+                  {runs.map((run) => {
+                    const stats = run.stats as Record<string, number | undefined>;
+                    const detail =
+                      run.stage === "discover"
+                        ? `${stats.found ?? 0} found · ${stats.created ?? 0} new · ${stats.merged ?? 0} known`
+                        : run.stage === "research"
+                          ? `${stats.researched ?? 0} researched · ${stats.unreadable ?? 0} unreadable`
+                          : Object.entries(stats)
+                              .filter(([, v]) => typeof v === "number")
+                              .map(([k, v]) => `${k} ${v}`)
+                              .join(" · ");
+                    return (
+                      <tr key={run.id}>
+                        <td>
+                          <div style={{ fontSize: 13, fontWeight: 600, textTransform: "capitalize" }}>
+                            {run.stage}
+                            <span className="muted" style={{ fontWeight: 400, marginLeft: 7, fontSize: 11.5 }}>
+                              {run.agent_name}
+                            </span>
+                          </div>
+                          <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+                            {detail || "—"}
+                            {stats.costUsd ? ` · $${Number(stats.costUsd).toFixed(3)}` : ""}
+                          </div>
+                          {run.error && (
+                            <div style={{ fontSize: 11.5, marginTop: 3, color: "var(--warn)" }}>
+                              {run.error.slice(0, 120)}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ width: 90, textAlign: "right", verticalAlign: "top" }}>
+                          <span
+                            className="pill"
+                            style={
+                              run.status === "done"
+                                ? { color: "var(--ok)", borderColor: "var(--ok)" }
+                                : run.status === "failed"
+                                  ? { color: "var(--warn)", borderColor: "var(--warn)" }
+                                  : {}
+                            }
+                          >
+                            {run.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
-          <ActivityFeed rows={activity} empty="Nothing has happened yet. Start the worker and run an agent." />
+
+          <div className="panel">
+            <div className="panel-head">
+              Recent activity
+              <Link href="/sales/activity" className="muted" style={{ fontWeight: 400, marginLeft: "auto", fontSize: 12 }}>
+                See all
+              </Link>
+            </div>
+            <ActivityFeed rows={activity} empty="Nothing has happened yet. Start the worker and run an agent." />
+          </div>
         </div>
 
         <div>

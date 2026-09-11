@@ -41,19 +41,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       : []),
     ...(canManageUsers(user)
       ? [
+          // Money is a manager's concern, not floor staff's.
+          { href: "/billing", label: "Plan and usage" },
           { href: "/demo", label: "Demo line" },
           { href: "/team", label: "Team" },
         ]
       : []),
-    // Sales-side, so it stays out of a venue's own sidebar. Nested inside the
-    // manage-users branch before, which read as if it were part of it.
-    ...(user.role === "owner"
-      ? [
-          { href: "/prospects", label: "Personalised demos" },
-          { href: "/sales", label: "Sales engine" },
-          { href: "/sales/activity", label: "Activity" },
-        ]
-      : []),
+    // Personalised demos are built *for* a prospect but are still a selling
+    // tool, so they stay owner-only.
+    ...(user.role === "owner" ? [{ href: "/prospects", label: "Personalised demos" }] : []),
+    // The sales console is deliberately NOT linked from here. It lives in the
+    // `(internal)` route group with its own layout and guard, and it holds
+    // every prospect in every market — other businesses' data, which has no
+    // business appearing in a customer's shell even behind a role check.
+    // Reach it directly at /sales.
   ];
 
   return (

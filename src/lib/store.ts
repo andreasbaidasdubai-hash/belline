@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { Booking, Call, Location, Session, User, WaitlistEntry } from "./types";
+import type { Lead } from "./leads";
 
 /**
  * File-backed store.
@@ -29,9 +30,18 @@ interface Db {
   calls: Call[];
   users: User[];
   sessions: Session[];
+  leads: Lead[];
 }
 
-const EMPTY: Db = { locations: [], bookings: [], waitlist: [], calls: [], users: [], sessions: [] };
+const EMPTY: Db = {
+  locations: [],
+  bookings: [],
+  waitlist: [],
+  calls: [],
+  users: [],
+  sessions: [],
+  leads: [],
+};
 
 // Next's dev server re-evaluates modules on edit; the custom server holds the
 // voice sessions in the same process. A global pin keeps one instance of the
@@ -291,6 +301,26 @@ export function saveCall(call: Call): Call {
   else db.calls[idx] = call;
   persist("calls");
   return call;
+}
+
+// --- leads -----------------------------------------------------------------
+
+/** Newest first: a sales list is worked from the top. */
+export function listLeads(): Lead[] {
+  return load().leads;
+}
+
+export function getLead(leadId: string): Lead | undefined {
+  return load().leads.find((l) => l.id === leadId);
+}
+
+export function saveLead(lead: Lead): Lead {
+  const db = load();
+  const idx = db.leads.findIndex((l) => l.id === lead.id);
+  if (idx === -1) db.leads.unshift(lead);
+  else db.leads[idx] = lead;
+  persist("leads");
+  return lead;
 }
 
 // --- users and sessions ----------------------------------------------------

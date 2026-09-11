@@ -37,6 +37,8 @@ export interface RunResult {
   conflicts: { company: string; heldBy: string }[];
   skipped: { company: string; reason: string }[];
   costUsd: number;
+  /** Billable API calls made. The unit the bill is actually in. */
+  requests: number;
   /**
    * What was actually found, for a human to read.
    *
@@ -87,7 +89,12 @@ export async function discover(options: RunOptions): Promise<RunResult> {
   const limit = options.limit ?? config.discovery.max_results_per_run;
   const actor = options.actor ?? `agent:${agent.id}`;
 
-  await assertWithinBudget(agent.id, limit * provider.costPerResultUsd);
+  // Headroom, not a prediction: a page holds up to 20 results, and a run that
+  // has to try several search terms makes more calls than the arithmetic
+  // suggests. Doubling is cheap insurance against an agent slipping past its
+  // daily cap on the last request of the day.
+  const estimatedRequests = Math.max(1, Math.ceil(limit / 20)) * 2;
+  await assertWithinBudget(agent.id, estimatedRequests * provider.costPerRequestUsd);
 
   const run = await one<{ id: number }>(
     `insert into sales.agent_run (agent_id, stage, trigger, stats)
@@ -109,6 +116,7 @@ export async function discover(options: RunOptions): Promise<RunResult> {
     conflicts: [],
     skipped: [],
     costUsd: 0,
+    requests: 0,
     sample: [],
   };
 
@@ -124,7 +132,6 @@ export async function discover(options: RunOptions): Promise<RunResult> {
 
     for await (const raw of stream) {
       result.found++;
-      result.costUsd += provider.costPerResultUsd;
       if (result.sample.length < 25) result.sample.push(raw);
 
       if (options.dryRun) continue;
@@ -147,16 +154,20 @@ export async function discover(options: RunOptions): Promise<RunResult> {
       if (outcome.conflict) result.conflicts.push({ company: raw.name, heldBy: outcome.conflict });
     }
 
-    // One cost row per run rather than per result: the charge is per API call
-    // and a thousand rows of $0.0035 is noise in the ledger, not detail.
+    // Metered from what the provider actually called, so the ledger reflects
+    // the bill rather than an inference from row counts. One row per run: a
+    // thousand entries of $0.035 is noise in the ledger, not detail.
+    result.costUsd = provider.requestCount * provider.costPerRequestUsd;
+    result.requests = provider.requestCount;
+
     if (result.costUsd > 0 && !options.dryRun) {
       await record({
         agentId: agent.id,
         runId,
         category: "discovery",
         provider: provider.slug,
-        units: result.found,
-        unitLabel: "results",
+        units: provider.requestCount,
+        unitLabel: "requests",
         amountUsd: result.costUsd,
       });
     }

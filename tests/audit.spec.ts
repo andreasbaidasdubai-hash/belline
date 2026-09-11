@@ -94,7 +94,11 @@ for (const page of PAGES) {
 
   test(`${page.slug} — WCAG 2.2 AA`, async ({ page: browser }) => {
     await browser.setViewportSize({ width: 1280, height: 800 });
-    await browser.goto(page.url, { waitUntil: "networkidle" });
+    // Same reason as the layout tests above: these pages preload 28 audio
+    // clips, so `networkidle` never arrives under parallel workers. Axe reads
+    // the accessibility tree, which needs layout and fonts, not a quiet socket.
+    await browser.goto(page.url, { waitUntil: "load" });
+    await browser.evaluate(() => document.fonts.ready);
 
     const results = await new AxeBuilder({ page: browser })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])

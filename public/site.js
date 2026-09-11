@@ -339,3 +339,285 @@
     if (e.matches) setOpen(false);
   });
 })();
+
+/* --- monthly / annual ------------------------------------------------------
+   The prices for both cycles are already in the markup as data attributes, so
+   the page reads correctly with no JavaScript at all and this only swaps
+   between two sets of numbers that are both already true. */
+(function () {
+  var group = document.querySelector(".cycle");
+  if (!group) return;
+
+  var options = group.querySelectorAll(".cycle-opt");
+
+  function show(cycle) {
+    options.forEach(function (opt) {
+      var on = opt.getAttribute("data-cycle") === cycle;
+      opt.classList.toggle("is-on", on);
+      opt.setAttribute("aria-pressed", String(on));
+    });
+    document.querySelectorAll("[data-" + cycle + "]").forEach(function (el) {
+      el.textContent = el.getAttribute("data-" + cycle);
+    });
+  }
+
+  group.addEventListener("click", function (e) {
+    var opt = e.target.closest(".cycle-opt");
+    if (opt) show(opt.getAttribute("data-cycle"));
+  });
+})();
+
+/* --- book a call -----------------------------------------------------------
+   The email check is the point of this block. A mistyped domain — gmial.com,
+   hotmial.com — passes every syntax test ever written, and the reply then
+   vanishes without a bounce anybody reads, which for a form that exists to
+   produce a reply is total failure that looks like success.
+
+   So the browser offers a correction, and the server resolves the domain's
+   mail records before accepting it. Neither refuses an address outright on
+   spelling alone: somebody's real mailbox may genuinely be at an address one
+   letter from a famous one, and a form telling a customer they do not exist
+   is worse than a bounce. */
+(function () {
+  var form = document.getElementById("book-form");
+  if (!form) return;
+
+  var note = document.getElementById("book-note");
+  var submit = form.querySelector(".book-submit");
+  var endpoint = "https://app.belline.ai/api/leads";
+
+  // Same list as the server's, and for the same reason.
+  var KNOWN = [
+    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com",
+    "msn.com", "yahoo.com", "yahoo.co.uk", "icloud.com", "me.com", "proton.me",
+    "protonmail.com", "aol.com", "zoho.com", "emirates.net.ae", "eim.ae",
+    "etisalat.ae", "du.ae"
+  ];
+
+  // Damerau-Levenshtein, not plain Levenshtein. A swap of two neighbours is
+  // one mistake, not two — which is why gmial.com is recognised as gmail.com.
+  // Kept in step with distance() in src/lib/leads/email.ts.
+  function distance(a, b) {
+    if (Math.abs(a.length - b.length) > 2) return 99;
+    var beforePrev = [];
+    var prev = [];
+    for (var j = 0; j <= b.length; j++) prev[j] = j;
+
+    for (var i = 1; i <= a.length; i++) {
+      var row = [i];
+      for (var k = 1; k <= b.length; k++) {
+        var cost = a[i - 1] === b[k - 1] ? 0 : 1;
+        row[k] = Math.min(prev[k] + 1, row[k - 1] + 1, prev[k - 1] + cost);
+        if (i > 1 && k > 1 && a[i - 1] === b[k - 2] && a[i - 2] === b[k - 1]) {
+          row[k] = Math.min(row[k], beforePrev[k - 2] + 1);
+        }
+      }
+      beforePrev = prev;
+      prev = row;
+    }
+    return prev[b.length];
+  }
+
+  function suggest(email) {
+    var at = email.lastIndexOf("@");
+    if (at < 0) return null;
+    var domain = email.slice(at + 1).toLowerCase();
+    if (KNOWN.indexOf(domain) !== -1) return null;
+
+    var best = null;
+    KNOWN.forEach(function (known) {
+      var d = distance(domain, known);
+      var limit = known.length > 12 ? 2 : 1;
+      if (d <= limit && (!best || d < best.d)) best = { domain: known, d: d };
+    });
+    return best ? email.slice(0, at) + "@" + best.domain : null;
+  }
+
+  function fieldOf(input) {
+    return input.closest(".f");
+  }
+
+  function clear(input) {
+    input.classList.remove("is-bad");
+    input.classList.remove("is-hint");
+    var slot = fieldOf(input) && fieldOf(input).querySelector(".f-err");
+    if (slot) {
+      slot.hidden = true;
+      slot.textContent = "";
+      slot.classList.remove("is-hint");
+    }
+  }
+
+  /**
+   * @param tone "bad" for a refusal, "hint" for a spelling suggestion.
+   *
+   * The distinction matters: a suggestion is a question, not a rejection, and
+   * painting it red tells somebody with an unusual but perfectly real address
+   * that they have got their own email wrong.
+   */
+  function mark(input, message, suggestion, tone, onKeep) {
+    input.classList.add(tone === "hint" ? "is-hint" : "is-bad");
+    var slot = fieldOf(input) && fieldOf(input).querySelector(".f-err");
+    if (!slot) return;
+    slot.hidden = false;
+    slot.classList.toggle("is-hint", tone === "hint");
+    slot.textContent = message + " ";
+
+    if (suggestion) {
+      var fix = document.createElement("button");
+      fix.type = "button";
+      fix.textContent = "Use " + suggestion;
+      fix.addEventListener("click", function () {
+        input.value = suggestion;
+        clear(input);
+        input.focus();
+      });
+      slot.appendChild(fix);
+    }
+
+    // The other half of asking: somebody whose address really does sit one
+    // letter from a famous domain has to be able to say so and get on with it.
+    if (onKeep) {
+      slot.appendChild(document.createTextNode(" or "));
+      var keep = document.createElement("button");
+      keep.type = "button";
+      keep.textContent = "keep mine";
+      keep.addEventListener("click", onKeep);
+      slot.appendChild(keep);
+    }
+  }
+
+  function fail(input, message, suggestion) {
+    mark(input, message, suggestion, "bad");
+  }
+
+  var email = form.elements.email;
+
+  // On blur, not on every keystroke: correcting somebody while they are still
+  // typing their own address is the form arguing with them.
+  email.addEventListener("blur", function () {
+    var value = email.value.trim();
+    if (!value) return;
+    var better = suggest(value);
+    if (better) mark(email, "That domain looks like a typo.", better, "hint");
+  });
+
+  form.addEventListener("input", function (e) {
+    if (e.target.classList.contains("is-bad") || e.target.classList.contains("is-hint")) {
+      clear(e.target);
+    }
+  });
+
+  // The visitor's own timezone, so "weekday mornings" means their morning.
+  try {
+    form.elements.timezone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch (err) {
+    /* Old browser. The field stays empty and we ask on the call. */
+  }
+
+  // Which button they came from, so a "High volume" enquiry is not answered
+  // with a Starter pitch.
+  document.querySelectorAll("[data-plan]").forEach(function (link) {
+    link.addEventListener("click", function () {
+      form.elements.source.value = "website: " + link.getAttribute("data-plan");
+    });
+  });
+  var bell = document.getElementById("bell-btn");
+  if (bell) {
+    bell.addEventListener("click", function () {
+      form.elements.source.value = "website: voice button";
+      document.getElementById("book").scrollIntoView({ behavior: "smooth", block: "start" });
+      form.elements.name.focus({ preventScroll: true });
+    });
+  }
+
+  function say(message, tone) {
+    note.textContent = message;
+    note.classList.toggle("is-good", tone === "good");
+    note.classList.toggle("is-bad", tone === "bad");
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    var required = ["name", "company", "email", "phone"];
+    var firstBad = null;
+
+    required.forEach(function (field) {
+      var input = form.elements[field];
+      if (!input.value.trim()) {
+        fail(input, "Required.");
+        if (!firstBad) firstBad = input;
+      }
+    });
+
+    if (firstBad) {
+      firstBad.focus();
+      say("Fill in the four marked fields and we will do the rest.", "bad");
+      return;
+    }
+
+    send(false);
+  });
+
+  function send(emailConfirmed) {
+    var payload = { emailConfirmed: emailConfirmed ? 1 : "" };
+    ["name", "company", "email", "phone", "website", "vertical", "venues",
+     "callVolume", "availability", "timezone", "notes", "source", "website2"
+    ].forEach(function (field) {
+      if (form.elements[field]) payload[field] = form.elements[field].value;
+    });
+
+    submit.disabled = true;
+    submit.textContent = "Booking…";
+    say("Checking that we can actually reach you…");
+
+    fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        return res.json().then(function (body) { return { status: res.status, body: body }; });
+      })
+      .then(function (result) {
+        if (result.status === 200 && result.body.ok) {
+          form.querySelectorAll(".f, .hp").forEach(function (el) { el.remove(); });
+          submit.remove();
+          say(result.body.message || "Booked in. We will be in touch.", "good");
+          return;
+        }
+
+        submit.disabled = false;
+        submit.textContent = "Book the call";
+
+        var field = result.body.field && form.elements[result.body.field];
+        if (!field) {
+          say(result.body.error || "That did not go through. Email hello@belline.ai.", "bad");
+          return;
+        }
+
+        if (result.body.confirmable) {
+          // A question, not a refusal. Answer it either way and the same
+          // submission goes straight through.
+          mark(field, result.body.error, result.body.suggestion, "hint", function () {
+            clear(field);
+            send(true);
+          });
+          field.focus();
+          say("Just checking that address before we reply to it.");
+          return;
+        }
+
+        fail(field, result.body.error, result.body.suggestion);
+        field.focus();
+        say("Almost — one thing to fix.", "bad");
+      })
+      .catch(function () {
+        submit.disabled = false;
+        submit.textContent = "Book the call";
+        // Never strand somebody with a dead form: the address is the fallback.
+        say("Could not reach us just then. Email hello@belline.ai and we will reply today.", "bad");
+      });
+  }
+})();

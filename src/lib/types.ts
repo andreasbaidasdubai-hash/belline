@@ -1,5 +1,6 @@
 import type { BrainVersion } from "./brain";
 import type { GoogleLink } from "./integrations/google";
+import type { BillingCycle, PlanId } from "./billing/plans";
 
 // Domain model.
 //
@@ -79,6 +80,34 @@ export interface Location {
    * numbers better than we do, and unset shows no estimate rather than zero.
    */
   averageBookingValue?: number;
+  /** What this venue pays, and what it is owed. Absent until it signs up. */
+  subscription?: Subscription;
+}
+
+/**
+ * A venue's plan.
+ *
+ * Per venue, not per company: the pricing card says "one Belline
+ * receptionist", and a second venue is a second line, a second diary and a
+ * second set of rules. Anything else would need a rewrite the moment somebody
+ * with two branches asked an obvious question.
+ *
+ * `startedOn` anchors every billing period that follows — see `periodFor` in
+ * billing/usage.ts, which remembers the anchor day rather than clamping it.
+ */
+export interface Subscription {
+  planId: PlanId;
+  cycle: BillingCycle;
+  /** `YYYY-MM-DD`. The billing anniversary, for as long as the plan lasts. */
+  startedOn: DateStr;
+  status: "trialing" | "active" | "cancelled";
+  /** Set when someone cancels. Service runs to the end of the paid period. */
+  cancelledAt?: string;
+  /** Trialing only. Nothing is charged, and the allowance is its own. */
+  trial?: {
+    endsOn: DateStr;
+    minutes: number;
+  };
 }
 
 /**

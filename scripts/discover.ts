@@ -109,7 +109,8 @@ try {
     console.log(`  leads claimed      ${result.leadsClaimed}`);
   }
   console.log(`  skipped            ${result.skipped.length}`);
-  console.log(`  cost               $${result.costUsd.toFixed(4)}  (estimate)`);
+  console.log(`  API requests       ${result.requests}`);
+  console.log(`  cost               $${result.costUsd.toFixed(4)}  (${result.requests} × $${(result.costUsd / Math.max(1, result.requests)).toFixed(3)})`);
   console.log(`  took               ${seconds}s\n`);
 
   if (result.skipped.length > 0) {

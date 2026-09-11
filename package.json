@@ -19,11 +19,13 @@
     "check:speculation": "node --import tsx --env-file-if-exists=.env scripts/check-speculation.ts",
     "check:prospect": "node --import tsx scripts/check-prospect.ts",
     "check:overview": "node --import tsx scripts/check-overview.ts",
+    "check:billing": "node --import tsx scripts/check-billing.ts",
+    "check:leads": "node --import tsx scripts/check-leads.ts",
     "check:queue": "node --import tsx --env-file-if-exists=.env scripts/check-queue.ts",
     "check:sales": "node --import tsx scripts/check-sales.ts",
     "check:import": "node --import tsx scripts/check-import.ts",
     "check:places": "node --import tsx scripts/check-places.ts",
-    "check:all": "npm run check && npm run check:brain && npm run check:calendar && npm run check:waitlist && npm run check:attention && npm run check:idempotency && npm run check:authority && npm run check:spoken && npm run check:speculation && npm run check:prospect && npm run check:overview",
+    "check:all": "npm run check && npm run check:brain && npm run check:calendar && npm run check:waitlist && npm run check:attention && npm run check:idempotency && npm run check:authority && npm run check:spoken && npm run check:speculation && npm run check:prospect && npm run check:overview && npm run check:billing && npm run check:leads",
     "audit": "playwright test",
     "audit:ui": "playwright test --ui",
     "site": "node --import tsx scripts/build-site.ts",
@@ -37,7 +39,9 @@
     "sales:db": "node --import tsx --env-file-if-exists=.env scripts/sales-db.ts",
     "worker": "node --import tsx --env-file-if-exists=.env scripts/worker.ts",
     "agents": "node --import tsx --env-file-if-exists=.env scripts/agents.ts",
-    "discover": "node --import tsx --env-file-if-exists=.env scripts/discover.ts"
+    "discover": "node --import tsx --env-file-if-exists=.env scripts/discover.ts",
+    "research": "node --import tsx --env-file-if-exists=.env scripts/research.ts",
+    "check:research": "node --import tsx scripts/check-research.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
