@@ -509,6 +509,150 @@ tbody tr:hover {
   border-top: 1px solid var(--accent-line);
 }
 
+/* The week strip. A shape to scan, not a table to read — which is why the
+   load is a bar rather than a percentage. Anyone who wants the detail clicks
+   the day. */
+
+.cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.cal-week-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--lift);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.cal-week-day:hover {
+  border-color: var(--accent-line);
+  background: var(--panel-2);
+}
+
+.cal-week-day.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.cal-week-day.closed {
+  opacity: 0.55;
+}
+
+.cal-week-name {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.cal-week-num {
+  font-size: 17px;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.cal-week-bar {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 26px;
+  background: var(--panel-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cal-week-fill {
+  width: 100%;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
+  min-height: 2px;
+}
+
+/* Over the kitchen's cap is the one thing worth colouring. */
+.cal-week-fill.over {
+  background: var(--bad);
+}
+
+.cal-week-sub {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-week-today {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--gold-ink);
+}
+
+/* Grabbable, and visibly lifted while held. */
+.cal-block {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.cal-block.held {
+  cursor: grabbing;
+  z-index: 4;
+  box-shadow: 0 8px 22px -6px rgba(15, 33, 49, 0.45);
+  opacity: 0.94;
+}
+
+.cal-lane {
+  cursor: copy;
+}
+
+.cal-toast {
+  position: sticky;
+  top: 8px;
+  z-index: 10;
+  margin-bottom: 10px;
+  padding: 9px 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  background: var(--ok-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.cal-toast.bad {
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.cal-modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 33, 49, 0.38);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 50;
+}
+
+.cal-modal {
+  width: 100%;
+  max-width: 420px;
+}
+
 .cal-now {
   position: absolute;
   left: 0;

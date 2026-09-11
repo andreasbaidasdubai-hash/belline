@@ -39,6 +39,23 @@ async function cleanup() {
   await query(`delete from sales.job where idempotency_key like $1`, [`${TAG}%`]);
 }
 
+/**
+ * Leave `key` as the only pending job from this run.
+ *
+ * A worker with `maxJobs: 1` claims the oldest due job, not "the job the test
+ * just enqueued" — so an earlier test that enqueues without draining (the
+ * idempotency test does exactly that, deliberately) silently feeds its
+ * leftover to the next test's worker. The job under test then never runs and
+ * the failure reads as a queue bug rather than a test-isolation one.
+ */
+async function isolate(key: string) {
+  await query(
+    `delete from sales.job
+      where idempotency_key like $1 and idempotency_key <> $2 and status = 'pending'`,
+    [`${TAG}%`, key],
+  );
+}
+
 console.log("\n  Queue\n");
 
 await test("a job runs exactly once, even with several workers competing", async () => {
@@ -98,6 +115,7 @@ await test("a failing job retries with backoff, then dies with its error kept", 
     idempotencyKey: `${TAG}:dead`,
     maxAttempts: 2,
   });
+  await isolate(`${TAG}:dead`);
 
   // First attempt: fails, reschedules into the future.
   await new Worker({ concurrency: 1, maxJobs: 1, idleMs: 10, quiet: true }).start();
@@ -123,6 +141,7 @@ await test("a failing job retries with backoff, then dies with its error kept", 
 
 await test("an unknown job type dies immediately rather than retrying for hours", async () => {
   await enqueue({ type: "no_such_handler", idempotencyKey: `${TAG}:unknown` });
+  await isolate(`${TAG}:unknown`);
   await new Worker({ concurrency: 1, maxJobs: 1, idleMs: 10, quiet: true }).start();
   const row = await query<{ status: string }>(
     `select status from sales.job where idempotency_key = $1`,

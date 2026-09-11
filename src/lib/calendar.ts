@@ -197,6 +197,99 @@ export function dayView(location: Location, date: string): DayView {
   };
 }
 
+export interface WeekDay {
+  date: string;
+  /** 0 = Sunday, matching Date.getDay(). */
+  weekday: number;
+  covers: number;
+  appointments: number;
+  /** Busiest quarter-hour, for the restaurant strip. */
+  peak: { startMin: Minutes; covers: number; cap: number } | null;
+  /** Fraction of the day's capacity taken, 0–1, for the bar height. */
+  load: number;
+  closed: boolean;
+  isToday: boolean;
+}
+
+/**
+ * Seven days at a glance.
+ *
+ * A day view answers "what is happening now"; a week answers "where are we
+ * thin". Restaurants plan staffing a week out and salons chase the empty
+ * Tuesday, and neither question is visible one day at a time.
+ *
+ * Load is deliberately coarse — a bar, not a number. Precision here would be
+ * false: it is a shape to scan, and anyone who wants the detail clicks the
+ * day.
+ */
+export function weekView(location: Location, from: string): WeekDay[] {
+  const today = todayIn(location.timezone);
+  const out: WeekDay[] = [];
+
+  for (let i = 0; i < 7; i++) {
+    const date = shiftDate(from, i);
+    const weekday = new Date(`${date}T12:00:00`).getDay();
+    const ranges = location.hours[weekday] ?? [];
+    const closed = ranges.length === 0 || location.closures.includes(date);
+
+    const bookings = listBookings({ locationId: location.id }).filter(
+      (b) => b.date === date && b.status === "confirmed",
+    );
+    const covers = bookings.reduce((n, b) => n + (b.partySize ?? 0), 0);
+
+    let peak: WeekDay["peak"] = null;
+    let load = 0;
+
+    if (isRestaurant(location) && location.restaurant) {
+      const openMin = ranges.length ? Math.min(...ranges.map((r) => r.start)) : FALLBACK_OPEN;
+      const closeMin = ranges.length ? Math.max(...ranges.map((r) => r.end)) : FALLBACK_CLOSE;
+      const slots = pacingFor(location, bookings, openMin, closeMin);
+      peak = slots.sort((a, b) => b.covers - a.covers)[0] ?? null;
+
+      // Against the room's total seats, which is the honest denominator: a
+      // restaurant is full when the seats are gone, not when the slots are.
+      const seats = (location.restaurant.tables ?? []).reduce((n, t) => n + t.maxSeats, 0);
+      load = seats > 0 ? Math.min(1, covers / seats) : 0;
+    } else {
+      // A diary is full when its people are. Minutes booked against minutes
+      // available is the only measure that survives different service lengths.
+      const staff = location.salon?.staff ?? [];
+      const available = staff.reduce((total, person) => {
+        const hours = person.hours[weekday] ?? [];
+        return total + hours.reduce((n, r) => n + (r.end - r.start), 0);
+      }, 0);
+      const booked = bookings.reduce((n, b) => n + (b.endMin - b.startMin), 0);
+      load = available > 0 ? Math.min(1, booked / available) : 0;
+    }
+
+    out.push({
+      date,
+      weekday,
+      covers,
+      appointments: bookings.length,
+      peak,
+      load,
+      closed,
+      isToday: date === today,
+    });
+  }
+  return out;
+}
+
+/** Monday of the week containing this date. Weeks start on Monday in trade. */
+export function weekStart(date: string): string {
+  const day = new Date(`${date}T12:00:00`).getDay();
+  // getDay() puts Sunday at 0; a working week starts the day after.
+  const back = day === 0 ? 6 : day - 1;
+  return shiftDate(date, -back);
+}
+
+function shiftDate(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 /** What the guest was told, as opposed to what the diary holds. */
 function guestEnd(location: Location, booking: Booking): Minutes {
   if (isRestaurant(location)) return booking.endMin;

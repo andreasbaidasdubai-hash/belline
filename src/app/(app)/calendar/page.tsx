@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
-import { dayView } from "@/lib/calendar";
+import { dayView, weekView, weekStart } from "@/lib/calendar";
 import { addDays, dateToSpoken, minutesToClock, todayIn } from "@/lib/time";
 import { isRestaurant } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -23,6 +23,7 @@ export default async function CalendarPage({
   const today = todayIn(location.timezone);
   const on = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : today;
   const view = dayView(location, on);
+  const week = weekView(location, weekStart(on));
 
   const link = (d: string) => `/calendar?loc=${location.id}&date=${d}`;
   const busiest = [...view.pacing].sort((a, b) => b.covers - a.covers)[0];
@@ -51,6 +52,43 @@ export default async function CalendarPage({
         }
       />
       <LocationTabs base="/calendar" active={location.id} />
+
+      {/* The week above the day: where are we thin, then what is happening. */}
+      <div className="cal-week" style={{ marginBottom: 16 }}>
+        {week.map((day) => (
+          <Link
+            key={day.date}
+            href={link(day.date)}
+            className={`cal-week-day${day.date === on ? " on" : ""}${day.closed ? " closed" : ""}`}
+            aria-current={day.date === on ? "date" : undefined}
+          >
+            <span className="cal-week-name">
+              {new Date(`${day.date}T12:00:00`).toLocaleDateString("en-GB", { weekday: "short" })}
+            </span>
+            <span className="cal-week-num">{Number(day.date.slice(8))}</span>
+            <span className="cal-week-bar" aria-hidden="true">
+              <span
+                className={`cal-week-fill${
+                  day.peak && day.peak.covers > day.peak.cap ? " over" : ""
+                }`}
+                style={{ height: `${Math.round(day.load * 100)}%` }}
+              />
+            </span>
+            <span className="cal-week-sub">
+              {day.closed
+                ? "closed"
+                : isRestaurant(location)
+                  ? day.covers > 0
+                    ? `${day.covers}`
+                    : "—"
+                  : day.appointments > 0
+                    ? `${day.appointments}`
+                    : "—"}
+            </span>
+            {day.isToday && <span className="cal-week-today" aria-label="today" />}
+          </Link>
+        ))}
+      </div>
 
       <div className="panel" style={{ padding: "14px 18px", marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 22, alignItems: "baseline", flexWrap: "wrap" }}>
@@ -91,7 +129,16 @@ export default async function CalendarPage({
           </p>
         </div>
       ) : (
-        <Grid view={view} />
+        <Grid
+          view={view}
+          locationId={location.id}
+          isRestaurant={isRestaurant(location)}
+          services={(location.salon?.services ?? []).map((s) => ({
+            id: s.id,
+            name: s.name,
+            durationMin: s.durationMin,
+          }))}
+        />
       )}
 
       {view.unplaced.length > 0 && (
