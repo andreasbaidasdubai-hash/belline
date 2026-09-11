@@ -1514,3 +1514,16 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 @media (max-width: 900px) {
   .channels { grid-template-columns: 1fr; gap: 0; margin-top: 40px; }
 }
+
+/* Der Weg aus dem Aufklapper heraus. Zwei Pläne standen dort lesbar und
+   unkaufbar: die Funktionen aufgelistet, kein Knopf nirgends. */
+.plan-pick {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 0.88rem;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--brass-soft);
+  padding-bottom: 3px;
+}
+.plan-pick:hover { border-bottom-color: var(--brass); }

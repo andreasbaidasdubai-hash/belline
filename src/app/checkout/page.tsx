@@ -6,6 +6,7 @@ import { PLANS, periodFee, FILS, annualPerMonth, type BillingCycle } from "@/lib
 import { stripeEnabled } from "@/lib/billing/stripe";
 import CheckoutForm from "./CheckoutForm";
 import PayButton from "./PayButton";
+import PlanSwitch from "./PlanSwitch";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,8 @@ export default async function CheckoutPage({
 
         {/* The order. */}
         <section className="checkout-order">
+          <PlanSwitch current={plan.id} cycle={cycle} />
+
           <h1 style={{ ...serif, fontSize: 25, letterSpacing: "-0.02em", margin: "0 0 6px" }}>
             Belline {plan.name}
           </h1>

@@ -1277,3 +1277,36 @@ body:has(.callbar) {
   }
   .checkout-order { padding: 24px 20px; }
 }
+
+/* --- Zwischen den Plänen wechseln --------------------------------------------
+ * Eine Zeile, nicht wieder eine Preistabelle. Die Kasse ist genau das, was
+ * hinter einer Preistabelle kommt; sie darf nicht zu einer werden.
+ */
+.plan-switch {
+  display: flex;
+  gap: 4px;
+  margin: -4px 0 20px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.plan-switch a {
+  flex: 1;
+  display: grid;
+  gap: 1px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  text-align: center;
+  text-decoration: none;
+  color: var(--muted);
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.plan-switch a strong { font-size: 12px; font-weight: 600; letter-spacing: -0.005em; }
+.plan-switch a span { font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.plan-switch a:hover { color: var(--text); }
+.plan-switch a.is-on {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--lift);
+}
+.plan-switch a.is-on span { color: var(--gold-ink); }
