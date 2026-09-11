@@ -30,6 +30,20 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
   reporter: [["list"]],
+  /**
+   * 60s, not the default 30.
+   *
+   * `serve:site` is a twenty-line static server and the suite points eight
+   * workers at it, each pulling a page plus its images and twenty-eight audio
+   * clips. Under that it occasionally takes longer than thirty seconds to
+   * answer one navigation — a different page each run, and the same page
+   * passes alone in a second, which is the tell that it is the harness rather
+   * than the site.
+   *
+   * Raised rather than papered over with retries: a retry would also hide a
+   * page that had genuinely become slow, and slow is a real defect here.
+   */
+  timeout: 60_000,
   use: {
     baseURL: `http://localhost:${PORT}`,
     // A screenshot the critic is meant to judge has to be deterministic:

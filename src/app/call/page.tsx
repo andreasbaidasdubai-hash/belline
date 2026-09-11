@@ -64,6 +64,16 @@ export default async function CallPage() {
         locationName={location.name}
         demoToken={token}
         compact
+        // One button. A stranger who came here to hear it talk should not
+        // have to make three decisions before anybody speaks.
+        oneTap
+        // A question and then the thing we actually want them to do. The
+        // default prompts are a restaurant booking, which on our own line was
+        // inviting visitors to ask us for a table for four.
+        prompts={[
+          "What does Belline cost?",
+          "Can you book me in with your sales director?",
+        ]}
       />
 
       <p className="widget-foot">

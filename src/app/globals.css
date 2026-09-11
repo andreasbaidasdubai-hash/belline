@@ -915,6 +915,9 @@ tbody tr:hover {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
+  /* Room for the panel's close button, which belongs to the page framing this
+     one and lands squarely on top of the "live call" badge without it. */
+  padding-right: 40px;
 }
 .widget-head img {
   height: 26px;

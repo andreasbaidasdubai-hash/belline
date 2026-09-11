@@ -103,6 +103,27 @@ export const bellineVenue: Location = {
   requiresEmail: true,
   // Ours. Never in a customer's venue switcher, call list or bookings.
   internal: true,
+  /**
+   * Capped, because this is a public line anyone on the internet can open and
+   * every second of it spends real money with three vendors at once.
+   *
+   * `clearBookingsDaily` is false here, unlike every other demo line: a
+   * booking on this venue is a sales lead with somebody's email on it, not a
+   * stranger's test reservation. Deleting those overnight would quietly throw
+   * away the entire point of the thing.
+   *
+   * The disclosure is empty on purpose. The greeting already says who is
+   * speaking, and "you have reached the Belline demonstration line" in front
+   * of it would be both redundant and oddly apologetic about the product
+   * answering its own phone.
+   */
+  demo: {
+    enabled: true,
+    maxCallsPerDay: 60,
+    maxCallSeconds: 600,
+    clearBookingsDaily: false,
+    disclosure: "",
+  },
   agent: {
     displayName: "Belle",
     greeting:

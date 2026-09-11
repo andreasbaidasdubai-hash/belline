@@ -15,6 +15,7 @@ import { reconcileStaleCalls, startCall } from "./src/lib/calls";
 import type { User } from "./src/lib/types";
 import { greetingFor } from "./src/lib/agent/runtime";
 import { checkDemoGate } from "./src/lib/demo";
+import { mayStreamTo } from "./src/lib/voice/entitlement";
 import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { VoiceSession } from "./src/lib/voice/session";
@@ -86,7 +87,10 @@ server.on("upgrade", (req, socket, head) => {
   if (pathname === "/ws/demo") {
     const locationId = verifyStreamToken(String(query.token ?? ""));
     const location = locationId ? getLocation(locationId) : undefined;
-    if (!location?.prospect || !location.demo?.enabled) {
+
+    // The predicate lives in lib/voice/entitlement.ts so it can be tested.
+    // It has already been wrong twice.
+    if (!location || !mayStreamTo(location)) {
       socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
       socket.destroy();
       return;

@@ -61,6 +61,11 @@ export default function Console({
   locationName,
   demoToken,
   compact = false,
+  prompts = [
+    "Hi, do you have a table for four on Friday around eight?",
+    "Actually can you make that six people?",
+  ],
+  oneTap = false,
 }: {
   locationId: string;
   locationName: string;
@@ -72,6 +77,25 @@ export default function Console({
   demoToken?: string;
   /** Drop the operator-facing panes: a prospect wants the conversation. */
   compact?: boolean;
+  /**
+   * Two things worth saying first, shown before the call starts.
+   *
+   * Defaulted to a restaurant booking because that is what a venue's own test
+   * console is usually for — but on Belline's own line it was telling visitors
+   * to ask us for a table for four, which is nonsense and the first thing they
+   * read.
+   */
+  prompts?: [string, string];
+  /**
+   * One button: connect and open the microphone together.
+   *
+   * The operator console is three decisions deep before anybody speaks — a
+   * number to type, a call to start, then a microphone to switch on. That is
+   * right for a venue testing its own agent and wrong for a stranger on the
+   * website, who should press one thing and be talking. The mic is opened
+   * inside the click because browsers only grant it from a real gesture.
+   */
+  oneTap?: boolean;
 }) {
   const [connected, setConnected] = useState(false);
   const [listening, setListening] = useState(false);
@@ -299,6 +323,29 @@ export default function Console({
 
   // --- microphone ----------------------------------------------------------
 
+  /**
+   * One gesture: open the microphone, then connect.
+   *
+   * In that order, and deliberately. `getUserMedia` has to be called inside
+   * the click or the browser refuses it — and asking first means the socket
+   * is not already open and greeting an empty room while a permission prompt
+   * sits on top of the page. If they decline, the call still goes ahead: they
+   * can type, and a refused microphone is not a reason to refuse the
+   * conversation.
+   */
+  const answerAndListen = useCallback(() => {
+    // Playback first, and synchronously, while the click is still on the
+    // stack. `getUserMedia` puts a permission prompt in front of the user,
+    // and by the time they answer it the gesture has expired — `resume()` is
+    // then refused, the greeting plays into a suspended context, and they
+    // hear nothing at all with no error anywhere. Which is the single worst
+    // failure this product has.
+    void primeAudio();
+    void startListening().finally(() => connect());
+    // primeAudio/startListening/connect are stable for this component's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function stopListening() {
     const capture = captureRef.current;
     if (capture) {
@@ -416,15 +463,24 @@ export default function Console({
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             {!connected ? (
               <>
-                <input
-                  value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                  placeholder="Calling from… (optional)"
-                  title="Give a number that already has a booking and the agent will recognise the caller."
-                  style={{ width: 190 }}
-                />
-                <button className="btn btn-accent" onClick={connect}>
-                  Start call
+                {/*
+                  The "calling from" box is operator tooling: it makes the
+                  agent recognise a number that already has a booking. On a
+                  public line it is a field a stranger has to decide about
+                  before they are allowed to speak, which is one step too many
+                  in front of the only thing that matters.
+                */}
+                {!oneTap && (
+                  <input
+                    value={from}
+                    onChange={(e) => setFrom(e.target.value)}
+                    placeholder="Calling from… (optional)"
+                    title="Give a number that already has a booking and the agent will recognise the caller."
+                    style={{ width: 190 }}
+                  />
+                )}
+                <button className="btn btn-accent" onClick={oneTap ? answerAndListen : connect}>
+                  {oneTap ? "Talk to Belline" : "Start call"}
                 </button>
               </>
             ) : (
@@ -436,7 +492,7 @@ export default function Console({
                   disabled={status ? !status.stt : false}
                   title={status && !status.stt ? "Set DEEPGRAM_API_KEY to use the microphone" : ""}
                 >
-                  {listening ? "◼ Stop mic" : "◉ Speak"}
+                  {listening ? "◼ Mute" : "◉ Speak"}
                 </button>
                 <button className="btn btn-danger" onClick={hangup}>
                   Hang up
@@ -453,13 +509,23 @@ export default function Console({
         >
           {lines.length === 0 && !connected && (
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
-              Press <strong>Start call</strong>. The agent greets you first, then either type
-              below or press <strong>Speak</strong> and talk to it.
+              {oneTap ? (
+                <>
+                  Press <strong>Talk to Belline</strong> and it will answer and start
+                  speaking. Allow the microphone when your browser asks — or just type
+                  instead.
+                </>
+              ) : (
+                <>
+                  Press <strong>Start call</strong>. The agent greets you first, then either
+                  type below or press <strong>Speak</strong> and talk to it.
+                </>
+              )}
               <br />
               <br />
-              Try: <em>&ldquo;Hi, do you have a table for four on Friday around eight?&rdquo;</em>
+              Try: <em>&ldquo;{prompts[0]}&rdquo;</em>
               <br />
-              Then: <em>&ldquo;Actually can you make that six people?&rdquo;</em>
+              Then: <em>&ldquo;{prompts[1]}&rdquo;</em>
             </p>
           )}
           {lines.map((line, i) => (

@@ -23,6 +23,7 @@ const { BELLINE_LOCATION_ID } = await import("../src/lib/seed-belline");
 const { startCall } = await import("../src/lib/calls");
 const { executeTool, toolsFor } = await import("../src/lib/agent/tools");
 const { findAvailability } = await import("../src/lib/booking");
+const { mayStreamTo } = await import("../src/lib/voice/entitlement");
 const { todayIn } = await import("../src/lib/time");
 
 let passed = 0;
@@ -95,6 +96,45 @@ test("its policies forbid overstating the product", () => {
   const policies = belline.agent.policies.join(" ");
   assert.match(policies, /Never overstate/i);
   assert.match(policies, /card details|payment/i, "nothing stops it asking for a card");
+});
+
+console.log("\nWho a signed token may call\n");
+
+test("Belline's own line accepts a token — the bell depends on it", () => {
+  // This is the bug the website shipped with: the guard demanded a *prospect*
+  // venue, so the bell opened a call that answered 403 and said "connection
+  // failed" with nothing in any log to explain it.
+  assert.equal(mayStreamTo(getLocation(BELLINE_LOCATION_ID)), true);
+});
+
+test("a customer's venue never does, whatever the token says", () => {
+  // The whole point of the guard. A leaked token must not become free calls
+  // on a customer's bill, or a stranger reading their diary aloud.
+  for (const id of ["loc_azure", "loc_lumiere", "loc_meridian"]) {
+    const venue = getLocation(id)!;
+    if (venue.demo?.enabled && !venue.prospect && !venue.internal) {
+      assert.equal(mayStreamTo(venue), false, `${venue.name} is reachable by token`);
+    }
+  }
+});
+
+test("an uncapped venue is refused, however much it is ours", () => {
+  // demo.enabled is what checkDemoGate caps on. Without it a public line
+  // spends real money with three vendors for as long as anybody leaves it
+  // open, so "ours" alone is not enough to let a stranger dial it.
+  const belline = getLocation(BELLINE_LOCATION_ID)!;
+  const { demo: _cap, ...uncapped } = belline;
+  assert.equal(mayStreamTo(uncapped as never), false, "an uncapped line was dialable");
+});
+
+test("Belline's own bookings are not wiped nightly like a demo line's", () => {
+  // Every other demo venue clears its bookings daily so the diary stays
+  // legible. Here a booking is a sales lead with somebody's email on it.
+  assert.equal(getLocation(BELLINE_LOCATION_ID)!.demo!.clearBookingsDaily, false);
+});
+
+test("a missing venue is refused rather than crashing the handshake", () => {
+  assert.equal(mayStreamTo(undefined), false);
 });
 
 console.log("\nBooking a demo\n");
