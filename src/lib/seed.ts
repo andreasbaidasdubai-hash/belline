@@ -456,6 +456,35 @@ function addMissingVenues(): void {
   for (const fixture of FIXTURES) {
     if (!known.has(fixture.id)) upsertLocation(fixture);
   }
+  refreshInternalVenues();
+}
+
+/**
+ * Keep our own venues matching the code that defines them.
+ *
+ * Belline's own venue is configured here, not in the dashboard — nobody edits
+ * it, and the rule that protects a customer's edits works against us on it.
+ * Shortening its greeting changed the fixture and nothing else: the stored
+ * copy kept the old wording, on a line that is the first thing anybody hears
+ * of the product.
+ *
+ * Only venues marked `internal`, and only their agent settings — bookings,
+ * calls and the brain history stay exactly as they are, because those are
+ * real and ours to keep.
+ */
+function refreshInternalVenues(): void {
+  for (const fixture of FIXTURES.filter((f) => f.internal)) {
+    const stored = listLocations({ includeInternal: true }).find((l) => l.id === fixture.id);
+    if (!stored) continue;
+    upsertLocation({
+      ...stored,
+      hours: fixture.hours,
+      requiresEmail: fixture.requiresEmail,
+      demo: fixture.demo,
+      agent: fixture.agent,
+      salon: fixture.salon,
+    });
+  }
 }
 
 /** Populate the store the first time the app runs. Idempotent. */

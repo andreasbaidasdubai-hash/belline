@@ -13,6 +13,14 @@ import type { Transport } from "./session";
 export class BrowserTransport implements Transport {
   readonly input = { encoding: "linear16" as const, sampleRate: 16000 };
   readonly output = "pcm_16000" as const;
+  /**
+   * There is a screen on the other end of this one.
+   *
+   * Which changes what the session should do: times can be shown as well as
+   * said, so the caller is not holding four of them in their head while
+   * deciding. A telephone has no such luxury and must not be sent any.
+   */
+  readonly screen = true;
 
   constructor(private readonly socket: WebSocket) {}
 
@@ -48,6 +56,8 @@ export class BrowserTransport implements Transport {
 export class TwilioTransport implements Transport {
   readonly input = { encoding: "mulaw" as const, sampleRate: 8000 };
   readonly output = "ulaw_8000" as const;
+  /** A telephone. Everything has to be said out loud. */
+  readonly screen = false;
 
   private carry: Buffer = Buffer.alloc(0);
   private static readonly FRAME = 160;

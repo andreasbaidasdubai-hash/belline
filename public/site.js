@@ -419,6 +419,24 @@
   triggers.forEach(function (t) {
     t.addEventListener("click", open);
   });
+
+  /**
+   * Grow the dock when Belline puts times on screen.
+   *
+   * An iframe cannot resize itself, so it asks. Only app.belline.ai is
+   * listened to, and only for a height inside a range we chose — a page that
+   * accepts layout instructions from any origin is a page anybody can reshape,
+   * and one that accepts any number is one frame away from covering the whole
+   * screen.
+   */
+  window.addEventListener("message", function (e) {
+    if (e.origin !== "https://app.belline.ai") return;
+    var msg = e.data;
+    if (!msg || msg.source !== "belline-call") return;
+    var h = Number(msg.height);
+    if (!dock || !(h >= 60 && h <= 320)) return;
+    dock.querySelector(".call-frame").style.height = h + "px";
+  });
 })();
 
 /* --- monthly / annual ------------------------------------------------------

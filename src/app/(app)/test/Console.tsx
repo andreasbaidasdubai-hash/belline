@@ -40,6 +40,25 @@ class Capture extends AudioWorkletProcessor {
 registerProcessor("capture", Capture);
 `;
 
+/**
+ * "Thursday", or "Thu 18 Sep" once it is far enough away to be ambiguous.
+ *
+ * Parsed as midday UTC rather than midnight: a bare `YYYY-MM-DD` is parsed as
+ * UTC midnight, which in any timezone west of London is the previous evening,
+ * and the strip would be headed with yesterday.
+ */
+function niceDay(date: string): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  const days = Math.round((d.getTime() - Date.now()) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  // en-GB, not the visitor's locale. The whole page is in English and the
+  // agent has just said the day out loud in English; a German browser was
+  // rendering "SONNTAG" under a sentence that said Sunday.
+  if (days < 7) return d.toLocaleDateString("en-GB", { weekday: "long" });
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+}
+
 /** Linear resample to 16 kHz, which is what the speech model wants. */
 function toPcm16(samples: Float32Array, fromRate: number): Int16Array {
   const ratio = fromRate / 16000;
@@ -137,6 +156,16 @@ export default function Console({
   const [heardBytes, setHeardBytes] = useState(0);
   /** Belline is mid-sentence. Drives the call bar; see the effect below. */
   const [speaking, setSpeaking] = useState(false);
+  /**
+   * The times Belline is offering, if any.
+   *
+   * Sent by the session off the availability tool's own result, so the page
+   * can never show a slot the engine did not offer.
+   */
+  const [slots, setSlots] = useState<{
+    date: string;
+    options: { time: string; spoken: string; with?: string }[];
+  } | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const captureRef = useRef<{ ctx: AudioContext; stream: MediaStream } | null>(null);
@@ -322,6 +351,9 @@ export default function Console({
         case "tool":
           setTraces((prev) => [msg.trace, ...prev]);
           break;
+        case "slots":
+          setSlots({ date: msg.date, options: msg.options });
+          break;
         case "interrupted":
           stopAudio();
           break;
@@ -489,6 +521,27 @@ export default function Console({
     if (auto) answerAndListen();
   }, [auto, answerAndListen]);
 
+  /**
+   * Tell the page framing us how tall we need to be.
+   *
+   * The dock on belline.ai is a fixed 76px, which is right for a status bar
+   * and clips a row of times to a sliver. An iframe cannot resize itself, so
+   * it asks. Guarded by a fixed origin — a page that accepts layout
+   * instructions from anywhere is a page anybody can reshape.
+   */
+  useEffect(() => {
+    if (!minimal) return;
+    try {
+      if (window.self === window.top) return;
+      window.parent.postMessage(
+        { source: "belline-call", height: slots ? 178 : 76 },
+        "*",
+      );
+    } catch {
+      // Cross-origin parent we cannot reach. The dock keeps its default size.
+    }
+  }, [slots, minimal]);
+
   // --- render --------------------------------------------------------------
 
   if (minimal) {
@@ -565,6 +618,44 @@ export default function Console({
             <strong>{locationName}</strong>
             <span>{error ?? state}</span>
           </div>
+
+          {/*
+            The times, while it is still saying them.
+            Tapping one *speaks* it rather than booking it directly. That
+            keeps one path through the booking engine instead of two, so a
+            tap and a spoken sentence cannot diverge — and the caller hears
+            Belline confirm, which is what makes it feel like a call rather
+            than a form.
+          */}
+          {slots && connected && (
+            <div className="callbar-slots">
+              <div className="callbar-slots-day">{niceDay(slots.date)}</div>
+              <div className="callbar-slots-row" role="list">
+                {slots.options.map((o) => (
+                  <button
+                    key={`${o.time}-${o.with ?? ""}`}
+                    type="button"
+                    role="listitem"
+                    className="callbar-slot"
+                    onClick={() => {
+                      socketRef.current?.send(
+                        JSON.stringify({
+                          type: "text",
+                          text: o.with
+                            ? `${o.spoken} with ${o.with}, please.`
+                            : `${o.spoken}, please.`,
+                        }),
+                      );
+                      setSlots(null);
+                    }}
+                  >
+                    <strong>{o.time}</strong>
+                    {o.with && <em>{o.with}</em>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/*

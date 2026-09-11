@@ -409,7 +409,11 @@
      findable enough that the team stops bookmarking the dashboard
      separately. It is a door for people who already have a key, not a
      call to action. */
-  .foot-staff { width: 100%; margin-top: 18px; font-size: 0.76rem; opacity: 0.5; }
+  /* Quiet by size and colour, not by opacity. Half-opacity on --muted lands
+     at 1.97:1 against white, which fails WCAG AA outright — a link nobody
+     with imperfect sight can read is not subtle, it is absent. --muted alone
+     is 5.26:1 and still recedes. */
+  .foot-staff { width: 100%; margin-top: 18px; font-size: 0.76rem; }
   .foot-staff a { color: var(--muted); text-decoration: none; }
   .foot-staff a:hover { color: var(--navy); text-decoration: underline; }
   .foot-staff a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }

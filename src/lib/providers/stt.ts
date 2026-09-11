@@ -71,9 +71,16 @@ export function createSttStream(opts: SttOptions): SttStream {
     // Digits as digits: party sizes, times and phone numbers all arrive as
     // numbers people say aloud, and "twenty twenty five" is not a year.
     numerals: "true",
-    // Silence that closes a thought. Below ~250 you clip people who pause to
-    // think; above ~600 the agent feels slow to react.
-    endpointing: phone ? "500" : "300",
+    // Silence that closes a thought.
+    //
+    // A phone line gets 500: it is 8 kHz over a lossy network, callers pause
+    // mid-sentence to check a diary, and clipping someone reads as not being
+    // listened to. A browser is clean 16 kHz from somebody at a desk with the
+    // agent visibly waiting on screen, so it can afford to be quicker — and
+    // on a demonstration the half-second of dead air after you stop talking
+    // is the thing that makes it feel like software rather than a person.
+    // 240 is as low as this goes before it starts cutting into pauses.
+    endpointing: phone ? "500" : "240",
     vad_events: "true",
     // Backstop for a line noisy enough that the endpointer never fires.
     utterance_end_ms: phone ? "1400" : "1000",

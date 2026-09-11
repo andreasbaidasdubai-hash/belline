@@ -1,4 +1,4 @@
-import type { Call, Location } from "../types";
+import type { Call, Location, ToolTrace } from "../types";
 import { AgentSession } from "../agent/runtime";
 import { createSttStream, type SttStream } from "../providers/stt";
 import { speak, speakClip, ttsEnabled, type TtsFormat } from "../providers/tts";
@@ -7,6 +7,8 @@ import { maxCallSeconds } from "../demo";
 import { speechKeyterms } from "../verticals";
 import { assessAuthority, type Assessment } from "../agent/authority";
 import { toSpoken } from "./spoken";
+import { findAvailability } from "../booking";
+import { todayIn, minutesToClock, minutesToSpoken } from "../time";
 
 /**
  * One live call.
@@ -76,6 +78,14 @@ export interface Transport {
   input: { encoding: "linear16" | "mulaw"; sampleRate: number };
   /** Format the agent's audio must be produced in. */
   output: TtsFormat;
+  /**
+   * Whether the caller can see anything.
+   *
+   * A browser can be shown the times as well as told them, which removes the
+   * worst moment in booking by voice — holding four of them in your head
+   * while deciding. A telephone cannot, and must never be sent them.
+   */
+  screen?: boolean;
   sendAudio(chunk: Buffer): void;
   /** Structured events for the browser console; a no-op for telephony. */
   sendEvent(event: Record<string, unknown>): void;
@@ -194,6 +204,10 @@ export class VoiceSession {
     const greeting = this.agent.greeting();
     this.pushTranscript("agent", greeting);
     this.transport.sendEvent({ type: "transcript", role: "agent", text: greeting });
+    // Before the greeting has finished playing, not after: the point is that
+    // the times are already there while Belline is still talking.
+    this.openingTimes();
+
     await this.say(greeting, ++this.generation, { cache: true });
     // Close the bubble so the caller's first reply does not get merged into
     // the greeting in the console.
@@ -395,6 +409,7 @@ export class VoiceSession {
 
           case "tool":
             this.transport.sendEvent({ type: "tool", trace: event.trace });
+            this.offerSlots(event.trace);
             break;
 
           case "control":
@@ -453,6 +468,86 @@ export class VoiceSession {
       return;
     }
     await this.end(rule.then === "transfer" ? "transferred" : "message_taken", rule.reason);
+  }
+
+  /**
+   * Put the times on screen, when the caller has a screen.
+   *
+   * The worst moment in booking by voice is being read four times and having
+   * to hold them in your head while deciding. On a phone line there is no
+   * answer to that — the agent reads them and that is the medium. In a browser
+   * there is a screen going spare, so the same times it is about to say are
+   * also shown, and tapping one is faster than saying it.
+   *
+   * Derived from the tool's own result rather than sent separately, so the
+   * page cannot show a time the engine did not actually offer. Availability
+   * has exactly one source and this is not a second one.
+   */
+  /**
+   * Put times on screen before anybody has asked for them.
+   *
+   * The agent will get to availability in its own time — often three or four
+   * turns in, after a name. That is correct for a phone call and wasteful on
+   * a screen, where the next few openings can simply be sitting there while
+   * the greeting plays. Somebody who already knows when they want to come can
+   * tap one and skip the conversation entirely.
+   *
+   * Never on the telephone, where there is nothing to look at. Never fatal:
+   * a venue with no bookable services, or a diary that throws, costs the
+   * caller nothing here — they still have the conversation.
+   */
+  private openingTimes(): void {
+    if (!this.transport.screen) return;
+    const serviceIds = this.location.salon?.services.map((s) => s.id);
+    if (!serviceIds?.length) return;
+
+    try {
+      const today = todayIn(this.location.timezone);
+      for (let i = 0; i < 14; i++) {
+        const day = new Date(`${today}T12:00:00Z`);
+        day.setUTCDate(day.getUTCDate() + i);
+        const date = day.toISOString().slice(0, 10);
+
+        const slots = findAvailability(this.location, {
+          locationId: this.location.id,
+          date,
+          // The first service only. Offering every service's openings at once
+          // on a venue with eight of them is a wall, not a help.
+          serviceIds: [serviceIds[0]],
+        });
+        if (!slots.length) continue;
+
+        this.transport.sendEvent({
+          type: "slots",
+          date,
+          options: slots.slice(0, 24).map((s) => ({
+            time: minutesToClock(s.startMin),
+            spoken: minutesToSpoken(s.startMin),
+            ...(s.staffName ? { with: s.staffName } : {}),
+          })),
+        });
+        return;
+      }
+    } catch {
+      // A diary that cannot be read is the conversation's problem, not the
+      // opening screen's.
+    }
+  }
+
+  private offerSlots(trace: ToolTrace): void {
+    if (trace.name !== "check_availability") return;
+    const result = trace.output as
+      | { available?: boolean; date?: string; options?: { time: string; spoken: string; with?: string }[] }
+      | undefined;
+    if (!result?.available || !result.date || !result.options?.length) return;
+
+    this.transport.sendEvent({
+      type: "slots",
+      date: result.date,
+      // Capped: a day with fifty free slots is a scroll nobody reads, and the
+      // agent is only going to speak two or three of them anyway.
+      options: result.options.slice(0, 24),
+    });
   }
 
   /** Speak one fragment, abortable, dropping output from a stale generation. */
