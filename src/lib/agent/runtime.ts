@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Call, Location, ToolTrace } from "../types";
-import { callContext, staticPrompt } from "./prompt";
+import { callContext, staticPrompt, type AgentChannel } from "./prompt";
 import { executeTool, toolsFor } from "./tools";
 import { findAvailability } from "../booking";
 import { guestBriefing, recallGuest } from "../guests";
@@ -167,9 +167,32 @@ function anthropic(): Anthropic {
   return client;
 }
 
+export interface AgentSessionOptions {
+  /** The number the other end is reachable on, when we have it. */
+  callerNumber?: string;
+  /**
+   * Spoken or written.
+   *
+   * Changes two blocks of the system prompt and which control tools exist —
+   * see prompt.ts. Everything else about the turn is identical, which is the
+   * whole argument: one receptionist, reachable two ways, not two products.
+   */
+  channel?: AgentChannel;
+  /**
+   * A conversation already in progress.
+   *
+   * A phone call lives and dies inside one process, so its history can stay in
+   * memory. A message thread cannot: the customer replies twenty minutes later,
+   * possibly to a different container, and the turn has to resume from what was
+   * written down. Passing it here is how it resumes.
+   */
+  history?: Anthropic.MessageParam[];
+}
+
 export class AgentSession {
   readonly location: Location;
   readonly call: Call;
+  readonly channel: AgentChannel;
   private readonly callerNumber?: string;
   private messages: Anthropic.MessageParam[] = [];
   private readonly tools: Anthropic.Tool[];
@@ -179,11 +202,26 @@ export class AgentSession {
   /** What was actually said on pickup — the model must not repeat it. */
   private spokenGreeting: string | null = null;
 
-  constructor(location: Location, call: Call, callerNumber?: string) {
+  constructor(location: Location, call: Call, opts: AgentSessionOptions = {}) {
     this.location = location;
     this.call = call;
-    this.callerNumber = callerNumber;
-    this.tools = toolsFor(location);
+    this.callerNumber = opts.callerNumber;
+    this.channel = opts.channel ?? "voice";
+    this.messages = opts.history ? [...opts.history] : [];
+    this.tools = toolsFor(location, this.channel);
+  }
+
+  /**
+   * The conversation so far, to be written down.
+   *
+   * Returned by value: a caller persisting this must not be handed the array
+   * the next turn is about to push onto. Thinking blocks are in here verbatim
+   * and have to be — the API rejects a history that drops them — which is also
+   * why this is opaque JSON to everything above rather than a shape anybody
+   * should be tempted to edit.
+   */
+  history(): Anthropic.MessageParam[] {
+    return this.messages.map((m) => ({ ...m }));
   }
 
   /**
@@ -311,7 +349,7 @@ export class AgentSession {
     return [
       {
         type: "text",
-        text: staticPrompt(this.location),
+        text: staticPrompt(this.location, this.channel),
         // Everything before this point is identical on every turn of every
         // call at this venue, so it is served from cache from turn two on.
         cache_control: { type: "ephemeral" },
@@ -320,10 +358,20 @@ export class AgentSession {
         type: "text",
         text: `${callContext(this.location, {
           callerNumber: this.callerNumber,
-          channel: this.call.channel,
+          channel: this.channel,
         })}
 
-You have already greeted the caller with: "${this.spokenGreeting ?? this.location.agent.greeting}" — do not greet them again.${
+${
+          // A telephone has a moment of pickup, and the greeting happens in it
+          // before the model is ever called — so the model has to be told not
+          // to say hello twice. A message thread has no such moment: the first
+          // thing Belline writes *is* the greeting.
+          this.channel === "voice"
+            ? `You have already greeted the caller with: "${
+                this.spokenGreeting ?? this.location.agent.greeting
+              }" — do not greet them again.`
+            : ""
+        }${
           guest ? `\n\n${guestBriefing(this.location, guest)}` : ""
         }`,
       },

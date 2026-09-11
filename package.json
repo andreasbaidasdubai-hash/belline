@@ -25,7 +25,7 @@
     "check:sales": "node --import tsx scripts/check-sales.ts",
     "check:import": "node --import tsx scripts/check-import.ts",
     "check:places": "node --import tsx scripts/check-places.ts",
-    "check:all": "npm run check && npm run check:tenancy && npm run check:reception && npm run check:brain && npm run check:calendar && npm run check:waitlist && npm run check:attention && npm run check:idempotency && npm run check:authority && npm run check:spoken && npm run check:speculation && npm run check:prospect && npm run check:overview && npm run check:billing && npm run check:leads && npm run check:belline && npm run check:slots",
+    "check:all": "npm run check && npm run check:tenancy && npm run check:reception && npm run check:channel && npm run check:brain && npm run check:calendar && npm run check:waitlist && npm run check:attention && npm run check:idempotency && npm run check:authority && npm run check:spoken && npm run check:speculation && npm run check:prospect && npm run check:overview && npm run check:billing && npm run check:leads && npm run check:belline && npm run check:slots",
     "audit": "playwright test",
     "audit:ui": "playwright test --ui",
     "site": "node --import tsx scripts/build-site.ts",
@@ -55,7 +55,8 @@
     "check:slots": "node --import tsx scripts/check-slots.ts",
     "check:tenancy": "node --import tsx scripts/check-tenancy.ts",
     "migrate": "node --import tsx --env-file-if-exists=.env scripts/migrate.ts",
-    "check:reception": "node --import tsx --env-file-if-exists=.env scripts/check-reception.ts"
+    "check:reception": "node --import tsx --env-file-if-exists=.env scripts/check-reception.ts",
+    "check:channel": "node --import tsx scripts/check-channel.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

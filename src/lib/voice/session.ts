@@ -169,7 +169,7 @@ export class VoiceSession {
     this.location = location;
     this.call = call;
     this.transport = transport;
-    this.agent = new AgentSession(location, call, callerNumber);
+    this.agent = new AgentSession(location, call, { callerNumber, channel: "voice" });
   }
 
   async start(): Promise<void> {

@@ -1,25 +1,18 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Booking, Call, Location, Slot } from "../types";
+import { confirmationMessage, describeBooking } from "../booking";
 import {
-  cancelBooking,
-  confirmationMessage,
-  createBooking,
-  describeBooking,
-  findAvailability,
-  modifyBooking,
-} from "../booking";
+  providerFor,
+  type BookingProvider,
+  type ProviderContext,
+} from "../booking/provider";
 import { sendSms, smsEnabled } from "../providers/sms";
 // The same checker the website's booking form uses. Two copies of "is this a
 // real address" drift, and the one that drifts is the one nobody tested.
 import { checkShape } from "../leads/email";
 import { join } from "../waitlist";
 import { chainDuration, resolveServices } from "../booking/salon";
-import {
-  findBookingByRef,
-  findBookingsByPhone,
-  getBooking,
-  listBookings,
-} from "../store";
+import { listBookings } from "../store";
 import {
   daysBetween,
   isValidDate,
@@ -29,6 +22,7 @@ import {
   resolveDate,
   todayIn,
 } from "../time";
+import type { AgentChannel } from "./prompt";
 
 /**
  * The agent's hands.
@@ -60,7 +54,10 @@ export interface ToolOutcome {
 const TIME_DESC = "Time in 24-hour HH:MM form, e.g. 19:30.";
 const DATE_DESC = "Date as YYYY-MM-DD. Resolve words like tomorrow yourself.";
 
-export function toolsFor(location: Location): Anthropic.Tool[] {
+export function toolsFor(
+  location: Location,
+  channel: AgentChannel = "voice",
+): Anthropic.Tool[] {
   const isRestaurant = location.vertical === "restaurant";
 
   const bookingShape: Record<string, unknown> = isRestaurant
@@ -220,40 +217,81 @@ export function toolsFor(location: Location): Anthropic.Tool[] {
         required: ["caller_name", "message"],
       },
     },
-    {
-      name: "transfer_call",
-      description:
-        "Hand the call to a person. Use only when it is urgent and cannot wait for a callback.",
-      input_schema: {
-        type: "object",
-        properties: { reason: { type: "string" } },
-        required: ["reason"],
-      },
-    },
-    {
-      name: "end_call",
-      description:
-        "End the call once the caller's business is finished. Say your goodbye in the same turn you call this.",
-      input_schema: {
-        type: "object",
-        properties: {
-          summary: { type: "string", description: "One line for the call log." },
-          outcome: {
-            type: "string",
-            enum: [
-              "booking_created",
-              "booking_changed",
-              "booking_cancelled",
-              "answered_question",
-              "message_taken",
-              "transferred",
-              "abandoned",
-            ],
+    /*
+      The control verbs, which are the one place the two channels genuinely
+      differ.
+
+      A telephone call is a resource that is held open and has to be let go of
+      — hence end_call — and it can be handed to a person mid-sentence, which
+      is what transfer_call does. A message thread has neither property. It
+      does not hang up, it goes quiet; and "fetch a person" is not a transfer
+      but a change of state that stops Belline answering and puts the thread in
+      front of staff.
+
+      So the verbs are swapped rather than shared. Offering end_call on
+      WhatsApp would mean the agent deciding a conversation was over, which is
+      a judgement it is in no position to make.
+    */
+    ...(channel === "voice"
+      ? ([
+          {
+            name: "transfer_call",
+            description:
+              "Hand the call to a person. Use only when it is urgent and cannot wait for a callback.",
+            input_schema: {
+              type: "object",
+              properties: { reason: { type: "string" } },
+              required: ["reason"],
+            },
           },
-        },
-        required: ["summary", "outcome"],
-      },
-    },
+          {
+            name: "end_call",
+            description:
+              "End the call once the caller's business is finished. Say your goodbye in the same turn you call this.",
+            input_schema: {
+              type: "object",
+              properties: {
+                summary: { type: "string", description: "One line for the call log." },
+                outcome: {
+                  type: "string",
+                  enum: [
+                    "booking_created",
+                    "booking_changed",
+                    "booking_cancelled",
+                    "answered_question",
+                    "message_taken",
+                    "transferred",
+                    "abandoned",
+                  ],
+                },
+              },
+              required: ["summary", "outcome"],
+            },
+          },
+        ] satisfies Anthropic.Tool[])
+      : ([
+          {
+            name: "request_human_handoff",
+            description:
+              "Stop answering and put this conversation in front of the team. Use it when someone asks for a person, complains, is angry, raises something sensitive, or asks for something you are not allowed to decide — and when you have misunderstood twice in a row. Say in the same turn that you are passing it on.",
+            input_schema: {
+              type: "object",
+              properties: {
+                reason: {
+                  type: "string",
+                  description: "Why, in a few words. Staff see this at the top of the conversation.",
+                },
+                summary: {
+                  type: "string",
+                  description:
+                    "Two sentences: what they want and what has happened so far, so nobody has to read the thread before replying.",
+                },
+                urgency: { type: "string", enum: ["normal", "urgent"] },
+              },
+              required: ["reason", "summary"],
+            },
+          },
+        ] satisfies Anthropic.Tool[])),
   ];
 }
 
@@ -348,6 +386,12 @@ export async function executeTool(
 ): Promise<ToolOutcome> {
   const { location } = ctx;
   const isRestaurant = location.vertical === "restaurant";
+  // Which book this venue writes into. One provider today — but every booking
+  // the product takes now goes through the interface, which is the only way an
+  // abstraction stays honest. The previous attempt at this seam was a type
+  // with no implementations and no call sites.
+  const provider = providerFor(location);
+  const pctx: ProviderContext = { location };
 
   switch (name) {
     case "check_availability": {
@@ -372,7 +416,7 @@ export async function executeTool(
         };
       }
 
-      const slots = findAvailability(location, {
+      const slots = await provider.checkAvailability(pctx, {
         locationId: location.id,
         date,
         preferredMin,
@@ -453,7 +497,7 @@ export async function executeTool(
         guestEmail = check.email;
       }
 
-      const result = createBooking(location, {
+      const result = await provider.createBooking(pctx, {
         date,
         startMin,
         guestName,
@@ -512,7 +556,7 @@ export async function executeTool(
       const phone = input.phone ? String(input.phone) : ctx.callerNumber;
 
       if (ref) {
-        const found = findBookingByRef(location.id, ref);
+        const found = await provider.getBookingByRef(pctx, ref);
         if (found && found.status === "confirmed") {
           return { result: { found: 1, bookings: [bookingPayload(location, found)] } };
         }
@@ -527,7 +571,7 @@ export async function executeTool(
       }
 
       if (phone) {
-        const matches = findBookingsByPhone(location.id, phone)
+        const matches = (await provider.findBookingsByPhone(pctx, phone))
           .filter((b) => b.date >= todayIn(location.timezone))
           .sort((a, b) => a.date.localeCompare(b.date) || a.startMin - b.startMin);
         if (matches.length > 0) {
@@ -549,15 +593,26 @@ export async function executeTool(
     }
 
     case "change_booking": {
-      const booking = getBooking(String(input.booking_id ?? ""));
-      if (!booking || booking.locationId !== location.id) {
+      // Honest before attempted. A provider that cannot move a booking must
+      // say so and take a message — trying, failing and leaving a guest
+      // believing their appointment moved is the worst of the three outcomes.
+      if (!provider.capabilities.reschedule) {
+        return {
+          result: {
+            error: "not_supported",
+            say: "I can't move a booking myself here. Let me take the details and the team will do it.",
+          },
+        };
+      }
+      const booking = await provider.getBookingById(pctx, String(input.booking_id ?? ""));
+      if (!booking) {
         return { result: { error: "Unknown booking. Use lookup_booking first." } };
       }
       if (booking.status !== "confirmed") {
         return { result: { error: `That booking is ${booking.status} and cannot be changed.` } };
       }
 
-      const changes: Parameters<typeof modifyBooking>[2] = {};
+      const changes: Parameters<BookingProvider["rescheduleBooking"]>[2] = {};
       if (input.date !== undefined) {
         const date = normaliseDate(ctx, input.date);
         if (typeof date !== "string") return { result: date };
@@ -573,7 +628,7 @@ export async function executeTool(
       if (input.staff_id !== undefined) changes.staffId = String(input.staff_id);
       if (input.notes !== undefined) changes.notes = String(input.notes);
 
-      const result = modifyBooking(location, booking, changes);
+      const result = await provider.rescheduleBooking(pctx, booking, changes);
       if (!result.ok) {
         return {
           result: {
@@ -597,14 +652,18 @@ export async function executeTool(
     }
 
     case "cancel_booking": {
-      const booking = getBooking(String(input.booking_id ?? ""));
+      const booking = await provider.getBookingById(pctx, String(input.booking_id ?? ""));
       if (!booking || booking.locationId !== location.id) {
         return { result: { error: "Unknown booking. Use lookup_booking first." } };
       }
       if (booking.status === "cancelled") {
         return { result: { cancelled: true, say: "That booking was already cancelled." } };
       }
-      const updated = cancelBooking(booking);
+      const cancelled = await provider.cancelBooking(pctx, booking);
+      if (!cancelled.ok) {
+        return { result: { error: "cancel_failed", say: cancelled.detail } };
+      }
+      const updated = cancelled.booking;
       ctx.call.bookingId = updated.id;
       return {
         result: {
