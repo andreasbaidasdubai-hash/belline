@@ -147,6 +147,16 @@ export default function SetupWizard({
             Open the dashboard
           </a>
         </div>
+
+        {/*
+          The card, offered rather than demanded. They are inside the product
+          on a trial that is already answering — asking for it before they have
+          heard it work would have been the easier sale and the worse one.
+        */}
+        <p className="muted" style={{ fontSize: 12.5, marginTop: 26, lineHeight: 1.6 }}>
+          Your first fortnight is free. <a href="/checkout">Add a card</a> whenever you are
+          ready — nothing stops working before then.
+        </p>
       </div>
     );
   }

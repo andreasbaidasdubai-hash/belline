@@ -148,6 +148,16 @@ export interface Location {
   /** What this venue pays, and what it is owed. Absent until it signs up. */
   subscription?: Subscription;
   /**
+   * The handles Stripe knows this venue by.
+   *
+   * Two ids and nothing else. Belline stores what it needs to open a customer
+   * portal and to match a webhook to a diary; everything else about the
+   * subscription — the card, the invoices, the retry schedule — is Stripe's to
+   * be authoritative about, and mirroring it here would be a second source of
+   * truth for somebody else's data.
+   */
+  stripe?: { customerId?: string; subscriptionId?: string };
+  /**
    * The booking is not complete without an email address.
    *
    * True for a venue whose booking *is* something sent — a video call, a link,
