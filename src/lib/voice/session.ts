@@ -6,6 +6,7 @@ import { saveCall } from "../store";
 import { maxCallSeconds } from "../demo";
 import { speechKeyterms } from "../verticals";
 import { assessAuthority, type Assessment } from "../agent/authority";
+import { toSpoken } from "./spoken";
 
 /**
  * One live call.
@@ -262,10 +263,18 @@ export class VoiceSession {
     this.speaking = true;
     this.speakingSince = Date.now();
 
+    // Between deciding what to say and saying it: prices become words,
+    // references are spelled out, and a fragment carrying a time or a total
+    // is delivered slower than the talk around it — because the caller is
+    // writing it down. See spoken.ts.
+    const spoken = toSpoken(text);
+
     const voice = {
       voiceId: this.location.agent.voiceId,
       modelId: this.location.agent.voiceModel,
-      speed: this.location.agent.voiceSpeed,
+      // A venue's configured pace shifts the whole range rather than
+      // overriding it, so "slower for numbers" survives being tuned.
+      speed: spoken.speed * ((this.location.agent.voiceSpeed ?? 1.05) / 1.05),
       format: this.transport.output,
       signal: controller.signal,
       previousText: this.spokenThisTurn || undefined,
@@ -276,13 +285,13 @@ export class VoiceSession {
         // A line that repeats verbatim every call. Handed over whole rather
         // than streamed — both transports re-frame, and barge-in still works
         // because clearAudio flushes whatever the far end has buffered.
-        const audio = await speakClip(text, { ...voice, previousText: undefined });
+        const audio = await speakClip(spoken.text, { ...voice, previousText: undefined });
         if (gen !== this.generation) return;
         if (audio.length) this.transport.sendAudio(audio);
         return;
       }
 
-      for await (const chunk of speak(text, voice)) {
+      for await (const chunk of speak(spoken.text, voice)) {
         if (gen !== this.generation) return;
         this.transport.sendAudio(chunk);
       }
