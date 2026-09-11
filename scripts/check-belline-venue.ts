@@ -23,7 +23,7 @@ const { BELLINE_LOCATION_ID } = await import("../src/lib/seed-belline");
 const { startCall } = await import("../src/lib/calls");
 const { executeTool, toolsFor } = await import("../src/lib/agent/tools");
 const { findAvailability } = await import("../src/lib/booking");
-const { mayStreamTo } = await import("../src/lib/voice/entitlement");
+const { mayStreamTo, watchLiveness, sweepLiveness } = await import("../src/lib/voice/entitlement");
 const { greetingClip, voiceParams } = await import("../src/lib/voice/session");
 const { toSpoken } = await import("../src/lib/voice/spoken");
 const { greetingFor } = await import("../src/lib/agent/runtime");
@@ -176,6 +176,63 @@ test("Belline's own bookings are not wiped nightly like a demo line's", () => {
 
 test("a missing venue is refused rather than crashing the handshake", () => {
   assert.equal(mayStreamTo(undefined), false);
+});
+
+console.log("\nThe heartbeat keeps calls up, not down\n");
+
+/** The parts of a websocket the heartbeat touches. */
+function fakeSocket(answersPings: boolean) {
+  const s = {
+    isAlive: undefined as boolean | undefined,
+    pings: 0,
+    terminated: false,
+    handlers: [] as (() => void)[],
+    on(_e: "pong", fn: () => void) {
+      s.handlers.push(fn);
+      return s;
+    },
+    ping() {
+      s.pings++;
+      // A live browser answers immediately; a sleeping laptop never does.
+      if (answersPings) s.handlers.forEach((h) => h());
+    },
+    terminate() {
+      s.terminated = true;
+    },
+  };
+  return s;
+}
+
+test("a watched socket survives sweep after sweep", () => {
+  // The regression that mattered: every call died at about fifty seconds
+  // because the pong listener was registered on an event that never fires,
+  // so the second sweep terminated a perfectly healthy connection.
+  const ws = fakeSocket(true);
+  watchLiveness(ws);
+  for (let i = 0; i < 20; i++) sweepLiveness([ws]);
+  assert.equal(ws.terminated, false, `terminated after ${ws.pings} pings`);
+  assert.equal(ws.pings, 20, "the socket was not actually being pinged");
+});
+
+test("a socket nobody watched is killed on the second sweep", () => {
+  // Exactly the bug, pinned. If watchLiveness is ever skipped at an upgrade
+  // site again, this is what happens to the call.
+  const ws = fakeSocket(true);
+  sweepLiveness([ws]);
+  assert.equal(ws.terminated, false, "killed on the very first sweep");
+  sweepLiveness([ws]);
+  assert.equal(ws.terminated, true);
+});
+
+test("a socket that stops answering is dropped", () => {
+  // The other half of the point: a closed laptop must not hold a voice
+  // session and three vendor connections open forever.
+  const ws = fakeSocket(false);
+  watchLiveness(ws);
+  sweepLiveness([ws]);
+  assert.equal(ws.terminated, false);
+  sweepLiveness([ws]);
+  assert.equal(ws.terminated, true);
 });
 
 console.log("\nBooking a demo\n");

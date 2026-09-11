@@ -26,3 +26,51 @@ export function mayStreamTo(location: Location | undefined): boolean {
   const ours = Boolean(location.prospect || location.internal);
   return ours && Boolean(location.demo?.enabled);
 }
+
+/**
+ * Liveness for one websocket.
+ *
+ * Separated from the sweep so both halves can be tested together, because the
+ * two got out of step once and it cost every call in production.
+ *
+ * A `noServer` websocket server driven by `handleUpgrade` never emits
+ * `connection` — the upgrade callback *is* the connection. Registering the
+ * pong listener on that event therefore registered it nowhere: the first
+ * sweep pinged and marked the socket not-alive, no pong was ever recorded,
+ * and the next sweep terminated it. Every call died at about fifty seconds,
+ * killed by the code written to stop calls dying.
+ */
+export interface Liveness {
+  isAlive?: boolean;
+  on(event: "pong", listener: () => void): unknown;
+  ping(): void;
+  terminate(): void;
+}
+
+/** Mark a socket live and keep it marked. Call this per connection. */
+export function watchLiveness(ws: Liveness): void {
+  ws.isAlive = true;
+  ws.on("pong", () => {
+    ws.isAlive = true;
+  });
+}
+
+/**
+ * One heartbeat sweep. Terminates whatever failed to answer the last ping.
+ *
+ * Returns how many were terminated, which is the only thing worth asserting
+ * about it — and would have been zero, every time, on a socket being watched.
+ */
+export function sweepLiveness(clients: Iterable<Liveness>): number {
+  let dropped = 0;
+  for (const client of clients) {
+    if (client.isAlive === false) {
+      client.terminate();
+      dropped++;
+      continue;
+    }
+    client.isAlive = false;
+    client.ping();
+  }
+  return dropped;
+}

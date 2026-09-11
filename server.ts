@@ -15,7 +15,7 @@ import { reconcileStaleCalls, startCall } from "./src/lib/calls";
 import type { User } from "./src/lib/types";
 import { greetingFor } from "./src/lib/agent/runtime";
 import { checkDemoGate } from "./src/lib/demo";
-import { mayStreamTo } from "./src/lib/voice/entitlement";
+import { mayStreamTo, watchLiveness, sweepLiveness, type Liveness } from "./src/lib/voice/entitlement";
 import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { VoiceSession, greetingClip } from "./src/lib/voice/session";
@@ -81,23 +81,25 @@ const HEARTBEAT_MS = 25_000;
 
 type Alive = WebSocket & { isAlive?: boolean };
 
-function keepAlive(wss: WebSocketServer): void {
-  wss.on("connection", (ws: Alive) => {
-    ws.isAlive = true;
-    ws.on("pong", () => {
-      ws.isAlive = true;
-    });
-  });
+/**
+ * Start watching one socket.
+ *
+ * Called from the upgrade handler, and it has to be — `wss.on("connection")`
+ * does not fire on a `noServer` server driven by `handleUpgrade`, because the
+ * callback *is* the connection. Registering the pong listener there meant it
+ * was never registered at all: the first sweep pinged and marked the socket
+ * not-alive, no pong was ever recorded, and the second sweep terminated it.
+ *
+ * Every call died at almost exactly fifty seconds, and the code that did it
+ * was the code added to stop calls dying.
+ */
+function watch(ws: WebSocket): void {
+  watchLiveness(ws as unknown as Liveness);
+}
 
+function keepAlive(wss: WebSocketServer): void {
   const sweep = setInterval(() => {
-    for (const client of wss.clients as Set<Alive>) {
-      if (client.isAlive === false) {
-        client.terminate();
-        continue;
-      }
-      client.isAlive = false;
-      client.ping();
-    }
+    sweepLiveness(wss.clients as unknown as Iterable<Liveness>);
   }, HEARTBEAT_MS);
 
   // Never hold the process open on this alone.
@@ -121,6 +123,7 @@ server.on("upgrade", (req, socket, head) => {
       return;
     }
     browserWss.handleUpgrade(req, socket, head, (ws) => {
+      watch(ws);
       handleBrowser(ws, String(query.locationId ?? ""), String(query.from ?? ""), user);
     });
     return;
@@ -148,6 +151,7 @@ server.on("upgrade", (req, socket, head) => {
       return;
     }
     browserWss.handleUpgrade(req, socket, head, (ws) => {
+      watch(ws);
       handleBrowser(ws, location.id, "", null);
     });
     return;
@@ -155,6 +159,7 @@ server.on("upgrade", (req, socket, head) => {
 
   if (pathname === "/ws/twilio") {
     twilioWss.handleUpgrade(req, socket, head, (ws) => {
+      watch(ws);
       handleTwilio(ws);
     });
     return;
