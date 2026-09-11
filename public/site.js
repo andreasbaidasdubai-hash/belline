@@ -340,6 +340,89 @@
   });
 })();
 
+/* --- the call panel --------------------------------------------------------
+   The bell opens a real conversation with Belline, not a form. It is an
+   ordinary link to app.belline.ai/call, so with JavaScript off — or if any of
+   this throws — it simply navigates there and still works. Everything below
+   only upgrades it to a panel. */
+(function () {
+  var bell = document.querySelector("[data-call]");
+  if (!bell) return;
+
+  // No panel on a small screen: a live call in a 340px iframe is worse than
+  // the page it would cover, and the full page is a better phone experience.
+  if (!window.matchMedia("(min-width: 760px)").matches) return;
+
+  var panel = null;
+  var frame = null;
+  var opener = null;
+
+  function close() {
+    if (!panel) return;
+    panel.remove();
+    panel = null;
+    frame = null;
+    document.body.style.overflow = "";
+    document.removeEventListener("keydown", onKey);
+    // Hanging up must not dump the visitor at the top of the page.
+    if (opener && opener.focus) opener.focus();
+  }
+
+  function onKey(e) {
+    if (e.key === "Escape") close();
+  }
+
+  function open(e) {
+    e.preventDefault();
+    opener = e.currentTarget;
+
+    panel = document.createElement("div");
+    panel.className = "call-panel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-modal", "true");
+    panel.setAttribute("aria-label", "Talk to Belline");
+
+    var sheet = document.createElement("div");
+    sheet.className = "call-sheet";
+
+    var shut = document.createElement("button");
+    shut.type = "button";
+    shut.className = "call-shut";
+    shut.setAttribute("aria-label", "End the call");
+    shut.textContent = "×";
+    shut.addEventListener("click", close);
+
+    frame = document.createElement("iframe");
+    frame.src = bell.getAttribute("href");
+    frame.title = "Talk to Belline";
+    // Without this the microphone is blocked inside the frame and the call is
+    // silent with no error a visitor could act on.
+    frame.allow = "microphone";
+    frame.className = "call-frame";
+
+    sheet.appendChild(shut);
+    sheet.appendChild(frame);
+    panel.appendChild(sheet);
+
+    // Clicking the backdrop closes; clicking inside the sheet must not.
+    panel.addEventListener("click", function (ev) {
+      if (ev.target === panel) close();
+    });
+
+    document.body.appendChild(panel);
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    shut.focus();
+  }
+
+  bell.addEventListener("click", open);
+
+  // The hero's "Hear it answer" should reach the same place — it is the same
+  // promise, and sending it somewhere else makes the page argue with itself.
+  var hero = document.querySelector('.hero a[href="#try"]');
+  if (hero) hero.addEventListener("click", open);
+})();
+
 /* --- monthly / annual ------------------------------------------------------
    The prices for both cycles are already in the markup as data attributes, so
    the page reads correctly with no JavaScript at all and this only swaps

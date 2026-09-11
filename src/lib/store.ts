@@ -188,10 +188,22 @@ export function bookingRef(): string {
 
 // --- locations -------------------------------------------------------------
 
-export function listLocations(): Location[] {
-  return load().locations;
+/**
+ * The venues a customer has.
+ *
+ * Belline's own venue — the demo-call diary behind the bell on the website —
+ * is excluded unless asked for. It runs on the same engine as everybody
+ * else's, which is the point of it, but it is not a venue anyone signed up
+ * for and it has no business appearing in a switcher, a call list or a set of
+ * bookings. Pass `includeInternal` where you genuinely mean all of them:
+ * seeding, and the call page itself.
+ */
+export function listLocations(opts?: { includeInternal?: boolean }): Location[] {
+  const all = load().locations;
+  return opts?.includeInternal ? all : all.filter((l) => !l.internal);
 }
 
+/** By id, internal or not — a caller naming a venue has already chosen it. */
 export function getLocation(locationId: string): Location | undefined {
   return load().locations.find((l) => l.id === locationId);
 }

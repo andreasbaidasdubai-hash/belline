@@ -40,6 +40,8 @@ export interface CreateInput {
   startMin: Minutes;
   guestName: string;
   guestPhone: string;
+  /** Only where `Location.requiresEmail` is set. Validated before it gets here. */
+  guestEmail?: string;
   notes?: string;
   partySize?: number;
   serviceIds?: string[];
@@ -171,6 +173,7 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
     endMin: check.assignment.blockEndMin,
     guestName: input.guestName,
     guestPhone: input.guestPhone,
+    guestEmail: input.guestEmail,
     notes: input.notes ?? "",
     serviceIds: check.assignment.serviceIds,
     staffId: check.assignment.staffId,

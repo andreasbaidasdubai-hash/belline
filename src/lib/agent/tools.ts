@@ -9,6 +9,9 @@ import {
   modifyBooking,
 } from "../booking";
 import { sendSms, smsEnabled } from "../providers/sms";
+// The same checker the website's booking form uses. Two copies of "is this a
+// real address" drift, and the one that drifts is the one nobody tested.
+import { checkShape } from "../leads/email";
 import { join } from "../waitlist";
 import { chainDuration, resolveServices } from "../booking/salon";
 import {
@@ -98,7 +101,10 @@ export function toolsFor(location: Location): Anthropic.Tool[] {
     {
       name: "book",
       description:
-        "Create the booking. Only call this once you have a name, a contact number, and a time you have confirmed with check_availability.",
+        "Create the booking. Only call this once you have a name, a contact number, and a time you have confirmed with check_availability." +
+        (location.requiresEmail
+          ? " This venue also needs an email address. Spell it back to them letter by letter and have them confirm it before you call this — an address misheard on a phone line never bounces, it just means they never hear from us."
+          : ""),
       input_schema: {
         type: "object",
         properties: {
@@ -106,6 +112,20 @@ export function toolsFor(location: Location): Anthropic.Tool[] {
           time: { type: "string", description: TIME_DESC },
           guest_name: { type: "string" },
           guest_phone: { type: "string", description: "Contact number, digits as spoken." },
+          ...(location.requiresEmail
+            ? {
+                guest_email: {
+                  type: "string",
+                  description:
+                    "Email address, confirmed with them. Write it as an address — 'andreas at gmail dot com' becomes andreas@gmail.com.",
+                },
+                email_confirmed: {
+                  type: "boolean",
+                  description:
+                    "Set this only after you have read an address back that looked like a misspelling and they told you it was right anyway. Without it an unusual address is queried once.",
+                },
+              }
+            : {}),
           notes: {
             type: "string",
             description:
@@ -118,6 +138,7 @@ export function toolsFor(location: Location): Anthropic.Tool[] {
           "time",
           "guest_name",
           "guest_phone",
+          ...(location.requiresEmail ? ["guest_email"] : []),
           ...(isRestaurant ? ["party_size"] : ["service_ids"]),
         ],
       },
@@ -395,11 +416,49 @@ export async function executeTool(
       if (!guestName) return { result: { error: "Ask for the guest's name first." } };
       if (!guestPhone) return { result: { error: "Ask for a contact number first." } };
 
+      // An address taken by ear is the least reliable thing on the call, and
+      // the only one that fails silently — so it is checked here rather than
+      // trusted, and the agent is handed words to say rather than an error.
+      let guestEmail: string | undefined;
+      if (location.requiresEmail) {
+        const check = checkShape(String(input.guest_email ?? ""));
+        if (!check.valid) {
+          return {
+            result: {
+              booked: false,
+              reason: "email_unclear",
+              say:
+                "I did not catch that address. Ask them to say it again slowly, " +
+                "then spell the part before the at sign back to them.",
+            },
+          };
+        }
+        // Queried once, then believed — the same bargain the web form makes.
+        // A real mailbox can sit one letter from a famous domain, and telling
+        // somebody their own address is wrong is worse than a bounce.
+        if (check.suggestion && !input.email_confirmed) {
+          return {
+            result: {
+              booked: false,
+              reason: "email_uncertain",
+              say:
+                `Read it back as ${check.suggestion} and ask if that is right. ` +
+                `If they say it really is ${check.email}, call book again with ` +
+                `email_confirmed set and it will go through.`,
+              heard: check.email,
+              likely: check.suggestion,
+            },
+          };
+        }
+        guestEmail = check.email;
+      }
+
       const result = createBooking(location, {
         date,
         startMin,
         guestName,
         guestPhone,
+        guestEmail,
         notes: String(input.notes ?? ""),
         partySize: Number(input.party_size) || undefined,
         serviceIds: (input.service_ids as string[]) ?? undefined,

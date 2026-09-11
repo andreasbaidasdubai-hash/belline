@@ -175,8 +175,24 @@ export function checkDraft(parts: DraftParts, ctx: GuardContext): GuardResult {
   const placeholder = all.match(/\[[A-Za-z _]+\]|\{\{?[a-z_]+\}?\}|\bYour Name\b/i);
   if (placeholder) problems.push(`unfilled placeholder: ${placeholder[0]}`);
 
-  if (!personalised.toLowerCase().includes(ctx.companyName.toLowerCase().split(/[,–-]/)[0].trim().toLowerCase())) {
-    warnings.push("does not name the business");
+  // Good copy names the branch or the street rather than reciting the full
+  // registered name — "Jumeirah Al Wasl" reads as written by someone who
+  // looked, where "Dr. Joy Dental Clinic, Jumeirah Al Wasl Road" reads as a
+  // mail merge. So this looks for any distinctive word from the name, not the
+  // whole string.
+  const distinctive = ctx.companyName
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(
+      (w) =>
+        w.length > 3 &&
+        !["dental", "clinic", "clinics", "centre", "center", "medical", "dubai", "road", "branch"].includes(
+          w,
+        ),
+    );
+  const body = personalised.toLowerCase();
+  if (distinctive.length > 0 && !distinctive.some((w) => body.includes(w))) {
+    warnings.push("does not name the business or a branch");
   }
 
   // --- not a template in disguise -----------------------------------------

@@ -91,6 +91,11 @@ export async function draftOutreach(options: {
        left join sales.contact ct on ct.id = l.contact_id
       where l.agent_id = $1
         and l.stage = 'qualified'
+        -- A live demo is a precondition, not a bonus. The email's entire job
+        -- is to earn one click on the recording; without one it promises
+        -- "listen to your demo" and links to the homepage, which is a broken
+        -- promise in the first message a business ever gets from us.
+        and d.location_slug is not null
         and ($3 or not exists (
               select 1 from sales.message m
                where m.lead_id = l.id and m.direction = 'outbound'))

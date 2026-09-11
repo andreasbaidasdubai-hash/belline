@@ -4,6 +4,45 @@ const nextConfig = {
   // The voice bridge runs in the custom server (server.mjs), not in a route
   // handler, so nothing here needs edge runtime.
   serverExternalPackages: ["ws"],
+
+  async headers() {
+    return [
+      {
+        /**
+         * Only /call may be framed, and only by our own marketing site.
+         *
+         * The bell on belline.ai opens this in a panel, which means the app
+         * has to permit being embedded — but permitting it everywhere would
+         * hand an attacker the dashboard in an invisible iframe, which is
+         * what clickjacking is. So the allowance is one path wide.
+         */
+        source: "/call",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value:
+              "frame-ancestors 'self' https://belline.ai https://www.belline.ai",
+          },
+        ],
+      },
+      {
+        /**
+         * Everything else: not framable at all.
+         *
+         * frame-ancestors is the modern control and beats X-Frame-Options
+         * where both are understood, but the older header is still what some
+         * corporate proxies enforce, so both are sent.
+         */
+        source: "/:path((?!call$).*)",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
 };
 
 /*

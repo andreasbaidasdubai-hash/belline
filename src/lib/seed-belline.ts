@@ -1,0 +1,159 @@
+import type { Location } from "./types";
+
+/**
+ * Belline, as a venue.
+ *
+ * The bell on the website opens a real call to this. Not a recording and not
+ * a script — the same engine, the same booking logic and the same refusals
+ * that answer a restaurant's phone, pointed at our own diary. Which means the
+ * demonstration cannot drift from the product: if the agent gets worse, the
+ * thing on the front page gets worse with it, in public.
+ *
+ * Modelled as a clinic because that engine is a diary of named people with
+ * timed appointments and a room constraint, which is exactly what a demo call
+ * is. The "practitioner" is whoever takes the call; the "treatment room" is
+ * the Zoom line, and there is one of it — so two demos can never be booked
+ * into the same slot.
+ *
+ * `requiresEmail` is the point of the whole thing. A booking here is a link
+ * that has to arrive, so the agent must take an address, spell it back, and
+ * have it confirmed. That is the hardest thing to do well on a phone line and
+ * the most convincing thing to watch working.
+ */
+
+const H = (h: number, m = 0) => h * 60 + m;
+
+/** Sunday-indexed, matching Date.getDay(). Sunday to Friday: the UAE week. */
+const WEEK = [0, 1, 2, 3, 4, 5];
+
+export const BELLINE_LOCATION_ID = "loc_belline";
+
+/**
+ * What Belline will say about itself.
+ *
+ * Every one of these is true today, and several of them are answers most
+ * companies would not put in a sales agent's mouth. That is deliberate: the
+ * fastest way to lose an operator is to be caught overstating something they
+ * can check in five minutes, and the refusals are the most persuasive part of
+ * any demonstration this product gives.
+ */
+const FAQS = [
+  {
+    q: "What is Belline?",
+    a: "An AI receptionist for clinics, dental practices, salons and restaurants. It answers your phone, checks what is genuinely free in your diary, and books it. You keep your number — you just forward it.",
+  },
+  {
+    q: "What does it cost?",
+    a: "Three plans, per venue. Starter is a hundred and seventy-nine dirhams a month with sixty voice minutes. Business is three hundred and sixty-five with a hundred and eighty minutes, and that is the one most venues take. Enterprise is eight hundred and ninety-nine, unlimited. No setup fee.",
+  },
+  {
+    q: "What happens if we run out of minutes?",
+    a: "Belline keeps answering and you are not charged a penny extra. There is no per-minute charge on any plan. Your dashboard tells you which plan would cover it, and you move up when you want to.",
+  },
+  {
+    q: "Do we have to change our phone number?",
+    a: "No. You keep the number on your signage and your listings, and set call forwarding on the line you already have. You can turn it off yourself at any time.",
+  },
+  {
+    q: "Is there a free trial?",
+    a: "Fourteen days with a limited number of live-call minutes. No card, nothing charged, and we set your venue up with you — that part is free too.",
+  },
+  {
+    q: "Does it speak Arabic?",
+    a: "Not yet, and I will not pretend otherwise. It answers in English today. Arabic is coming, but nobody has made a real Arabic call on it, so I am not going to sell you one.",
+  },
+  {
+    q: "Can it transfer a call to a person?",
+    a: "Not as a live transfer yet. What it does today is recognise that a call needs a person, take the details, and put it at the top of your Action Inbox for a callback. A proper warm transfer is being built.",
+  },
+  {
+    q: "Does it connect to our booking system?",
+    a: "There is a built-in diary that works today. Google Calendar is built and waiting on credentials. Fresha, SevenRooms, OpenTable and Treatwell all require a signed partner agreement before they will issue us credentials, so I cannot promise you a date on those.",
+  },
+  {
+    q: "How long does it take to set up?",
+    a: "About thirty minutes to configure a venue, and we do it with you before anything touches your real line.",
+  },
+  {
+    q: "What happens to our guests' data?",
+    a: "Transcripts and bookings are stored so you can audit what was said. Call audio is not recorded. The data belongs to your venue and is exportable.",
+  },
+  {
+    q: "Is this a recording?",
+    a: "No. You are talking to the same agent that answers our customers' phones — same engine, same booking logic. Try to catch it out, that is rather the point.",
+  },
+  {
+    q: "Can I see it working on my own business?",
+    a: "Yes. Give us your website and we will build your venue into Belline before the call, so you can ring it and hear it answer as you.",
+  },
+];
+
+export const bellineVenue: Location = {
+  id: BELLINE_LOCATION_ID,
+  name: "Belline",
+  vertical: "clinic",
+  timezone: "Asia/Dubai",
+  phone: "+1 571 778 5920",
+  address: "Dubai",
+  currency: "AED",
+  // Generous, because the people trying this are in every timezone and a
+  // demonstration that says "we are closed" is a demonstration of nothing.
+  hours: Object.fromEntries(WEEK.map((d) => [d, [{ start: H(8), end: H(21) }]])),
+  closures: [],
+  requiresEmail: true,
+  // Ours. Never in a customer's venue switcher, call list or bookings.
+  internal: true,
+  agent: {
+    displayName: "Belle",
+    greeting:
+      "Hello, this is Belle at Belline. Ask me anything about what we do — or I can book you twenty minutes with our sales director. What would you like?",
+    returningGreeting:
+      "Hello again, this is Belle at Belline. Good to hear from you, {name} — what can I do?",
+    voiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
+    model: "claude-haiku-4-5",
+    persona:
+      "Warm, quick and straight. You sound like a very good receptionist who happens to know the product inside out — helpful first, never pushy, and completely unbothered by a hard question. You are talking to a business owner who is deciding whether to trust software with their phone line, so being caught overstating something would cost more than any booking is worth.",
+    policies: [
+      "Your job is to get them booked in for a twenty-minute call with our sales director. Answer whatever they ask first, then offer it. Offer it once; if they say no, help them anyway and leave the door open.",
+      "Never overstate what Belline does. If something is not built yet — Arabic, live call transfer, the booking-system integrations — say so plainly and say what does work instead. Being caught out costs more than the booking.",
+      "You must take an email address before you can book, because the meeting is a link that has to arrive. Ask for it, then spell the part before the at sign back to them letter by letter and have them confirm before you book.",
+      "Take their business name and what kind of venue it is, and put it in the notes. Whoever takes the call should not be starting from nothing.",
+      "Never quote a price you have not been given. The three plan prices are in your knowledge; anything else, say it depends and the call is the place to work it out.",
+      "Do not ask for card details, and never take payment. There is nothing to pay for at this stage and asking would be alarming.",
+      "If they are just curious and not a business, be friendly, answer them, and do not push a booking.",
+    ],
+    faqs: FAQS,
+    transferNumber: "",
+    // Longer than a venue's line: this is a sales conversation, and somebody
+    // who wants to interrogate the product for eight minutes is the best kind
+    // of caller we get.
+    maxCallSeconds: 600,
+    bookingHorizonDays: 30,
+  },
+  salon: {
+    slotMinutes: 15,
+    services: [
+      {
+        id: "demo_call",
+        name: "Demo call",
+        durationMin: 20,
+        // Ten minutes between calls, held in the diary and never quoted —
+        // nobody wants the next demo starting the second theirs ends.
+        bufferMin: 10,
+        price: 0,
+        resourceType: "zoom",
+      },
+    ],
+    staff: [
+      {
+        id: "sales_director",
+        name: "our sales director",
+        serviceIds: ["demo_call"],
+        hours: Object.fromEntries(WEEK.map((d) => [d, [{ start: H(9), end: H(19) }]])),
+        timeOff: [],
+      },
+    ],
+    // One line, so two demos can never land in the same slot.
+    resources: [{ id: "zoom1", name: "Zoom line", type: "zoom" }],
+  },
+};

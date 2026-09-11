@@ -82,6 +82,26 @@ export interface Location {
   averageBookingValue?: number;
   /** What this venue pays, and what it is owed. Absent until it signs up. */
   subscription?: Subscription;
+  /**
+   * The booking is not complete without an email address.
+   *
+   * True for a venue whose booking *is* something sent — a video call, a link,
+   * a joining instruction. Where it is set the agent must take an address,
+   * spell it back, and have it confirmed before booking, because an address
+   * misheard over a phone line fails silently: nothing bounces that anybody
+   * reads, and the guest simply never hears from us again.
+   */
+  requiresEmail?: boolean;
+  /**
+   * Ours, not a customer's.
+   *
+   * Belline's own venue — the diary of demo calls behind the bell on the
+   * website — runs on the same engine as everybody else's, which is the whole
+   * point of it. But it is not a venue anybody signed up for, and it must
+   * never appear in a customer's venue switcher, their call list or their
+   * bookings. `listLocations()` leaves it out unless asked for it directly.
+   */
+  internal?: boolean;
 }
 
 /**
@@ -329,6 +349,14 @@ export interface Booking {
   endMin: Minutes;
   guestName: string;
   guestPhone: string;
+  /**
+   * Only where the venue needs one — see `Location.requiresEmail`.
+   *
+   * A restaurant booking a table has no use for an email and should not be
+   * asking a caller to spell one out loud. A venue whose whole booking *is* an
+   * email (a video call, a link to send) cannot do without it.
+   */
+  guestEmail?: string;
   notes: string;
   // Restaurant
   partySize?: number;

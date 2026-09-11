@@ -55,6 +55,9 @@ export default async function InternalLayout({ children }: { children: React.Rea
     // us for a call ten minutes ago is worth more than a thousand scraped rows.
     { href: "/sales/enquiries", label: "Enquiries" },
     { href: "/sales/leads", label: "Pipeline" },
+    // The only page that is ever urgent: nothing leaves the building until
+    // someone clears this.
+    { href: "/sales/approvals", label: "Approvals" },
     { href: "/sales/activity", label: "Agent activity" },
   ];
 

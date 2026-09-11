@@ -897,3 +897,69 @@ tbody tr:hover {
     padding: 10px 12px;
   }
 }
+
+/* --- the embedded call widget ---------------------------------------------
+   /call, opened in a panel from belline.ai. Chrome is deliberately minimal:
+   the frame it sits in is only 560px wide, and everything that is not the
+   conversation is competing with it. */
+
+.widget {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 20px 20px 26px;
+}
+
+.widget-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.widget-head img {
+  height: 26px;
+  width: auto;
+  display: block;
+}
+
+.widget-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ok);
+}
+.widget-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: widget-pulse 2s ease-in-out infinite;
+}
+@keyframes widget-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.widget-lead {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+
+.widget-foot {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .widget-dot { animation: none; }
+}

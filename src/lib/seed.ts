@@ -1,6 +1,7 @@
 import type { AgentConfig, Location, StaffMember, WeeklyHours } from "./types";
 import { isEmpty, listLocations, replaceAll, upsertLocation } from "./store";
 import { ensureBaseline } from "./brain";
+import { bellineVenue } from "./seed-belline";
 
 const H = (h: number, m = 0) => h * 60 + m;
 
@@ -393,6 +394,11 @@ function asDemoLine(location: Location, disclosure: string): Location {
 }
 
 const FIXTURES = [
+  // Belline itself. The bell on the website opens a real call to this, so it
+  // is a fixture rather than something set up by hand — a demonstration that
+  // depends on somebody remembering to configure it is a demonstration that
+  // is broken the first time the data directory is rebuilt.
+  bellineVenue,
   asDemoLine(
     restaurant,
     "You've reached the Belline demonstration line for restaurants.",
@@ -413,7 +419,7 @@ const FIXTURES = [
  * anything the operator has set is left exactly as they set it.
  */
 function backfillAgentDefaults(): void {
-  for (const stored of listLocations()) {
+  for (const stored of listLocations({ includeInternal: true })) {
     const fixture = FIXTURES.find((f) => f.id === stored.id);
     if (!fixture) continue;
 
@@ -446,7 +452,7 @@ function backfillAgentDefaults(): void {
  * operator has since edited.
  */
 function addMissingVenues(): void {
-  const known = new Set(listLocations().map((l) => l.id));
+  const known = new Set(listLocations({ includeInternal: true }).map((l) => l.id));
   for (const fixture of FIXTURES) {
     if (!known.has(fixture.id)) upsertLocation(fixture);
   }
@@ -473,5 +479,5 @@ export function seedIfEmpty(): void {
  * for what somebody actually did.
  */
 function baselineBrains(): void {
-  for (const location of listLocations()) ensureBaseline(location);
+  for (const location of listLocations({ includeInternal: true })) ensureBaseline(location);
 }
