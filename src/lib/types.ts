@@ -71,6 +71,14 @@ export interface Location {
   brainHistory?: BrainVersion[];
   /** A connected Google Calendar, mirrored to one-way. */
   google?: GoogleLink;
+  /**
+   * What one booking is typically worth here.
+   *
+   * Entered by the venue or left alone. Belline never guesses it: an invented
+   * ROI figure is the fastest way to lose an operator who knows their own
+   * numbers better than we do, and unset shows no estimate rather than zero.
+   */
+  averageBookingValue?: number;
 }
 
 /**

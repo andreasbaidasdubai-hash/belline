@@ -1,47 +1,41 @@
 import Link from "next/link";
-import { listBookings, listCalls } from "@/lib/store";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
-import { callDurationSeconds } from "@/lib/calls";
-import { describeBookingShort } from "@/lib/booking";
-import { minutesToSpoken, todayIn } from "@/lib/time";
 import { seedIfEmpty } from "@/lib/seed";
+import { overviewFor, summarise } from "@/lib/overview";
+import { callDurationSeconds } from "@/lib/calls";
+import { isRestaurant, terms } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
 export const dynamic = "force-dynamic";
 
-function Stat({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "ok" | "warn";
-}) {
+/**
+ * Home.
+ *
+ * The question an owner opens this to ask is "did it earn its keep, and does
+ * anything need me?" — so the page answers those two, in that order, and
+ * nothing else competes for the top of the screen. It used to open with a
+ * latency percentile, which is true, measurable, and answers neither.
+ */
+
+function Did({ n, label, tone }: { n: number; label: string; tone?: "good" | "quiet" }) {
+  if (n === 0 && tone === "quiet") return null;
   return (
-    <div className="panel" style={{ padding: "16px 18px" }}>
-      <div className="muted" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
-        {label}
-      </div>
+    <div style={{ minWidth: 92 }}>
       <div
         style={{
-          fontSize: 31,
+          fontSize: 27,
           fontWeight: 300,
-          marginTop: 9,
-          letterSpacing: "-0.03em",
+          letterSpacing: "-0.035em",
+          lineHeight: 1.05,
           fontVariantNumeric: "tabular-nums",
-          color: tone === "ok" ? "var(--ok)" : tone === "warn" ? "var(--warn)" : "var(--text)",
+          color: tone === "good" && n > 0 ? "var(--ok)" : "var(--text)",
         }}
       >
-        {value}
+        {n}
       </div>
-      {hint && (
-        <div className="muted" style={{ fontSize: 11.5, marginTop: 5 }}>
-          {hint}
-        </div>
-      )}
+      <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
+        {label}
+      </div>
     </div>
   );
 }
@@ -55,105 +49,152 @@ export default async function OverviewPage({
   const user = await requireUser();
   const { loc } = await searchParams;
   const location = await resolveLocation(user, loc);
+  if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
 
-  if (!location) {
-    return <p className="muted">No venues are assigned to your account yet.</p>;
-  }
-
-  const today = todayIn(location.timezone);
-  const calls = listCalls(location.id);
-  const completed = calls.filter((c) => c.status === "completed");
-  const bookings = listBookings({ locationId: location.id, status: "confirmed" });
-  const todays = bookings
-    .filter((b) => b.date === today)
-    .sort((a, b) => a.startMin - b.startMin);
-
-  const voiceBookings = bookings.filter((b) => b.source === "voice");
-  const handled = completed.filter(
-    (c) => c.outcome && c.outcome !== "transferred" && c.outcome !== "abandoned",
-  );
-  const containment = completed.length
-    ? Math.round((handled.length / completed.length) * 100)
-    : null;
-
-  const latencies = calls.flatMap((c) => c.latenciesMs).sort((a, b) => a - b);
-  const p50 = latencies.length ? latencies[Math.floor(latencies.length / 2)] : null;
-  const p90 = latencies.length
-    ? latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * 0.9))]
-    : null;
-
-  const covers = todays.reduce((n, b) => n + (b.partySize ?? 1), 0);
+  const { did, worth, health, needsYou, recent } = overviewFor(location);
+  const t = terms(location);
+  const unwell = health.filter((h) => !h.ok);
 
   return (
     <>
       <PageHeader
         title={location.name}
-        subtitle={`${location.address} · ${location.phone} · agent "${location.agent.displayName}"`}
+        subtitle={`${location.address} · ${location.phone || "no number yet"}`}
         right={
-          <Link href={`/test?loc=${location.id}`} className="btn btn-accent">
-            Call the agent
+          <Link href={`/calendar?loc=${location.id}`} className="btn btn-accent">
+            Today&apos;s diary
           </Link>
         }
       />
       <LocationTabs base="/" active={location.id} />
 
-      <div className="stats">
-        <Stat label="Calls handled" value={String(completed.length)} hint="all time" />
-        <Stat
-          label="Contained"
-          value={containment === null ? "—" : `${containment}%`}
-          hint="resolved without a human"
-          tone={containment !== null && containment >= 70 ? "ok" : undefined}
-        />
-        <Stat
-          label="Bookings by voice"
-          value={String(voiceBookings.length)}
-          hint={`${bookings.length} total on the book`}
-        />
-        <Stat
-          label="Response p50"
-          value={p50 === null ? "—" : `${p50} ms`}
-          hint={p90 === null ? "no turns yet" : `p90 ${p90} ms`}
-          tone={p50 !== null && p50 < 1200 ? "ok" : p50 !== null ? "warn" : undefined}
-        />
-        <Stat
-          label={location.vertical === "restaurant" ? "Covers today" : "Appointments today"}
-          value={String(location.vertical === "restaurant" ? covers : todays.length)}
-          hint={todays.length ? `first at ${minutesToSpoken(todays[0].startMin)}` : "nothing booked"}
-        />
+      {/* What it did. One sentence first, because that is what gets read. */}
+      <div className="panel" style={{ padding: "20px 22px", marginBottom: 14 }}>
+        <p style={{ fontSize: 16, lineHeight: 1.5, margin: 0, maxWidth: "58ch", color: "var(--text)" }}>
+          {summarise(location, did)}
+        </p>
+
+        {did.answered > 0 && (
+          <div
+            style={{
+              display: "flex",
+              gap: 30,
+              flexWrap: "wrap",
+              marginTop: 20,
+              paddingTop: 18,
+              borderTop: "1px solid var(--border-soft)",
+            }}
+          >
+            <Did n={did.booked} label={t.booking === "reservation" ? "booked" : "appointments"} tone="good" />
+            <Did n={did.moved} label="moved" tone="quiet" />
+            <Did n={did.cancelled} label="cancelled" tone="quiet" />
+            <Did n={did.questions} label="questions answered" tone="quiet" />
+            <Did n={did.messages} label="messages taken" tone="quiet" />
+            <Did n={did.escalated} label="sent to a person" tone="quiet" />
+            <Did n={did.abandoned} label="rang off" tone="quiet" />
+          </div>
+        )}
       </div>
+
+      {/* Anything broken goes above anything good. */}
+      {unwell.length > 0 && (
+        <div
+          className="panel"
+          style={{
+            padding: "15px 18px",
+            marginBottom: 14,
+            borderColor: "var(--bad)",
+            background: "var(--bad-soft)",
+          }}
+        >
+          <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--bad)" }}>
+            {unwell.length === 1 ? "One thing needs fixing" : `${unwell.length} things need fixing`}
+          </div>
+          {unwell.map((h) => (
+            <div key={h.label} style={{ fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>
+              <strong>{h.label}.</strong> <span className="muted">{h.detail}</span>
+              {h.fix && <span className="muted"> {h.fix}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/*
+        Says the venue's name because the sidebar badge counts every venue this
+        user can see — without it, the same words carry two different numbers on
+        the same screen. And "things", not "calls": a freed slot with somebody
+        waiting for it has no call attached.
+      */}
+      {needsYou.total > 0 && (
+        <Link
+          href={`/attention?loc=${location.id}`}
+          className="panel"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "15px 18px",
+            marginBottom: 14,
+          }}
+        >
+          <span
+            style={{
+              minWidth: 26,
+              height: 26,
+              padding: "0 8px",
+              borderRadius: 999,
+              background: "var(--bad)",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 700,
+              display: "grid",
+              placeItems: "center",
+              fontVariantNumeric: "tabular-nums",
+              flexShrink: 0,
+            }}
+          >
+            {needsYou.total}
+          </span>
+          <span style={{ minWidth: 0 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, display: "block" }}>
+              {needsYou.total === 1 ? "One thing needs you" : `${needsYou.total} things need you`} at{" "}
+              {location.name}
+            </span>
+            {needsYou.top && (
+              <span className="muted" style={{ fontSize: 12.5, display: "block", marginTop: 3 }}>
+                Most urgent — {needsYou.top.who}: {needsYou.top.todo}
+              </span>
+            )}
+          </span>
+          <span className="muted" style={{ fontSize: 12.5, marginLeft: "auto", flexShrink: 0 }}>
+            Open →
+          </span>
+        </Link>
+      )}
 
       <div className="split">
         <div className="panel">
-          <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", fontWeight: 600, fontSize: 13 }}>
-            Today&apos;s book
-            <span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>
-              {today}
-            </span>
-          </div>
-          {todays.length === 0 ? (
+          <div className="panel-head">Recent calls</div>
+          {recent.length === 0 ? (
             <p className="muted" style={{ padding: "26px 16px", fontSize: 13, margin: 0 }}>
-              Nothing booked today. Open the test console and make a reservation — it lands here.
+              No calls yet. Ring the number, or use the{" "}
+              <Link href="/test" style={{ color: "var(--accent)" }}>test console</Link>.
             </p>
           ) : (
             <table>
               <tbody>
-                {todays.map((b) => (
-                  <tr key={b.id}>
-                    <td
-                      className="mono"
-                      style={{ width: 84, color: "var(--gold-ink)", whiteSpace: "nowrap" }}
-                    >
-                      {minutesToSpoken(b.startMin)}
-                    </td>
+                {recent.map((c) => (
+                  <tr key={c.id}>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{b.guestName}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        {describeBookingShort(location, b)}
+                      <Link href={`/calls/${c.id}`} style={{ fontWeight: 600 }}>
+                        {c.summary ?? c.transcript.find((tr) => tr.role === "caller")?.text ?? "—"}
+                      </Link>
+                      <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
+                        {new Date(c.startedAt).toLocaleString()} · {callDurationSeconds(c)}s
                       </div>
                     </td>
-                    <td style={{ width: 78, textAlign: "right" }}>
-                      <span className="pill mono">{b.ref}</span>
+                    <td style={{ width: 128, textAlign: "right" }}>
+                      <span className="pill">{c.outcome?.replace(/_/g, " ") ?? c.status}</span>
                     </td>
                   </tr>
                 ))}
@@ -162,36 +203,73 @@ export default async function OverviewPage({
           )}
         </div>
 
-        <div className="panel">
-          <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", fontWeight: 600, fontSize: 13 }}>
-            Recent calls
+        <div>
+          <div className="panel" style={{ marginBottom: 14 }}>
+            <div className="panel-head">
+              Bookings taken by Belline
+              <span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>
+                last {worth.days} days
+              </span>
+            </div>
+            <div style={{ padding: "18px 18px 20px" }}>
+              <div
+                style={{
+                  fontSize: 34,
+                  fontWeight: 300,
+                  letterSpacing: "-0.035em",
+                  lineHeight: 1,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {worth.bookings}
+              </div>
+
+              {worth.estimate === null ? (
+                <p className="muted" style={{ fontSize: 12.5, margin: "12px 0 0", lineHeight: 1.55 }}>
+                  Tell us what a{" "}
+                  {isRestaurant(location) ? "cover" : t.booking} is typically worth and this will
+                  show an estimate of what they came to. We will not guess it for you.
+                </p>
+              ) : (
+                <>
+                  <div style={{ fontSize: 15, marginTop: 12, fontWeight: 600 }}>
+                    ≈ {worth.currency} {worth.estimate.toLocaleString()}
+                  </div>
+                  <p className="muted" style={{ fontSize: 11.5, margin: "6px 0 0", lineHeight: 1.5 }}>
+                    An estimate, from the average you entered — not measured revenue.
+                  </p>
+                </>
+              )}
+            </div>
           </div>
-          {calls.length === 0 ? (
-            <p className="muted" style={{ padding: "26px 16px", fontSize: 13, margin: 0 }}>
-              No calls yet.
-            </p>
-          ) : (
-            <table>
-              <tbody>
-                {calls.slice(0, 8).map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <Link href={`/calls/${c.id}`} style={{ fontWeight: 600 }}>
-                        {c.summary ?? c.transcript.find((t) => t.role === "caller")?.text ?? "—"}
-                      </Link>
-                      <div className="muted" style={{ fontSize: 11.5, marginTop: 3 }}>
-                        {new Date(c.startedAt).toLocaleString()} · {callDurationSeconds(c)}s ·{" "}
-                        {c.channel}
-                      </div>
-                    </td>
-                    <td style={{ width: 130, textAlign: "right" }}>
-                      <span className="pill">{c.outcome?.replace(/_/g, " ") ?? c.status}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+
+          <div className="panel">
+            <div className="panel-head">Belline health</div>
+            <div style={{ padding: "12px 18px 16px" }}>
+              {health.map((h) => (
+                <div
+                  key={h.label}
+                  style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "6px 0" }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: h.ok ? "var(--ok)" : "var(--bad)",
+                      flexShrink: 0,
+                      marginTop: 5,
+                    }}
+                  />
+                  <span style={{ fontSize: 13, minWidth: 116 }}>{h.label}</span>
+                  <span className="muted" style={{ fontSize: 11.5, lineHeight: 1.45 }}>
+                    {h.detail}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </>

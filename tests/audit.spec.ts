@@ -45,7 +45,19 @@ for (const page of PAGES) {
       );
 
       await browser.setViewportSize({ width: bp.width, height: bp.height });
-      await browser.goto(page.url, { waitUntil: "networkidle" });
+
+      // Not `networkidle`. These pages preload 28 audio clips, so under
+      // parallel workers the socket never goes quiet inside the timeout and
+      // the run fails on a page that renders in 2.6s on its own. A gate that
+      // cries wolf gets ignored, which is worse than not having it.
+      //
+      // What the checks below actually need is layout and web fonts settled,
+      // so wait for those directly.
+      await browser.goto(page.url, { waitUntil: "load" });
+      await browser.evaluate(() => document.fonts.ready);
+      await browser.evaluate(
+        () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+      );
 
       await browser.screenshot({
         path: path.join(OUT, `${page.slug}-${bp.name}.png`),
