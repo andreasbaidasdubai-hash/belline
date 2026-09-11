@@ -33,7 +33,7 @@ const { seedIfEmpty } = await import("../src/lib/seed");
 const { signUp } = await import("../src/lib/onboarding");
 const { getLocation } = await import("../src/lib/store");
 const { applyStripeEvent, stripeEnabled } = await import("../src/lib/billing/stripe");
-const { PLANS, periodFee, planById } = await import("../src/lib/billing/plans");
+const { PLANS, periodFee, planById, annualPerMonth } = await import("../src/lib/billing/plans");
 
 let passed = 0;
 let failed = 0;
@@ -84,6 +84,21 @@ await test("every plan has a whole-dirham monthly and annual price", () => {
       assert.equal(Number.isInteger(fils), true, `${plan.name} ${cycle} is not an integer`);
       assert.equal(fils % 100, 0, `${plan.name} ${cycle} is not a whole dirham`);
     }
+  }
+});
+
+await test("the annual per-month figure is a price, not a fils count", () => {
+  // It rendered "AED 14,900 a month" on the checkout page, because the helper
+  // already returns fils and the page multiplied by FILS a second time. A
+  // number a hundred times too big is the one pricing bug a customer
+  // definitely notices.
+  for (const plan of PLANS) {
+    const perMonth = annualPerMonth(plan);
+    assert.ok(
+      perMonth < plan.monthly,
+      `${plan.name}: annual per-month (${perMonth}) is not below the monthly price (${plan.monthly})`,
+    );
+    assert.equal(perMonth % 100, 0, `${plan.name}: not a whole dirham`);
   }
 });
 

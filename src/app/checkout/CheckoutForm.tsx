@@ -1,17 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import type { BillingCycle, PlanId } from "@/lib/billing/plans";
 
 /**
- * Four fields.
+ * Four fields, on the same page as the price.
  *
- * Business name, what you do, email, password — and nothing else, because
- * every other thing a signup form asks for is something the next screen can
- * read off the business's own website. Asking for an address and a phone
- * number here would be asking somebody to type what we are about to fetch.
+ * Everything else a signup form might ask for is something the next screen
+ * reads off the business's own website, so asking here would be asking
+ * somebody to type what we are about to fetch.
  *
- * The vertical is the one field that cannot be deferred: it decides which
- * engine the venue runs on, and a table is not an appointment.
+ * What happens on submit depends on whether we can take a card yet:
+ *
+ *   Stripe configured — create the account, then straight to Stripe. The
+ *   customer never comes back to a marketing page in between, which is the
+ *   thing that loses them.
+ *
+ *   Stripe not configured — create the account and go to setup. The trial is
+ *   real, the product works, and the button says so rather than pretending
+ *   there is a payment step that does not exist.
  */
 
 const TRADES = [
@@ -20,7 +27,15 @@ const TRADES = [
   { value: "restaurant", label: "Restaurant" },
 ] as const;
 
-export default function StartForm() {
+export default function CheckoutForm({
+  planId,
+  cycle,
+  takesCard,
+}: {
+  planId: PlanId;
+  cycle: BillingCycle;
+  takesCard: boolean;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ field?: string; message: string } | null>(null);
 
@@ -32,7 +47,7 @@ export default function StartForm() {
 
     const form = new FormData(event.currentTarget);
     try {
-      const res = await fetch("/api/signup", {
+      const signup = await fetch("/api/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -46,21 +61,37 @@ export default function StartForm() {
         }),
       });
 
-      const body = (await res.json().catch(() => ({}))) as {
+      const body = (await signup.json().catch(() => ({}))) as {
         ok?: boolean;
         next?: string;
         field?: string;
         error?: string;
       };
 
-      if (!res.ok || !body.ok) {
+      if (!signup.ok || !body.ok) {
         setError({ field: body.field, message: body.error ?? "Something went wrong." });
         setBusy(false);
         return;
       }
 
-      // A full navigation rather than a router push: the session cookie was
-      // just set, and every page after this reads it on the server.
+      if (takesCard) {
+        // Straight on to the card. A "thanks for signing up" page in between is
+        // a page people close.
+        const checkout = await fetch("/api/checkout", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ planId, cycle }),
+        });
+        const paid = (await checkout.json().catch(() => ({}))) as { url?: string };
+        if (paid.url) {
+          window.location.href = paid.url;
+          return;
+        }
+        // Checkout would not open. The account exists and the trial is
+        // running, so carry on into setup rather than stranding them —
+        // they can add a card from the dashboard.
+      }
+
       window.location.href = body.next ?? "/setup";
     } catch {
       setError({ message: "Could not reach Belline. Check your connection and try again." });
@@ -68,10 +99,10 @@ export default function StartForm() {
     }
   }
 
-  const badField = (name: string) => (error?.field === name ? { borderColor: "var(--bad)" } : {});
+  const bad = (name: string) => (error?.field === name ? { borderColor: "var(--bad)" } : {});
 
   return (
-    <form onSubmit={submit} style={{ display: "grid", gap: 16 }}>
+    <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
       <div>
         <label htmlFor="businessName">Business name</label>
         <input
@@ -81,15 +112,14 @@ export default function StartForm() {
           required
           maxLength={120}
           autoComplete="organization"
-          autoFocus
           placeholder="Marina Hair Studio"
-          style={badField("businessName")}
+          style={bad("businessName")}
         />
       </div>
 
       <div>
         <label htmlFor="vertical">What do you do?</label>
-        <select id="vertical" name="vertical" defaultValue="salon" style={badField("vertical")}>
+        <select id="vertical" name="vertical" defaultValue="salon" style={bad("vertical")}>
           {TRADES.map((t) => (
             <option key={t.value} value={t.value}>
               {t.label}
@@ -109,7 +139,7 @@ export default function StartForm() {
           autoComplete="email"
           inputMode="email"
           spellCheck={false}
-          style={badField("email")}
+          style={bad("email")}
         />
       </div>
 
@@ -122,9 +152,9 @@ export default function StartForm() {
           required
           autoComplete="new-password"
           minLength={12}
-          style={badField("password")}
+          style={bad("password")}
         />
-        <p className="muted" style={{ fontSize: 11, margin: "7px 0 0" }}>
+        <p className="muted" style={{ fontSize: 10.5, margin: "6px 0 0" }}>
           At least twelve characters. A short sentence works well.
         </p>
       </div>
@@ -146,11 +176,16 @@ export default function StartForm() {
         </p>
       )}
 
-      <button className="btn btn-accent" type="submit" disabled={busy} style={{ padding: "12px 16px" }}>
-        {busy ? "Setting you up…" : "Get Belline"}
+      <button
+        className="btn btn-accent"
+        type="submit"
+        disabled={busy}
+        style={{ padding: "13px 16px", fontSize: 14.5, marginTop: 4 }}
+      >
+        {busy ? "Setting you up…" : takesCard ? "Continue to payment" : "Start free trial"}
       </button>
 
-      <p className="muted" style={{ fontSize: 11, margin: 0, textAlign: "center", lineHeight: 1.6 }}>
+      <p className="muted" style={{ fontSize: 10.5, margin: 0, textAlign: "center", lineHeight: 1.6 }}>
         Next: paste your website and Belline reads your business off it.
       </p>
     </form>

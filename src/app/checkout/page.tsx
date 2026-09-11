@@ -1,28 +1,38 @@
 import Brand from "@/components/Brand";
-import { requireUser } from "@/lib/auth-server";
+import { currentUser } from "@/lib/auth-server";
 import { listLocationsFor } from "@/lib/store";
 import { seedIfEmpty } from "@/lib/seed";
 import { PLANS, periodFee, FILS, annualPerMonth, type BillingCycle } from "@/lib/billing/plans";
 import { stripeEnabled } from "@/lib/billing/stripe";
+import CheckoutForm from "./CheckoutForm";
 import PayButton from "./PayButton";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Checkout" };
+export const metadata = {
+  title: "Get Belline",
+  description: "Belline, your AI receptionist. Fourteen days free, cancel anytime.",
+};
 
 /**
- * The checkout page.
+ * The checkout. Where "Get Belline" lands.
  *
- * Everything on it is the order and nothing else: the logo, the plan, the
- * price, what is included, what happens next. No navigation, no footer, no
- * second offer — a page whose only job is to be agreed with should not contain
- * a way to wander off.
+ * It used to land on a signup form with no price on it, and the checkout was a
+ * separate page behind a login that a visitor never saw. That is a signup
+ * flow wearing a purchase's clothes: somebody who has decided to buy is shown
+ * a form about themselves instead of the thing they are buying.
  *
- * The card itself is taken on Stripe's hosted page, which is where the "Pay"
- * button goes. That is not a shortcut: it arrives with 3D Secure, Apple Pay,
- * Google Pay, local card rules and PCI scope we are much better off not
- * having, and a form of ours would be a worse version of it that also made us
- * responsible for card numbers.
+ * So they are one page now. The order on the left — plan, price, what is
+ * included, what is due — and the four fields it takes to own it on the right.
+ * No navigation, no footer, no second offer: a page whose only job is to be
+ * agreed with should not contain a way to wander off.
+ *
+ * Public, deliberately. Asking somebody to create an account *before* showing
+ * them the price is the single most common way a low-ticket SaaS funnel leaks,
+ * and it is the thing the audit found.
+ *
+ * Signed in already — arriving from the end of setup, or from the billing page
+ * — they get the same order without the fields.
  */
 export default async function CheckoutPage({
   searchParams,
@@ -30,12 +40,12 @@ export default async function CheckoutPage({
   searchParams: Promise<{ plan?: string; cycle?: string; cancelled?: string }>;
 }) {
   seedIfEmpty();
-  const user = await requireUser();
   const params = await searchParams;
+  const user = await currentUser();
 
   const plan = PLANS.find((p) => p.id === params.plan) ?? PLANS[0];
   const cycle: BillingCycle = params.cycle === "annual" ? "annual" : "monthly";
-  const venue = listLocationsFor(user.tenantId)[0];
+  const venue = user ? listLocationsFor(user.tenantId)[0] : undefined;
 
   const fee = periodFee(plan, cycle);
   const money = (fils: number) =>
@@ -45,33 +55,20 @@ export default async function CheckoutPage({
   const serif = { fontFamily: '"Fraunces", Georgia, serif', fontWeight: 500 } as const;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "grid", placeItems: "start center" }}>
-      <main style={{ width: "100%", maxWidth: 520, padding: "56px 26px 90px" }}>
-        <div style={{ textAlign: "center", marginBottom: 34 }}>
-          <Brand size={28} />
+    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+      <main className="checkout">
+        <div style={{ gridArea: "brand", marginBottom: 30 }}>
+          <a href="https://belline.ai" style={{ textDecoration: "none" }}>
+            <Brand size={28} />
+          </a>
         </div>
 
-        {params.cancelled && (
-          <p
-            style={{
-              fontSize: 13,
-              padding: "11px 14px",
-              borderRadius: 9,
-              background: "var(--panel-2)",
-              border: "1px solid var(--border)",
-              margin: "0 0 24px",
-              color: "var(--text-2)",
-            }}
-          >
-            Nothing was charged. You can pick it up again whenever you like.
-          </p>
-        )}
-
-        <div className="panel" style={{ padding: "30px 28px" }}>
-          <h1 style={{ ...serif, fontSize: 26, letterSpacing: "-0.02em", margin: "0 0 6px" }}>
+        {/* The order. */}
+        <section className="checkout-order">
+          <h1 style={{ ...serif, fontSize: 25, letterSpacing: "-0.02em", margin: "0 0 6px" }}>
             Belline {plan.name}
           </h1>
-          <p className="muted" style={{ fontSize: 13.5, margin: "0 0 24px", lineHeight: 1.55 }}>
+          <p className="muted" style={{ fontSize: 13.5, margin: "0 0 22px", lineHeight: 1.55 }}>
             {plan.summary}
           </p>
 
@@ -79,29 +76,29 @@ export default async function CheckoutPage({
             style={{
               display: "flex",
               alignItems: "baseline",
-              gap: 10,
-              paddingBottom: 20,
-              marginBottom: 20,
+              gap: 9,
+              paddingBottom: 18,
+              marginBottom: 18,
               borderBottom: "1px solid var(--border-soft)",
             }}
           >
-            <span style={{ ...serif, fontSize: 38, letterSpacing: "-0.02em", lineHeight: 1 }}>
+            <span style={{ ...serif, fontSize: 34, letterSpacing: "-0.02em", lineHeight: 1 }}>
               {money(fee)}
             </span>
-            <span className="muted" style={{ fontSize: 13.5 }}>
+            <span className="muted" style={{ fontSize: 13 }}>
               {cycle === "annual" ? "a year" : "a month"}
             </span>
           </div>
 
-          <ul style={{ listStyle: "none", padding: 0, margin: "0 0 24px" }}>
+          <ul style={{ listStyle: "none", padding: 0, margin: "0 0 20px" }}>
             {live.map((f) => (
               <li
                 key={f.text}
                 style={{
                   position: "relative",
-                  paddingLeft: 20,
-                  marginBottom: 9,
-                  fontSize: 13.5,
+                  paddingLeft: 19,
+                  marginBottom: 8,
+                  fontSize: 13,
                   color: "var(--text-2)",
                   lineHeight: 1.5,
                 }}
@@ -127,38 +124,87 @@ export default async function CheckoutPage({
               display: "flex",
               justifyContent: "space-between",
               alignItems: "baseline",
-              padding: "16px 0",
+              padding: "15px 0 0",
               borderTop: "1px solid var(--border)",
-              marginBottom: 22,
             }}
           >
-            <span style={{ fontSize: 14, fontWeight: 600 }}>Due today</span>
-            <span style={{ ...serif, fontSize: 22, letterSpacing: "-0.015em" }}>{money(fee)}</span>
+            <span style={{ fontSize: 13.5, fontWeight: 600 }}>Due today</span>
+            <span style={{ ...serif, fontSize: 21, letterSpacing: "-0.015em" }}>
+              {user ? money(fee) : money(0)}
+            </span>
           </div>
+          {!user && (
+            <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0", lineHeight: 1.6 }}>
+              Fourteen days free. Then {money(fee)} {cycle === "annual" ? "a year" : "a month"},
+              cancel any time before.
+            </p>
+          )}
 
-          <PayButton
-            planId={plan.id}
-            cycle={cycle}
-            enabled={stripeEnabled()}
-            venueName={venue?.name ?? "your venue"}
-          />
+          {cycle === "monthly" && (
+            <p className="muted" style={{ fontSize: 11.5, margin: "14px 0 0", lineHeight: 1.6 }}>
+              {/* annualPerMonth already returns fils. Multiplying by FILS
+                  again put "AED 14,900 a month" on the page. */}
+              Or {money(annualPerMonth(plan))} a month{" "}
+              <a href={`/checkout?plan=${plan.id}&cycle=annual`}>paid annually</a> — two months free.
+            </p>
+          )}
+        </section>
 
-          <p className="muted" style={{ fontSize: 11.5, margin: "16px 0 0", textAlign: "center", lineHeight: 1.6 }}>
-            Secure checkout by Stripe · Cancel anytime
-            {cycle === "monthly" && plan.annual > 0 ? (
-              <>
-                <br />
-                Or {money(annualPerMonth(plan))} a month{" "}
-                <a href={`/checkout?plan=${plan.id}&cycle=annual`}>paid annually</a>.
-              </>
-            ) : null}
+        {/* The part that makes it theirs. */}
+        <section className="checkout-act">
+          {params.cancelled && (
+            <p
+              style={{
+                fontSize: 12.5,
+                padding: "10px 13px",
+                borderRadius: 9,
+                background: "var(--panel-2)",
+                border: "1px solid var(--border)",
+                margin: "0 0 20px",
+                color: "var(--text-2)",
+              }}
+            >
+              Nothing was charged. Pick it up whenever you like.
+            </p>
+          )}
+
+          {user ? (
+            <>
+              <h2 style={{ ...serif, fontSize: 21, letterSpacing: "-0.015em", margin: "0 0 6px" }}>
+                Add a card
+              </h2>
+              <p className="muted" style={{ fontSize: 13, margin: "0 0 22px", lineHeight: 1.55 }}>
+                Billed for {venue?.name ?? "your venue"}.
+              </p>
+              <PayButton
+                planId={plan.id}
+                cycle={cycle}
+                enabled={stripeEnabled()}
+                venueName={venue?.name ?? "your venue"}
+              />
+            </>
+          ) : (
+            <>
+              <h2 style={{ ...serif, fontSize: 21, letterSpacing: "-0.015em", margin: "0 0 6px" }}>
+                Someone always answers.
+              </h2>
+              <p className="muted" style={{ fontSize: 13, margin: "0 0 22px", lineHeight: 1.55 }}>
+                Four things and you are set up.
+              </p>
+              <CheckoutForm planId={plan.id} cycle={cycle} takesCard={stripeEnabled()} />
+            </>
+          )}
+
+          <p
+            className="muted"
+            style={{ fontSize: 11, margin: "18px 0 0", textAlign: "center", lineHeight: 1.65 }}
+          >
+            {stripeEnabled() ? "Secure checkout by Stripe · " : ""}Cancel anytime
+            <br />
+            Several venues? <a href="mailto:hello@belline.ai">Email us</a> and we will price it
+            properly.
           </p>
-        </div>
-
-        <p className="muted" style={{ fontSize: 12, textAlign: "center", marginTop: 22, lineHeight: 1.6 }}>
-          Billed for {venue?.name ?? "your venue"}. Several venues?{" "}
-          <a href="mailto:hello@belline.ai">Email us</a> — we will price it properly.
-        </p>
+        </section>
       </main>
     </div>
   );

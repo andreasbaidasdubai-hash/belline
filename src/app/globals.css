@@ -1242,3 +1242,38 @@ body:has(.callbar) {
   .callbar-slot strong { font-size: 14px; }
   .callbar-slot em { font-size: 10px; color: var(--muted); }
 }
+
+/* --- Die Kasse ---------------------------------------------------------------
+ * Links die Bestellung, rechts das, was sie zu ihrer macht. Auf dem Telefon
+ * untereinander — und die Bestellung zuerst, weil man erst weiß, was man
+ * kauft, und dann tippt.
+ */
+.checkout {
+  display: grid;
+  grid-template-areas: "brand brand" "order act";
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 48px;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 54px 26px 90px;
+  align-items: start;
+}
+.checkout-order {
+  grid-area: order;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--lift);
+  padding: 28px 26px;
+}
+.checkout-act { grid-area: act; }
+
+@media (max-width: 760px) {
+  .checkout {
+    grid-template-areas: "brand" "order" "act";
+    grid-template-columns: 1fr;
+    gap: 26px 0;
+    padding: 40px 20px 80px;
+  }
+  .checkout-order { padding: 24px 20px; }
+}
