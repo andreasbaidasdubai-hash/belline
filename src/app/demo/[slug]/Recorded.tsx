@@ -187,11 +187,10 @@ const CSS = `
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em;
   text-transform: uppercase; padding-top: 3px;
 }
-/* Brass names the agent, ink-3 names the caller — the same two-voice
-   distinction the marketing site makes, in the same two colours.
-   #7D93A8 was here before: a slate from the old palette that sat at 2.6:1 on
-   paper. These labels are 10.5px uppercase, which is exactly the size the
-   4.5:1 rule exists for, and --muted was darkened to clear it. */
+/* Brass names the agent, ink-3 the caller — the same two-voice distinction
+   the marketing site makes, in the same two colours. The slate that was here
+   measured 3.02:1 on paper; these labels are 10.5px uppercase, which is the
+   size the 4.5:1 rule exists for. --muted clears it at 4.91:1. */
 .demo-agent .demo-who { color: var(--gold); }
 .demo-caller .demo-who { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
