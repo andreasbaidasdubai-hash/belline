@@ -38,7 +38,7 @@ const { seedIfEmpty } = await import("../src/lib/seed");
 const { signUp } = await import("../src/lib/onboarding");
 const { getLocation, saveCall } = await import("../src/lib/store");
 const { startCall } = await import("../src/lib/calls");
-const { enableEmbed, checkEmbedGate, embedSnippet } = await import("../src/lib/embed");
+const { enableEmbed, checkEmbedGate, embedSnippet, parseMode } = await import("../src/lib/embed");
 const { signVisitorToken, verifyVisitorToken } = await import("../src/lib/auth");
 const { BELLINE_LOCATION_ID } = await import("../src/lib/seed-belline");
 const { isConfigured } = await import("../src/lib/db/client");
@@ -160,6 +160,41 @@ await test("the snippet carries the venue's mode, so a paste is enough", () => {
   assert.ok(snippet.includes('data-mode="both"'));
   assert.ok(snippet.includes(venue.embed!.key));
   assert.equal(snippet.split("\n").length, 1, "the snippet must stay one line");
+});
+
+await test("an unrecognised mode leaves the venue where it was", () => {
+  // Stored, it would fail every predicate and present as a widget that is
+  // switched on and offers nothing — the hardest failure to diagnose from
+  // outside, because the dashboard would say it was working.
+  for (const junk of ["", "VOICE", "on", "true", null, undefined, 7, {}, ["both"]]) {
+    assert.equal(parseMode(junk), undefined, `accepted ${JSON.stringify(junk)}`);
+  }
+  for (const good of ["voice", "chat", "both"] as const) {
+    assert.equal(parseMode(good), good);
+  }
+});
+
+await test("saving without naming a mode does not silently change one", () => {
+  const chatOnly = enableEmbed(getLocation(venue.id)!, ["https://marinahair.ae"], undefined, "chat");
+  // The dashboard posts origins on every save. A venue that had chosen chat
+  // must not be flipped back to the default by editing its website list.
+  const edited = enableEmbed(chatOnly, ["https://marinahair.ae", "https://staging.marinahair.ae"]);
+  assert.equal(edited.embed!.mode, "chat");
+  assert.equal(edited.embed!.allowedOrigins.length, 2);
+  venue = enableEmbed(edited, ["https://marinahair.ae"], undefined, "both");
+});
+
+await test("the dashboard screen exists and is reachable", () => {
+  // This feature shipped once without a screen: the endpoint was real and the
+  // only way to use it was to POST by hand. A page nobody can navigate to has
+  // not shipped.
+  const page = path.join(process.cwd(), "src", "app", "(app)", "website", "page.tsx");
+  assert.ok(fs.existsSync(page), "no /website screen");
+  const nav = fs.readFileSync(
+    path.join(process.cwd(), "src", "app", "(app)", "layout.tsx"),
+    "utf8",
+  );
+  assert.ok(nav.includes('href: "/website"'), "the screen is not in the navigation");
 });
 
 // ---------------------------------------------------------------------------

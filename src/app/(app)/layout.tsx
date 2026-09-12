@@ -54,6 +54,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       ? [
           { href: "/agents", label: "Agent" },
           { href: "/venue", label: "How it works" },
+          // Beside the other places Belline answers from, not under
+          // integrations: this is a channel the venue switches on, not a
+          // third party it connects to.
+          { href: "/website", label: "Your website" },
           { href: "/integrations", label: "Integrations" },
         ]
       : []),

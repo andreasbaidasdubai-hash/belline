@@ -16,6 +16,19 @@ export function modeOf(config: EmbedConfig | undefined): EmbedMode | null {
   return config.mode ?? "voice";
 }
 
+/**
+ * A mode from whatever arrived over the wire.
+ *
+ * Returns undefined for anything it does not recognise, and the caller then
+ * leaves the venue where it was. Storing an unrecognised string would be
+ * worse than refusing it: every predicate above would return false, and the
+ * dashboard would show a widget that is switched on and offers nothing —
+ * which is the hardest of the available failures to diagnose from the outside.
+ */
+export function parseMode(raw: unknown): EmbedMode | undefined {
+  return raw === "voice" || raw === "chat" || raw === "both" ? raw : undefined;
+}
+
 export function voiceAllowed(config: EmbedConfig | undefined): boolean {
   const mode = modeOf(config);
   return mode === "voice" || mode === "both";

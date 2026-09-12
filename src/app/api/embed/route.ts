@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { getLocation, listLocationsFor } from "@/lib/store";
-import { disableEmbed, embedSnippet, enableEmbed, normaliseOrigin } from "@/lib/embed";
+import { disableEmbed, embedSnippet, enableEmbed, normaliseOrigin, parseMode } from "@/lib/embed";
 import { publish } from "@/lib/brain";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   if (auth.response) return auth.response;
   const user = auth.user;
 
-  let body: { locationId?: string; origins?: unknown; enabled?: boolean };
+  let body: { locationId?: string; origins?: unknown; enabled?: boolean; mode?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -57,15 +57,25 @@ export async function POST(req: Request) {
     );
   }
 
-  const updated = enableEmbed(location, origins);
-  publish(updated.id, user, `Website widget on for ${origins.join(", ")}`);
+  // What the widget offers. Unrecognised leaves the venue where it was — see
+  // parseMode.
+  const updated = enableEmbed(location, origins, undefined, parseMode(body.mode));
+  const offers =
+    updated.embed!.mode === "both"
+      ? "talking and messages"
+      : updated.embed!.mode === "chat"
+        ? "messages"
+        : "talking";
+  publish(updated.id, user, `Website widget on for ${origins.join(", ")} — ${offers}`);
 
   return NextResponse.json({
     ok: true,
     enabled: true,
     key: updated.embed!.key,
+    mode: updated.embed!.mode,
     origins: updated.embed!.allowedOrigins,
     snippet: embedSnippet(updated, new URL(req.url).origin),
     maxCallsPerDay: updated.embed!.maxCallsPerDay,
+    maxChatsPerDay: updated.embed!.maxChatsPerDay,
   });
 }

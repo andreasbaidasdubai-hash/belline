@@ -1072,6 +1072,76 @@ body:has(.callbar) {
    the gesture that got here, so on a phone the audio context can arrive
    suspended — Belline talking with nobody able to hear it. A small button in
    the corner is a poor answer when the instruction is simply "tap". */
+/* --- The website widget screen ---------------------------------------------
+ *
+ * Three choices in a row, each carrying what it costs. A radio group would
+ * have been smaller and would have made the price of each choice something you
+ * find out afterwards — and the difference between these three is precisely
+ * that one of them spends voice minutes and one does not.
+ */
+.widget-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.widget-mode {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 16px;
+  text-align: left;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.widget-mode:hover { border-color: var(--accent-line); }
+.widget-mode.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.widget-mode strong { font-size: 14px; font-weight: 600; }
+.widget-mode span { font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.widget-mode em { font-style: normal; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+
+/* What it has done today, beside the switch rather than buried in billing. */
+.widget-used {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 34px;
+}
+.widget-used > div { display: grid; gap: 3px; }
+.widget-used strong {
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.widget-used strong span { font-size: 15px; color: var(--muted); }
+.widget-used .muted { font-size: 12.5px; }
+
+.widget-snippet {
+  margin: 0;
+  padding: 13px 15px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  /* The line is long and must not push the page sideways. */
+  overflow-x: auto;
+  white-space: pre;
+}
+
+@media (max-width: 760px) {
+  .widget-modes { grid-template-columns: 1fr; }
+  .widget-used { gap: 24px; }
+}
+
 .callbar.is-blocked { cursor: pointer; }
 
 /* The way out for somebody who cannot talk right now. Deliberately the
