@@ -339,17 +339,27 @@ function Send() {
  * selectors rather than a class system that would only exist to look careful.
  */
 const CSS = `
-:root { color-scheme: dark }
+/* The panel, on paper.
+ *
+ * It was ink — a dark window opening out of a light page, which read as a
+ * different piece of software borrowed for the occasion. The site is paper,
+ * the dashboard is paper, and the one surface a customer's customer sees
+ * should be the same material as the page it opens on.
+ *
+ * The palette is site.css's, value for value: nothing here may drift from the
+ * marketing site, because the two are a metre apart on screen.
+ */
+:root { color-scheme: light }
 * { box-sizing: border-box }
 html, body { margin: 0; height: 100% }
-body { background: #14110D }
+body { background: #FBF9F5 }
 
 .bl-wrap {
   height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  background: #14110D;
-  color: #FBF9F5;
+  background: #FBF9F5;
+  color: #14110D;
   font: 400 15px/1.55 "Instrument Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -359,71 +369,75 @@ body { background: #14110D }
   align-items: center;
   gap: 11px;
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(251,249,245,.1);
+  border-bottom: 1px solid rgba(20,17,13,.1);
+  background: #FBF9F5;
 }
 .bl-mark { display: grid; place-items: center; width: 32px; height: 32px; flex: none;
-  border-radius: 999px; background: rgba(232,220,198,.12); color: #E8DCC6 }
+  border-radius: 999px; background: rgba(138,103,46,.12); color: #8A672E }
 .bl-mark svg { width: 19px; height: 19px; display: block }
 .bl-who { display: grid; min-width: 0 }
 .bl-who strong { font-weight: 600; font-size: 14.5px; letter-spacing: -.01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.bl-who em { font-style: normal; font-size: 12.5px; color: rgba(251,249,245,.62) }
+.bl-who em { font-style: normal; font-size: 12.5px; color: #746C63 }
 .bl-swap {
-  margin-left: auto; flex: none; color: #E8DCC6; text-decoration: none;
+  margin-left: auto; flex: none; color: #8A672E; text-decoration: none;
   font-size: 12.5px; padding: 6px 11px; border-radius: 999px;
-  border: 1px solid rgba(232,220,198,.3);
+  border: 1px solid rgba(138,103,46,.32);
 }
-.bl-swap:hover { background: rgba(232,220,198,.1) }
+.bl-swap:hover { background: rgba(138,103,46,.08) }
 
 .bl-log { overflow-y: auto; padding: 18px 16px 6px; display: grid; align-content: start; gap: 10px }
 
-.bl-opener { margin: 0 0 4px; font-size: 14.5px; color: rgba(251,249,245,.72); max-width: 34ch }
+.bl-opener { margin: 0 0 4px; font-size: 14.5px; color: #4A443C; max-width: 34ch }
 
 .bl-line { display: flex }
 .bl-line p {
   margin: 0; padding: 9px 13px; max-width: 84%;
   border-radius: 15px; font-size: 14.5px; white-space: pre-wrap; overflow-wrap: anywhere;
 }
+/* Das Haus spricht auf Papier, der Besucher in Tinte. Herum wäre es auch
+   lesbar — aber die dunkle Blase ist die auffälligere, und auffällig gehört
+   dem, was der Besucher gerade selbst getan hat. */
 .bl-line.bl-them { justify-content: flex-start }
-.bl-line.bl-them p { background: #221D17; border-bottom-left-radius: 5px }
+.bl-line.bl-them p { background: #F0EBE1; color: #14110D; border-bottom-left-radius: 5px }
 .bl-line.bl-you { justify-content: flex-end }
-.bl-line.bl-you p { background: #E8DCC6; color: #14110D; border-bottom-right-radius: 5px }
+.bl-line.bl-you p { background: #14110D; color: #FBF9F5; border-bottom-right-radius: 5px }
 
 .bl-note {
   margin: 2px auto; padding: 6px 12px; font-size: 12.5px; text-align: center;
-  color: rgba(251,249,245,.6); background: rgba(251,249,245,.05); border-radius: 999px;
+  color: #746C63; background: rgba(20,17,13,.045); border-radius: 999px;
 }
 
 .bl-thinking p { display: flex; gap: 4px; padding: 13px }
-.bl-thinking i { width: 5px; height: 5px; border-radius: 999px; background: rgba(251,249,245,.5);
+.bl-thinking i { width: 5px; height: 5px; border-radius: 999px; background: rgba(20,17,13,.42);
   animation: pulse 1.1s infinite }
 .bl-thinking i:nth-child(2) { animation-delay: .15s }
 .bl-thinking i:nth-child(3) { animation-delay: .3s }
 @keyframes pulse { 0%,60%,100% { opacity: .3 } 30% { opacity: 1 } }
 
-.bl-trouble { margin: 0; padding: 8px 16px; font-size: 13px; color: #F0B7A4 }
+.bl-trouble { margin: 0; padding: 8px 16px; font-size: 13px; color: #A33327 }
 
 .bl-wrap form { display: flex; gap: 8px; align-items: end; padding: 12px 14px 14px;
-  border-top: 1px solid rgba(251,249,245,.1) }
+  border-top: 1px solid rgba(20,17,13,.1); background: #FBF9F5 }
 .bl-wrap textarea {
   flex: 1; resize: none; min-height: 42px; max-height: 120px;
-  padding: 11px 13px; border-radius: 13px; border: 1px solid rgba(251,249,245,.16);
-  background: #1C1813; color: #FBF9F5; font: inherit; font-size: 14.5px;
+  padding: 11px 13px; border-radius: 13px; border: 1px solid rgba(20,17,13,.16);
+  background: #fff; color: #14110D; font: inherit; font-size: 14.5px;
 }
-.bl-wrap textarea::placeholder { color: rgba(251,249,245,.42) }
+.bl-wrap textarea::placeholder { color: #8E867C }
 /* Der Rahmen des Dashboards legt beim Fokus noch einen blassen Ring auf jedes
    Textfeld. Zusammen mit dem Umriss unten sind das zwei Ringe um dasselbe
    Feld — hier gilt nur der eine. */
-.bl-wrap textarea:focus { box-shadow: none; border-color: rgba(251,249,245,.16) }
+.bl-wrap textarea:focus { box-shadow: none; border-color: rgba(20,17,13,.16) }
 .bl-wrap textarea:focus-visible, .bl-wrap button:focus-visible, .bl-swap:focus-visible {
-  outline: 2px solid #E8DCC6; outline-offset: 2px;
+  outline: 2px solid #14110D; outline-offset: 2px;
 }
 .bl-wrap button {
   flex: none; width: 42px; height: 42px; border: 0; border-radius: 13px;
-  background: #E8DCC6; color: #14110D; cursor: pointer; display: grid; place-items: center;
+  background: #14110D; color: #FBF9F5; cursor: pointer; display: grid; place-items: center;
 }
 .bl-wrap button svg { width: 21px; height: 21px }
-.bl-wrap button:disabled { opacity: .4; cursor: default }
+.bl-wrap button:disabled { opacity: .32; cursor: default }
 
 @media (prefers-reduced-motion: reduce) { .bl-thinking i { animation: none; opacity: .6 } }
 `;

@@ -145,7 +145,11 @@
         // A short beat so the lines do not all land at once.
         timers.push(setTimeout(next, 900));
       };
-      player.src = "/audio/" + scene.audio[i];
+      // A path, already fingerprinted by the build. The older data had bare
+      // filenames, which is tolerated here so a cached copy of the JSON does
+      // not go silent on the way through a deploy.
+      var clip = scene.audio[i];
+      player.src = clip.charAt(0) === "/" ? clip : "/audio/" + clip;
       var started = player.play();
       if (started && started.catch) {
         started.catch(function () {

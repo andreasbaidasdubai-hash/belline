@@ -44,7 +44,7 @@
       <a href="#how">How it works</a>
       <a href="#price">Pricing</a>
       <a class="nav-cta" href="https://app.belline.ai/checkout">Get Belline</a>
-      <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>
+      <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Sign in</a>
     </nav>
     <!--
       Das Menü fürs Telefon. Vorher stand hier nichts: unter 900 px hat die
@@ -81,14 +81,6 @@
 
         <div class="cta-row rise rise-3">
           <a class="btn" href="https://app.belline.ai/checkout">Get Belline</a>
-          <a class="btn-quiet" href="https://app.belline.ai/call?start=1" data-call>
-            <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
-              <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
-              <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
-              <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
-            </svg>
-            Hear Belle
-          </a>
         </div>
 
         <p class="hero-note rise rise-4">
@@ -238,21 +230,43 @@
 
   <section id="trade" class="rule">
     <div class="wrap">
-      <p class="eyebrow">Who it's for</p>
-      <h2 class="display">Built for businesses that book customers.</h2>
-
-      <div class="trade-links" style="margin-top:34px">
-        <a href="/salons">Salons &amp; spas</a>
-        <a href="/clinics">Clinics</a>
-        <a href="/dental">Dental practices</a>
-        <a href="/restaurants">Restaurants</a>
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Who it's for</p>
+          <h2 class="display">If your diary is<br>your business.</h2>
+        </div>
+        <p class="sec-lead lead">
+          Four trades, one receptionist. It knows your services, your people
+          and your rules — pick yours and see the call it would have answered.
+        </p>
       </div>
 
-      <figure class="plate">
-        <img src="/img/bell.jpg" width="1200" height="1800" loading="lazy"
-             alt="A brass service bell on an empty reception counter, the room behind it out of focus.">
-        <figcaption>Somebody is standing at the counter. Nobody is behind it.</figcaption>
-      </figure>
+      <div class="trade-cards">
+        <a href="/salons">
+          <span class="trade-n">01</span>
+          <h3>Salons &amp; spas</h3>
+          <p>Knows which stylist does colour, how long it takes, and that a first colour needs a patch test.</p>
+          <span class="trade-go">See a salon call</span>
+        </a>
+        <a href="/clinics">
+          <span class="trade-n">02</span>
+          <h3>Clinics</h3>
+          <p>Books the right practitioner into the right room, and never gives clinical advice.</p>
+          <span class="trade-go">See a clinic call</span>
+        </a>
+        <a href="/dental">
+          <span class="trade-n">03</span>
+          <h3>Dental practices</h3>
+          <p>Check-ups, hygienist and emergencies — and it can tell which one it is being asked for.</p>
+          <span class="trade-go">See a dental call</span>
+        </a>
+        <a href="/restaurants">
+          <span class="trade-n">04</span>
+          <h3>Restaurants</h3>
+          <p>Holds the pass to a pace your kitchen can cook, instead of filling one sitting and drowning it.</p>
+          <span class="trade-go">See a restaurant call</span>
+        </a>
+      </div>
     </div>
   </section>
 
@@ -287,69 +301,103 @@
 
   <section id="price" class="rule">
     <div class="wrap">
-      <p class="eyebrow">Pricing</p>
-      <h2 class="display">AED 179 a month.</h2>
-
-      <div class="price-one">
+      <div class="sec-head">
         <div>
-          <p class="lead" style="margin-top:22px">
-            Your receptionist, answering around the clock. No setup fee, no
-            contract, and the first fortnight is free without a card.
-          </p>
-          <ul class="price-list">
+          <p class="eyebrow">Pricing</p>
+          <h2 class="display">Less than one<br>missed booking.</h2>
+        </div>
+        <p class="sec-lead lead">
+          Per venue, per month. No setup fee, no contract, and the first
+          fortnight is free without a card.
+        </p>
+      </div>
+
+      <div class="cycle" role="group" aria-label="Billing period">
+        <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monthly</button>
+        <button type="button" class="cycle-opt" data-cycle="annual" aria-pressed="false">
+          Annual <span class="cycle-save">2 months free</span>
+        </button>
+      </div>
+
+      <div class="plans">
+        <div class="plan">
+          <div class="plan-tag" aria-hidden="true"></div>
+          <h3>Starter</h3>
+          <p class="plan-sub">For a single venue that wants the phone answered properly.</p>
+          <div class="plan-price">
+            <span class="amt" data-monthly="AED 179" data-annual="AED 149">AED 179</span>
+            <span class="per">per month</span>
+            <span class="billed" data-monthly="Billed monthly. Cancel anytime."
+                  data-annual="AED 1,790 billed once a year.">Billed monthly. Cancel anytime.</span>
+          </div>
+          <ul>
             <li>60 voice minutes a month</li>
             <li>One Belline receptionist, answering 24/7</li>
+            <li>Phone, website chat and the website bell</li>
             <li>Books and changes appointments against your real availability</li>
             <li>Answers questions from your own hours, prices and policies</li>
             <li>Summary and full transcript of every call</li>
             <li>Flags anything it should not handle for you to call back</li>
-            <li>No setup fee</li>
           </ul>
-          <div class="cta-row" style="margin-top:30px">
-            <a class="btn" href="https://app.belline.ai/checkout" data-cta="pricing">Get Belline</a>
-          </div>
-          <p class="fine" style="margin-top:16px">
-            Fourteen days free · No card · Cancel anytime
-          </p>
+          <a class="btn line" href="https://app.belline.ai/checkout?plan=starter" data-cta="plan-starter">Get Starter</a>
         </div>
 
-        <aside class="price-aside">
-          <h3>A busier line?</h3>
-          <p>
-            Two larger plans exist for venues where the phone genuinely does not
-            stop. You can move up at any point — most never need to.
-          </p>
+        <div class="plan is-best">
+          <div class="plan-tag">Most popular</div>
+          <h3>Business</h3>
+          <p class="plan-sub">For a venue where the phone is genuinely busy.</p>
+          <div class="plan-price">
+            <span class="amt" data-monthly="AED 365" data-annual="AED 304">AED 365</span>
+            <span class="per">per month</span>
+            <span class="billed" data-monthly="Billed monthly. Cancel anytime."
+                  data-annual="AED 3,650 billed once a year.">Billed monthly. Cancel anytime.</span>
+          </div>
+          <ul>
+            <li>180 voice minutes a month</li>
+            <li>Everything in Starter</li>
+            <li>Your own rules about what it may and may not decide</li>
+            <li>Every change versioned, with one-click revert</li>
+            <li>Waitlist — it offers a slot the moment one frees</li>
+            <li>Priority support</li>
+          </ul>
+          <a class="btn" href="https://app.belline.ai/checkout?plan=business" data-cta="plan-business">Get Business</a>
+        </div>
 
-          <details>
-            <summary>Business — AED 365 a month</summary>
-            <ul class="price-list">
-              <li>180 voice minutes a month</li>
-              <li>Everything in Starter</li>
-              <li>Your own rules about what it may and may not decide</li>
-              <li>Every change versioned, with one-click revert</li>
-              <li>Waitlist — it offers a slot the moment one frees</li>
-              <li>Priority support</li>
-            </ul>
-            <a class="plan-pick" href="https://app.belline.ai/checkout?plan=business">Get Business</a>
-          </details>
+        <div class="plan">
+          <div class="plan-tag" aria-hidden="true"></div>
+          <h3>Enterprise</h3>
+          <p class="plan-sub">For a venue whose phone never stops, or one that would rather not count.</p>
+          <div class="plan-price">
+            <span class="amt" data-monthly="AED 899" data-annual="AED 749">AED 899</span>
+            <span class="per">per month</span>
+            <span class="billed" data-monthly="Billed monthly. Cancel anytime."
+                  data-annual="AED 8,990 billed once a year.">Billed monthly. Cancel anytime.</span>
+          </div>
+          <ul>
+            <li>Unlimited voice minutes</li>
+            <li>Everything in Business</li>
+            <li>One venue, no allowance to watch</li>
+            <li>Named contact for onboarding and changes</li>
+          </ul>
+          <a class="btn line" href="https://app.belline.ai/checkout?plan=enterprise" data-cta="plan-enterprise">Get Enterprise</a>
+        </div>
+      </div>
 
-          <details>
-            <summary>Enterprise — AED 899 a month</summary>
-            <ul class="price-list">
-              <li>Unlimited voice minutes</li>
-              <li>Everything in Business</li>
-              <li>One venue, no allowance to watch</li>
-              <li>Named contact for onboarding and changes</li>
-            </ul>
-            <a class="plan-pick" href="https://app.belline.ai/checkout?plan=enterprise">Get Enterprise</a>
-          </details>
+      <p class="compare">A receptionist works office hours. Belline answers 24/7.</p>
 
-          <details>
-            <summary>What counts as a voice minute</summary>
-            <p>A voice minute is time Belline spends on a live call with your caller — from the moment it answers to the moment the call ends — rounded up to the next whole minute. Calls you make from your own test console do not count, and neither do calls cut short by a fault on our side.</p>
-            <p>There is no per-minute charge on any plan. If the allowance runs short, the answer is a bigger plan, not a bigger bill.</p>
-          </details>
-        </aside>
+      <div class="terms">
+        <div>
+          <h4>What counts as a voice minute</h4>
+          <p>A voice minute is time Belline spends on a live call with your caller — from the moment it answers to the moment the call ends — rounded up to the next whole minute. Calls you make from your own test console do not count, and neither do calls cut short by a fault on our side.</p>
+        </div>
+        <div>
+          <h4>No surprise invoices</h4>
+          <p>There is no per-minute charge on any plan. The invoice is the plan fee and nothing else — if the allowance runs short, the answer is a bigger plan, not a bigger bill.</p>
+        </div>
+        <div>
+          <h4>14 days free</h4>
+          <p>A limited number of live-call minutes, no card, nothing charged. Standard onboarding is free — we set your venue up with you.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -433,25 +481,18 @@
       AI reception for clinics, dental practices, salons and restaurants.<br>
       <a href="tel:+15717785920">+1 571 778 5920</a> ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
-      <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>
+      <a href="https://app.belline.ai/login" rel="nofollow">Sign in</a>
     </p>
   </div>
 </footer>
 
 <!--
-  On a phone the buy button has to be reachable from anywhere on the page, and
-  the ringing bell cannot share that corner with it. Under 760px the bell steps
-  aside: the demo is one tap inside the bar instead.
+  On a phone the buy button has to be reachable from anywhere on the page.
+  One action, the same one as the hero — the chat button sits above it for
+  anybody who wants to ask something first.
 -->
 <div class="buybar" aria-label="Get Belline">
   <a class="buybar-cta" href="https://app.belline.ai/checkout" data-cta="sticky">Get Belline</a>
-  <a class="buybar-demo" href="https://app.belline.ai/call?start=1" data-call aria-label="Hear Belle now">
-    <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
-      <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
-      <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
-      <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
-    </svg>
-  </a>
 </div>
 
 <!--
@@ -476,15 +517,6 @@
   </svg>
   <span class="chat-fab-say">Chat with Belle</span>
 </button>
-
-<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Hear Belle now">
-  <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
-    <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
-    <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
-    <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
-  </svg>
-  <span class="bell-fab-say">Hear Belle</span>
-</a>
 
 <script type="application/json" id="call-scenes"></script>
 <script src="/site.js"></script>

@@ -1270,7 +1270,57 @@ body:has(.callbar) {
   margin-top: 4px;
 }
 
+/* --- Die Tage ---------------------------------------------------------------
+ *
+ * Vorher gab es genau einen: den, nach dem gefragt worden war. Wer "Donnerstag"
+ * gesagt bekam und lieber Freitag wollte, musste es sagen — was am Telefon
+ * richtig ist und auf einem Bildschirm eine verschenkte Sekunde.
+ *
+ * Ein Streifen, kein Monatsraster. Ein Monat sind dreißig Felder, von denen
+ * vier eine Antwort sind; hier steht nur, was wirklich frei ist. Waagerecht
+ * scrollbar, weil fünf Tage auf einem 360-px-Telefon sonst zu 60-px-Feldern
+ * zusammenschrumpfen, die kein Daumen trifft.
+ */
+.callbar-days {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 0 2px 12px;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.callbar-days::-webkit-scrollbar { display: none; }
+
+.callbar-day {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 1px;
+  /* 44 px ist die Untergrenze für einen Daumen; das hier liegt darüber. */
+  min-width: 62px;
+  padding: 8px 10px;
+  border-radius: 11px;
+  border: 1px solid rgba(251, 249, 245, 0.18);
+  background: transparent;
+  color: rgba(251, 249, 245, 0.72);
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+.callbar-day:hover { border-color: rgba(251, 249, 245, 0.34); color: #FBF9F5; }
+.callbar-day.is-on {
+  background: #FBF9F5;
+  border-color: #FBF9F5;
+  color: #14110D;
+}
+.callbar-day-name { font-size: 12.5px; font-weight: 600; letter-spacing: -0.005em; }
+.callbar-day-date { font-size: 10.5px; opacity: 0.7; font-variant-numeric: tabular-nums; }
+
 .callbar-slots-day {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -1278,44 +1328,60 @@ body:has(.callbar) {
   color: rgba(251, 249, 245, 0.55);
   margin-bottom: 10px;
 }
+/* Wie viele es sind. Eine Zahl neben dem Tag beantwortet "lohnt sich der
+   Blick?", bevor jemand die Reihe durchgescrollt hat. */
+.callbar-slots-day em {
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--gold-lit);
+}
 
+/* Ein Raster, keine Reihe.
+ *
+ * Vorher lagen die Zeiten in einer waagerecht scrollenden Reihe. Bei drei
+ * Vorschlägen ging das; bei achtzehn war halb neun das Einzige, was man sah,
+ * und alles nach zehn Uhr lag hinter einer Geste, die auf einem Laptop ohne
+ * Trackpad-Gewohnheit niemand macht. Ein Raster zeigt drei Reihen auf einmal
+ * und scrollt senkrecht — die Richtung, in die jede Seite ohnehin scrollt.
+ *
+ * auto-fill statt fester Spalten: auf einem 360-px-Telefon werden es drei, im
+ * angedockten Panel vier, auf der ganzen Seite sechs. Eine Regel, drei
+ * Layouts, und keins davon geraten. */
 .callbar-slots-row {
-  display: flex;
-  gap: 9px;
-  overflow-x: auto;
-  padding: 2px 2px 10px;
-  scroll-snap-type: x proximity;
-  /* Thumb-scrolling on a phone must not drag the page behind it. */
-  overscroll-behavior-x: contain;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 7px;
+  /* Zwei Reihen ganz und von der dritten ein Streifen — genug, dass klar ist,
+     dass es weitergeht, ohne den Knopf darunter zu verdrängen. Im angedockten
+     Panel ist weniger Platz als auf der ganzen Seite, also richtet sich das
+     nach der Höhe statt nach einer festen Zahl. */
+  max-height: min(150px, 30vh);
+  overflow-y: auto;
+  padding: 2px 2px 4px;
+  overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: rgba(251, 249, 245, 0.28) transparent;
-  /* Start-aligned, not centred. Centring a row that overflows pushes the
-     earliest time off the left edge, and the earliest time is the one most
-     people want. */
-  justify-content: flex-start;
 }
-.callbar-slots-row::-webkit-scrollbar { height: 5px; }
+.callbar-slots-row::-webkit-scrollbar { width: 5px; }
 .callbar-slots-row::-webkit-scrollbar-thumb {
   background: rgba(251, 249, 245, 0.28);
   border-radius: 3px;
 }
 
 .callbar-slot {
-  flex: 0 0 auto;
-  /* start, not center: centring snaps the nearest card to the middle on
-     layout, which scrolled the earliest time off the left edge before
-     anybody had touched it. */
-  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  /* 44px is the floor for a thumb; this clears it in both directions. */
-  min-width: 84px;
-  min-height: 52px;
+  /* 44px is the floor for a thumb; this clears it in both directions. Kein
+     min-width mehr: die Spaltenbreite kommt jetzt aus dem Raster, und eine
+     Mindestbreite darin hätte auf einem schmalen Telefon überstanden. */
+  min-height: 48px;
   justify-content: center;
-  padding: 10px 14px;
+  padding: 8px 10px;
   border-radius: 12px;
   border: 1px solid rgba(251, 249, 245, 0.2);
   background: rgba(251, 249, 245, 0.07);

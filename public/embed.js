@@ -156,6 +156,10 @@
       "?o=" +
       encodeURIComponent(location.origin);
     panel.className = "belline-panel";
+    // The call is ink and the chat is paper, and the frame behind each has to
+    // match — otherwise the wrong colour flashes for as long as the iframe
+    // takes to paint, which on a slow connection is not a flash.
+    if (kind === "chat") panel.style.background = "#FBF9F5";
     panel.title = label;
     // Only the panel that needs it asks for it. A chat window requesting a
     // microphone is the kind of thing that gets a widget removed from a site.

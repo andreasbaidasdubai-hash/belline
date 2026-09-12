@@ -112,8 +112,8 @@ function Refused({ reason }: { reason: string }) {
         placeItems: "center",
         padding: 28,
         textAlign: "center",
-        background: "#14110D",
-        color: "#FBF9F5",
+        background: "#FBF9F5",
+        color: "#14110D",
         fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif',
       }}
     >

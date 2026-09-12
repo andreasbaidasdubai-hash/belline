@@ -69,9 +69,23 @@ const VOICE_MANIFEST: Record<string, string> = (() => {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 })();
 
-/** Undefined unless every line in the scene has a clip: a half-voiced call is worse than a silent one. */
+/**
+ * Undefined unless every line in the scene has a clip: a half-voiced call is
+ * worse than a silent one.
+ *
+ * Full paths, not bare filenames, and that is the whole fix for a Listen
+ * button that had never once played a sound in production. Assets are
+ * fingerprinted on the way into site/ — `bell.mp3` becomes `bell.a1b2c3d4.mp3`
+ * — and every reference is rewritten by `repoint`, which searches for
+ * `/audio/bell.mp3`. A bare `bell.mp3` in this JSON matched nothing, went out
+ * unrewritten, and asked the browser for a file that no longer existed under
+ * that name. The button worked locally, where nothing is hashed, which is
+ * exactly why nobody caught it.
+ */
 function withAudio(scene: { turns: [string, string][] }) {
-  const audio = scene.turns.map(([, text]) => VOICE_MANIFEST[text] ?? null);
+  const audio = scene.turns.map(([, text]) =>
+    VOICE_MANIFEST[text] ? `/audio/${VOICE_MANIFEST[text]}` : null,
+  );
   return audio.every((a) => a) ? audio : undefined;
 }
 
@@ -290,17 +304,23 @@ const BUBBLE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
  * Der Knopf ist versteckt und wird von site.js eingeblendet: ohne JavaScript
  * gibt es nichts zu öffnen, und ein toter Knopf ist schlimmer als keiner.
  */
+/**
+ * Der eine schwebende Knopf.
+ *
+ * Vorher standen hier zwei — die Glocke und die Sprechblase. Zwei Knöpfe in
+ * derselben Ecke sind zwei Entscheidungen an der Stelle, an der die Seite
+ * genau eine will, und die Glocke hat mit "Get Belline" um dieselbe Absicht
+ * konkurriert. Wer sprechen will, sagt das im Chat; der Chat bietet es an.
+ *
+ * Versteckt im Markup und von site.js eingeblendet: ohne JavaScript gibt es
+ * nichts zu öffnen, und ein toter Knopf ist schlimmer als keiner.
+ */
 const BELL_FAB = `<button class="chat-fab" type="button" hidden
         data-chat="https://app.belline.ai/embed/be_belline_site/chat"
         aria-label="Chat with Belline">
   ${BUBBLE}
   <span class="chat-fab-say">Chat with Belline</span>
-</button>
-
-<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Hear Belline now">
-  ${MARK}
-  <span class="bell-fab-say">Hear Belline</span>
-</a>`;
+</button>`;
 
 /**
  * One trade's page.
@@ -378,12 +398,20 @@ function verticalPage(v: Vertical): string {
         <h1 class="display rise rise-1">${esc(v.headline)}</h1>
         <p class="lead rise rise-2">${esc(v.lead)}</p>
 
+        <!--
+          Kaufen ist der Hauptknopf, auch hier. Vorher stand "Hear Belline"
+          gefüllt davor und "Get Belline" als Umriss daneben — die Seite hat
+          also am lautesten zu dem geführt, was nichts verkauft, während die
+          Startseite inzwischen genau einen Knopf hat. Zwei Seiten desselben
+          Trichters, die sich widersprechen, ist schlimmer als jede der beiden
+          Varianten für sich.
+        -->
         <div class="cta-row rise rise-3">
-          <a class="btn" href="https://app.belline.ai/call?start=1" data-call>
+          <a class="btn" href="https://app.belline.ai/checkout">Get Belline</a>
+          <a class="btn-quiet" href="https://app.belline.ai/call?start=1" data-call>
             ${MARK}
-            Hear Belline
+            Hear it answer
           </a>
-          <a class="btn line" href="https://app.belline.ai/checkout">Get Belline</a>
         </div>
 
         <p class="hero-note rise rise-4">

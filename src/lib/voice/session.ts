@@ -1,4 +1,4 @@
-import type { Call, Location, ToolTrace } from "../types";
+import type { Call, DateStr, Location, ToolTrace } from "../types";
 import { AgentSession } from "../agent/runtime";
 import { createSttStream, type SttStream } from "../providers/stt";
 import { speak, speakClip, ttsEnabled, type TtsFormat } from "../providers/tts";
@@ -616,52 +616,109 @@ export class VoiceSession {
     if (!serviceIds?.length) return;
 
     try {
-      const today = todayIn(this.location.timezone);
-      for (let i = 0; i < 14; i++) {
-        const day = new Date(`${today}T12:00:00Z`);
-        day.setUTCDate(day.getUTCDate() + i);
-        const date = day.toISOString().slice(0, 10);
-
-        const slots = findAvailability(this.location, {
-          locationId: this.location.id,
-          date,
-          // The first service only. Offering every service's openings at once
-          // on a venue with eight of them is a wall, not a help.
-          serviceIds: [serviceIds[0]],
-        });
-        if (!slots.length) continue;
-
-        this.transport.sendEvent({
-          type: "slots",
-          date,
-          options: slots.slice(0, 24).map((s) => ({
-            time: minutesToClock(s.startMin),
-            spoken: minutesToSpoken(s.startMin),
-            ...(s.staffName ? { with: s.staffName } : {}),
-          })),
-        });
-        return;
-      }
+      // The first service only. Offering every service's openings at once on a
+      // venue with eight of them is a wall, not a help.
+      const days = this.openDays(todayIn(this.location.timezone), [serviceIds[0]]);
+      if (days.length) this.transport.sendEvent({ type: "slots", days });
     } catch {
       // A diary that cannot be read is the conversation's problem, not the
       // opening screen's.
     }
   }
 
+  /**
+   * The next few days that actually have something free.
+   *
+   * Not the next few days — the next few *open* ones. A salon closed on Sunday
+   * and Monday would otherwise spend two of five columns saying nothing, which
+   * is how a picker teaches somebody that it is not worth looking at.
+   *
+   * Bounded twice: at most five days shown, and at most three weeks walked. A
+   * venue with nothing free for a month should return a short list and let the
+   * conversation handle it, not spin through a year of empty diary.
+   */
+  private openDays(
+    from: DateStr,
+    serviceIds: string[],
+    staffId?: string,
+  ): { date: DateStr; options: { time: string; spoken: string; with?: string }[] }[] {
+    const days: { date: DateStr; options: { time: string; spoken: string; with?: string }[] }[] = [];
+
+    for (let i = 0; i < 21 && days.length < 5; i++) {
+      const day = new Date(`${from}T12:00:00Z`);
+      day.setUTCDate(day.getUTCDate() + i);
+      const date = day.toISOString().slice(0, 10);
+
+      const slots = findAvailability(this.location, {
+        locationId: this.location.id,
+        date,
+        serviceIds,
+        ...(staffId ? { staffId } : {}),
+      });
+      if (!slots.length) continue;
+
+      days.push({
+        date,
+        // Capped per day: a day with fifty free slots is a scroll nobody
+        // reads, and the agent is only going to speak two or three anyway.
+        options: slots.slice(0, 18).map((s) => ({
+          time: minutesToClock(s.startMin),
+          spoken: minutesToSpoken(s.startMin),
+          ...(s.staffName ? { with: s.staffName } : {}),
+        })),
+      });
+    }
+
+    return days;
+  }
+
+  /**
+   * Put the diary on screen behind what the agent just said.
+   *
+   * The tool answers one question — is this day free — because that is the
+   * question a caller asks out loud. A screen can answer a better one: here is
+   * that day, and here are the next few, choose. So the day the agent checked
+   * leads, and the days after it are filled in beside it.
+   *
+   * Cheap enough to do inline: the diary is a local file and this is the same
+   * search the tool just ran, a handful more times, while the agent is still
+   * speaking its first sentence.
+   */
   private offerSlots(trace: ToolTrace): void {
     if (trace.name !== "check_availability") return;
     const result = trace.output as
       | { available?: boolean; date?: string; options?: { time: string; spoken: string; with?: string }[] }
       | undefined;
     if (!result?.available || !result.date || !result.options?.length) return;
+    if (!this.transport.screen) return;
 
-    this.transport.sendEvent({
-      type: "slots",
+    const asked = {
       date: result.date,
-      // Capped: a day with fifty free slots is a scroll nobody reads, and the
-      // agent is only going to speak two or three of them anyway.
-      options: result.options.slice(0, 24),
-    });
+      // Capped: a day with fifty free slots is a scroll nobody reads.
+      options: result.options.slice(0, 18),
+    };
+
+    let days = [asked];
+    try {
+      const input = trace.input as { service_ids?: string[]; staff_id?: string } | undefined;
+      const serviceIds = input?.service_ids?.length
+        ? input.service_ids
+        : this.location.salon?.services.slice(0, 1).map((s) => s.id);
+
+      if (serviceIds?.length) {
+        const after = new Date(`${result.date}T12:00:00Z`);
+        after.setUTCDate(after.getUTCDate() + 1);
+        days = [
+          asked,
+          ...this.openDays(after.toISOString().slice(0, 10), serviceIds, input?.staff_id).slice(0, 4),
+        ];
+      }
+    } catch {
+      // The day the agent named is the one that matters. Failing to find the
+      // ones after it costs a column, not the call.
+    }
+
+    this.transport.sendEvent({ type: "slots", days });
   }
 
   /** Speak one fragment, abortable, dropping output from a stale generation. */

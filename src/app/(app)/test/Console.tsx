@@ -41,6 +41,51 @@ registerProcessor("capture", Capture);
 `;
 
 /**
+ * One day the diary has something free in, and what is free in it.
+ *
+ * Several of these arrive at once now. The agent answers the day it was asked
+ * about, because that is the question somebody asks out loud; the screen can
+ * show the next few beside it, because a screen can answer a better question.
+ */
+interface SlotDay {
+  date: string;
+  options: { time: string; spoken: string; with?: string }[];
+}
+
+/** "Mon" — or "Today" and "Tmrw", which are what people actually look for. */
+function shortDay(date: string): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  const days = Math.round((d.getTime() - Date.now()) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Tmrw";
+  return d.toLocaleDateString("en-GB", { weekday: "short" });
+}
+
+/** "18 Sep". Under the weekday, so the strip is never ambiguous about which week. */
+function shortDate(date: string): string {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+/**
+ * The day as somebody would say it out loud.
+ *
+ * Sent to the agent, not shown — so "Today" and "Tomorrow" are right where a
+ * date would be stilted, and a weekday plus the date is right once "Thursday"
+ * could mean either of two.
+ */
+function spokenDay(date: string): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  const days = Math.round((d.getTime() - Date.now()) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days < 7) return d.toLocaleDateString("en-GB", { weekday: "long" });
+  return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+}
+
+/**
  * "Thursday", or "Thu 18 Sep" once it is far enough away to be ambiguous.
  *
  * Parsed as midday UTC rather than midnight: a bare `YYYY-MM-DD` is parsed as
@@ -173,10 +218,9 @@ export default function Console({
    * Sent by the session off the availability tool's own result, so the page
    * can never show a slot the engine did not offer.
    */
-  const [slots, setSlots] = useState<{
-    date: string;
-    options: { time: string; spoken: string; with?: string }[];
-  } | null>(null);
+  const [slots, setSlots] = useState<SlotDay[] | null>(null);
+  /** Which day the picker is showing. An index, so a new diary resets it. */
+  const [slotDay, setSlotDay] = useState(0);
 
   const socketRef = useRef<WebSocket | null>(null);
   const captureRef = useRef<{ ctx: AudioContext; stream: MediaStream } | null>(null);
@@ -362,9 +406,15 @@ export default function Console({
         case "tool":
           setTraces((prev) => [msg.trace, ...prev]);
           break;
-        case "slots":
-          setSlots({ date: msg.date, options: msg.options });
+        case "slots": {
+          // The wire carries several days now. A single-day payload is still
+          // accepted: a browser holding an older page must not be met with an
+          // empty picker after a deploy.
+          const days: SlotDay[] = msg.days ?? (msg.date ? [{ date: msg.date, options: msg.options }] : []);
+          setSlots(days.length ? days : null);
+          setSlotDay(0);
           break;
+        }
         case "interrupted":
           stopAudio();
           break;
@@ -545,7 +595,7 @@ export default function Console({
     try {
       if (window.self === window.top) return;
       window.parent.postMessage(
-        { source: "belline-call", height: slots ? 178 : 76 },
+        { source: "belline-call", height: slots ? 316 : 76 },
         "*",
       );
     } catch {
@@ -644,30 +694,83 @@ export default function Console({
           */}
           {slots && connected && (
             <div className="callbar-slots">
-              <div className="callbar-slots-day">{niceDay(slots.date)}</div>
+              {/*
+                The days. A strip rather than a calendar grid: a month view is
+                thirty boxes of which four are answers, and this is a panel
+                beside a live conversation, not a booking site. Only days with
+                something free are here, so every one of them is a real answer.
+              */}
+              {slots.length > 1 && (
+                <div className="callbar-days" role="tablist" aria-label="Choose a day">
+                  {slots.map((d, i) => (
+                    <button
+                      key={d.date}
+                      type="button"
+                      role="tab"
+                      aria-selected={i === slotDay}
+                      className={`callbar-day${i === slotDay ? " is-on" : ""}`}
+                      onClick={() => setSlotDay(i)}
+                    >
+                      <span className="callbar-day-name">{shortDay(d.date)}</span>
+                      <span className="callbar-day-date">{shortDate(d.date)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="callbar-slots-day">
+                {niceDay((slots[slotDay] ?? slots[0]).date)}
+                <em>{(slots[slotDay] ?? slots[0]).options.length} free</em>
+              </div>
+
+              {/*
+                Tapping a time *speaks* it rather than booking it directly.
+                That keeps one path through the booking engine instead of two,
+                so a tap and a spoken sentence cannot diverge — and the caller
+                hears Belline confirm, which is what makes it feel like a call
+                rather than a form.
+              */}
               <div className="callbar-slots-row" role="list">
-                {slots.options.map((o) => (
-                  <button
-                    key={`${o.time}-${o.with ?? ""}`}
-                    type="button"
-                    role="listitem"
-                    className="callbar-slot"
-                    onClick={() => {
-                      socketRef.current?.send(
-                        JSON.stringify({
-                          type: "text",
-                          text: o.with
-                            ? `${o.spoken} with ${o.with}, please.`
-                            : `${o.spoken}, please.`,
-                        }),
-                      );
-                      setSlots(null);
-                    }}
-                  >
-                    <strong>{o.time}</strong>
-                    {o.with && <em>{o.with}</em>}
-                  </button>
-                ))}
+                {(slots[slotDay] ?? slots[0]).options.map((o) => {
+                  // Whose name to print. A venue with one chair had "our sales
+                  // director" stamped under all six times — six repetitions of
+                  // a fact that distinguishes nothing, in the smallest type on
+                  // screen. It earns its place only where there is a choice.
+                  const day = slots[slotDay] ?? slots[0];
+                  const named = new Set(day.options.map((s) => s.with).filter(Boolean));
+                  const who = named.size > 1 ? o.with : undefined;
+                  return (
+                    <button
+                      key={`${o.time}-${o.with ?? ""}`}
+                      type="button"
+                      role="listitem"
+                      className="callbar-slot"
+                      onClick={() => {
+                        socketRef.current?.send(
+                          JSON.stringify({
+                            type: "text",
+                            // The day goes with the time whenever the picker is
+                            // showing more than one. "Half four, please" against
+                            // five days on screen is the one sentence the agent
+                            // cannot resolve — and it would resolve it silently.
+                            text:
+                              [
+                                o.spoken,
+                                who ? `with ${who}` : "",
+                                slots.length > 1 ? `on ${spokenDay(day.date)}` : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ") + ", please.",
+                          }),
+                        );
+                        setSlots(null);
+                      }}
+                    >
+                      <strong>{o.time}</strong>
+                      {who && <em>{who}</em>}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
