@@ -347,10 +347,13 @@ await test("an unrecognised mode falls back to the bell, not to everything", () 
   assert.ok(widget.includes('if (mode !== "chat" && mode !== "both") mode = "voice"'));
 });
 
-await test("only the spoken panel asks for a microphone", () => {
+await test("only the spoken panel plays sound; the chat may record a note, never on opening", () => {
+  // Both frames are *permitted* the microphone — the chat needs it for the
+  // voice note — but only the call gets autoplay, and the chat page asks the
+  // browser only when the button is held (checked under "Voice notes").
   assert.ok(
-    widget.includes('if (kind === "voice") panel.allow = "microphone; autoplay"'),
-    "a chat window asking for a microphone gets a widget removed from a site",
+    widget.includes('panel.allow = kind === "voice" ? "microphone; autoplay" : "microphone"'),
+    "the chat frame cannot record a voice note, or the call frame cannot play",
   );
 });
 
@@ -391,6 +394,97 @@ await test("the landing page's button is inert without JavaScript", () => {
   assert.ok(js.includes("fab.hidden = false"));
   assert.ok(js.includes('"?o=" + encodeURIComponent(location.origin)'), "no framing origin");
 });
+
+// ---------------------------------------------------------------------------
+head("Voice notes");
+
+const { voiceNoteToText, acceptsVoiceMime, VOICE_NOTE_MAX_BYTES } = await import(
+  "../src/lib/webchat-voice"
+);
+
+await test("what browsers record is accepted; everything else is not", () => {
+  for (const ok of ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4", "AUDIO/WEBM"]) {
+    assert.ok(acceptsVoiceMime(ok), `${ok} refused`);
+  }
+  for (const no of ["text/plain", "application/json", "video/webm", "", undefined, null]) {
+    assert.equal(acceptsVoiceMime(no), false, `${String(no)} accepted`);
+  }
+});
+
+await test("the words come back trimmed and capped like a typed message", async () => {
+  const heard = await voiceNoteToText(
+    { bytes: Buffer.from("opus"), mime: "audio/webm;codecs=opus" },
+    async () => "  What time   do you close on\nSaturday?  ",
+  );
+  assert.deepEqual(heard, { ok: true, text: "What time do you close on Saturday?" });
+
+  const long = await voiceNoteToText(
+    { bytes: Buffer.from("opus"), mime: "audio/webm" },
+    async () => "a".repeat(5000),
+  );
+  assert.ok(long.ok && long.text.length === 1000, "a voice note got round the 1000-character ceiling");
+});
+
+await test("silence is 'empty', not a message", async () => {
+  let called = 0;
+  const heard = await voiceNoteToText(
+    { bytes: Buffer.from("opus"), mime: "audio/webm" },
+    async () => {
+      called++;
+      return "   ";
+    },
+  );
+  assert.deepEqual(heard, { ok: false, reason: "empty" });
+  assert.equal(called, 1);
+});
+
+await test("a recording that is too big, or not audio, never reaches the transcriber", async () => {
+  let called = 0;
+  const spy = async () => {
+    called++;
+    return "words";
+  };
+  const big = await voiceNoteToText({ bytes: Buffer.alloc(VOICE_NOTE_MAX_BYTES + 1), mime: "audio/webm" }, spy);
+  assert.deepEqual(big, { ok: false, reason: "too-big" });
+  const none = await voiceNoteToText({ bytes: Buffer.alloc(0), mime: "audio/webm" }, spy);
+  assert.deepEqual(none, { ok: false, reason: "too-big" });
+  const text = await voiceNoteToText({ bytes: Buffer.from("x"), mime: "text/plain" }, spy);
+  assert.deepEqual(text, { ok: false, reason: "unsupported" });
+  assert.equal(called, 0, "the transcriber was paid for a request that should have been refused");
+});
+
+await test("a vendor failure is 'failed', and nothing is stored", async () => {
+  const heard = await voiceNoteToText({ bytes: Buffer.from("opus"), mime: "audio/webm" }, async () => {
+    throw new Error("Deepgram 503");
+  });
+  assert.deepEqual(heard, { ok: false, reason: "failed" });
+});
+
+await test("the chat frames may ask for the microphone — for the note, never on opening", () => {
+  // The widget on a customer's site, and our own chat dock.
+  assert.match(widget, /panel\.allow = kind === "voice" \? "microphone; autoplay" : "microphone"/);
+  const js = fs.readFileSync(path.join(process.cwd(), "public", "site.js"), "utf8");
+  assert.ok(js.includes('frame.allow = "microphone"'), "our own chat dock cannot record a note");
+  // And the page never asks for it until the button is held.
+  const chat = fs.readFileSync(
+    path.join(process.cwd(), "src", "app", "embed", "[key]", "chat", "Chat.tsx"),
+    "utf8",
+  );
+  const asks = chat.indexOf("getUserMedia(");
+  const inStart = chat.indexOf("async function startNote");
+  assert.ok(asks > inStart, "the chat asks for the microphone somewhere other than when the note starts");
+});
+
+await test("the WhatsApp refusal for voice notes still stands — only the web chat transcribes", () => {
+  const respond = fs.readFileSync(
+    path.join(process.cwd(), "src", "lib", "reception", "respond.ts"),
+    "utf8",
+  );
+  assert.ok(respond.includes("I can't listen to voice notes just yet"));
+});
+
+// ---------------------------------------------------------------------------
+head("Our own website, continued");
 
 await test("the front page does not claim WhatsApp is live", () => {
   const raw = fs.readFileSync(path.join(process.cwd(), "public", "landing.html"), "utf8");

@@ -33,11 +33,39 @@ type Line = {
   who: "you" | "them" | "note";
   text: string;
   at: string;
+  /** Spoken rather than typed: how long, and whether the words are in yet. */
+  voice?: { seconds: number; pending?: boolean };
 };
 
 type Status = "AI_ACTIVE" | "HANDOFF_REQUESTED" | "HUMAN_ACTIVE" | "CLOSED";
 
 const POLL_MS = 4000;
+
+/**
+ * The voice note.
+ *
+ * Hold the microphone, talk, let go — the way WhatsApp settled it, because
+ * that is the gesture every visitor's thumb already knows. A quick tap is
+ * not a recording; it shows the hint instead, which is also WhatsApp's
+ * answer to the same mistake. Sliding off the button before letting go
+ * throws the note away.
+ *
+ * What comes back is words, not audio: the note is transcribed on the way in
+ * and Belline replies in writing, like everything else here. The visitor
+ * chose the quiet channel; a spoken reply would break that.
+ */
+const NOTE_MAX_SECONDS = 60;
+/** Shorter than this was a tap, not a note. */
+const NOTE_MIN_MS = 600;
+
+/** What the browser can record. Chrome and Firefox make Opus; Safari makes AAC. */
+function recordingMime(): string | null {
+  if (typeof MediaRecorder === "undefined") return null;
+  for (const type of ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4", "audio/webm"]) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return null;
+}
 
 export default function Chat({
   embedKey,
@@ -57,10 +85,28 @@ export default function Chat({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Status>("AI_ACTIVE");
   const [trouble, setTrouble] = useState<string | null>(null);
+  /** Seconds into a recording, or null when not recording. */
+  const [recording, setRecording] = useState<number | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+  const [canRecord, setCanRecord] = useState(false);
 
   const token = useRef<string>(freshToken);
   const lastId = useRef(0);
   const foot = useRef<HTMLDivElement | null>(null);
+  const rec = useRef<{
+    recorder: MediaRecorder;
+    stream: MediaStream;
+    chunks: Blob[];
+    startedAt: number;
+    tick: ReturnType<typeof setInterval>;
+    stopAt: ReturnType<typeof setTimeout>;
+    /** Set when the pointer slid off before release, or the note was too short. */
+    discard: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    setCanRecord(Boolean(recordingMime() && navigator.mediaDevices?.getUserMedia));
+  }, []);
 
   /**
    * Keep the conversation across a reload.
@@ -186,6 +232,148 @@ export default function Chat({
     }
   }
 
+  // --- the voice note ------------------------------------------------------
+
+  async function startNote() {
+    if (rec.current || busy) return;
+    setHint(null);
+    setTrouble(null);
+    const mime = recordingMime();
+    if (!mime) return;
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+    } catch {
+      setTrouble("The microphone isn't available here — you can type instead.");
+      return;
+    }
+    // The visitor may have let go while the browser was asking permission.
+    // A recorder that starts after the finger has gone would run until the
+    // sixty-second stop with nobody holding anything.
+    if (!holding.current) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+
+    const recorder = new MediaRecorder(stream, { mimeType: mime });
+    const entry = {
+      recorder,
+      stream,
+      chunks: [] as Blob[],
+      startedAt: Date.now(),
+      tick: setInterval(() => setRecording(Math.floor((Date.now() - entry.startedAt) / 1000)), 250),
+      stopAt: setTimeout(() => stopNote(), NOTE_MAX_SECONDS * 1000),
+      discard: false,
+    };
+    rec.current = entry;
+    recorder.ondataavailable = (e) => {
+      if (e.data.size) entry.chunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      clearInterval(entry.tick);
+      clearTimeout(entry.stopAt);
+      stream.getTracks().forEach((t) => t.stop());
+      if (rec.current === entry) rec.current = null;
+      setRecording(null);
+
+      const ms = Date.now() - entry.startedAt;
+      if (entry.discard) return;
+      if (ms < NOTE_MIN_MS) {
+        setHint("Hold the microphone to record a voice note.");
+        return;
+      }
+      void sendNote(new Blob(entry.chunks, { type: mime }), Math.max(1, Math.round(ms / 1000)));
+    };
+    recorder.start();
+    setRecording(0);
+  }
+
+  function stopNote(discard = false) {
+    const entry = rec.current;
+    if (!entry) return;
+    entry.discard = discard || entry.discard;
+    if (entry.recorder.state !== "inactive") entry.recorder.stop();
+  }
+
+  /** Whether the pointer is still down on the microphone. */
+  const holding = useRef(false);
+
+  async function sendNote(blob: Blob, seconds: number) {
+    if (!blob.size) return;
+    const mine: Line = {
+      id: -Date.now(),
+      who: "you",
+      text: "",
+      at: new Date().toISOString(),
+      voice: { seconds, pending: true },
+    };
+    setLines((prev) => [...prev, mine]);
+    setBusy(true);
+
+    const clientId = messageId();
+    try {
+      const res = await fetch(`/api/webchat/${encodeURIComponent(embedKey)}/voice`, {
+        method: "POST",
+        headers: {
+          "content-type": blob.type,
+          "x-visitor-token": token.current,
+          "x-client-id": clientId,
+          "x-note-seconds": String(seconds),
+        },
+        body: blob,
+      });
+
+      if (res.status === 401) {
+        setTrouble("This conversation timed out. Reload the page to start again.");
+        return;
+      }
+      if (res.status === 429) return;
+      if (!res.ok) {
+        setLines((prev) => prev.filter((l) => l.id !== mine.id));
+        setTrouble(
+          res.status === 413
+            ? "That note was too long to send. Keep it under a minute, or type it."
+            : "That didn't send. Try again in a moment.",
+        );
+        return;
+      }
+
+      const payload = (await res.json()) as {
+        ok: boolean;
+        reason?: string;
+        heard?: string;
+        messages?: { id: number; sender: string; body: string; createdAt: string }[];
+        status?: Status;
+        lastId?: number;
+      };
+
+      if (!payload.ok || !payload.heard) {
+        // No words in it. Nothing was stored, so nothing stays on screen.
+        setLines((prev) => prev.filter((l) => l.id !== mine.id));
+        setTrouble(
+          payload.reason === "empty"
+            ? "I couldn't make that out — try again a little closer to the microphone, or type it."
+            : "I couldn't hear that just now. Could you type it instead?",
+        );
+        return;
+      }
+
+      // The words Belline heard, in the visitor's own bubble, before the reply.
+      setLines((prev) =>
+        prev.map((l) => (l.id === mine.id ? { ...l, text: payload.heard!, voice: { seconds } } : l)),
+      );
+      absorb(payload);
+    } catch {
+      setLines((prev) => prev.filter((l) => l.id !== mine.id));
+      setTrouble("That didn't send. Try again in a moment.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const waiting = status === "HANDOFF_REQUESTED";
   const withPerson = status === "HUMAN_ACTIVE";
 
@@ -227,7 +415,15 @@ export default function Chat({
             </p>
           ) : (
             <div key={l.id} className={`bl-line bl-${l.who}`}>
-              <p>{l.text}</p>
+              <p>
+                {l.voice && (
+                  <span className="bl-voice">
+                    <Mic />
+                    {l.voice.pending ? "Voice note · listening…" : `Voice note · ${clock(l.voice.seconds)}`}
+                  </span>
+                )}
+                {l.text}
+              </p>
             </div>
           ),
         )}
@@ -252,6 +448,7 @@ export default function Chat({
       </div>
 
       {trouble && <p className="bl-trouble">{trouble}</p>}
+      {hint && !trouble && <p className="bl-hint">{hint}</p>}
 
       <form
         onSubmit={(e) => {
@@ -259,27 +456,94 @@ export default function Chat({
           void send();
         }}
       >
-        <textarea
-          rows={1}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            // Enter sends, shift+enter breaks the line. The convention every
-            // other chat has, and getting it wrong makes the panel feel broken.
-            if (e.key === "Enter" && !e.shiftKey) {
+        {recording !== null ? (
+          // The bar while a note is being held. The textarea is gone: there
+          // is one thing happening and this is it.
+          <div className="bl-rec" aria-live="polite">
+            <i className="bl-rec-dot" aria-hidden="true" />
+            <span className="bl-rec-time">{clock(recording)}</span>
+            <span className="bl-rec-say">Release to send · slide off to cancel</span>
+          </div>
+        ) : (
+          <textarea
+            rows={1}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter sends, shift+enter breaks the line. The convention every
+              // other chat has, and getting it wrong makes the panel feel broken.
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+            placeholder="Type your message"
+            aria-label="Your message"
+            maxLength={1000}
+          />
+        )}
+
+        {canRecord && !draft.trim() ? (
+          // Hold to record. `touch-action: none` in the stylesheet keeps a
+          // long press from becoming a scroll or a context menu, and pointer
+          // capture keeps the release arriving here wherever the finger went.
+          <button
+            type="button"
+            className={`bl-mic${recording !== null ? " is-on" : ""}`}
+            disabled={busy}
+            aria-label={recording !== null ? "Recording — release to send" : "Hold to record a voice note"}
+            aria-pressed={recording !== null}
+            onPointerDown={(e) => {
+              if (e.button !== 0 && e.pointerType === "mouse") return;
               e.preventDefault();
-              void send();
-            }
-          }}
-          placeholder="Type your message"
-          aria-label="Your message"
-          maxLength={1000}
-        />
-        <button type="submit" disabled={busy || !draft.trim()} aria-label="Send">
-          <Send />
-        </button>
+              holding.current = true;
+              e.currentTarget.setPointerCapture(e.pointerId);
+              void startNote();
+            }}
+            onPointerUp={(e) => {
+              holding.current = false;
+              const under = document.elementFromPoint(e.clientX, e.clientY);
+              // Let go somewhere else: WhatsApp's slide-to-cancel, without
+              // the slide animation. The note is thrown away.
+              stopNote(!e.currentTarget.contains(under));
+            }}
+            onPointerCancel={() => {
+              holding.current = false;
+              stopNote(true);
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <Mic />
+          </button>
+        ) : (
+          <button type="submit" disabled={busy || !draft.trim()} aria-label="Send">
+            <Send />
+          </button>
+        )}
       </form>
     </div>
+  );
+}
+
+/** 7 → "0:07", 65 → "1:05". */
+function clock(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s < 10 ? "0" : ""}${s}`;
+}
+
+function Mic() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
+      <path
+        d="M6 11a6 6 0 0 0 12 0M12 17v3M9 20h6"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -439,5 +703,40 @@ body { background: #FBF9F5 }
 .bl-wrap button svg { width: 21px; height: 21px }
 .bl-wrap button:disabled { opacity: .32; cursor: default }
 
-@media (prefers-reduced-motion: reduce) { .bl-thinking i { animation: none; opacity: .6 } }
+/* The microphone. Paper with an ink outline while idle — the quieter of the
+   two buttons, because typing is what this panel is for — and ink while a
+   note is being held, so the state is visible under a thumb. */
+.bl-wrap .bl-mic {
+  background: #FBF9F5; color: #14110D; border: 1px solid rgba(20,17,13,.22);
+  touch-action: none; -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
+.bl-wrap .bl-mic.is-on { background: #14110D; color: #FBF9F5; border-color: #14110D;
+  transform: scale(1.08) }
+.bl-wrap .bl-mic svg { width: 20px; height: 20px }
+
+/* The bar in place of the textarea while recording. */
+.bl-rec {
+  flex: 1; min-height: 42px; display: flex; align-items: center; gap: 10px;
+  padding: 0 13px; border-radius: 13px; background: #F0EBE1; font-size: 13.5px;
+}
+.bl-rec-dot { width: 9px; height: 9px; border-radius: 999px; background: #A33327;
+  animation: rec 1s infinite }
+@keyframes rec { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+.bl-rec-time { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 34px }
+.bl-rec-say { color: #746C63; font-size: 12.5px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis }
+
+/* The label on a spoken message. Inside the visitor's ink bubble, so it is
+   paper at reduced strength. */
+.bl-voice { display: flex; align-items: center; gap: 5px; font-size: 11.5px; opacity: .72;
+  margin-bottom: 3px; letter-spacing: .01em }
+.bl-voice svg { width: 12px; height: 12px }
+
+.bl-hint { margin: 0; padding: 8px 16px; font-size: 13px; color: #746C63 }
+
+@media (prefers-reduced-motion: reduce) {
+  .bl-thinking i { animation: none; opacity: .6 }
+  .bl-rec-dot { animation: none }
+}
 `;

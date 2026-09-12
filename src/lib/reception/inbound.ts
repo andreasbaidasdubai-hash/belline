@@ -123,7 +123,9 @@ export async function acceptInbound(
         ? { mediaId: inbound.content.mediaId, mime: inbound.content.mime }
         : inbound.content.type === "unsupported"
           ? { kind: inbound.content.kind }
-          : {},
+          : inbound.content.transcribedFrom
+            ? { voiceNote: true, seconds: inbound.content.transcribedFrom.seconds ?? null }
+            : {},
     providerMessageId: inbound.providerMessageId,
   });
 

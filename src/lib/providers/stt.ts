@@ -235,6 +235,58 @@ export function createSttStream(opts: SttOptions): SttStream {
 }
 
 // ---------------------------------------------------------------------------
+// A clip, whole
+// ---------------------------------------------------------------------------
+
+/**
+ * Transcribe a finished recording — a voice note from the web chat.
+ *
+ * Not a stream: the visitor has already stopped talking, so there is no turn
+ * to end and nothing to endpoint. One request, the words back. Same model and
+ * the same formatting flags as the live line, so a number said into a voice
+ * note comes back as the same digits it would on a call.
+ *
+ * Throws when no key is set. The caller decides what a visitor is told; this
+ * function should not be quietly returning an empty string that reads as
+ * "they said nothing".
+ */
+export async function transcribeClip(
+  audio: Buffer,
+  mime: string,
+  opts: { keyterms?: string[]; signal?: AbortSignal } = {},
+): Promise<string> {
+  const key = process.env.DEEPGRAM_API_KEY;
+  if (!key) throw new Error("DEEPGRAM_API_KEY is not set.");
+
+  const params = new URLSearchParams({
+    model: "nova-3",
+    language: "en",
+    smart_format: "true",
+    punctuate: "true",
+    numerals: "true",
+  });
+  for (const term of opts.keyterms ?? []) {
+    if (term.trim()) params.append("keyterm", term.trim());
+  }
+
+  const response = await fetch(`https://api.deepgram.com/v1/listen?${params}`, {
+    method: "POST",
+    headers: { Authorization: `Token ${key}`, "Content-Type": mime },
+    body: new Uint8Array(audio),
+    signal: opts.signal,
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Deepgram ${response.status}: ${detail.slice(0, 200)}`);
+  }
+
+  const data = (await response.json()) as {
+    results?: { channels?: { alternatives?: { transcript?: string }[] }[] };
+  };
+  return (data.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "").trim();
+}
+
+// ---------------------------------------------------------------------------
 // Flux
 // ---------------------------------------------------------------------------
 

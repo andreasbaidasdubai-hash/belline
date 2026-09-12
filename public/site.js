@@ -498,6 +498,9 @@
       fab.getAttribute("data-chat") + "?o=" + encodeURIComponent(location.origin);
     frame.title = "Chat with Belline";
     frame.className = "chat-frame";
+    // For the voice note. The browser asks only when the visitor holds the
+    // microphone button inside the chat, never on opening.
+    frame.allow = "microphone";
 
     var shut = document.createElement("button");
     shut.type = "button";

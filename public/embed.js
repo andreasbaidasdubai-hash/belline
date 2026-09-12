@@ -161,9 +161,11 @@
     // takes to paint, which on a slow connection is not a flash.
     if (kind === "chat") panel.style.background = "#FBF9F5";
     panel.title = label;
-    // Only the panel that needs it asks for it. A chat window requesting a
-    // microphone is the kind of thing that gets a widget removed from a site.
-    if (kind === "voice") panel.allow = "microphone; autoplay";
+    // The call needs the microphone from the first second and speakers to
+    // answer. The chat needs the microphone too, but only for a voice note,
+    // and only when the visitor holds the button — the browser asks then, not
+    // on opening. Granting the frame permission to *ask* is not a prompt.
+    panel.allow = kind === "voice" ? "microphone; autoplay" : "microphone";
     document.body.appendChild(panel);
 
     shut = document.createElement("button");

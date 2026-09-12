@@ -196,7 +196,18 @@ export interface InboundMessage {
   /** What the sender's profile says they are called, if the provider offers it. */
   profileName?: string;
   content:
-    | { type: "text"; text: string }
+    | {
+        type: "text";
+        text: string;
+        /**
+         * Set when the words were spoken, not typed — a voice note from the
+         * web chat, transcribed before it got here. The thread stores the
+         * transcript as an ordinary text message, because that is what the
+         * model and the inbox can act on; this is how anyone reading it back
+         * knows a misheard word is a misheard word and not a typo.
+         */
+        transcribedFrom?: { kind: "voice"; seconds?: number };
+      }
     | { type: "audio"; mediaId: string; mime?: string }
     | { type: "unsupported"; kind: string };
   timestamp: string;

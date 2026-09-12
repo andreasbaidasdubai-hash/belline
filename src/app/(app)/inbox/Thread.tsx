@@ -161,6 +161,13 @@ export default function Thread({
                             : ""}
                     </span>
                     <p>{m.body || <em>{m.contentType}</em>}</p>
+                    {m.meta?.voiceNote === true && (
+                      // Spoken into the website and transcribed, so a colleague
+                      // reading "Thurday" knows it was heard, not typed.
+                      <span className="muted" style={{ fontSize: 11, display: "block", marginTop: 3 }}>
+                        Voice note{typeof m.meta.seconds === "number" ? ` · ${m.meta.seconds}s` : ""} — transcribed
+                      </span>
+                    )}
                     <time dateTime={m.createdAt}>
                       {new Date(m.createdAt).toLocaleTimeString("en-GB", {
                         hour: "2-digit",
