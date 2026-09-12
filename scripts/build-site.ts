@@ -317,10 +317,15 @@ const BUBBLE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
  */
 const BELL_FAB = `<button class="chat-fab" type="button" hidden
         data-chat="https://app.belline.ai/embed/be_belline_site/chat"
-        aria-label="Chat with Belline">
+        aria-label="Write with Belle">
   ${BUBBLE}
-  <span class="chat-fab-say">Chat with Belline</span>
-</button>`;
+  <span class="chat-fab-say">Write with Belle</span>
+</button>
+
+<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Speak to Belle now">
+  ${MARK}
+  <span class="bell-fab-say">Speak to Belle</span>
+</a>`;
 
 /**
  * One trade's page.
@@ -408,10 +413,6 @@ function verticalPage(v: Vertical): string {
         -->
         <div class="cta-row rise rise-3">
           <a class="btn" href="https://app.belline.ai/checkout">Get Belline</a>
-          <a class="btn-quiet" href="https://app.belline.ai/call?start=1" data-call>
-            ${MARK}
-            Hear it answer
-          </a>
         </div>
 
         <p class="hero-note rise rise-4">
@@ -480,7 +481,7 @@ ${CALL_PANEL}
       <div class="cta-row" style="margin-top:34px">
         <a class="btn" href="https://app.belline.ai/call?start=1" data-call>
           ${MARK}
-          Hear Belline
+          Speak to Belle
         </a>
         <a class="btn line" href="tel:+15717785920">Ring +1 571 778 5920</a>
       </div>

@@ -161,7 +161,17 @@ footer .brand span { font-size: 1.8rem; }
   border-bottom: 0;
 }
 .top nav .nav-cta:hover { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
-.top nav .nav-quiet { display: none; }
+.top nav .nav-quiet {
+  padding: 9px 18px;
+  border-radius: 999px;
+  border-bottom: 0;
+  box-shadow: inset 0 0 0 1px var(--rule);
+  color: var(--ink-2);
+}
+.top nav .nav-quiet:hover {
+  box-shadow: inset 0 0 0 1px var(--ink);
+  color: var(--ink);
+}
 
 /* Der Aufklapper. Auf dem Laptop unsichtbar, auf dem Telefon das Einzige
    rechts. Ein Strich, der sich zum Kreuz dreht — kein Drei-Strich-Symbol,
@@ -385,6 +395,9 @@ section { padding: 110px 0; }
     margin-top: 18px;
     border-bottom: 0;
   }
+  /* Im aufgeklappten Menü wieder eine Zeile, keine Pille: dort stehen die
+     Punkte untereinander, und eine Pille zwischen lauter Textzeilen sieht aus,
+     als wäre sie versehentlich dort gelandet. */
   .top nav .nav-quiet {
     display: block;
     font-family: inherit;
@@ -392,6 +405,8 @@ section { padding: 110px 0; }
     color: var(--ink-3);
     padding: 16px 0 0;
     border-bottom: 0;
+    box-shadow: none;
+    border-radius: 0;
   }
 }
 
