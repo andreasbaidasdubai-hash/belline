@@ -147,26 +147,32 @@ export function RecordedDemoPage({ demo }: { demo: RecordedDemo }) {
 const CSS = `
 .demo-player { margin: 26px 0 30px; }
 .demo-player-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+/* The primary action, in the editorial direction's own shape: a filled ink
+   pill with paper text, matching .btn on the marketing site. It was a brass
+   button with navy text, which was the old brand and — at 15px bold — 3.5:1,
+   under the 4.5:1 the rest of the site was deliberately tuned to meet. Brass
+   is the accent here, not the surface. */
 .demo-play {
   display: inline-flex; align-items: center; gap: 11px;
-  padding: 14px 24px; border-radius: 11px; cursor: pointer;
-  background: var(--gold, #C9A227); color: var(--navy, #0B1F33);
-  border: none; font-size: 15px; font-weight: 700; font-family: inherit;
-  transition: filter 0.14s ease;
+  padding: 15px 28px; border-radius: 999px; cursor: pointer;
+  background: var(--text); color: var(--panel);
+  border: 1px solid var(--text);
+  font-size: 15px; font-weight: 600; font-family: inherit;
+  transition: background 0.14s ease, color 0.14s ease;
 }
-.demo-play:hover { filter: brightness(1.06); }
-.demo-play:focus-visible { outline: 2px solid var(--navy, #0B1F33); outline-offset: 3px; }
+.demo-play:hover { background: transparent; color: var(--text); }
+.demo-play:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 .demo-live { display: flex; align-items: center; gap: 3px; height: 20px; }
 .demo-live i {
   display: block; width: 3px; height: 5px; border-radius: 2px;
-  background: var(--gold, #C9A227); opacity: 0.5;
+  background: var(--gold); opacity: 0.5;
 }
 .demo-live[data-speaking="true"] i { animation: demobar 900ms ease-in-out infinite; opacity: 1; }
 .demo-live[data-speaking="true"] i:nth-child(2) { animation-delay: 120ms; }
 .demo-live[data-speaking="true"] i:nth-child(3) { animation-delay: 240ms; }
 .demo-live[data-speaking="true"] i:nth-child(4) { animation-delay: 120ms; }
 @keyframes demobar { 0%, 100% { height: 5px; } 50% { height: 19px; } }
-.demo-failed { margin-top: 12px; font-size: 13.5px; color: #B4472E; }
+.demo-failed { margin-top: 12px; font-size: 13.5px; color: var(--bad); }
 .demo-transcript {
   margin-top: 20px; display: flex; flex-direction: column; gap: 10px;
   max-height: 340px; overflow-y: auto; padding-right: 6px;
@@ -181,8 +187,13 @@ const CSS = `
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em;
   text-transform: uppercase; padding-top: 3px;
 }
-.demo-agent .demo-who { color: var(--gold, #C9A227); }
-.demo-caller .demo-who { color: #7D93A8; }
+/* Brass names the agent, ink-3 names the caller — the same two-voice
+   distinction the marketing site makes, in the same two colours.
+   #7D93A8 was here before: a slate from the old palette that sat at 2.6:1 on
+   paper. These labels are 10.5px uppercase, which is exactly the size the
+   4.5:1 rule exists for, and --muted was darkened to clear it. */
+.demo-agent .demo-who { color: var(--gold); }
+.demo-caller .demo-who { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   .demo-live[data-speaking="true"] i { animation: none; height: 12px; }
   .demo-transcript { scroll-behavior: auto; }

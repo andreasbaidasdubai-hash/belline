@@ -64,9 +64,20 @@ export default async function InternalLayout({ children }: { children: React.Rea
 
   return (
     <div className="shell">
-      <aside className="sidebar" style={{ background: "var(--navy, #0B1F33)" }}>
+      {/*
+        Ink, not the old brand navy. `--navy` no longer exists, so this was
+        falling through to a hardcoded #0B1F33 — a colour from the previous
+        identity sitting against the new paper.
+
+        Still dark, and deliberately so: the customer shell is paper and this
+        one is not, which is what stops the two being confused on a screen
+        share when a prospect's pipeline is on the other tab.
+      */}
+      <aside className="sidebar" style={{ background: "var(--text)" }}>
         <div className="brand">
-          <Brand size={22} tone="var(--gold)" />
+          {/* Brass is a 3.5:1 pairing against ink — fine for the mark, which is
+              a shape, and not for the label beside it. */}
+          <Brand size={22} tone="var(--gold-lit)" />
           <div
             style={{
               fontSize: 10,
@@ -74,7 +85,7 @@ export default async function InternalLayout({ children }: { children: React.Rea
               letterSpacing: "0.14em",
               textTransform: "uppercase",
               fontWeight: 700,
-              color: "var(--gold, #C9A227)",
+              color: "var(--gold-lit)",
             }}
           >
             Sales console
