@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { listBookings } from "@/lib/store";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
-import { minutesToSpoken, dateToSpoken, todayIn } from "@/lib/time";
+import { addDays, minutesToSpoken, dateToSpoken, todayIn } from "@/lib/time";
 import { describeBookingShort } from "@/lib/booking";
+import { terms } from "@/lib/verticals";
 import { seedIfEmpty } from "@/lib/seed";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
+import Progress from "./Progress";
 
 export const dynamic = "force-dynamic";
+
+/** How far back the list reaches, so last night can still be tidied up. */
+const RECENT_DAYS = 3;
 
 export default async function BookingsPage({
   searchParams,
@@ -18,10 +23,19 @@ export default async function BookingsPage({
   const { loc } = await searchParams;
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
+  const t = terms(location);
 
   const today = todayIn(location.timezone);
+  // A few days back as well as forward.
+  //
+  // Upcoming-only was right while this page was a list to read. It is now a
+  // list to work — somebody ticks people off as they arrive — and nobody marks
+  // last night's no-shows during last night. They do it the next morning, and
+  // a page that had already dropped yesterday made that impossible, which left
+  // the no-show rule in the house rules permanently unreachable.
+  const from = addDays(today, -RECENT_DAYS);
   const bookings = listBookings({ locationId: location.id })
-    .filter((b) => b.date >= today)
+    .filter((b) => b.date >= from)
     .sort((a, b) => a.date.localeCompare(b.date) || a.startMin - b.startMin);
 
   const byDate = new Map<string, typeof bookings>();
@@ -35,7 +49,7 @@ export default async function BookingsPage({
     <>
       <PageHeader
         title="Bookings"
-        subtitle="Upcoming only. Everything the agent took is here alongside anything entered by hand."
+        subtitle={`Everything the agent took, alongside anything entered by hand. Mark ${t.guests} in as they arrive — a no-show recorded here is what the house rules count.`}
       />
       <LocationTabs base="/bookings" active={location.id} />
 
@@ -107,6 +121,20 @@ export default async function BookingsPage({
                       </td>
                       <td style={{ width: 92 }}>
                         <span className="pill">{b.source}</span>
+                      </td>
+                      <td style={{ width: 170, textAlign: "right" }}>
+                        {/* Only where it can still mean something: nobody
+                            arrives for tomorrow, and a cancellation is already
+                            settled. */}
+                        {b.date <= today && b.status !== "cancelled" ? (
+                          <Progress
+                            locationId={location.id}
+                            booking={{ id: b.id, status: b.status, service: b.service }}
+                            guestWord={t.guest}
+                          />
+                        ) : b.status === "cancelled" ? (
+                          <span className="pill">cancelled{b.lateCancel ? " · late" : ""}</span>
+                        ) : null}
                       </td>
                       <td style={{ width: 80, textAlign: "right" }}>
                         <span className="pill mono">{b.ref}</span>

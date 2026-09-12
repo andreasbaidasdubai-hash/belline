@@ -48,17 +48,58 @@ function book(
   // Seeding writes history as well as tonight's book, and history is in the
   // past — which the house rules refuse for the agent and allow for a person
   // working the diary. This script is the second of those.
-  const result = createBooking(location, { staffOverride: true, ...input });
+  let result = createBooking(location, { staffOverride: true, ...input });
+
+  // Whoever this was written for may not work the day it is being run.
+  //
+  // The fixtures name a practitioner per visit because it reads better, but
+  // "today" moves and their rota does not: seeded on a Saturday, every visit
+  // pinned to a Monday-to-Friday dentist was silently dropped, and the demo
+  // for the feature that depends on that history — recall — came up empty on
+  // exactly the days somebody was most likely to be looking at it. The name
+  // was never the point of the fixture, so it is the part that gives way.
+  if (!result.ok && input.staffId && /staff|secondary|closed/.test(result.reason)) {
+    result = createBooking(location, { staffOverride: true, ...input, staffId: undefined });
+  }
+
   if (!result.ok) {
     skipped++;
     return null;
   }
   made++;
+  return finish(result.booking, status);
+}
+
+/**
+ * The same, but willing to move the date by a few days.
+ *
+ * For history, where the exact date is not the point. "Their last cleaning was
+ * about six months ago" is the fixture; whether it was 182 days or 179 is not,
+ * and insisting on the number means the visit is dropped entirely whenever the
+ * day it lands on has nobody rostered — which is most of them, for a clinic
+ * that is shut one day in seven and staffed differently on the rest.
+ */
+function bookNear(
+  location: Location,
+  input: Parameters<typeof createBooking>[1],
+  status: Booking["status"] = "confirmed",
+  spread = 6,
+): Booking | null {
+  for (let shift = 0; shift <= spread; shift++) {
+    for (const direction of shift === 0 ? [0] : [-1, 1]) {
+      const made = book(location, { ...input, date: addDays(input.date, shift * direction) }, status);
+      if (made) return made;
+    }
+  }
+  return null;
+}
+
+function finish(booking: Booking, status: Booking["status"]): Booking {
   // Past visits are history, not tonight's book.
   if (status !== "confirmed") {
-    return saveBooking({ ...result.booking, status });
+    return saveBooking({ ...booking, status });
   }
-  return result.booking;
+  return booking;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,33 +211,59 @@ for (const [guestName, guestPhone, startMin, serviceIds, notes] of salonDay) {
 const clinic = locations.find((l) => l.vertical === "clinic")!;
 const cToday = todayIn(clinic.timezone);
 
-// A recall patient — hygiene every six months, same practitioner.
+// A recall patient — hygiene every six months.
 const OMAR = { guestName: "Omar Al Nuaimi", guestPhone: "+971 50 663 8814" };
-// Whole numbers of weeks, so each visit lands on a weekday Dr Haddad works —
-// otherwise the engine correctly refuses to book him and the demo loses a visit.
+// Whole numbers of weeks, so each visit lands on the same weekday as today and
+// the clinic is open for all of them. Which practitioner takes them is left to
+// the engine by `book` when the named one is off — see the note there.
 for (const back of [364, 182]) {
-  book(
+  bookNear(
     clinic,
     {
       ...OMAR,
       date: addDays(cToday, -back),
-      startMin: H(9, 30),
+      startMin: H(11, 30),
       serviceIds: ["hygiene"],
-      staffId: "dr_haddad",
       source: "voice",
     },
     "completed",
   );
 }
-book(clinic, {
+bookNear(clinic, {
   ...OMAR,
   date: addDays(cToday, 6),
-  startMin: H(9, 30),
+  startMin: H(11, 30),
   serviceIds: ["hygiene"],
-  staffId: "dr_haddad",
   notes: "Sensitivity on the upper left — mentioned on the call",
   source: "voice",
 });
+
+/**
+ * Four patients whose recall has come round and who have not rebooked.
+ *
+ * The whole point of the recall page is the list of people who stopped coming,
+ * and a demo where everybody has already rebooked shows an empty one. These
+ * are the list: a cleaning apiece, six months to a year ago, nothing since.
+ */
+for (const [guestName, guestPhone, back] of [
+  ["Priya Raghavan", "+971 50 771 4482", 205],
+  ["Tomas Novak", "+971 55 336 1190", 231],
+  ["Aisha Buchanan", "+971 52 908 7734", 194],
+  ["Dmitri Volkov", "+971 56 442 0158", 188],
+] as [string, string, number][]) {
+  bookNear(
+    clinic,
+    {
+      guestName,
+      guestPhone,
+      date: addDays(cToday, -back),
+      startMin: H(12),
+      serviceIds: ["hygiene"],
+      source: "voice",
+    },
+    "completed",
+  );
+}
 
 const clinicDay: [string, string, number, string[], string, string][] = [
   ["Hana Darwish", "+971 55 214 7790", H(9), ["dent_consult"], "dr_haddad", "New patient, referred by her sister"],

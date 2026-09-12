@@ -211,6 +211,23 @@ textarea::placeholder {
   color: #A9A199;
 }
 
+/* Number inputs, without the spinner.
+   Two reasons, and the second is the real one. The arrows eat twenty pixels
+   of a field that is already narrow, so a four-figure price renders clipped —
+   "2900" reads as "290", which is a number somebody will believe. And a
+   focused number input changes its value on a scroll wheel, so scrolling past
+   a long settings page silently rewrites whatever the pointer was over. */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 input:focus,
 textarea:focus,
 select:focus {

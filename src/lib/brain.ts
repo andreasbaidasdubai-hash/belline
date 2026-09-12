@@ -26,6 +26,15 @@ export type BrainSection =
   | "services"
   | "staff"
   | "policies"
+  /**
+   * The house rules — notice, horizon, cancellation window, deposits.
+   *
+   * Separate from `policies`, which is the free text folded into the prompt.
+   * These are enforced rather than said, and "who shortened the cancellation
+   * window" is exactly the question this history exists to answer.
+   */
+  | "rules"
+  | "room"
   | "faqs"
   | "escalation"
   | "style";
@@ -72,6 +81,7 @@ export interface BrainSnapshot {
   agent: AgentConfig;
   restaurant?: Location["restaurant"];
   salon?: Location["salon"];
+  policy?: Location["policy"];
 }
 
 export function snapshotOf(location: Location): BrainSnapshot {
@@ -89,6 +99,7 @@ export function snapshotOf(location: Location): BrainSnapshot {
     agent: location.agent,
     restaurant: location.restaurant,
     salon: location.salon,
+    policy: location.policy,
   };
 }
 
@@ -108,7 +119,9 @@ function digestOf(snapshot: BrainSnapshot): string {
  * snapshots are both there to produce one on demand.
  */
 export function changedSections(before: BrainSnapshot | null, after: BrainSnapshot): BrainSection[] {
-  if (!before) return ["company", "services", "staff", "policies", "faqs", "escalation", "style"];
+  if (!before) {
+    return ["company", "services", "staff", "policies", "rules", "room", "faqs", "escalation", "style"];
+  }
 
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
   const touched: BrainSection[] = [];
@@ -121,6 +134,17 @@ export function changedSections(before: BrainSnapshot | null, after: BrainSnapsh
     touched.push("services");
   }
   if (!same(before.salon?.staff, after.salon?.staff)) touched.push("staff");
+  // The physical side: tables, sections, rooms and equipment. A change here
+  // moves where people sit rather than what they are told, so it is worth
+  // seeing separately from the price list.
+  if (
+    !same(before.restaurant?.tables, after.restaurant?.tables) ||
+    !same(before.restaurant?.sections, after.restaurant?.sections) ||
+    !same(before.salon?.resources, after.salon?.resources)
+  ) {
+    touched.push("room");
+  }
+  if (!same(before.policy, after.policy)) touched.push("rules");
   if (!same(before.agent.policies, after.agent.policies)) touched.push("policies");
   if (!same(before.agent.faqs, after.agent.faqs)) touched.push("faqs");
   if (!same(before.agent.transferNumber, after.agent.transferNumber)) touched.push("escalation");

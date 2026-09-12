@@ -454,21 +454,48 @@ export function cancelBooking(
   });
 }
 
-/** Front-of-house progress: arrived, seated, gone. Not the same as status. */
-export function markService(
-  booking: Booking,
-  event: "arrived" | "seated" | "left",
-): Booking {
+export type Progress = "arrived" | "seated" | "left" | "no_show" | "reopen";
+
+/**
+ * What actually happened, as against what was booked.
+ *
+ * This is the smallest piece of the product and one of the load-bearing ones,
+ * because three things already read it and until now nothing could write it:
+ * `noShowsBeforeReview` in the house rules, the recall list, and every guest
+ * record. A venue that had set "hand to a person after two no-shows" had set a
+ * rule that could never fire, and every guest showed nought no-shows for ever
+ * — which is worse than not having the number, because it reads as a fact.
+ *
+ * Arriving and being seated leave the booking confirmed: a seated party still
+ * holds its table. Leaving and not turning up both end it, which is what frees
+ * the table and what keeps the covers report honest.
+ */
+export function markProgress(booking: Booking, event: Progress): Booking {
   const at = new Date().toISOString();
+
+  // Putting a booking back is a correction, not an event — somebody ticked the
+  // wrong row. It clears the trail rather than adding to it, because a guest
+  // marked absent and then found in the bar was never absent.
+  if (event === "reopen") {
+    const reopened = { ...booking, status: "confirmed" as const, updatedAt: at };
+    delete reopened.service;
+    return saveBooking(reopened);
+  }
+
+  if (event === "no_show") {
+    return saveBooking({ ...booking, status: "no_show", service: undefined, updatedAt: at });
+  }
+
   const service = { ...(booking.service ?? {}) };
   if (event === "arrived") service.arrivedAt = at;
   if (event === "seated") service.seatedAt = at;
   if (event === "left") service.leftAt = at;
+
   return saveBooking({
     ...booking,
     service,
-    // A party that has been and gone is completed, and counting them as a
-    // live booking is what makes a venue's own covers report wrong.
+    // A party that has been and gone is completed, and counting them as a live
+    // booking is what makes a venue's own covers report wrong.
     status: event === "left" ? "completed" : booking.status,
     updatedAt: at,
   });

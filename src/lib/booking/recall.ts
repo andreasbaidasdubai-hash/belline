@@ -1,5 +1,5 @@
 import type { Booking, DateStr, Location } from "../types";
-import { listBookings } from "../store";
+import { listBookings, saveBooking } from "../store";
 import { addDays, daysBetween, todayIn } from "../time";
 import { normalisePhone } from "../guests";
 import { priceFor } from "./services";
@@ -28,7 +28,7 @@ import { priceFor } from "./services";
  * weeks before anyone notices the calls stopped.
  */
 
-export type RecallStatus = "upcoming" | "due" | "overdue" | "booked";
+export type RecallStatus = "upcoming" | "due" | "overdue" | "contacted" | "booked";
 
 export interface RecallItem {
   guestName: string;
@@ -47,6 +47,10 @@ export interface RecallItem {
   value: number;
   /** Set when they have already rebooked — the item is closed, not chased. */
   bookedFor?: DateStr;
+  /** When somebody last rang them about it. */
+  contactedAt?: string;
+  /** Off the list until this date, because they asked. */
+  snoozedUntil?: DateStr;
 }
 
 export interface RecallOptions {
@@ -54,6 +58,13 @@ export interface RecallOptions {
   withinDays?: number;
   /** How far back an unanswered recall is still worth chasing. Default 180. */
   staleAfterDays?: number;
+  /**
+   * Include the people who asked to be left until later.
+   *
+   * Off by default, because the point of a snooze is that the list gets
+   * shorter. On for the page that wants to show what it is hiding.
+   */
+  includeSnoozed?: boolean;
   /** Freeze the clock. Tests only. */
   today?: DateStr;
 }
@@ -100,6 +111,9 @@ export function recallDue(location: Location, opts: RecallOptions = {}): RecallI
     const bookedFor = answeredBy(bookings, phone, booking.date);
     const overdueDays = daysBetween(dueOn, today);
 
+    const snoozed = booking.recallSnoozedUntil && booking.recallSnoozedUntil > today;
+    if (snoozed && !bookedFor && !opts.includeSnoozed) continue;
+
     items.push({
       guestName: booking.guestName,
       guestPhone: booking.guestPhone,
@@ -108,17 +122,35 @@ export function recallDue(location: Location, opts: RecallOptions = {}): RecallI
       serviceName: service.name,
       lastVisit: booking.date,
       fromBookingId: booking.id,
-      status: bookedFor ? "booked" : overdueDays > 0 ? "overdue" : overdueDays === 0 ? "due" : "upcoming",
+      status: bookedFor
+        ? "booked"
+        : booking.recallContactedAt
+          ? "contacted"
+          : overdueDays > 0
+            ? "overdue"
+            : overdueDays === 0
+              ? "due"
+              : "upcoming",
       overdueDays,
       value: priceFor(service),
       bookedFor,
+      contactedAt: booking.recallContactedAt,
+      snoozedUntil: booking.recallSnoozedUntil,
     });
   }
 
   // Overdue before due before upcoming, then by what the visit is worth. A
   // practice working a list from the top should be ringing the people who
-  // stopped coming, not the people who are coming next week anyway.
-  const rank: Record<RecallStatus, number> = { overdue: 0, due: 1, upcoming: 2, booked: 3 };
+  // stopped coming, not the people who are coming next week anyway — and
+  // someone already rung sits below both, because the next move there is
+  // theirs rather than the practice's.
+  const rank: Record<RecallStatus, number> = {
+    overdue: 0,
+    due: 1,
+    upcoming: 2,
+    contacted: 3,
+    booked: 4,
+  };
   return items.sort(
     (a, b) =>
       rank[a.status] - rank[b.status] ||
@@ -154,6 +186,7 @@ export interface RecallSummary {
   overdue: number;
   due: number;
   upcoming: number;
+  contacted: number;
   booked: number;
   /** What the unanswered part of the list is worth, at list price. */
   outstandingValue: number;
@@ -172,11 +205,37 @@ export function recallSummary(location: Location, opts: RecallOptions = {}): Rec
     overdue: items.filter((i) => i.status === "overdue").length,
     due: items.filter((i) => i.status === "due").length,
     upcoming: items.filter((i) => i.status === "upcoming").length,
+    contacted: items.filter((i) => i.status === "contacted").length,
     booked: items.filter((i) => i.status === "booked").length,
     outstandingValue: items
       .filter((i) => i.status === "overdue" || i.status === "due")
       .reduce((n, i) => n + i.value, 0),
   };
+}
+
+/**
+ * Record that somebody has been rung, or asked to be left alone until later.
+ *
+ * Written onto the visit that raised the recall — see `Booking.recallContactedAt`.
+ * `until` absent simply marks the contact, which moves the item down the list
+ * without hiding it: they have been rung, they have not said no.
+ */
+export function markRecall(
+  booking: Booking,
+  action: "contacted" | "snooze" | "clear",
+  until?: DateStr,
+): Booking {
+  const at = new Date().toISOString();
+  const next: Booking = { ...booking, updatedAt: at };
+
+  if (action === "clear") {
+    delete next.recallContactedAt;
+    delete next.recallSnoozedUntil;
+  } else {
+    next.recallContactedAt = at;
+    if (action === "snooze") next.recallSnoozedUntil = until;
+  }
+  return saveBooking(next);
 }
 
 /**

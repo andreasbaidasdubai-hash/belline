@@ -40,6 +40,7 @@ npm run doctor     # why isn't the phone ringing? checks every key against the p
 npm run demo       # fill the dashboard with a plausible week (add -- reset to wipe first)
 npm run check        # booking-engine test suite (28 cases, no keys needed)
 npm run check:engine # the depth: phases, policy, holds, recall (63 cases)
+npm run check:config # the settings gate: validation, coercion, recall actions
 npm run user -- list                                  # accounts
 npm run user -- reset you@example.com "new password"  # if you lock yourself out
 npm run typecheck
@@ -191,9 +192,21 @@ argued with; every one of these rules exists to stop the *agent* over-promising.
 is kept back for ninety seconds so a second line is not offered the same table.
 A call's own holds are invisible to it, and a dropped call releases everything.
 
-**Who is due back** (`src/lib/booking/recall.ts`) — dental recall, and the same
-query is a salon's rebooking list. Written onto each booking as it is taken, so
-the list is a query rather than a nightly job with somewhere to fail silently.
+**Who is due back** (`src/lib/booking/recall.ts`, `/recall`) — dental recall,
+and the same query is a salon's rebooking list. Written onto each booking as it
+is taken, so the list is a query rather than a nightly job with somewhere to
+fail silently. Worked from the page: rang them, try again later, undo. Priced,
+because "thirty-one patients overdue and AED 14,200 sitting in your recall
+list" is a sentence that sells a subscription and "you have a recall feature"
+is not.
+
+**All of it is editable** (`/venue`, `src/lib/booking/config.ts`) — the room,
+the price list, the team, the rooms, the house rules. A configurable engine has
+a failure mode a seeded one does not: a venue can describe a diary that cannot
+work, and nothing throws. Stages that do not add up. A stylist qualified for a
+service deleted this morning. A treatment needing a room nobody owns. So the
+save path is a gate — errors refuse, warnings save and say so — and everything
+arriving over HTTP is rebuilt field by field before it is checked.
 
 `npm run check` and `npm run check:engine` cover all of the above, including the
 cases a demo never reaches: turn times growing with party size, pacing blocking
@@ -214,6 +227,7 @@ who has missed twice being handed to a person rather than refused by a machine.
 | `src/lib/agent/prompt.ts` | System prompt. Split at the cache boundary. |
 | `src/lib/agent/tools.ts` | The eight tools, with validation and recovery text. |
 | `src/lib/booking/` | Availability per vertical, the house rules, quote holds, recall. |
+| `src/lib/booking/config.ts` | The gate on the settings page: what a venue may save, and what it may not. |
 | `src/lib/calendar.ts` | The day as a grid: shifts, utilisation, processing gaps, sellable holes. |
 | `src/lib/auth.ts` | Passwords, sessions, roles. No `next/*` imports — the WS bridge uses it too. |
 | `src/lib/auth-server.ts` | `requireUser()` for pages, `requireApiUser()` for routes. |

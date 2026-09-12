@@ -846,6 +846,22 @@ export interface Booking {
   recallServiceId?: string;
   /** The recall this booking answered, so a due list can close itself out. */
   recallOf?: string;
+  /**
+   * When somebody last reached out about this recall, and until when it should
+   * stay off the list.
+   *
+   * The only part of a recall that is not derived. Everything else — who is
+   * due, how overdue, what it is worth, whether they have rebooked — falls out
+   * of the bookings themselves, which is why there is no recall table to fall
+   * out of sync. But "we rang them and they said ring back in March" is a fact
+   * about the outreach, not about the visit, and it has to be written down
+   * somewhere or the same patient is rung every week until they stop answering.
+   *
+   * Held on the visit that raised the recall, because that is what the item is
+   * derived from.
+   */
+  recallContactedAt?: string;
+  recallSnoozedUntil?: DateStr;
   source: "voice" | "manual" | "web" | "whatsapp";
   callId?: string;
   /**

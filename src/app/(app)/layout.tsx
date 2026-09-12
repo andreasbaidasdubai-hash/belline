@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth-server";
 import { canManageUsers, canSeeLocation } from "@/lib/auth";
 import { listLocations } from "@/lib/store";
 import { attentionFor } from "@/lib/attention";
+import { recallSummary } from "@/lib/booking/recall";
 import SignOutButton from "@/components/SignOutButton";
 
 /**
@@ -24,6 +25,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .filter((l) => canSeeLocation(user, l.id))
     .reduce((n, l) => n + attentionFor(l).length, 0);
 
+  // Everyone due back across the venues this person can see. It sits next to
+  // the book rather than under settings because it is a list to be worked, not
+  // a page to be read — and a recall list nobody opens is the whole reason
+  // practices lose a third of their recare.
+  const dueBack = listLocations()
+    .filter((l) => canSeeLocation(user, l.id) && l.salon)
+    .reduce((n, l) => {
+      const { overdue, due } = recallSummary(l);
+      return n + overdue + due;
+    }, 0);
+
   const nav = [
     { href: "/attention", label: "Needs you", badge: outstanding || undefined },
     { href: "/", label: "Overview" },
@@ -32,12 +44,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/inbox", label: "Messages" },
     { href: "/bookings", label: "Bookings" },
     { href: "/waitlist", label: "Waitlist" },
+    ...(dueBack > 0
+      ? [{ href: "/recall", label: "Recall", badge: dueBack, quiet: true }]
+      : []),
     { href: "/guests", label: "Guests" },
     { href: "/test", label: "Test console" },
     // Floor staff read the book; they do not rewrite the agent's rules.
     ...(user.role !== "staff"
       ? [
           { href: "/agents", label: "Agent" },
+          { href: "/venue", label: "How it works" },
           { href: "/integrations", label: "Integrations" },
         ]
       : []),
@@ -89,15 +105,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                     height: 19,
                     padding: "0 6px",
                     borderRadius: 999,
-                    background: "var(--bad)",
-                    color: "#fff",
+                    // Only one thing in this product is ever urgent. A recall
+                    // list is work to get through, not an alarm, and dressing
+                    // it as one is how a red dot stops meaning anything.
+                    background: "quiet" in item && item.quiet ? "var(--accent-soft)" : "var(--bad)",
+                    color: "quiet" in item && item.quiet ? "var(--accent)" : "#fff",
                     fontSize: 11,
                     fontWeight: 700,
                     display: "grid",
                     placeItems: "center",
                     fontVariantNumeric: "tabular-nums",
                   }}
-                  aria-label={`${item.badge} needing attention`}
+                  aria-label={
+                    "quiet" in item && item.quiet
+                      ? `${item.badge} due back`
+                      : `${item.badge} needing attention`
+                  }
                 >
                   {item.badge}
                 </span>
