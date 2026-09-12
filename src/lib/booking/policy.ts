@@ -104,15 +104,14 @@ export function checkPolicy(
   const policy = location.policy ?? {};
   const notice = noticeMinutes(now, request.date, request.startMin);
 
-  if (notice < 0) {
-    return {
-      ok: false,
-      reason: "past",
-      detail: "That time has already passed.",
-    };
-  }
-
+  // Before every other rule, because a person working the book is allowed to
+  // do things the agent is not — including writing down a walk-in that has
+  // already happened, which is the one legitimate reason to book into the past.
   if (request.staffOverride) return null;
+
+  if (notice < 0) {
+    return { ok: false, reason: "past", detail: "That time has already passed." };
+  }
 
   const required = Math.max(policy.minNoticeMin ?? 0, request.minNoticeMin ?? 0);
   if (required > 0 && notice < required) {

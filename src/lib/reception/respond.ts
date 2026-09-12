@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Call, Location } from "../types";
+import type { Conversation } from "./types";
 import { getCall, getLocation, saveCall } from "../store";
 import { startCall } from "../calls";
 import { AgentSession } from "../agent/runtime";
@@ -7,6 +8,8 @@ import { checkTimes, honestAlternative } from "../agent/honesty";
 import { metaAdapter } from "./channel/meta";
 import { twilioAdapter } from "./channel/twilio";
 import { internalAdapter } from "./channel/internal";
+import { webchatAdapter } from "./channel/webchat";
+import { isPhoneHandle } from "../webchat";
 import { openCredentials } from "../db/credentials";
 import {
   agentHistory,
@@ -49,9 +52,11 @@ const ADAPTERS: Record<string, ChannelAdapter> = {
   meta: metaAdapter,
   twilio: twilioAdapter,
   // No wire. The same pipeline with the delivery recorded rather than sent —
-  // how the journey is demonstrated before a business's own number exists,
-  // and how web chat will arrive later.
+  // how the journey is demonstrated before a business's own number exists.
   internal: internalAdapter,
+  // Our own page. The reply is delivered by being written down; the visitor's
+  // browser asks for it. See channel/webchat.ts.
+  webchat: webchatAdapter,
 };
 
 /** The reason a turn produced nothing, for the log. Never shown to a customer. */
@@ -113,10 +118,14 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   // The venue's own episode record. Created on the first turn and carried on
   // the conversation afterwards, so the dashboard, the attention inbox and the
   // week's numbers see a WhatsApp conversation exactly as they see a call.
-  const call: Call = existingCall(conversation.callId) ?? startWhatsappCall(location, accepted);
+  const call: Call =
+    existingCall(conversation.callId) ?? startEpisode(location, conversation.channel, accepted);
 
   const session = new AgentSession(location, call, {
-    callerNumber: customer?.phoneE164,
+    // Only a real number. A website visitor's handle is not one, and handing it
+    // to the agent would have it looking up a guest by a string no booking can
+    // ever contain — see webchat.ts.
+    callerNumber: isPhoneHandle(customer?.phoneE164) ? customer?.phoneE164 : undefined,
     channel: "text",
     history,
   });
@@ -174,7 +183,7 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   const honesty = checkTimes(reply, call.toolCalls);
   if (!honesty.ok) {
     console.warn(
-      `[whatsapp ${traceId}] invented ${honesty.invented.join(", ")} — offered ${
+      `[reception ${traceId}] invented ${honesty.invented.join(", ")} — offered ${
         honesty.offered.join(", ") || "nothing"
       }
            replaced: ${reply}`,
@@ -267,7 +276,7 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
       name: "provider.error",
       payload: { where: "send", detail: result.detail, retryable: result.retryable },
     });
-    console.error(`[whatsapp ${traceId}] send failed: ${result.detail}`);
+    console.error(`[reception ${traceId}] send failed: ${result.detail}`);
     return { sent: false, failed: result.detail };
   }
 
@@ -325,7 +334,7 @@ async function sendAndRecord(
 
   const result = await deliver(account, accepted.message.fromE164, text);
   if (!result.ok) {
-    console.error(`[whatsapp ${traceId}] send failed: ${result.detail}`);
+    console.error(`[reception ${traceId}] send failed: ${result.detail}`);
     return { sent: false, failed: result.detail };
   }
   await markSent(accepted.tenantId, committed.messageId, result.providerMessageId);
@@ -364,7 +373,20 @@ function existingCall(callId: string | undefined): Call | undefined {
   return callId ? getCall(callId) : undefined;
 }
 
-function startWhatsappCall(location: Location, accepted: Accepted): Call {
+/**
+ * Open the venue's episode record for a conversation.
+ *
+ * The channel carries through so the dashboard can say where somebody came
+ * from, and so the two website channels keep separate daily ceilings. A visitor
+ * who has given no number is recorded as "Website" rather than as their internal
+ * handle: the column is read by a receptionist, not by us.
+ */
+function startEpisode(
+  location: Location,
+  channel: Conversation["channel"],
+  accepted: Accepted,
+): Call {
+  if (channel === "webchat") return startCall(location, "webchat", "Website");
   return startCall(location, "whatsapp", accepted.message.fromE164);
 }
 

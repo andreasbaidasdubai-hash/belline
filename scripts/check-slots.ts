@@ -68,12 +68,27 @@ function nextOpenDay(): string {
 const day = nextOpenDay();
 
 function check(date: string) {
+  return checkOn(date).out;
+}
+
+/**
+ * The same lookup, keeping hold of the call it happened on.
+ *
+ * Quoting a time keeps it back for a minute or so, per call — see
+ * booking/holds.ts. So "what would the diary give me" is only a meaningful
+ * question with a call attached to it: asked from nowhere, the answer
+ * correctly excludes the very times this call was just quoted.
+ */
+function checkOn(date: string) {
   const call = startCall(belline, "browser", "browser-console");
-  return executeTool(
-    "check_availability",
-    { date, service_ids: ["demo_call"] },
-    { location: belline, call, callerNumber: "" } as never,
-  );
+  return {
+    call,
+    out: executeTool(
+      "check_availability",
+      { date, service_ids: ["demo_call"] },
+      { location: belline, call, callerNumber: "" } as never,
+    ),
+  };
 }
 
 console.log("\nWhat the picker is given\n");
@@ -92,14 +107,17 @@ test("availability comes back with times a page could render", async () => {
 test("every time shown is one the diary would actually take", async () => {
   // The whole point. A picker offering a slot the engine does not have is
   // worse than no picker: somebody taps it and gets told no.
-  const out = (await check(day)) as { result: Record<string, unknown> };
+  const { call, out: pending } = checkOn(day);
+  const out = (await pending) as { result: Record<string, unknown> };
   const options = out.result.options as { time: string }[];
   const real = new Set(
-    findAvailability(belline, {
-      locationId: belline.id,
-      date: day,
-      serviceIds: ["demo_call"],
-    }).map((s) => `${String(Math.floor(s.startMin / 60)).padStart(2, "0")}:${String(s.startMin % 60).padStart(2, "0")}`),
+    findAvailability(
+      belline,
+      { locationId: belline.id, date: day, serviceIds: ["demo_call"] },
+      // As this call, not as a stranger: the times it was just quoted are
+      // being held *for* it, and a search from nowhere would not see them.
+      { callId: call.id },
+    ).map((s) => `${String(Math.floor(s.startMin / 60)).padStart(2, "0")}:${String(s.startMin % 60).padStart(2, "0")}`),
   );
   for (const o of options) {
     assert.ok(real.has(o.time), `${o.time} is on the page but not in the diary`);

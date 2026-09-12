@@ -66,6 +66,11 @@ export async function POST(request: Request) {
     source: "manual",
     // Only ever true because a person on the floor ticked it.
     overbook: body.overbook === true,
+    // Written by somebody signed in and looking at the room. The house rules
+    // — notice periods, the horizon, the tables not sold online — exist to
+    // stop the *agent* over-promising, and a manager who is overruled by them
+    // stops using the calendar and goes back to the paper book.
+    staffOverride: true,
   });
 
   if (!result.ok) {

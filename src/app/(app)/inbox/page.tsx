@@ -3,6 +3,7 @@ import { visibleLocations } from "@/lib/auth";
 import { isConfigured } from "@/lib/db/client";
 import { listConversations, listMessages, getCustomer } from "@/lib/reception/repo";
 import { seedIfEmpty } from "@/lib/seed";
+import { describeHandle } from "@/lib/webchat";
 import Thread from "./Thread";
 import type { Conversation, Message, Customer } from "@/lib/reception/types";
 
@@ -84,7 +85,7 @@ export default async function InboxPage({
             return [
               c.id,
               person
-                ? [person.firstName, person.lastName].filter(Boolean).join(" ") || person.phoneE164
+                ? [person.firstName, person.lastName].filter(Boolean).join(" ") || describeHandle(person.phoneE164)
                 : "Unknown",
             ] as const;
           }),
@@ -102,10 +103,10 @@ export default async function InboxPage({
       messages={messages}
       customerName={
         customer
-          ? [customer.firstName, customer.lastName].filter(Boolean).join(" ") || customer.phoneE164
+          ? [customer.firstName, customer.lastName].filter(Boolean).join(" ") || describeHandle(customer.phoneE164)
           : ""
       }
-      customerPhone={customer?.phoneE164 ?? ""}
+      customerPhone={describeHandle(customer?.phoneE164)}
     />
   );
 }

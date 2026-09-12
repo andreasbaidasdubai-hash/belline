@@ -174,6 +174,14 @@ details > summary::marker {
   color: #fff;
 }
 
+/* The selected one of a pair of view switches. Reads as pressed rather than
+   as the primary action, which is what it is. */
+.btn.on {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
 .btn-danger {
   border-color: var(--border);
   color: var(--bad);
@@ -517,6 +525,91 @@ tbody tr:hover {
     var(--panel) 8px
   );
   border-top: 1px solid var(--accent-line);
+}
+
+/* Processing time. The chair is occupied and the stylist is not, so it is
+   drawn *inside* the appointment rather than beside it — a second client is
+   already in here on a salon that dovetails, and a solid bar would hide the
+   most sellable forty minutes of the day. */
+.cal-block-gap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.26),
+    rgba(255, 255, 255, 0.26) 2px,
+    transparent 2px,
+    transparent 8px
+  );
+  border-top: 1px dashed rgba(255, 255, 255, 0.45);
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
+/* Outside the shift, or out of service. Not white — an hour nobody works is
+   not the same as an hour nobody has booked, and a grid that draws them alike
+   is the reason people keep a paper rota next to the screen. */
+.cal-off {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--border-soft),
+    var(--border-soft) 2px,
+    transparent 2px,
+    transparent 6px
+  );
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.cal-off-label {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+/* How much of this column is sold. A hairline, because it is a shape to scan
+   across a row of ten people, not a number to read. */
+.cal-head-util {
+  display: block;
+  height: 3px;
+  margin-top: 4px;
+  background: var(--border-soft);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cal-head-util span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.cal-flags {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  display: flex;
+  gap: 3px;
+}
+
+.cal-flag {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.85;
+}
+
+.cal-flag.deposit {
+  background: var(--warn, #C88A2E);
+  opacity: 1;
 }
 
 /* The week strip. A shape to scan, not a table to read — which is why the
@@ -963,6 +1056,19 @@ body:has(.callbar) {
    suspended — Belline talking with nobody able to hear it. A small button in
    the corner is a poor answer when the instruction is simply "tap". */
 .callbar.is-blocked { cursor: pointer; }
+
+/* The way out for somebody who cannot talk right now. Deliberately the
+   quietest thing on this screen: it is an alternative, not a competing offer. */
+.callbar-swap {
+  position: relative;
+  margin-top: -14px;
+  color: rgba(251, 249, 245, 0.66);
+  font-size: 13.5px;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(251, 249, 245, 0.26);
+  padding-bottom: 2px;
+}
+.callbar-swap:hover { color: #FBF9F5; }
 
 /* The mark behind the call: the venue's own where we have one, the bell
    otherwise. Enormous and very faint — it is a ground, not a participant, and

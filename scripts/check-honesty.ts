@@ -177,11 +177,18 @@ test("the replacement quotes the real times", () => {
   assert.equal(said.includes("2:00"), false, "it repeated the invention");
 });
 
-test("with nothing free it offers a person, not a time", () => {
+test("with nothing free it offers a way forward, not a dead end", () => {
   const v = checkTimes("I have 4:30.", []);
   const said = honestAlternative(v);
   assert.equal(/\d{1,2}:\d{2}/.test(said), false, `it invented a time in the recovery: ${said}`);
-  assert.ok(/team|details/i.test(said), said);
+  // A question, so the conversation has somewhere to go. The first version of
+  // this line closed the conversation — and got sent to somebody who had just
+  // said "the first one please".
+  assert.ok(said.trim().endsWith("?"), said);
+  assert.ok(/another day|another time|look/i.test(said), said);
+  // And never a promise to go and look, because nothing here will: this
+  // replaces a reply, it does not run a second turn.
+  assert.equal(/let me check|I'll check|one moment|checking now/i.test(said), false, said);
 });
 
 test("the replacement never names more than three times", () => {

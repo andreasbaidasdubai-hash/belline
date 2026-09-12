@@ -1,4 +1,4 @@
-import type { InboundMessage, StatusUpdate } from "./types";
+import type { ChannelAccount, InboundMessage, StatusUpdate } from "./types";
 import {
   accountForInbound,
   createConversation,
@@ -46,11 +46,27 @@ export type Rejected =
 
 export async function acceptInbound(
   inbound: InboundMessage,
+  /**
+   * The account, when the caller already knows it.
+   *
+   * Every channel with a wire is identified by the number it was sent to, which
+   * is what `accountForInbound` looks up. Web chat has no number — the request
+   * arrives at a URL carrying the venue's embed key, and that key has already
+   * been resolved to a venue and checked against the origin allowlist before
+   * anything gets here. So the caller passes the account rather than the lookup
+   * inventing a number for it to find.
+   *
+   * Passed in rather than branching here, so that the order below — tenant,
+   * customer, conversation, dedup — stays the single path every channel takes.
+   */
+  resolved?: ChannelAccount,
 ): Promise<{ ok: true; accepted: Accepted } | { ok: false; rejected: Rejected }> {
-  const account = await accountForInbound(inbound.channel, {
-    phoneE164: inbound.toE164,
-    externalNumberId: inbound.externalNumberId,
-  });
+  const account =
+    resolved ??
+    (await accountForInbound(inbound.channel, {
+      phoneE164: inbound.toE164,
+      externalNumberId: inbound.externalNumberId,
+    }));
 
   if (!account) {
     // A webhook for a number nobody has connected. Not an error worth

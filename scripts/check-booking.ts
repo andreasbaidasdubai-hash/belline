@@ -201,11 +201,15 @@ const salonBooking = (over: Partial<Booking>) =>
 const salonBookingFor = (location: Location, over: Partial<Booking>) =>
   booking({ locationId: location.id, vertical: location.vertical, ...over });
 
+// Pinned to Jonas throughout this pair: he charges and works to the list, so
+// these test chaining rather than which stylist the engine happened to pick.
+// Marie's own timing and prices are a separate test, below.
 test("chained services are priced and timed as one block", () => {
   const result = checkSalonSlot(salon, [], {
     date: WED,
     startMin: H(10),
     serviceIds: ["cut_w", "blowdry"],
+    staffId: "st_jonas",
   });
   assert(result.ok);
   assert.equal(result.assignment.durationMin, 105);
@@ -213,7 +217,12 @@ test("chained services are priced and timed as one block", () => {
 });
 
 test("the cleanup buffer is held after the appointment, not shown in it", () => {
-  const result = checkSalonSlot(salon, [], { date: WED, startMin: H(10), serviceIds: ["cut_w"] });
+  const result = checkSalonSlot(salon, [], {
+    date: WED,
+    startMin: H(10),
+    serviceIds: ["cut_w"],
+    staffId: "st_jonas",
+  });
   assert(result.ok);
   assert.equal(result.assignment.endMin, H(11), "guest-facing end should exclude buffer");
   assert.equal(result.assignment.blockEndMin, H(11, 15), "diary block should include buffer");

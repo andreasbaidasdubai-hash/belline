@@ -863,6 +863,82 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .bell-fab:hover::after,
 .bell-fab:focus-visible::after { animation: none; }
 
+/* --- Der Chat-Knopf ---------------------------------------------------------
+ *
+ * Sitzt über der Glocke und ist bewusst der leisere von beiden: Papier mit
+ * Kontur statt Tinte, und er klingelt nicht. Die Glocke ist das, was dieses
+ * Produkt kann und ein Chat-Widget nicht — sie bleibt der Hauptknopf. Dieser
+ * hier ist für den, der genau jetzt nicht sprechen kann.
+ *
+ * Dasselbe Zeichen in beiden, in einer Sprechblase: die Verwandtschaft trägt
+ * die Marke, die Blase sagt, was passiert. */
+.chat-fab {
+  position: fixed;
+  right: 26px;
+  bottom: 96px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 22px 13px 19px;
+  border-radius: 999px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.94rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 0 0 4px var(--paper), 0 12px 28px -14px rgba(20, 17, 13, 0.42);
+  transition: transform 0.16s ease;
+}
+.chat-fab[hidden] { display: none; }
+.chat-fab svg { width: 23px; height: 23px; display: block; color: var(--brass); }
+.chat-fab:hover,
+.chat-fab:focus-visible { transform: translateY(-2px); }
+
+/* Der Chat braucht Höhe, das Gespräch nicht — ein Anruf ist eine Leiste, ein
+   Chat ist ein Fenster. Auf dem Telefon nimmt er den ganzen Schirm: 380 px
+   Chat in einem 390-px-Gerät sind kein Panel, sondern ein Versehen. */
+.chat-dock {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  z-index: 50;
+  width: min(384px, calc(100vw - 36px));
+  height: min(544px, calc(100vh - 52px));
+  background: var(--ink);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px -20px rgba(20, 17, 13, 0.55);
+}
+/* Die Ecke rundet der Rahmen selbst, nicht der Behälter: mit overflow:hidden
+   würde der Schließknopf, der zehn Pixel außerhalb sitzt, weggeschnitten. */
+.chat-frame { width: 100%; height: 100%; border: 0; display: block; border-radius: 14px; }
+
+@media (max-width: 620px) {
+  .chat-dock {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+  .chat-frame { border-radius: 0; }
+  /* Auf dem ganzen Schirm gibt es kein Außerhalb mehr. Die rechte Ecke der
+     Kopfzeile ist frei — auf unserer eigenen Seite steht dort kein "Lieber
+     sprechen?", weil unser Widget nur den Chat anbietet. */
+  .chat-dock .call-shut {
+    top: 12px;
+    right: 12px;
+    border-color: transparent;
+    background: rgba(251, 249, 245, 0.16);
+    color: var(--paper);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-fab { transition: none; }
+}
+
 /* --- Das angedockte Gespräch ------------------------------------------------ */
 
 .call-dock {
@@ -912,7 +988,16 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
     bottom: calc(18px + env(safe-area-inset-bottom, 0px));
     width: 60px; height: 60px; padding: 0; justify-content: center; gap: 0;
   }
-  .bell-fab-say {
+  /* Der Chat-Knopf macht dasselbe wie die Glocke, sonst steht auf dem Telefon
+     ein runder Knopf neben einer beschrifteten Pille — zwei Knöpfe, die
+     aussehen, als gehörten sie nicht zusammen. */
+  .chat-fab {
+    right: 18px;
+    bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+    width: 56px; height: 56px; padding: 0; justify-content: center; gap: 0;
+  }
+  .bell-fab-say,
+  .chat-fab-say {
     position: absolute; width: 1px; height: 1px;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
@@ -1462,7 +1547,8 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 
   /* Zwei runde Knöpfe in derselben Ecke sind einer zu viel. Die Glocke tritt
      zurück, sobald die Leiste da ist — die Demo sitzt jetzt in ihr. */
-  .buybar-on .bell-fab { display: none; }
+  .buybar-on .bell-fab,
+  .buybar-on .chat-fab { display: none; }
 
   /* Platz, damit die Leiste den Abschluss nicht überdeckt. */
   body { padding-bottom: 0; }
@@ -1490,8 +1576,11 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
  */
 .channels {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 64px;
+  /* Drei, seit die Website auch getippt beantwortet wird. Bei zwei Spalten
+     stünde die dritte Karte allein in einer eigenen Zeile — dieselbe Angabe,
+     aber optisch ein Nachtrag statt ein gleichwertiger Kanal. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 48px;
   margin-top: 52px;
   border-top: 1px solid var(--rule);
 }
@@ -1511,7 +1600,19 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   color: var(--brass);
 }
 
-@media (max-width: 900px) {
+/* Was noch nicht läuft, steht trotzdem da — nur eben als Notiz und nicht als
+   Versprechen. Ruhiger gesetzt als die Kanäle darüber, weil es keiner ist. */
+.channel-note {
+  margin: 26px 0 0;
+  font-size: 0.9rem;
+  color: var(--ink-3);
+  max-width: 64ch;
+  line-height: 1.65;
+}
+
+/* Drei oder eins, nichts dazwischen: zwei Spalten für drei Karten lassen
+   immer eine allein in der letzten Zeile stehen. */
+@media (max-width: 1040px) {
   .channels { grid-template-columns: 1fr; gap: 0; margin-top: 40px; }
 }
 

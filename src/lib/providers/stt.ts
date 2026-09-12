@@ -20,6 +20,17 @@ export interface SttOptions {
   onFinal: (text: string) => void;
   /** Caller started speaking, which is the barge-in trigger. */
   onSpeechStart?: () => void;
+  /**
+   * The caller has *probably* finished, and it is worth starting an answer.
+   *
+   * Only Flux produces this. It is the same bet the session makes for itself
+   * on nova-3 by watching the transcript go quiet, with the difference that
+   * Flux is betting on the sentence sounding finished rather than on the
+   * caller having stopped for long enough — which is the bet a person makes.
+   */
+  onEagerEnd?: (text: string) => void;
+  /** The eager guess was wrong; the caller carried on. Throw the work away. */
+  onTurnResumed?: () => void;
   onError?: (message: string) => void;
   /**
    * Words this venue expects to hear that a general model will not: its own
@@ -34,9 +45,45 @@ export interface SttStream {
   close(): void;
   readonly ready: Promise<void>;
   readonly enabled: boolean;
+  /** Whether this engine decides for itself when a turn is over. */
+  readonly predictsTurnEnd: boolean;
 }
 
 const KEEPALIVE_MS = 8000;
+
+/**
+ * Silence that closes a thought, on nova-3.
+ *
+ * Exported because `npm run bench:latency` reports what a caller waits, and a
+ * benchmark that carries its own copy of this number stops being a benchmark
+ * the first time somebody tunes it here. It had already drifted once.
+ */
+export const NOVA_ENDPOINTING_MS = {
+  /** A lossy 8 kHz line, and callers who pause mid-sentence to check a diary. */
+  phone: 500,
+  /** Clean 16 kHz from somebody at a desk, watching the agent wait on screen. */
+  browser: 240,
+} as const;
+
+/**
+ * Which recogniser answers the phone.
+ *
+ * `nova-3` is the default because it is what has taken every call so far and
+ * its failure mode is understood. `flux` is better at the thing that matters
+ * most — it will not answer half a sentence — but it ends turns on meaning
+ * rather than on silence, and meaning is exactly what a caller reciting a
+ * phone number does not have half way through. Measured on our own audio it
+ * called the turn over after "that's Andreas" and left the number to the next
+ * one. That is survivable and arguably human, but it is a change in behaviour
+ * that belongs on the demo line before it belongs on a customer's.
+ *
+ * `npm run bench:turns` is how you decide, on real audio, at phone quality.
+ */
+export type SttEngine = "nova-3" | "flux";
+
+export function sttEngine(): SttEngine {
+  return process.env.STT_ENGINE === "flux" ? "flux" : "nova-3";
+}
 
 export function createSttStream(opts: SttOptions): SttStream {
   const key = process.env.DEEPGRAM_API_KEY;
@@ -49,8 +96,11 @@ export function createSttStream(opts: SttOptions): SttStream {
       close() {},
       ready: Promise.resolve(),
       enabled: false,
+      predictsTurnEnd: false,
     };
   }
+
+  if (sttEngine() === "flux") return createFluxStream(opts, key);
 
   // A phone line is 8 kHz µ-law over a lossy network and callers on one pause
   // more — mid-sentence, to check a diary, because the line lags. The browser
@@ -80,7 +130,7 @@ export function createSttStream(opts: SttOptions): SttStream {
     // on a demonstration the half-second of dead air after you stop talking
     // is the thing that makes it feel like software rather than a person.
     // 240 is as low as this goes before it starts cutting into pauses.
-    endpointing: phone ? "500" : "240",
+    endpointing: String(phone ? NOVA_ENDPOINTING_MS.phone : NOVA_ENDPOINTING_MS.browser),
     vad_events: "true",
     // Backstop for a line noisy enough that the endpointer never fires.
     utterance_end_ms: phone ? "1400" : "1000",
@@ -166,6 +216,144 @@ export function createSttStream(opts: SttOptions): SttStream {
 
   return {
     enabled: true,
+    predictsTurnEnd: false,
+    ready,
+    send(chunk) {
+      if (open && socket.readyState === WebSocket.OPEN) socket.send(chunk);
+      else if (socket.readyState === WebSocket.CONNECTING) pending.push(chunk);
+    },
+    close() {
+      clearInterval(keepalive);
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: "CloseStream" }));
+        socket.close();
+      } else {
+        socket.terminate();
+      }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Flux
+// ---------------------------------------------------------------------------
+
+/**
+ * How sure Flux must be that the caller has finished before we answer.
+ *
+ * Measured on phone-quality audio of our own sentences: at 0.5 a finished
+ * question is called over about 280 ms after the caller stops, at 0.7 about
+ * 480 ms. The higher number is the default here because the cost of the two
+ * mistakes is not symmetric — answering 200 ms sooner is barely noticed, and
+ * answering over somebody who had not finished is the single thing callers
+ * complain about.
+ */
+const EOT_THRESHOLD = "0.7";
+
+/**
+ * When to start preparing an answer, on a weaker hunch than the above.
+ *
+ * The work is thrown away if the caller carries on, so this can afford to be
+ * wrong. It is the same trade the session makes on nova-3, moved into the
+ * model that can hear the intonation.
+ */
+const EAGER_EOT_THRESHOLD = "0.4";
+
+/**
+ * A caller who trails off entirely still has to be answered.
+ *
+ * Flux will genuinely wait forever on an unfinished sentence — which is right,
+ * and is the whole reason to use it, but a caller who says "I'd like a table
+ * for, umm..." and then stops needs somebody to say "for how many?" rather
+ * than listen politely for five seconds. Deepgram's own default is 5000.
+ */
+const EOT_TIMEOUT_MS = "1800";
+
+function createFluxStream(opts: SttOptions, key: string): SttStream {
+  const params = new URLSearchParams({
+    model: "flux-general-en",
+    encoding: opts.encoding,
+    sample_rate: String(opts.sampleRate),
+    eot_threshold: EOT_THRESHOLD,
+    eager_eot_threshold: EAGER_EOT_THRESHOLD,
+    eot_timeout_ms: EOT_TIMEOUT_MS,
+  });
+
+  for (const term of opts.keyterms ?? []) {
+    if (term.trim()) params.append("keyterm", term.trim());
+  }
+
+  const socket = new WebSocket(`wss://api.deepgram.com/v2/listen?${params}`, {
+    headers: { Authorization: `Token ${key}` },
+  });
+
+  let open = false;
+  const pending: Buffer[] = [];
+
+  const ready = new Promise<void>((resolve, reject) => {
+    socket.once("open", () => {
+      open = true;
+      for (const chunk of pending) socket.send(chunk);
+      pending.length = 0;
+      resolve();
+    });
+    socket.once("error", (err) => {
+      opts.onError?.(err.message);
+      reject(err);
+    });
+  });
+  ready.catch(() => {});
+
+  const keepalive = setInterval(() => {
+    if (open && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "KeepAlive" }));
+    }
+  }, KEEPALIVE_MS);
+
+  socket.on("message", (raw) => {
+    let msg: { type?: string; event?: string; transcript?: string };
+    try {
+      msg = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+    // Everything conversational arrives as TurnInfo; `event` is the part that
+    // says what happened.
+    if (msg.type !== "TurnInfo") return;
+    const transcript = (msg.transcript ?? "").trim();
+
+    switch (msg.event) {
+      case "StartOfTurn":
+        // Flux's own judgement that somebody has started talking — which is
+        // what barge-in needs, and is steadier than voice activity because it
+        // has already decided the noise was speech.
+        opts.onSpeechStart?.();
+        break;
+
+      case "Update":
+        if (transcript) opts.onPartial?.(transcript);
+        break;
+
+      case "EagerEndOfTurn":
+        if (transcript) opts.onEagerEnd?.(transcript);
+        break;
+
+      case "TurnResumed":
+        // The hunch was wrong: they were mid-breath, not finished.
+        opts.onTurnResumed?.();
+        break;
+
+      case "EndOfTurn":
+        if (transcript) opts.onFinal(transcript);
+        break;
+    }
+  });
+
+  socket.on("close", () => clearInterval(keepalive));
+
+  return {
+    enabled: true,
+    predictsTurnEnd: true,
     ready,
     send(chunk) {
       if (open && socket.readyState === WebSocket.OPEN) socket.send(chunk);

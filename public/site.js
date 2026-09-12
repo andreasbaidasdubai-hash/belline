@@ -443,6 +443,75 @@
   });
 })();
 
+/* --- the chat panel --------------------------------------------------------
+   The other way in. Belline's own website is a customer of this product like
+   any other: the panel below is the same embedded chat a venue pastes into
+   their own site, pointed at our own venue and our own diary. Which means it
+   cannot quietly rot — if the chat a customer is paying for breaks, the one on
+   the front page breaks with it, in public.
+
+   The button ships hidden and is revealed here. Without JavaScript there is
+   nothing to open — the conversation *is* the frame — and a button that does
+   nothing is worse than no button. */
+(function () {
+  var fab = document.querySelector("[data-chat]");
+  if (!fab) return;
+
+  var dock = null;
+
+  function close() {
+    if (!dock) return;
+    dock.remove();
+    dock = null;
+    fab.hidden = false;
+    document.removeEventListener("keydown", onKey);
+    try {
+      fab.focus();
+    } catch (e) {
+      /* focus is a nicety, never a failure */
+    }
+  }
+
+  function onKey(e) {
+    if (e.key === "Escape") close();
+  }
+
+  function open() {
+    if (dock) return;
+    // The button becomes the panel, as the bell does: two invitations to the
+    // same conversation, one of which is already open.
+    fab.hidden = true;
+
+    dock = document.createElement("div");
+    dock.className = "chat-dock";
+    dock.setAttribute("role", "region");
+    dock.setAttribute("aria-label", "Chat with Belline");
+
+    var frame = document.createElement("iframe");
+    // Our origin goes in the URL so the edge can name it in frame-ancestors.
+    // Without it the browser refuses the page before it is parsed.
+    frame.src =
+      fab.getAttribute("data-chat") + "?o=" + encodeURIComponent(location.origin);
+    frame.title = "Chat with Belline";
+    frame.className = "chat-frame";
+
+    var shut = document.createElement("button");
+    shut.type = "button";
+    shut.className = "call-shut";
+    shut.setAttribute("aria-label", "Close the chat");
+    shut.textContent = "×";
+    shut.addEventListener("click", close);
+
+    dock.appendChild(frame);
+    dock.appendChild(shut);
+    document.body.appendChild(dock);
+    document.addEventListener("keydown", onKey);
+  }
+
+  fab.addEventListener("click", open);
+  fab.hidden = false;
+})();
+
 /* --- monthly / annual ------------------------------------------------------
    The prices for both cycles are already in the markup as data attributes, so
    the page reads correctly with no JavaScript at all and this only swaps

@@ -187,8 +187,8 @@
           <h2 class="display">Your phone line,<br>and your website.</h2>
         </div>
         <p class="sec-lead lead">
-          The same receptionist in both places — the same diary, the same
-          prices, the same things it will not decide on its own.
+          The same receptionist in every one — the same diary, the same prices,
+          the same things it will not decide on its own. Not three products.
         </p>
       </div>
 
@@ -204,15 +204,35 @@
           <p class="channel-how">One setting on the line you already have.</p>
         </div>
         <div>
-          <h3>Your website</h3>
+          <h3>A bell on your website</h3>
           <p>
-            A bell in the corner of your own site. A visitor taps it and is
-            talking — out loud, straight away — to the same receptionist. Not a
-            chat box, not a form, and nothing for them to type.
+            A visitor taps it and is talking — out loud, straight away — to the
+            same receptionist. No form, no ticket, nobody waiting on an email.
           </p>
           <p class="channel-how">One line of HTML, pasted once.</p>
         </div>
+        <div>
+          <h3>Chat on your website</h3>
+          <p>
+            Because half the people on your site are on a train, at a desk with
+            other people, or beside a sleeping child, and will not talk out
+            loud. They type instead, and the same receptionist books them.
+          </p>
+          <p class="channel-how">Same line of HTML. Your choice which appears.</p>
+        </div>
       </div>
+
+      <!--
+        Die ehrliche Zeile. WhatsApp ist gebaut und getestet, aber ohne
+        verbundene Nummer ist es nicht live — und etwas zu verkaufen, das ein
+        Kunde am ersten Tag nicht einschalten kann, ist genau der Vertrauens-
+        bruch, den dieses Produkt sich nicht leisten kann.
+      -->
+      <p class="channel-note">
+        WhatsApp is built and runs on the same engine, but it is not connected
+        yet — Meta's business verification has to clear first. We will not sell
+        it to you until it answers.
+      </p>
     </div>
   </section>
 
@@ -433,6 +453,29 @@
     </svg>
   </a>
 </div>
+
+<!--
+  Der zweite Weg herein, für alle, die nicht laut reden können oder wollen:
+  im Zug, im Großraumbüro, neben einem schlafenden Kind. Dieselbe Belle,
+  dieselbe Marke, dasselbe Zeichen — nur in einer Sprechblase, damit auf einen
+  Blick klar ist, welcher der beiden Knöpfe getippt statt gesprochen wird.
+
+  Ein <button> und kein Link, und im Markup versteckt: ohne JavaScript gibt es
+  hier nichts zu öffnen (das Gespräch *ist* der eingebettete Rahmen), und ein
+  Knopf, der nichts tut, ist schlimmer als keiner. site.js blendet ihn ein.
+-->
+<button class="chat-fab" type="button" hidden
+        data-chat="https://app.belline.ai/embed/be_belline_site/chat"
+        aria-label="Chat with Belle">
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M3 11.2C3 6.9 7.03 3.5 12 3.5s9 3.4 9 7.7c0 4.3-4.03 7.7-9 7.7a11 11 0 0 1-2.4-.26L5.4 20.5l.5-3.2A7.7 7.7 0 0 1 3 11.2Z"
+          stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <circle cx="12" cy="7.4" r="1.05" fill="currentColor"/>
+    <path d="M8.7 13.1a3.3 3.3 0 0 1 6.6 0Z" fill="currentColor"/>
+    <rect x="7.8" y="13.8" width="8.4" height="1.35" rx=".68" fill="currentColor"/>
+  </svg>
+  <span class="chat-fab-say">Chat with Belle</span>
+</button>
 
 <a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Hear Belle now">
   <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">

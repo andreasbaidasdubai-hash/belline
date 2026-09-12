@@ -45,7 +45,10 @@ function book(
   input: Parameters<typeof createBooking>[1],
   status: Booking["status"] = "confirmed",
 ): Booking | null {
-  const result = createBooking(location, input);
+  // Seeding writes history as well as tonight's book, and history is in the
+  // past — which the house rules refuse for the agent and allow for a person
+  // working the diary. This script is the second of those.
+  const result = createBooking(location, { staffOverride: true, ...input });
   if (!result.ok) {
     skipped++;
     return null;

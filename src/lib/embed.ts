@@ -1,7 +1,30 @@
 import crypto from "node:crypto";
-import type { EmbedConfig, Location } from "./types";
+import type { EmbedConfig, EmbedMode, Location } from "./types";
 import { listCalls, upsertLocation } from "./store";
 import { todayIn } from "./time";
+
+/**
+ * What a venue's widget offers a visitor: the bell, the chat, or both.
+ *
+ * Unset means `voice`. Every site already carrying this script switched the
+ * widget on when a bell was the only thing it could be, and adding a chat
+ * bubble to somebody's live website because we shipped a feature would be a
+ * change they did not make.
+ */
+export function modeOf(config: EmbedConfig | undefined): EmbedMode | null {
+  if (!config?.enabled) return null;
+  return config.mode ?? "voice";
+}
+
+export function voiceAllowed(config: EmbedConfig | undefined): boolean {
+  const mode = modeOf(config);
+  return mode === "voice" || mode === "both";
+}
+
+export function chatAllowed(config: EmbedConfig | undefined): boolean {
+  const mode = modeOf(config);
+  return mode === "chat" || mode === "both";
+}
 
 /**
  * Belline on a venue's own website.
@@ -58,7 +81,10 @@ export const EMBED_DEFAULTS = {
 export function enableEmbed(
   location: Location,
   origins: string[],
-  limits?: Partial<Pick<EmbedConfig, "maxCallsPerDay" | "maxCallSeconds">>,
+  limits?: Partial<
+    Pick<EmbedConfig, "maxCallsPerDay" | "maxCallSeconds" | "maxChatsPerDay" | "maxMessagesPerChat">
+  >,
+  mode?: EmbedMode,
 ): Location {
   const cleaned = origins.map(normaliseOrigin).filter((o): o is string => Boolean(o));
   const embed: EmbedConfig = {
@@ -67,6 +93,15 @@ export function enableEmbed(
     allowedOrigins: [...new Set(cleaned)],
     maxCallsPerDay: limits?.maxCallsPerDay ?? location.embed?.maxCallsPerDay ?? EMBED_DEFAULTS.maxCallsPerDay,
     maxCallSeconds: limits?.maxCallSeconds ?? location.embed?.maxCallSeconds ?? EMBED_DEFAULTS.maxCallSeconds,
+    /**
+     * What the widget offers. Switching the widget on without saying leaves a
+     * venue where it already was — and a venue that has never had it gets both,
+     * because a business turning this on today is choosing from what exists
+     * today, not from what existed before web chat did.
+     */
+    mode: mode ?? location.embed?.mode ?? "both",
+    maxChatsPerDay: limits?.maxChatsPerDay ?? location.embed?.maxChatsPerDay,
+    maxMessagesPerChat: limits?.maxMessagesPerChat ?? location.embed?.maxMessagesPerChat,
   };
   return upsertLocation({ ...location, embed });
 }
@@ -134,6 +169,16 @@ export interface EmbedGate {
 export function checkEmbedGate(location: Location): EmbedGate {
   const config = location.embed;
   if (!config?.enabled) return { allowed: false, used: 0, limit: 0 };
+  // A venue that chose the chat and not the bell. The key is real and the
+  // origin is allowed; the spoken channel is simply not one they switched on.
+  if (!voiceAllowed(config)) {
+    return {
+      allowed: false,
+      used: 0,
+      limit: 0,
+      message: "Calling isn't switched on for this website. Send a message instead and we'll reply.",
+    };
+  }
 
   const today = todayIn(location.timezone);
   const used = listCalls(location.id).filter(
@@ -162,5 +207,10 @@ export function checkEmbedGate(location: Location): EmbedGate {
  */
 export function embedSnippet(location: Location, origin = "https://app.belline.ai"): string {
   const key = location.embed?.key ?? "YOUR_KEY";
-  return `<script src="${origin}/embed.js" data-belline="${key}" async></script>`;
+  const mode = location.embed?.mode ?? "voice";
+  // The mode is written into the snippet rather than left to the default,
+  // because the default has to stay "voice" for every site already carrying
+  // this line — and a venue that chose chat should not have to discover an
+  // attribute to get it.
+  return `<script src="${origin}/embed.js" data-belline="${key}" data-mode="${mode}" async></script>`;
 }

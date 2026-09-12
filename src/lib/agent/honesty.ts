@@ -157,7 +157,16 @@ export function honestAlternative(verdict: HonestyVerdict, slots?: Slot[]): stri
     .map(minutesToClock);
 
   if (!times.length) {
-    return "I haven't got anything free there, I'm afraid. Would you like me to take your details and have the team come back to you?";
+    // A dead end is its own failure. The first version of this line said there
+    // was nothing free and offered to take a message, which is a reasonable
+    // thing to say once and a terrible thing to say to somebody who has just
+    // picked a time — as it did, in the demo that found this: "the first one
+    // please" answered with "I haven't got anything free there".
+    //
+    // It cannot promise to go and look, because nothing here will: the guard
+    // replaces a reply, it does not run another turn. So it asks, and the
+    // answer arrives on the next message, which is a turn that can look.
+    return "I haven't got anything free there, I'm afraid. Would you like me to look at another day?";
   }
   const list =
     times.length === 1

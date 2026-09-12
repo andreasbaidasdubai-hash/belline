@@ -280,7 +280,34 @@ export interface EmbedConfig {
   allowedOrigins: string[];
   maxCallsPerDay: number;
   maxCallSeconds: number;
+  /**
+   * What the widget offers a visitor: the bell, the chat, or both.
+   *
+   * The venue's choice, not the page's. `embed.js` takes a `data-mode`
+   * attribute so a business can put the bell on one page and the chat on
+   * another, but the attribute cannot turn on something this field has off —
+   * otherwise the entitlement would live in the customer's HTML, where anybody
+   * could edit it.
+   *
+   * Unset means `voice`, which is what every venue that switched the widget on
+   * before chat existed actually asked for. Adding a chat bubble to somebody's
+   * live website because we shipped a feature would be a change they did not
+   * make.
+   */
+  mode?: EmbedMode;
+  /** Web chat conversations a day. Its own ceiling; see the note on Call.channel. */
+  maxChatsPerDay?: number;
+  /**
+   * Messages one visitor may send in one conversation.
+   *
+   * The cap that matters on a public widget. A bored visitor with a keyboard is
+   * cheaper than a bot but not free, and a conversation that has run past this
+   * is one a person should be reading anyway.
+   */
+  maxMessagesPerChat?: number;
 }
+
+export type EmbedMode = "voice" | "chat" | "both";
 
 export interface AgentConfig {
   /** The name the agent introduces itself with. */
@@ -879,9 +906,15 @@ export interface Call {
    * Belline do for me this week", and that question must not have two answers
    * depending on which channel somebody happened to use.
    *
-   * Only  is billable; see billing/usage.ts, which checks this.
+   * `browser` is the bell on a venue's own site — a spoken conversation.
+   * `webchat` is the same site, typed. Separate values because they consume
+   * different things and have separate daily ceilings: one costs speech
+   * synthesis by the second, the other costs tokens by the message, and a busy
+   * afternoon on one must not switch the other off.
+   *
+   * Only `phone` is billable; see billing/usage.ts, which checks this.
    */
-  channel: "browser" | "phone" | "whatsapp";
+  channel: "browser" | "phone" | "whatsapp" | "webchat";
   from: string;
   startedAt: string;
   endedAt?: string;

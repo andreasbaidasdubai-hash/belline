@@ -7,7 +7,9 @@ import { maxCallSeconds } from "../demo";
 import { speechKeyterms } from "../verticals";
 import { assessAuthority, type Assessment } from "../agent/authority";
 import { toSpoken } from "./spoken";
+import { isBackchannel, invitesAnswer } from "./backchannel";
 import { findAvailability } from "../booking";
+import { releaseCall } from "../booking/holds";
 import { todayIn, minutesToClock, minutesToSpoken } from "../time";
 
 /**
@@ -35,6 +37,21 @@ import { todayIn, minutesToClock, minutesToSpoken } from "../time";
 const BARGE_IN_GUARD_MS = 400;
 
 /**
+ * How long to let voice activity stand before believing it, when no words
+ * have arrived to explain it.
+ *
+ * Voice activity says *something* made a noise; it does not say whether that
+ * noise was a caller taking the floor or a caller saying "mm-hmm" while they
+ * listen. The transcript answers that, and it arrives a moment later. So the
+ * agent keeps talking for this long, and cuts off either when the words prove
+ * it is a real interruption or when they never come at all.
+ *
+ * Cutting a fifth of a second late is not perceptible — a person takes about
+ * as long to stop. Cutting on every "yeah" is very perceptible indeed.
+ */
+const BARGE_IN_CONFIRM_MS = 220;
+
+/**
  * How settled an interim transcript must be before it is worth guessing on.
  *
  * Too eager and every syllable starts a turn that is immediately thrown away;
@@ -43,7 +60,7 @@ const BARGE_IN_GUARD_MS = 400;
  * finished, which is the same judgement the endpointer is making — only this
  * one is free to be wrong.
  */
-const GUESS_AFTER_MS = 140;
+export const GUESS_AFTER_MS = 140;
 
 /** Below this a transcript is a filler word, not a turn. */
 const GUESS_MIN_CHARS = 10;
@@ -157,6 +174,16 @@ export class VoiceSession {
    */
   private guess: Guess | null = null;
   private guessTimer: NodeJS.Timeout | null = null;
+  /**
+   * A noise made over the agent that has not yet been judged.
+   *
+   * Non-zero from the moment voice activity is detected until the turn is
+   * either interrupted or finished, so that a caller who opens with "yeah"
+   * and carries on into "yeah, actually, can you make it seven" is judged
+   * again on every revision of the transcript rather than only on the first.
+   */
+  private bargeInAt = 0;
+  private bargeInTimer: NodeJS.Timeout | null = null;
   private closed = false;
   private timeout: NodeJS.Timeout | null = null;
 
@@ -180,8 +207,14 @@ export class VoiceSession {
       onPartial: (text) => {
         this.transport.sendEvent({ type: "partial", text });
         this.considerGuess(text);
+        this.considerBargeIn(text);
       },
       onFinal: (text) => void this.onCallerTurn(text),
+      // Flux only. The recogniser has decided the sentence sounds finished,
+      // which is a better reason to start answering than the transcript
+      // having gone quiet for a tenth of a second — and it arrives earlier.
+      onEagerEnd: (text) => this.startGuess(text),
+      onTurnResumed: () => this.dropGuess(),
       onError: (message) => this.transport.sendEvent({ type: "stt_error", message }),
       keyterms: speechKeyterms(this.location),
     });
@@ -241,7 +274,50 @@ export class VoiceSession {
     // itself off mid-word.
     if (Date.now() - this.speakingSince < BARGE_IN_GUARD_MS) return;
 
+    // Not an interruption yet — a candidate for one. Voice activity alone
+    // cannot tell a caller taking the floor from a caller saying "mm-hmm",
+    // and the transcript that can is a fraction of a second behind. Keep
+    // talking until either the words settle it or they fail to arrive.
+    if (this.bargeInAt) return;
+    this.bargeInAt = Date.now();
+    this.bargeInTimer = setTimeout(() => {
+      this.bargeInTimer = null;
+      // Noise, with no words to explain it, for long enough that talking over
+      // it is the bigger risk. Stop.
+      if (this.speaking) this.interrupt();
+    }, BARGE_IN_CONFIRM_MS);
+  }
+
+  /**
+   * Judge a noise made over the agent, now that there are words for it.
+   *
+   * Runs on every revision of the interim transcript, so an utterance that
+   * starts as agreement and turns into an interruption is caught the moment
+   * it turns.
+   */
+  private considerBargeIn(text: string): void {
+    if (!this.speaking || !this.bargeInAt) return;
+
+    // Listening noise. Carry on talking — but leave the judgement open, in
+    // case this is the opening word of a real sentence.
+    //
+    // Unless a question has just been put to them, in which case even a bare
+    // "yes" is an answer, and ignoring it would leave both sides waiting.
+    if (isBackchannel(text) && !invitesAnswer(this.spokenThisTurn)) {
+      if (this.bargeInTimer) {
+        clearTimeout(this.bargeInTimer);
+        this.bargeInTimer = null;
+      }
+      return;
+    }
+
     this.interrupt();
+  }
+
+  private clearBargeIn(): void {
+    if (this.bargeInTimer) clearTimeout(this.bargeInTimer);
+    this.bargeInTimer = null;
+    this.bargeInAt = 0;
   }
 
   /**
@@ -252,6 +328,12 @@ export class VoiceSession {
    * each new word should cancel the guess built on the old one.
    */
   private considerGuess(partial: string): void {
+    // When the recogniser will tell us itself, stop second-guessing it. Flux
+    // fires `EagerEndOfTurn` on the shape of the sentence; this timer fires on
+    // the transcript going quiet, and running both means two guesses racing
+    // over the same words.
+    if (this.stt?.predictsTurnEnd) return;
+
     const text = partial.trim();
     if (this.closed || this.speaking || this.thinking) return;
     if (text.length < GUESS_MIN_CHARS) return;
@@ -264,6 +346,14 @@ export class VoiceSession {
 
   private startGuess(text: string): void {
     if (this.closed || this.speaking || this.thinking) return;
+
+    // Reached directly from the recogniser as well as from the timer, and the
+    // recogniser may revise itself. Never leave a previous guess running: it
+    // holds a model stream and a synthesis, and both cost money to ignore.
+    if (this.guess) {
+      if (sameUtterance(this.guess.text, text)) return;
+      this.dropGuess();
+    }
 
     const abort = new AbortController();
     const guess: Guess = { text, ready: [], dead: false, done: Promise.resolve(), abort };
@@ -357,7 +447,13 @@ export class VoiceSession {
     this.abort = null;
     this.speaking = false;
     this.thinking = false;
+    // Write down the part the caller actually heard before cutting in. The
+    // turn is abandoned, not undone — it was said, it is on the recording,
+    // and a transcript that skips it reads as though Belline sat silent
+    // while the caller talked over nothing.
+    if (this.spokenThisTurn.trim()) this.appendAgentTurn(this.spokenThisTurn.trim(), 0);
     this.spokenThisTurn = "";
+    this.clearBargeIn();
     this.dropGuess();
     this.transport.clearAudio();
     this.transport.sendEvent({ type: "interrupted" });
@@ -366,8 +462,26 @@ export class VoiceSession {
   private async onCallerTurn(text: string): Promise<void> {
     if (this.closed || !text.trim()) return;
 
+    // "Mm-hmm" over the top of an answer is not a turn, and treating it as
+    // one is worse than ignoring it twice over: the sentence gets cut off,
+    // and then the agent has to find something to say about "mm-hmm".
+    //
+    // The endpointer will deliver it as a finished utterance all the same,
+    // which is why this guard is here as well as on the barge-in path — the
+    // two arrive by different routes and either one alone leaves a hole.
+    if (
+      (this.speaking || this.thinking) &&
+      isBackchannel(text) &&
+      !invitesAnswer(this.spokenThisTurn)
+    ) {
+      this.pushTranscript("caller", text);
+      this.transport.sendEvent({ type: "transcript", role: "caller", text });
+      return;
+    }
+
     // Anything still in flight belongs to the previous turn.
     if (this.speaking || this.thinking) this.interrupt();
+    this.clearBargeIn();
 
     const gen = ++this.generation;
     // A new answer starts a new contour — the previous turn's words would
@@ -629,6 +743,11 @@ export class VoiceSession {
     this.dropGuess();
     this.abort?.abort();
     this.stt?.close();
+
+    // Whatever this call was holding goes back on the market now, however the
+    // call ended. A dropped line that keeps its last quoted table until the
+    // timer runs out costs the venue exactly the bookings it is busiest taking.
+    releaseCall(this.call.id);
 
     this.call.status = "completed";
     this.call.endedAt = new Date().toISOString();

@@ -15,6 +15,7 @@ import {
   type BookingResult,
 } from "./index";
 import { findBookingByRef, findBookingsByPhone, getBooking } from "../store";
+import { holdForSlot, MAX_QUOTED_HOLDS } from "./holds";
 
 /**
  * Where a booking actually happens.
@@ -52,6 +53,14 @@ export interface ProviderContext {
   location: Location;
   /** Threads a request through the logs. Passed to a remote provider's calls. */
   traceId?: string;
+  /**
+   * The conversation this is happening inside.
+   *
+   * Carried so a provider that holds quoted slots knows whose holds are
+   * whose — a caller must never be told the time it was just offered has
+   * gone, and without this the engine cannot tell that call from any other.
+   */
+  callId?: string;
 }
 
 export interface Capabilities {
@@ -140,8 +149,18 @@ export const localProvider: BookingProvider = {
     return location.salon?.staff ?? [];
   },
 
-  async checkAvailability({ location }, query) {
-    return localSearch(location, query);
+  async checkAvailability({ location, callId }, query) {
+    const slots = localSearch(location, query, { callId });
+    // Quoting a time takes it off the market for the length of a decision.
+    // Without this, two lines ringing at once are offered the same table and
+    // both callers are told yes — see holds.ts, which is entirely about that
+    // ninety seconds.
+    if (callId) {
+      for (const slot of slots.slice(0, MAX_QUOTED_HOLDS)) {
+        holdForSlot(location, slot, { callId });
+      }
+    }
+    return slots;
   },
 
   async createBooking({ location }, input) {
@@ -171,8 +190,12 @@ export const localProvider: BookingProvider = {
     return localModify(location, booking, changes);
   },
 
-  async cancelBooking(_ctx, booking) {
-    return { ok: true, booking: localCancel(booking) };
+  async cancelBooking({ location }, booking, reason) {
+    // The venue is handed in so the cancellation records which side of the
+    // venue's own window it fell on. Belline never charges for it; a
+    // cancellation with no record of when it came is one the venue cannot act
+    // on at all.
+    return { ok: true, booking: localCancel(booking, location, reason) };
   },
 };
 

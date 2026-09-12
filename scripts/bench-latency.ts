@@ -26,10 +26,18 @@ const { AgentSession } = await import("../src/lib/agent/runtime");
 const { speak } = await import("../src/lib/providers/tts");
 const { toSpoken } = await import("../src/lib/voice/spoken");
 
-/** What the endpointer waits out on a phone line before calling a turn over. */
-const ENDPOINT_MS = 500;
-/** How long the transcript must settle before a guess starts. */
-const GUESS_AFTER_MS = 220;
+const { NOVA_ENDPOINTING_MS } = await import("../src/lib/providers/stt");
+const { GUESS_AFTER_MS } = await import("../src/lib/voice/session");
+
+/**
+ * Both taken from the code that runs the call, not copied.
+ *
+ * They were copied, and they drifted: this file claimed the guess started
+ * 220 ms into the silence while the session had been using 140 for some time.
+ * A benchmark reporting a number the product does not use is worse than no
+ * benchmark, because it is believed.
+ */
+const ENDPOINT_MS = NOVA_ENDPOINTING_MS.phone;
 
 const TURNS = [
   "What time do you close on a Saturday?",

@@ -295,6 +295,47 @@ export function signStreamToken(locationId: string, ttlSeconds = 300): string {
   return `${payload}.${mac}`;
 }
 
+/**
+ * Which browser session a web chat message belongs to.
+ *
+ * The visitor is anonymous and stays anonymous — there is no account to sign
+ * in to — but "anonymous" cannot mean "anybody", or a visitor could ask for
+ * somebody else's thread by guessing an id. So the id is minted server-side,
+ * signed, and handed back; the page keeps the token and nothing else.
+ *
+ * Long-lived by the standards of the other token here, because the thing it
+ * protects is a conversation somebody may come back to after lunch, and an
+ * expiry mid-sentence would read as the receptionist forgetting them.
+ */
+export function signVisitorToken(
+  locationId: string,
+  visitorId: string,
+  ttlSeconds = 60 * 60 * 12,
+): string {
+  const expires = Date.now() + ttlSeconds * 1000;
+  const payload = `${locationId}.${visitorId}.${expires}`;
+  const mac = crypto.createHmac("sha256", streamSecret()).update(payload).digest("base64url");
+  return `${payload}.${mac}`;
+}
+
+export function verifyVisitorToken(
+  token: string | undefined,
+): { locationId: string; visitorId: string } | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 4) return null;
+  const [locationId, visitorId, expires, mac] = parts;
+  const expected = crypto
+    .createHmac("sha256", streamSecret())
+    .update(`${locationId}.${visitorId}.${expires}`)
+    .digest("base64url");
+  const a = Buffer.from(mac);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  if (Number(expires) < Date.now()) return null;
+  return { locationId, visitorId };
+}
+
 export function verifyStreamToken(token: string | undefined): string | null {
   if (!token) return null;
   const parts = token.split(".");

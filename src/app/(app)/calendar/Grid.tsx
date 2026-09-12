@@ -33,6 +33,85 @@ function minutesAt(offsetPx: number, openMin: number): number {
   return Math.round((openMin + offsetPx / SCALE) / SNAP) * SNAP;
 }
 
+/**
+ * Where two bookings share a column, give each its own strip of it.
+ *
+ * The case that forced this is dovetailing: a client booked into the forty
+ * minutes while somebody else's colour develops is genuinely two appointments
+ * in one stylist's column at the same time, and drawn full-width the second
+ * one simply covers the first. Any diary that allows overlap at all has to
+ * solve this, and the solution is always the same — cluster whatever overlaps,
+ * pack each cluster into as few lanes as it needs, and split the width.
+ *
+ * Non-overlapping days are untouched: one lane, full width, exactly as before.
+ */
+function laneOut(
+  blocks: { startMin: number; bufferEndMin: number }[],
+): Map<number, { lane: number; lanes: number }> {
+  const order = blocks
+    .map((block, index) => ({ index, start: block.startMin, end: block.bufferEndMin }))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  const out = new Map<number, { lane: number; lanes: number }>();
+  let cluster: typeof order = [];
+  let clusterEnd = -Infinity;
+
+  const flush = () => {
+    if (cluster.length === 0) return;
+    const laneEnds: number[] = [];
+    const assigned: number[] = [];
+    for (const item of cluster) {
+      let lane = laneEnds.findIndex((end) => end <= item.start);
+      if (lane === -1) {
+        lane = laneEnds.length;
+        laneEnds.push(item.end);
+      } else {
+        laneEnds[lane] = item.end;
+      }
+      assigned.push(lane);
+    }
+    cluster.forEach((item, i) => {
+      out.set(item.index, { lane: assigned[i], lanes: laneEnds.length });
+    });
+    cluster = [];
+    clusterEnd = -Infinity;
+  };
+
+  for (const item of order) {
+    if (item.start >= clusterEnd) flush();
+    cluster.push(item);
+    clusterEnd = Math.max(clusterEnd, item.end);
+  }
+  flush();
+  return out;
+}
+
+/** The holes between the stretches somebody is actually occupied. */
+function processingGaps(busy: { start: number; end: number }[] | undefined) {
+  if (!busy || busy.length < 2) return [];
+  const out: { start: number; end: number }[] = [];
+  for (let i = 1; i < busy.length; i++) {
+    if (busy[i].start > busy[i - 1].end) {
+      out.push({ start: busy[i - 1].end, end: busy[i].start });
+    }
+  }
+  return out;
+}
+
+/** The parts of the drawn day this column is not working. */
+function offShift(shift: { start: number; end: number }[], openMin: number, closeMin: number) {
+  if (shift.length === 0) return [{ start: openMin, end: closeMin }];
+  const sorted = shift.slice().sort((a, b) => a.start - b.start);
+  const out: { start: number; end: number }[] = [];
+  let cursor = openMin;
+  for (const range of sorted) {
+    if (range.start > cursor) out.push({ start: cursor, end: Math.min(range.start, closeMin) });
+    cursor = Math.max(cursor, range.end);
+  }
+  if (cursor < closeMin) out.push({ start: cursor, end: closeMin });
+  return out.filter((r) => r.end > r.start);
+}
+
 interface Dragging {
   bookingId: string;
   /** Where in the block the pointer grabbed it, so it does not jump. */
@@ -48,12 +127,23 @@ export default function Grid({
   isRestaurant,
   overbookAllowed,
   services,
+  /**
+   * Whether the grid can be worked in as well as read.
+   *
+   * Off for the room axis. A column there is a surgery, not a person, and
+   * neither "move this patient into surgery two" nor "book somebody into the
+   * treatment room" is a request the engine takes — rooms are assigned, not
+   * chosen. A grid that accepted the drag and then quietly reassigned the room
+   * itself would be worse than one that does not offer it.
+   */
+  bookable = true,
 }: {
   view: DayView;
   locationId: string;
   isRestaurant: boolean;
   overbookAllowed: boolean;
   services: { id: string; name: string; durationMin: number }[];
+  bookable?: boolean;
 }) {
   const router = useRouter();
   const [drag, setDrag] = useState<Dragging | null>(null);
@@ -114,7 +204,7 @@ export default function Grid({
     columnId: string,
     durationMin: number,
   ) {
-    if (busy) return;
+    if (busy || !bookable) return;
     // Left button only, and never on a touch scroll.
     if (event.button !== 0) return;
     event.preventDefault();
@@ -172,6 +262,15 @@ export default function Grid({
               <div className="cal-head-sub">
                 {column.capacity ? `${column.capacity} seats` : column.group ?? ""}
               </div>
+              {column.availableMin > 0 && (
+                <span
+                  className="cal-head-util"
+                  title={`${Math.round(column.utilisation * 100)}% of ${Math.round(column.availableMin / 60)}h sold`}
+                  aria-label={`${Math.round(column.utilisation * 100)} per cent sold`}
+                >
+                  <span style={{ width: `${Math.round(column.utilisation * 100)}%` }} />
+                </span>
+              )}
             </div>
           ))}
 
@@ -193,7 +292,7 @@ export default function Grid({
                 else lanes.current.delete(column.id);
               }}
               onClick={(event) => {
-                if (drag || busy) return;
+                if (drag || busy || !bookable) return;
                 // Only an empty part of the lane — a click on a block is a
                 // click on the block.
                 if (event.target !== event.currentTarget) return;
@@ -208,9 +307,41 @@ export default function Grid({
                 <div key={m} className="cal-rule" style={{ top: top(m, view.openMin) }} />
               ))}
 
-              {view.blocks
-                .filter((block) => block.columnId === column.id)
-                .map((block) => {
+              {/* Hours this column is not on. Drawn before anything else so a
+                  booking that sits outside a shift is still visible on top of
+                  it — which is exactly the case somebody needs to see. */}
+              {offShift(column.shift, view.openMin, view.closeMin).map((band) => (
+                <div
+                  key={`off-${band.start}`}
+                  className="cal-off"
+                  style={{
+                    top: top(band.start, view.openMin),
+                    height: (band.end - band.start) * SCALE,
+                  }}
+                />
+              ))}
+
+              {view.offBlocks
+                .filter((b) => b.columnId === column.id)
+                .map((b) => (
+                  <div
+                    key={`blk-${b.startMin}-${b.reason}`}
+                    className="cal-off"
+                    style={{
+                      top: top(b.startMin, view.openMin),
+                      height: (b.endMin - b.startMin) * SCALE,
+                    }}
+                    title={b.reason}
+                  >
+                    <span className="cal-off-label">{b.reason}</span>
+                  </div>
+                ))}
+
+              {(() => {
+                const mine = view.blocks.filter((block) => block.columnId === column.id);
+                const lanes = laneOut(mine);
+                return mine.map((block, index) => {
+                  const { lane, lanes: count } = lanes.get(index) ?? { lane: 0, lanes: 1 };
                   const held = drag?.bookingId === block.booking.id;
                   // While dragging, the block follows the pointer in whichever
                   // lane it is over — so it is drawn here only if this is that
@@ -228,6 +359,16 @@ export default function Grid({
                       style={{
                         top: top(startMin, view.openMin),
                         height: guestHeight + bufferHeight,
+                        // A block being dragged goes full width so it can be
+                        // seen; everything else shares the column with whatever
+                        // it overlaps.
+                        ...(count > 1 && !held
+                          ? {
+                              left: `calc(3px + ${(lane * 100) / count}%)`,
+                              width: `calc(${100 / count}% - 6px)`,
+                              right: "auto",
+                            }
+                          : {}),
                       }}
                       title={`${block.title} · ${block.detail} · ${minutesToClock(block.startMin)}–${minutesToClock(block.endMin)} · drag to move`}
                       onPointerDown={(event) =>
@@ -252,9 +393,33 @@ export default function Grid({
                           aria-label="Turnaround held in the diary"
                         />
                       )}
+                      {/* The stretches inside this appointment where the chair
+                          is taken and the practitioner is not — colour
+                          developing, anaesthetic taking. Drawn because it is
+                          the most sellable time in the day. */}
+                      {processingGaps(block.busy).map((gap) => (
+                        <span
+                          key={`gap-${gap.start}`}
+                          className="cal-block-gap"
+                          style={{
+                            top: (gap.start - block.startMin) * SCALE,
+                            height: (gap.end - gap.start) * SCALE,
+                          }}
+                          title={`${minutesToClock(gap.start)}–${minutesToClock(gap.end)} — processing, ${block.title} is here but ${column.name} is free`}
+                        />
+                      ))}
+                      {(block.depositDue || block.arrived) && (
+                        <span className="cal-flags">
+                          {block.arrived && <span className="cal-flag" title="Arrived" />}
+                          {block.depositDue && (
+                            <span className="cal-flag deposit" title="Deposit not settled" />
+                          )}
+                        </span>
+                      )}
                     </div>
                   );
-                })}
+                });
+              })()}
 
               {view.nowMin !== null &&
                 view.nowMin >= view.openMin &&
@@ -267,8 +432,15 @@ export default function Grid({
       </div>
 
       <p className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
-        Drag a booking to move it. Click an empty slot to take one.
-        {isRestaurant && " The table is chosen by the engine — dragging sideways moves the time only."}
+        {bookable ? (
+          <>
+            Drag a booking to move it. Click an empty slot to take one.
+            {isRestaurant &&
+              " The table is chosen by the engine — dragging sideways moves the time only."}
+          </>
+        ) : (
+          "Rooms are assigned by the engine, so this view reads only. Switch to People to move anything."
+        )}
       </p>
 
       {booking && (

@@ -258,25 +258,20 @@ function orderStaff(
   dayBookings: Booking[],
   block: TimeRange,
 ): StaffMember[] {
+  // Both sorts leave equal candidates in the order the venue listed them,
+  // which is a preference it has already expressed — and a stable tie-break
+  // rather than an arbitrary one keeps the same guest getting the same person.
   if (config.assignment === "pack") {
     return candidates
       .slice()
-      .sort(
-        (a, b) =>
-          gapCost(dayBookings, a.id, block) - gapCost(dayBookings, b.id, block) ||
-          a.name.localeCompare(b.name),
-      );
+      .sort((a, b) => gapCost(dayBookings, a.id, block) - gapCost(dayBookings, b.id, block));
   }
-  // Default: spread the day evenly rather than stacking everything on
-  // whoever happens to come first in the list. Measured in minutes sold, not
+  // Default: spread the day evenly rather than stacking everything on whoever
+  // happens to come first in the list. Measured in minutes sold, not
   // appointments — six blow-dries is not the same day as two balayages.
   return candidates
     .slice()
-    .sort(
-      (a, b) =>
-        bookedMinutes(dayBookings, a.id) - bookedMinutes(dayBookings, b.id) ||
-        a.name.localeCompare(b.name),
-    );
+    .sort((a, b) => bookedMinutes(dayBookings, a.id) - bookedMinutes(dayBookings, b.id));
 }
 
 // ---------------------------------------------------------------------------
@@ -408,10 +403,16 @@ export function checkSalonSlot(
       continue;
     }
 
+    // A second person is needed only where the first one is not already it.
+    // A dentist running a hygiene appointment does their own exam; sending
+    // them to find a colleague for it would take the practice's most expensive
+    // diary out twice for one patient.
+    const needs = shape.secondary.filter((s) => s.role !== staff.role);
+
     let secondaryStaffId: string | undefined;
     let secondaryStaffName: string | undefined;
-    if (shape.secondary.length > 0) {
-      const helper = findSecondary(config, dayBookings, shape, query, staff);
+    if (needs.length > 0) {
+      const helper = findSecondary(config, dayBookings, needs, query, staff);
       if (!helper) {
         missedSecondary = true;
         continue;
@@ -475,15 +476,15 @@ export function checkSalonSlot(
 function findSecondary(
   config: SalonConfig,
   dayBookings: Booking[],
-  shape: ServiceShape,
+  needs: ServiceShape["secondary"],
   query: SalonQuery,
   primary: StaffMember,
 ): StaffMember | undefined {
-  const windows = shape.secondary.map((s) => ({
+  const windows = needs.map((s) => ({
     start: query.startMin + s.start,
     end: query.startMin + s.end,
   }));
-  const roles = new Set(shape.secondary.map((s) => s.role));
+  const roles = new Set(needs.map((s) => s.role));
 
   const candidates = config.staff
     .filter((p) => p.id !== primary.id && p.role && roles.has(p.role))

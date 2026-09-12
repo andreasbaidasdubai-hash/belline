@@ -22,6 +22,13 @@ type Summary = {
   handoffReason?: string;
 };
 
+/** Where the person is, in the words a receptionist would use. */
+const CHANNEL: Record<string, string> = {
+  whatsapp: "WhatsApp",
+  sms: "SMS",
+  webchat: "Website chat",
+};
+
 const STATUS: Record<ConversationStatus, { label: string; tone: string }> = {
   AI_ACTIVE: { label: "Belline", tone: "var(--ok)" },
   HANDOFF_REQUESTED: { label: "Needs you", tone: "var(--bad)" },
@@ -70,9 +77,9 @@ export default function Thread({
         <div className="panel" style={{ padding: 26, marginTop: 18, maxWidth: "62ch" }}>
           <p style={{ margin: "0 0 10px", fontSize: 15 }}>Nothing here yet.</p>
           <p className="muted" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.65 }}>
-            Messages arrive once a WhatsApp number is connected. Everything behind this
-            screen — answering, booking, handing over to you — is built and tested; what is
-            missing is the number itself.
+            Messages land here from the chat on your website, and from WhatsApp once a
+            number is connected. Everything behind this screen — answering, booking,
+            handing over to you — is the same either way.
           </p>
         </div>
       </div>
@@ -124,7 +131,10 @@ export default function Thread({
               <header className="inbox-head">
                 <div>
                   <strong>{customerName}</strong>
-                  <span className="muted"> · {customerPhone} · WhatsApp</span>
+                  <span className="muted">
+                    {" "}
+                    · {customerPhone} · {CHANNEL[selected.channel] ?? selected.channel}
+                  </span>
                 </div>
                 <span className="pill" style={{ color: status?.tone }}>
                   {aiAnswering ? "Belline is answering" : status?.label}

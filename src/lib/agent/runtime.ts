@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream";
 import type { Call, Location, ToolTrace } from "../types";
 import { callContext, staticPrompt, type AgentChannel } from "./prompt";
 import { executeTool, toolsFor } from "./tools";
@@ -28,6 +29,22 @@ export type AgentEvent =
   | { type: "error"; message: string };
 
 const MAX_TOOL_ROUNDS = 6;
+
+/**
+ * Enough of a turn in progress to put the history right if it is cut short.
+ *
+ * Barge-in is not an error and does not unwind — it simply stops asking the
+ * generator for more. Everything needed to close the conversation honestly
+ * afterwards therefore has to live outside it.
+ */
+interface TurnState {
+  /** Every clause handed to the voice this turn. */
+  spoken: string;
+  /** Tool results gathered in the round currently in flight. */
+  results: Anthropic.ToolResultBlockParam[];
+  /** The turn ran to its own end; nothing to repair. */
+  settled: boolean;
+}
 
 /**
  * Tools a guess may run.
@@ -161,6 +178,26 @@ function modelParams(model: string): {
   };
 }
 
+/**
+ * Whether to pay for the same model to talk faster.
+ *
+ * Fast mode runs Opus at up to two and a half times the output rate for a
+ * premium on output tokens. On most products that is a poor trade; on a
+ * telephone it is close to the only thing money can buy, because a reply is
+ * spoken as it is written and the caller is listening to the gap.
+ *
+ * An answer is forty or fifty tokens, so the premium is fractions of a penny
+ * a turn — but it is a live-money setting on a hot path, so it is opt-in and
+ * off by default. `npm run bench:model` is how to decide whether it earns its
+ * keep for a given venue.
+ */
+function fastMode(model: string): boolean {
+  return (
+    process.env.ANTHROPIC_FAST_MODE === "1" &&
+    (model.startsWith("claude-opus-5") || model.startsWith("claude-opus-4-8"))
+  );
+}
+
 let client: Anthropic | null = null;
 function anthropic(): Anthropic {
   if (!client) client = new Anthropic();
@@ -259,14 +296,7 @@ export class AgentSession {
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         const chunker = new SentenceChunker();
-        const stream = anthropic().messages.stream({
-          model: this.location.agent.model,
-          max_tokens: 2048,
-          system: this.systemBlocks(),
-          tools: this.tools,
-          ...modelParams(this.location.agent.model),
-          messages,
-        });
+        const stream = this.open(messages);
 
         for await (const event of stream) {
           if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
@@ -338,6 +368,37 @@ export class AgentSession {
   }
 
 
+  /**
+   * One request to the model, streamed.
+   *
+   * Shared by the real turn and the speculative one so the two cannot drift:
+   * a guess answered under different parameters than the turn that adopts it
+   * is a guess that will keep being thrown away for reasons nobody can see.
+   */
+  private open(messages: Anthropic.MessageParam[]): MessageStream {
+    const model = this.location.agent.model;
+    const params = {
+      model,
+      max_tokens: 2048,
+      system: this.systemBlocks(),
+      tools: this.tools,
+      ...modelParams(model),
+      messages,
+    };
+
+    if (!fastMode(model)) return anthropic().messages.stream(params);
+
+    // Same endpoint and the same wire protocol — `speed` is a request field,
+    // not a different API. The cast is only because the beta namespace
+    // re-declares the content-block unions under its own names, and every
+    // block this code touches is identical in both.
+    return anthropic().beta.messages.stream({
+      ...params,
+      betas: ["fast-mode-2026-02-01"],
+      speed: "fast",
+    }) as unknown as MessageStream;
+  }
+
   private systemBlocks(): Anthropic.TextBlockParam[] {
     // Guest history goes in the volatile block, after the cache breakpoint —
     // it is different for every caller, so putting it in the cached half
@@ -352,7 +413,13 @@ export class AgentSession {
         text: staticPrompt(this.location, this.channel),
         // Everything before this point is identical on every turn of every
         // call at this venue, so it is served from cache from turn two on.
-        cache_control: { type: "ephemeral" },
+        //
+        // An hour, not the default five minutes. A venue does not take a call
+        // every five minutes, so the default expired between calls and the
+        // very first turn of most calls — the one turn where the caller is
+        // listening hardest — paid full price and full latency for a prompt
+        // that had not changed since yesterday. An hour spans a lunch service.
+        cache_control: { type: "ephemeral", ttl: "1h" },
       },
       {
         type: "text",
@@ -408,21 +475,84 @@ ${
       return;
     }
 
+    // Barge-in ends a turn by abandoning this generator wherever it happens to
+    // be suspended, and a generator abandoned mid-turn leaves the history in a
+    // state the next turn cannot recover from. `closeInterruptedTurn` is what
+    // makes that survivable, and it can only run from a `finally` — hence the
+    // split into two methods rather than one long one.
+    const turn: TurnState = { spoken: "", results: [], settled: false };
+    try {
+      yield* this.runTurn(turn);
+    } finally {
+      if (!turn.settled) this.closeInterruptedTurn(turn);
+    }
+  }
+
+  /**
+   * Close a turn the caller talked over.
+   *
+   * Two things go wrong when a turn is abandoned part-way, and both of them
+   * outlive the interruption:
+   *
+   *   The agent forgets it spoke. The assistant message is only written to
+   *   the history once the model's stream has finished, so a turn cut off
+   *   before then left no trace at all — and an agent that does not know it
+   *   just read out three times will happily read them out again.
+   *
+   *   A tool round is left hanging. If the cut lands between asking for a
+   *   tool and writing down what it returned, the history ends on a `tool_use`
+   *   with no `tool_result`, which the API rejects outright. Every remaining
+   *   turn of that call then fails, and the caller hears the line drop — long
+   *   after the interruption that caused it.
+   *
+   * What is written down is what was handed to the voice, which may be up to
+   * one clause more than the caller actually heard. That is the right way to
+   * be wrong: believing it said slightly more than it did costs a repeated
+   * clause, believing it said nothing costs the whole answer twice.
+   */
+  private closeInterruptedTurn(turn: TurnState): void {
+    const last = this.messages[this.messages.length - 1];
+
+    if (last?.role === "assistant" && Array.isArray(last.content)) {
+      const open = last.content.filter(
+        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+      );
+      if (open.length) {
+        const done = new Map(turn.results.map((r) => [r.tool_use_id, r]));
+        this.messages.push({
+          role: "user",
+          // Every `tool_use` needs its `tool_result`, in order. The ones that
+          // had already run keep their real answer; the rest are told plainly
+          // that they never ran, which is true and is something the model can
+          // act on if the caller comes back to the same request.
+          content: open.map(
+            (use) =>
+              done.get(use.id) ?? {
+                type: "tool_result" as const,
+                tool_use_id: use.id,
+                content: JSON.stringify({
+                  error: "Not run — the caller interrupted. Ask again if you still need this.",
+                }),
+                is_error: true,
+              },
+          ),
+        });
+      }
+    }
+
+    if (turn.spoken.trim()) {
+      this.messages.push({ role: "assistant", content: turn.spoken.trim() });
+    }
+  }
+
+  private async *runTurn(turn: TurnState): AsyncGenerator<AgentEvent> {
     const startedAt = Date.now();
     let firstAudioMs = -1;
-    let spoken = "";
 
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         const chunker = new SentenceChunker();
-        const stream = anthropic().messages.stream({
-          model: this.location.agent.model,
-          max_tokens: 2048,
-          system: this.systemBlocks(),
-          tools: this.tools,
-          ...modelParams(this.location.agent.model),
-          messages: this.messages,
-        });
+        const stream = this.open(this.messages);
 
         for await (const event of stream) {
           if (
@@ -431,7 +561,7 @@ ${
           ) {
             for (const sentence of chunker.push(event.delta.text)) {
               if (firstAudioMs < 0) firstAudioMs = Date.now() - startedAt;
-              spoken += (spoken ? " " : "") + sentence;
+              turn.spoken += (turn.spoken ? " " : "") + sentence;
               yield { type: "sentence", text: sentence };
             }
           }
@@ -440,7 +570,7 @@ ${
         const tail = chunker.flush();
         if (tail) {
           if (firstAudioMs < 0) firstAudioMs = Date.now() - startedAt;
-          spoken += (spoken ? " " : "") + tail;
+          turn.spoken += (turn.spoken ? " " : "") + tail;
           yield { type: "sentence", text: tail };
         }
 
@@ -463,7 +593,10 @@ ${
         const toolUses = message.content.filter(
           (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
         );
-        const results: Anthropic.ToolResultBlockParam[] = [];
+        // Held on the turn, not local to the round: if the caller interrupts
+        // between a tool returning and its result being written down, the
+        // repair needs whatever did come back.
+        const results: Anthropic.ToolResultBlockParam[] = (turn.results = []);
         let control: AgentEvent | null = null;
 
         for (const use of toolUses) {
@@ -549,10 +682,14 @@ ${
       };
     }
 
+    // The turn reached its own end rather than being cut off, so the history
+    // is already whole and needs no repair.
+    turn.settled = true;
+
     if (firstAudioMs >= 0) this.call.latenciesMs.push(firstAudioMs);
     yield {
       type: "turn_end",
-      text: spoken,
+      text: turn.spoken,
       firstAudioMs: firstAudioMs < 0 ? 0 : firstAudioMs,
     };
   }

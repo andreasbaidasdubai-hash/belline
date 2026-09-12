@@ -88,6 +88,7 @@ export default function Console({
   auto = false,
   minimal = false,
   logoUrl,
+  chatHref,
 }: {
   locationId: string;
   locationName: string;
@@ -137,6 +138,16 @@ export default function Console({
   minimal?: boolean;
   /** The venue's mark, shown behind the call. Falls back to the bell. */
   logoUrl?: string;
+  /**
+   * Where to go to type instead.
+   *
+   * The other half of the 2-in-1, and the half that matters more: somebody who
+   * opened the bell on a train, in an open-plan office or beside a sleeping
+   * child has already decided they want an answer and just cannot say it out
+   * loud. Without this they close the panel. Set only where the venue has both
+   * switched on.
+   */
+  chatHref?: string;
 }) {
   const [connected, setConnected] = useState(false);
   const [listening, setListening] = useState(false);
@@ -685,6 +696,17 @@ export default function Console({
           >
             End
           </button>
+        )}
+
+        {/*
+          Typing instead. Quiet, and below the thing it is an alternative to —
+          the bell is what this product does that a chat widget does not, and
+          this is the escape hatch for the person who cannot use it right now.
+        */}
+        {chatHref && (
+          <a className="callbar-swap" href={chatHref}>
+            Rather type? Send a message
+          </a>
         )}
       </div>
     );

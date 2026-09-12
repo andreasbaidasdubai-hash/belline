@@ -52,6 +52,18 @@ export interface Hold {
  */
 export const DEFAULT_HOLD_SECONDS = 90;
 
+/**
+ * How many of the times found are actually kept back.
+ *
+ * A search returns six and the agent reads out three; holding all six would
+ * take six tables off the market because one person rang up to browse, and on
+ * a Friday with three lines busy that is the whole book. Holding the ones
+ * about to be said out loud is proportionate — and a caller who picks the
+ * fourth option and loses the race is told so immediately, with alternatives,
+ * which is the failure this was always going to have at the margin.
+ */
+export const MAX_QUOTED_HOLDS = 3;
+
 // Pinned to the global for the same reason the store is: the dev server
 // re-evaluates modules while the custom websocket server keeps running in the
 // same process, and two copies of this map would defeat the entire point.

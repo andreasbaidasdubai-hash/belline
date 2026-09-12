@@ -22,6 +22,7 @@ const { seedIfEmpty } = await import("../src/lib/seed");
 const { listLocations } = await import("../src/lib/store");
 const { dayView, weekView, weekStart } = await import("../src/lib/calendar");
 const { createBooking, modifyBooking } = await import("../src/lib/booking");
+const { quoteFor } = await import("../src/lib/booking/salon");
 
 let passed = 0;
 let failed = 0;
@@ -107,9 +108,12 @@ test("the block carries a buffer beyond the guest-facing end", () => {
     block.bufferEndMin > block.endMin,
     "the turnaround is not drawn — a diary that hides it double-books the chair",
   );
+  // Against *this stylist's* length, not the wall price list. A senior is
+  // quicker at the same service and the grid has to draw what they will
+  // actually take, or the column is wrong for every one of their clients.
   assert.equal(
     block.endMin - block.startMin,
-    service.durationMin,
+    quoteFor(salon.salon!, service, stylist.id).durationMin,
     "the guest-facing block is not the service length",
   );
 });

@@ -127,6 +127,38 @@ export const bellineVenue: Location = {
     clearBookingsDaily: false,
     disclosure: "",
   },
+  /**
+   * The widget on our own marketing site.
+   *
+   * Our own website is a customer of this product like any other, and it gets
+   * the chat rather than the bell: the bell is already the hero of the front
+   * page, and a second way to start the same spoken call would be two buttons
+   * for one thing. The chat is for the visitor who will not talk out loud —
+   * on a train, in an open-plan office — who today reads the page and leaves.
+   *
+   * The key is fixed rather than generated, which every other venue's is not.
+   * `landing.html` is a static file on a different host with no way to ask what
+   * ours is, and a key is public by design — it sits in page source, like a
+   * Stripe publishable key. Nothing is protected by it; the origin allowlist
+   * below and the ceilings are what protect anything.
+   */
+  embed: {
+    key: "be_belline_site",
+    enabled: true,
+    mode: "chat",
+    allowedOrigins: [
+      "https://belline.ai",
+      "https://www.belline.ai",
+      // For working on the marketing page locally, where it is served from a
+      // file server rather than from Vercel.
+      "http://localhost:3000",
+      "http://localhost:4321",
+    ],
+    maxCallsPerDay: 60,
+    maxCallSeconds: 600,
+    maxChatsPerDay: 120,
+    maxMessagesPerChat: 40,
+  },
   agent: {
     displayName: "Belle",
     /**

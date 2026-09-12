@@ -11,7 +11,8 @@ import { sendSms, smsEnabled } from "../providers/sms";
 // real address" drift, and the one that drifts is the one nobody tested.
 import { checkShape } from "../leads/email";
 import { join } from "../waitlist";
-import { chainDuration, resolveServices } from "../booking/salon";
+import { serviceShape } from "../booking/services";
+import { depositWording, horizonDays } from "../booking/policy";
 import { listBookings } from "../store";
 import {
   daysBetween,
@@ -302,6 +303,11 @@ function slotSummary(location: Location, slots: Slot[]) {
     time: minutesToClock(s.startMin),
     spoken: minutesToSpoken(s.startMin),
     ...(s.staffName ? { with: s.staffName } : {}),
+    // The price travels with the slot because it is not a property of the
+    // service alone: a salon that charges by stylist level quotes a different
+    // number for the same cut at eleven and at two, and the agent reading the
+    // wall price is an argument at the till.
+    ...(s.price ? { price: `${location.currency} ${s.price}` } : {}),
   }));
 }
 
@@ -313,9 +319,13 @@ function normaliseDate(ctx: ToolContext, raw: unknown): string | { error: string
   const today = todayIn(ctx.location.timezone);
   const delta = daysBetween(today, date);
   if (delta < 0) return { error: "That date is in the past. Ask the caller which date they meant." };
-  if (delta > ctx.location.agent.bookingHorizonDays) {
+  // The venue's own horizon where it has set one, falling back to the agent's.
+  // Checked here as well as in the engine so the agent stops asking questions
+  // about a date it is never going to be allowed to book.
+  const horizon = horizonDays(ctx.location);
+  if (delta > horizon) {
     return {
-      error: `That is further ahead than the ${ctx.location.agent.bookingHorizonDays}-day booking window. Take a message instead.`,
+      error: `That is further ahead than the ${horizon}-day booking window. Take a message instead.`,
     };
   }
   return date;
@@ -343,15 +353,18 @@ function bookingPayload(location: Location, booking: Booking) {
   if (booking.vertical === "restaurant") {
     return { ...base, party_size: booking.partySize };
   }
-  const { services } = resolveServices(location.salon!, booking.serviceIds ?? []);
-  const { price, durationMin } = chainDuration(services);
-  const staff = location.salon!.staff.find((s) => s.id === booking.staffId);
+  const config = location.salon!;
+  const staff = config.staff.find((s) => s.id === booking.staffId);
+  // Priced and timed for the person actually doing it, not off the wall list.
+  const shape = serviceShape(config, booking.serviceIds ?? [], { staff });
+  const second = config.staff.find((s) => s.id === booking.secondaryStaffId);
   return {
     ...base,
-    services: services.map((s) => s.name),
+    services: shape.services.map((s) => s.name),
     with: staff?.name,
-    duration_min: durationMin,
-    price: `${location.currency} ${price}`,
+    ...(second ? { also_seeing: second.name } : {}),
+    duration_min: shape.durationMin,
+    price: `${location.currency} ${shape.price}`,
   };
 }
 
@@ -391,7 +404,9 @@ export async function executeTool(
   // abstraction stays honest. The previous attempt at this seam was a type
   // with no implementations and no call sites.
   const provider = providerFor(location);
-  const pctx: ProviderContext = { location };
+  // The call id travels with every provider call: it is what lets the engine
+  // hold a quoted slot against other lines without holding it against this one.
+  const pctx: ProviderContext = { location, callId: ctx.call.id };
 
   switch (name) {
     case "check_availability": {
@@ -512,6 +527,20 @@ export async function executeTool(
       });
 
       if (!result.ok) {
+        // A house rule is not a full room, and answering one with "how about
+        // half past" is worse than saying nothing: the caller has been told
+        // the venue needs a day's notice and is then offered a time tomorrow
+        // morning anyway. `detail` already carries what to say.
+        if (result.policy) {
+          return {
+            result: {
+              booked: false,
+              reason: result.reason,
+              house_rule: true,
+              say: `${result.detail} Say this as the house's rule, not as a system limitation, and do not offer nearby times.`,
+            },
+          };
+        }
         return {
           result: {
             booked: false,
@@ -541,11 +570,22 @@ export async function executeTool(
       }
 
       const texted = await confirmByText(location, result.booking);
+      const deposit = result.booking.deposit;
       return {
         result: {
           booked: true,
           ...bookingPayload(location, result.booking),
           read_back: describeBooking(location, result.booking),
+          // Said at the point the booking is made and not before, because a
+          // deposit mentioned while the caller is still choosing a time reads
+          // as a barrier rather than a term. Belline never takes the money —
+          // see policy.ts — so the wording sends them to the team.
+          ...(deposit
+            ? {
+                deposit: `${deposit.currency} ${deposit.amount}`,
+                say: depositWording(location, deposit),
+              }
+            : {}),
           ...texted,
         },
       };

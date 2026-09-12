@@ -52,7 +52,13 @@ export async function POST(request: Request) {
   // engine's decision — it picks the tightest fit and combines within a
   // section. Honouring a dragged table would mean overriding that, so the
   // move is vertical only and says so rather than silently ignoring it.
-  const changes: Parameters<typeof modifyBooking>[2] = { startMin: Math.round(startMin) };
+  // Dragged by somebody signed in and looking at the room: the same authority
+  // as writing a booking by hand, and the same reasoning — see the quick-book
+  // route. The physical rules still apply; only the ones aimed at the agent lift.
+  const changes: Parameters<typeof modifyBooking>[2] = {
+    startMin: Math.round(startMin),
+    staffOverride: true,
+  };
   let note: string | undefined;
 
   if (columnId && !isRestaurant(location)) {

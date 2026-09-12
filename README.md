@@ -38,7 +38,8 @@ and fill in what you have — each key switches on independently.
 npm run site       # build the public website into site/ for any static host
 npm run doctor     # why isn't the phone ringing? checks every key against the provider
 npm run demo       # fill the dashboard with a plausible week (add -- reset to wipe first)
-npm run check      # booking-engine test suite (22 cases, no keys needed)
+npm run check        # booking-engine test suite (28 cases, no keys needed)
+npm run check:engine # the depth: phases, policy, holds, recall (63 cases)
 npm run user -- list                                  # accounts
 npm run user -- reset you@example.com "new password"  # if you lock yourself out
 npm run typecheck
@@ -151,25 +152,56 @@ slot returns nearby alternatives in the same result, so the agent answers
 This is the part that is genuinely vertical-specific, and the reason a generic
 voice platform leaves you with all the hard work still to do.
 
-**Restaurants** (`src/lib/booking/restaurant.ts`) — three constraints must hold
-at once. A physical table or a valid same-section combination that fits the
-party; that table free for the full turn time, which grows with party size;
-and kitchen pacing, a cap on covers seated per slot that applies *even when
-tables are free*. It seats the tightest fit available, because putting a couple
-on a six-top on a Saturday costs the venue four covers.
+**Restaurants** (`src/lib/booking/restaurant.ts`) — five constraints must hold
+at once. A table, or a combination the floor plan says can actually be pushed
+together, that fits the party; that table free for the full turn time — which
+grows with party size — plus the minutes it takes to clear and re-lay it;
+kitchen pacing, a cap on covers seated per slot that applies *even when tables
+are free*, and different for a Saturday brunch than a Tuesday lunch; the
+section's own limits, because a terrace closes when it rains and the chef's
+counter is sold rather than seated; and whatever is held back — a table out of
+play, covers kept for walk-ins. It seats the tightest fit available, because
+putting a couple on a six-top on a Saturday costs the venue four covers.
 
-**Salons** (`src/lib/booking/salon.ts`) — one qualified person free for the
-exact duration of the requested service chain, plus any shared equipment that
-chain needs (colour stations are a real constraint), plus the cleanup buffer
-after it. The buffer is held in the diary but never quoted to the guest.
-Work is spread across qualified staff rather than stacked on whoever is first
-in the list.
+**Salons and clinics** (`src/lib/booking/salon.ts`, `services.ts`) — the right
+qualified person free *for the parts of the appointment they are needed for*,
+plus every piece of shared equipment it uses, plus the cleanup after it, plus
+whoever else has to walk in partway through. Three things there are not obvious:
 
-`npm run check` covers all of the above, including the cases a demo never
-reaches: turn times growing with party size, pacing blocking a slot with empty
-tables, a stylist's cleanup buffer blocking the next booking, two colour
-clients contending for two stations, a three-hour service that would overrun a
-shift.
+- **Staff time is intervals, not a span.** A colour develops for forty minutes
+  with nobody standing over it. With `dovetail` on, another client goes in that
+  gap — the difference between a colourist taking three clients in a morning
+  and taking two. The chair stays held throughout either way.
+- **The same service is not the same service.** A senior stylist is quicker and
+  charges more; a first visit is longer than a returning one. Both are priced
+  and timed per person, per guest.
+- **A second practitioner for part of it.** A hygiene visit is an hour of the
+  hygienist's time containing ten minutes of the dentist's, for the exam. A
+  practice that cannot say this blocks an hour of dentist time per cleaning.
+
+**The house rules** (`src/lib/booking/policy.ts`) are separate from all of it,
+and deliberately so. "Is a chair free at nine tomorrow" is a question about the
+room; "will we take that booking from somebody ringing at half past eight
+tonight" is a question about the business. Notice periods, the horizon, same-day
+cutoffs, cancellation windows, deposits — worked out, said in the venue's own
+words, and never overruled by the agent. A manager working the diary is never
+argued with; every one of these rules exists to stop the *agent* over-promising.
+
+**Two lines at once** (`src/lib/booking/holds.ts`) — a time quoted on one call
+is kept back for ninety seconds so a second line is not offered the same table.
+A call's own holds are invisible to it, and a dropped call releases everything.
+
+**Who is due back** (`src/lib/booking/recall.ts`) — dental recall, and the same
+query is a salon's rebooking list. Written onto each booking as it is taken, so
+the list is a query rather than a nightly job with somewhere to fail silently.
+
+`npm run check` and `npm run check:engine` cover all of the above, including the
+cases a demo never reaches: turn times growing with party size, pacing blocking
+a slot with empty tables, a table promised before it has been cleared, three
+tables pushed together when two will not do, a client dovetailed into a
+developing colour, a hygiene visit with no dentist free for the exam, a
+treatment needing two scarce resources of which only one is free, and a patient
+who has missed twice being handed to a person rather than refused by a machine.
 
 ### Files worth knowing
 
@@ -181,7 +213,8 @@ shift.
 | `src/lib/agent/runtime.ts` | Streaming model loop, sentence chunking, tool execution. |
 | `src/lib/agent/prompt.ts` | System prompt. Split at the cache boundary. |
 | `src/lib/agent/tools.ts` | The eight tools, with validation and recovery text. |
-| `src/lib/booking/` | Availability, per vertical. |
+| `src/lib/booking/` | Availability per vertical, the house rules, quote holds, recall. |
+| `src/lib/calendar.ts` | The day as a grid: shifts, utilisation, processing gaps, sellable holes. |
 | `src/lib/auth.ts` | Passwords, sessions, roles. No `next/*` imports — the WS bridge uses it too. |
 | `src/lib/auth-server.ts` | `requireUser()` for pages, `requireApiUser()` for routes. |
 | `src/app/(app)/layout.tsx` | The guard. Every route under it needs a session. |

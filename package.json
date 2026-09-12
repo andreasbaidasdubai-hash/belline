@@ -9,6 +9,7 @@
     "start": "node --import tsx --env-file-if-exists=.env server.ts --prod",
     "typecheck": "tsc --noEmit",
     "check": "node --import tsx scripts/check-booking.ts",
+    "check:engine": "node --import tsx scripts/check-engine.ts",
     "check:brain": "node --import tsx scripts/check-brain.ts",
     "check:calendar": "node --import tsx scripts/check-calendar.ts",
     "check:waitlist": "node --import tsx scripts/check-waitlist.ts",
@@ -25,7 +26,7 @@
     "check:sales": "node --import tsx scripts/check-sales.ts",
     "check:import": "node --import tsx scripts/check-import.ts",
     "check:places": "node --import tsx scripts/check-places.ts",
-    "check:all": "npm run check && npm run check:tenancy && npm run check:reception && npm run check:channel && npm run check:honesty && npm run check:whatsapp && npm run check:signup && npm run check:checkout && npm run check:embed && npm run check:brain && npm run check:calendar && npm run check:waitlist && npm run check:attention && npm run check:idempotency && npm run check:authority && npm run check:spoken && npm run check:speculation && npm run check:prospect && npm run check:overview && npm run check:billing && npm run check:leads && npm run check:belline && npm run check:slots",
+    "check:all": "npm run check && npm run check:engine && npm run check:tenancy && npm run check:reception && npm run check:channel && npm run check:honesty && npm run check:whatsapp && npm run check:signup && npm run check:checkout && npm run check:embed && npm run check:webchat && npm run check:brain && npm run check:calendar && npm run check:waitlist && npm run check:attention && npm run check:idempotency && npm run check:authority && npm run check:spoken && npm run check:speculation && npm run check:interruption && npm run check:prospect && npm run check:overview && npm run check:billing && npm run check:leads && npm run check:belline && npm run check:slots",
     "audit": "playwright test",
     "audit:ui": "playwright test --ui",
     "site": "node --import tsx scripts/build-site.ts",
@@ -62,8 +63,15 @@
     "check:signup": "node --import tsx scripts/check-signup.ts",
     "check:checkout": "node --import tsx scripts/check-checkout.ts",
     "check:embed": "node --import tsx scripts/check-embed.ts",
+    "check:webchat": "node --import tsx --env-file-if-exists=.env scripts/check-webchat.ts",
+    "chat:demo": "node --import tsx --env-file-if-exists=.env scripts/chat-demo.ts",
     "whatsapp:demo": "node --import tsx --env-file-if-exists=.env scripts/whatsapp-demo.ts",
-    "check:honesty": "node --import tsx scripts/check-honesty.ts"
+    "check:honesty": "node --import tsx scripts/check-honesty.ts",
+    "check:interruption": "node --import tsx --env-file-if-exists=.env scripts/check-interruption.ts",
+    "bench:turns": "node --import tsx --env-file-if-exists=.env scripts/bench-turns.ts",
+    "bench:voice": "node --import tsx --env-file-if-exists=.env scripts/bench-voice.ts",
+    "voice:samples": "node --import tsx --env-file-if-exists=.env scripts/voice-samples.ts",
+    "bench:model": "node --import tsx --env-file-if-exists=.env scripts/bench-model.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

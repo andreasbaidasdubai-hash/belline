@@ -1,4 +1,5 @@
 import type { Location } from "../types";
+import { voiceAllowed } from "../embed";
 
 /**
  * May a signed stream token open a call to this venue?
@@ -28,7 +29,13 @@ export function mayStreamTo(location: Location | undefined): boolean {
   // spending a customer's minutes, and the widget is an explicit decision by
   // that customer to let strangers do exactly that — bounded by an origin
   // allowlist and a daily cap. See embed.ts.
-  if (location.embed?.enabled) return true;
+  //
+  // `voiceAllowed`, not `enabled`: a venue can have the widget on and offer
+  // only the chat, and that venue has not agreed to anybody spending a second
+  // of speech. This clause is the one that decides whether a socket opens, so
+  // "the widget is on" was too wide by exactly one mode — as our own venue,
+  // which offers the chat and not the bell, demonstrated the moment it existed.
+  if (voiceAllowed(location.embed)) return true;
 
   const ours = Boolean(location.prospect || location.internal);
   return ours && Boolean(location.demo?.enabled);

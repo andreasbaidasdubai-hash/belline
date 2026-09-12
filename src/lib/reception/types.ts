@@ -12,7 +12,16 @@ import type { DateStr, Minutes, Slot } from "../types";
 
 export type Channel = "whatsapp" | "sms" | "webchat";
 
-export type Provider = "meta" | "twilio" | "internal";
+/**
+ * Who carries the message.
+ *
+ * `webchat` is the odd one and worth naming: its network is this application.
+ * A reply is "delivered" by existing in the `message` table, and the visitor's
+ * own page asks for anything it has not shown yet. Which is also why a
+ * colleague typing in the inbox reaches a website visitor with no extra
+ * machinery — it is the same row either way.
+ */
+export type Provider = "meta" | "twilio" | "internal" | "webchat";
 
 /**
  * Where a conversation is, and therefore who is allowed to answer it.
@@ -51,7 +60,15 @@ export type DeliveryStatus = "queued" | "sent" | "delivered" | "read" | "failed"
 export interface Customer {
   id: number;
   tenantId: string;
-  /** E.164, always. A number stored twice in two formats is two customers. */
+  /**
+   * The contact handle, normalised — the field's name predates the third
+   * channel and the column's does too.
+   *
+   * E.164 wherever the customer is a telephone number, and `web:<id>` for a
+   * website visitor who has not given one. Normalised either way: a handle
+   * stored twice in two formats is two customers. `isPhoneHandle` in
+   * webchat.ts is the test to use before treating it as a number.
+   */
   phoneE164: string;
   firstName?: string;
   lastName?: string;

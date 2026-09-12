@@ -5,6 +5,7 @@ import { signStreamToken } from "@/lib/auth";
 import { seedIfEmpty } from "@/lib/seed";
 import { listLocations } from "@/lib/store";
 import { checkEmbedGate, originAllowed } from "@/lib/embed";
+import { chatAllowed } from "@/lib/webchat";
 import Console from "../../(app)/test/Console";
 
 export const dynamic = "force-dynamic";
@@ -37,11 +38,14 @@ export const metadata: Metadata = {
  */
 export default async function EmbedPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ key: string }>;
+  searchParams: Promise<{ o?: string }>;
 }) {
   seedIfEmpty();
   const { key } = await params;
+  const { o } = await searchParams;
 
   const location = listLocations({ includeInternal: true }).find(
     (l) => l.embed?.enabled && l.embed.key === key,
@@ -77,6 +81,14 @@ export default async function EmbedPage({
       minimal
       auto
       logoUrl={location.logoUrl}
+      // The 2-in-1, offered only where the venue switched both on. The framing
+      // origin has to ride along: the middleware builds frame-ancestors from
+      // it on every response, and without it the browser refuses the page.
+      chatHref={
+        chatAllowed(location.embed)
+          ? `/embed/${encodeURIComponent(key)}/chat${o ? `?o=${encodeURIComponent(o)}` : ""}`
+          : undefined
+      }
     />
   );
 }

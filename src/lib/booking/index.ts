@@ -6,27 +6,34 @@ import type {
   Minutes,
   Slot,
 } from "../types";
-import {
-  bookingRef,
-  id,
-  listBookings,
-  saveBooking,
-} from "../store";
-import { minutesToSpoken, dateToSpoken } from "../time";
+import { bookingRef, id, listBookings, saveBooking } from "../store";
+import { addDays, minutesToSpoken, dateToSpoken } from "../time";
+import { normalisePhone } from "../guests";
 import { checkRestaurantSlot, searchRestaurant } from "./restaurant";
 import { checkSalonSlot, chainDuration, resolveServices, searchSalon } from "./salon";
+import { serviceShape } from "./services";
+import {
+  checkPolicy,
+  depositFor,
+  isLateCancel,
+  nowIn,
+  type Now,
+  type PolicyReason,
+} from "./policy";
+import { asBookings as holdsAsBookings, releaseCall } from "./holds";
 import { bookingKey, describeWhat, findDuplicate, type BookingIdentity } from "./idempotency";
 import { pushBooking } from "../integrations/google";
 
 /**
  * The booking facade the agent talks to.
  *
- * Everything vertical-specific stays in restaurant.ts / salon.ts; this file
- * is what the tool layer calls, and it is also the seam where a venue's
- * existing system takes over. A venue already on SevenRooms or Fresha does
- * not want a second source of truth — it wants the agent writing into the
- * book their staff already stare at all day. Implementing `BookingBackend`
- * against their API is the whole integration.
+ * Everything vertical-specific stays in restaurant.ts / salon.ts; this file is
+ * what the tool layer calls, and it is where the two questions are put
+ * together: is the room free (the engines) and will the business take it (the
+ * policy). It is also the seam where a venue's existing system takes over — a
+ * venue already on SevenRooms or Fresha does not want a second source of
+ * truth, it wants the agent writing into the book its staff already stare at
+ * all day. See provider.ts.
  */
 export interface BookingBackend {
   name: string;
@@ -50,6 +57,16 @@ export interface CreateInput {
   source?: Booking["source"];
   /** Set only from the calendar, by a person who can see the room. */
   overbook?: boolean;
+  /**
+   * A person working the book rather than a caller on the line. Lifts the
+   * rules that exist to stop the agent over-promising, and none of the rules
+   * that stop anybody double-booking a room.
+   */
+  staffOverride?: boolean;
+  /** The recall this booking answers, so the due list can close itself out. */
+  recallOf?: string;
+  /** Freeze the clock. Tests only — a notice-period rule is untestable without it. */
+  now?: Now;
 }
 
 export type BookingResult =
@@ -58,26 +75,52 @@ export type BookingResult =
       booking: Booking;
       /**
        * True when this booking already existed and was returned rather than
-       * created. The agent should read it back as a confirmation, not
-       * announce a second reservation — and the caller, who may simply have
-       * repeated themselves, should never learn there was a question.
+       * created. The agent should read it back as a confirmation, not announce
+       * a second reservation — and the caller, who may simply have repeated
+       * themselves, should never learn there was a question.
        */
       duplicate?: boolean;
     }
-  | { ok: false; reason: string; detail: string; alternatives: Slot[] };
+  | {
+      ok: false;
+      reason: string;
+      detail: string;
+      alternatives: Slot[];
+      /**
+       * Set when the business said no rather than the room. The difference
+       * matters to the agent: a full room is answered with other times, a
+       * notice period is answered with an apology and the earliest date that
+       * works, and offering alternatives to somebody who has been told they
+       * need to call back is worse than saying nothing.
+       */
+      policy?: PolicyReason;
+    };
 
 // ---------------------------------------------------------------------------
 
-export function findAvailability(location: Location, query: AvailabilityQuery): Slot[] {
-  const bookings = listBookings({ locationId: location.id });
+/**
+ * Free times, with anything another live call is currently holding taken out.
+ *
+ * `callId` is the conversation asking. Its own holds are invisible to it, or
+ * the agent would offer a caller a time and then refuse to book it — which is
+ * the bug every first implementation of quote-holding ships with.
+ */
+export function findAvailability(
+  location: Location,
+  query: AvailabilityQuery,
+  opts: { callId?: string } = {},
+): Slot[] {
+  const bookings = withHolds(location, query.date, opts.callId);
   return location.vertical === "restaurant"
     ? searchRestaurant(location, bookings, query)
     : searchSalon(location, bookings, query);
 }
 
 export function createBooking(location: Location, input: CreateInput): BookingResult {
-  const bookings = listBookings({ locationId: location.id });
-  const now = new Date().toISOString();
+  const all = listBookings({ locationId: location.id });
+  const bookings = withHolds(location, input.date, input.callId, all);
+  const now = input.now ?? nowIn(location);
+  const stamp = new Date().toISOString();
 
   // Before anything is held: is this booking already on the book? A retried
   // tool call, a redelivered webhook, or a caller repeating themselves all
@@ -95,6 +138,30 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
   if (already) return { ok: true, booking: already, duplicate: true };
   const idempotencyKey = bookingKey(identity);
 
+  const newGuest = isNewGuest(all, input.guestPhone);
+
+  // The house rules, before the floor plan. A table being empty tomorrow
+  // morning is not the same question as whether the business will take a
+  // booking for it from somebody ringing tonight.
+  const refused = checkPolicy(location, {
+    date: input.date,
+    startMin: input.startMin,
+    minNoticeMin: noticeNeededFor(location, input),
+    guestPhone: input.guestPhone,
+    history: all,
+    staffOverride: input.staffOverride,
+    now,
+  });
+  if (refused) {
+    return {
+      ok: false,
+      reason: refused.reason,
+      detail: refused.detail,
+      policy: refused.reason,
+      alternatives: [],
+    };
+  }
+
   if (location.vertical === "restaurant") {
     const partySize = input.partySize ?? 2;
     const check = checkRestaurantSlot(location, bookings, {
@@ -102,18 +169,24 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
       startMin: input.startMin,
       partySize,
       overbook: input.overbook,
+      staffOverride: input.staffOverride,
     });
     if (!check.ok) {
       return {
         ok: false,
         reason: check.reason,
         detail: check.detail,
-        alternatives: findAvailability(location, {
-          locationId: location.id,
-          date: input.date,
-          preferredMin: input.startMin,
-          partySize,
-        }),
+        alternatives: findAvailability(
+          location,
+          {
+            locationId: location.id,
+            date: input.date,
+            preferredMin: input.startMin,
+            partySize,
+            staffOverride: input.staffOverride,
+          },
+          { callId: input.callId },
+        ),
       };
     }
     const booking: Booking = {
@@ -130,13 +203,20 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
       notes: input.notes ?? "",
       partySize,
       tableIds: check.assignment.tableIds,
+      deposit: depositFor(location, {
+        date: input.date,
+        partySize,
+        guestPhone: input.guestPhone,
+        history: all,
+      }),
       source: input.source ?? "voice",
       callId: input.callId,
+      recallOf: input.recallOf,
       idempotencyKey,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: stamp,
+      updatedAt: stamp,
     };
-    return { ok: true, booking: mirrored(location, saveBooking(booking)) };
+    return { ok: true, booking: settled(location, booking, input.callId) };
   }
 
   const check = checkSalonSlot(location, bookings, {
@@ -144,27 +224,37 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
     startMin: input.startMin,
     serviceIds: input.serviceIds ?? [],
     staffId: input.staffId,
+    newGuest,
+    staffOverride: input.staffOverride,
   });
   if (!check.ok) {
     return {
       ok: false,
       reason: check.reason,
       detail: check.detail,
-      alternatives: findAvailability(location, {
-        locationId: location.id,
-        date: input.date,
-        preferredMin: input.startMin,
-        serviceIds: input.serviceIds,
-        staffId: input.staffId,
-      }),
+      alternatives: findAvailability(
+        location,
+        {
+          locationId: location.id,
+          date: input.date,
+          preferredMin: input.startMin,
+          serviceIds: input.serviceIds,
+          staffId: input.staffId,
+          newGuest,
+          staffOverride: input.staffOverride,
+        },
+        { callId: input.callId },
+      ),
     };
   }
+
+  const recall = recallFor(location, input.date, check.assignment.serviceIds);
   const booking: Booking = {
     id: id("bk"),
     ref: bookingRef(),
     locationId: location.id,
-    // Not hardcoded: a clinic runs the same engine and its bookings must
-    // carry their own vertical, or every read-back calls a patient a client.
+    // Not hardcoded: a clinic runs the same engine and its bookings must carry
+    // their own vertical, or every read-back calls a patient a client.
     vertical: location.vertical,
     status: "confirmed",
     date: input.date,
@@ -178,13 +268,24 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
     serviceIds: check.assignment.serviceIds,
     staffId: check.assignment.staffId,
     resourceId: check.assignment.resourceId,
+    resourceIds: check.assignment.resourceIds.length ? check.assignment.resourceIds : undefined,
+    secondaryStaffId: check.assignment.secondaryStaffId,
+    deposit: depositFor(location, {
+      date: input.date,
+      value: check.assignment.price,
+      guestPhone: input.guestPhone,
+      history: all,
+    }),
+    recallDueOn: recall?.dueOn,
+    recallServiceId: recall?.serviceId,
+    recallOf: input.recallOf,
     source: input.source ?? "voice",
     callId: input.callId,
     idempotencyKey,
-    createdAt: now,
-    updatedAt: now,
+    createdAt: stamp,
+    updatedAt: stamp,
   };
-  return { ok: true, booking: mirrored(location, saveBooking(booking)) };
+  return { ok: true, booking: settled(location, booking, input.callId) };
 }
 
 export function modifyBooking(
@@ -197,11 +298,34 @@ export function modifyBooking(
     serviceIds?: string[];
     staffId?: string;
     notes?: string;
+    staffOverride?: boolean;
+    now?: Now;
   },
 ): BookingResult {
-  const bookings = listBookings({ locationId: location.id });
+  const all = listBookings({ locationId: location.id });
   const date = changes.date ?? booking.date;
   const startMin = changes.startMin ?? booking.startMin;
+  const bookings = withHolds(location, date, booking.callId, all);
+
+  // Moving a booking is taking a new one, as far as the house rules go. A
+  // clinic that needs a day's notice needs it for the new time, not the old.
+  const refused = checkPolicy(location, {
+    date,
+    startMin,
+    guestPhone: booking.guestPhone,
+    history: all,
+    staffOverride: changes.staffOverride,
+    now: changes.now ?? nowIn(location),
+  });
+  if (refused) {
+    return {
+      ok: false,
+      reason: refused.reason,
+      detail: refused.detail,
+      policy: refused.reason,
+      alternatives: [],
+    };
+  }
 
   if (location.vertical === "restaurant") {
     const partySize = changes.partySize ?? booking.partySize ?? 2;
@@ -210,6 +334,7 @@ export function modifyBooking(
       startMin,
       partySize,
       excludeBookingId: booking.id,
+      staffOverride: changes.staffOverride,
     });
     if (!check.ok) {
       return {
@@ -222,6 +347,7 @@ export function modifyBooking(
           preferredMin: startMin,
           partySize,
           excludeBookingId: booking.id,
+          staffOverride: changes.staffOverride,
         }),
       };
     }
@@ -256,6 +382,7 @@ export function modifyBooking(
     serviceIds,
     staffId: changes.staffId ?? booking.staffId,
     excludeBookingId: booking.id,
+    staffOverride: changes.staffOverride,
   });
   if (!check.ok) {
     return {
@@ -269,9 +396,11 @@ export function modifyBooking(
         serviceIds,
         staffId: changes.staffId ?? booking.staffId,
         excludeBookingId: booking.id,
+        staffOverride: changes.staffOverride,
       }),
     };
   }
+  const recall = recallFor(location, date, check.assignment.serviceIds);
   const updated: Booking = {
     ...booking,
     date,
@@ -280,6 +409,10 @@ export function modifyBooking(
     serviceIds: check.assignment.serviceIds,
     staffId: check.assignment.staffId,
     resourceId: check.assignment.resourceId,
+    resourceIds: check.assignment.resourceIds.length ? check.assignment.resourceIds : undefined,
+    secondaryStaffId: check.assignment.secondaryStaffId,
+    recallDueOn: recall?.dueOn,
+    recallServiceId: recall?.serviceId,
     notes: changes.notes ?? booking.notes,
     // As above: the fingerprint follows the booking to its new slot, or it
     // would keep guarding the one this guest has just given up.
@@ -296,11 +429,48 @@ export function modifyBooking(
   return { ok: true, booking: mirrored(location, saveBooking(updated)) };
 }
 
-export function cancelBooking(booking: Booking): Booking {
+/**
+ * Cancel it, and record whether it was late.
+ *
+ * The venue is passed in where the caller has it, because "late" is the
+ * venue's own definition and a cancellation with no record of which side of
+ * the window it fell on is a cancellation the venue cannot act on. Belline
+ * charges nobody — see `lateCancelNotice`, which states the policy and stops
+ * there.
+ */
+export function cancelBooking(
+  booking: Booking,
+  location?: Location,
+  reason?: string,
+): Booking {
+  const at = new Date().toISOString();
   return saveBooking({
     ...booking,
     status: "cancelled",
-    updatedAt: new Date().toISOString(),
+    cancelledAt: at,
+    cancelReason: reason,
+    lateCancel: location ? isLateCancel(location, booking) : booking.lateCancel,
+    updatedAt: at,
+  });
+}
+
+/** Front-of-house progress: arrived, seated, gone. Not the same as status. */
+export function markService(
+  booking: Booking,
+  event: "arrived" | "seated" | "left",
+): Booking {
+  const at = new Date().toISOString();
+  const service = { ...(booking.service ?? {}) };
+  if (event === "arrived") service.arrivedAt = at;
+  if (event === "seated") service.seatedAt = at;
+  if (event === "left") service.leftAt = at;
+  return saveBooking({
+    ...booking,
+    service,
+    // A party that has been and gone is completed, and counting them as a
+    // live booking is what makes a venue's own covers report wrong.
+    status: event === "left" ? "completed" : booking.status,
+    updatedAt: at,
   });
 }
 
@@ -324,12 +494,12 @@ export function describeBookingShort(location: Location, booking: Booking): stri
     const tables = (booking.tableIds ?? []).join(" + ");
     return `party of ${booking.partySize}${tables ? ` · table ${tables}` : ""}`;
   }
-  const { services } = resolveServices(location.salon!, booking.serviceIds ?? []);
-  const staff = location.salon!.staff.find((s) => s.id === booking.staffId);
-  const { price } = chainDuration(services);
-  return `${services.map((s) => s.name).join(" + ")}${staff ? ` · ${staff.name}` : ""} · ${
+  const config = location.salon!;
+  const staff = config.staff.find((s) => s.id === booking.staffId);
+  const shape = serviceShape(config, booking.serviceIds ?? [], { staff });
+  return `${shape.services.map((s) => s.name).join(" + ")}${staff ? ` · ${staff.name}` : ""} · ${
     location.currency
-  } ${price}`;
+  } ${shape.price}`;
 }
 
 /** The confirmation text a guest receives. Short — it is read on a lock screen. */
@@ -350,22 +520,100 @@ export function describeBooking(location: Location, booking: Booking): string {
   if (booking.vertical === "restaurant") {
     return `${booking.guestName}, party of ${booking.partySize}, ${when} (ref ${booking.ref})`;
   }
-  const { services } = resolveServices(location.salon!, booking.serviceIds ?? []);
-  const staff = location.salon!.staff.find((s) => s.id === booking.staffId);
-  const { price } = chainDuration(services);
-  return `${booking.guestName}, ${services.map((s) => s.name).join(" + ")}${
+  const config = location.salon!;
+  const staff = config.staff.find((s) => s.id === booking.staffId);
+  const shape = serviceShape(config, booking.serviceIds ?? [], { staff });
+  return `${booking.guestName}, ${shape.services.map((s) => s.name).join(" + ")}${
     staff ? ` with ${staff.name}` : ""
-  }, ${when}, ${location.currency} ${price} (ref ${booking.ref})`;
+  }, ${when}, ${location.currency} ${shape.price} (ref ${booking.ref})`;
+}
+
+// ---------------------------------------------------------------------------
+
+/** The book, plus whatever other live calls are holding right now. */
+function withHolds(
+  location: Location,
+  date: DateStr,
+  callId?: string,
+  book?: Booking[],
+): Booking[] {
+  const bookings = book ?? listBookings({ locationId: location.id });
+  const held = holdsAsBookings(location.id, date, callId);
+  return held.length === 0 ? bookings : [...bookings, ...held];
+}
+
+/** Nobody has been here before under this number. */
+function isNewGuest(history: Booking[], phone: string): boolean {
+  const key = normalisePhone(phone);
+  if (key.length < 6) return false;
+  return !history.some(
+    (b) =>
+      normalisePhone(b.guestPhone) === key &&
+      (b.status === "completed" || b.status === "confirmed"),
+  );
+}
+
+/** Extra notice this particular booking needs, beyond the venue's own rule. */
+function noticeNeededFor(location: Location, input: CreateInput): number | undefined {
+  if (location.vertical !== "restaurant") return undefined;
+  const config = location.restaurant;
+  if (!config) return undefined;
+  const service = config.services.find(
+    (s) => input.startMin >= s.start && input.startMin <= s.lastSeating,
+  );
+  return service?.minNoticeMin;
+}
+
+/**
+ * When this visit brings the guest back.
+ *
+ * The longest interval among the services booked wins: somebody having a
+ * cleaning and a filling is due back for the cleaning in six months, not for
+ * the filling in none. Written onto the booking so the due list is a query
+ * rather than a nightly job with somewhere to fail silently.
+ */
+function recallFor(
+  location: Location,
+  date: DateStr,
+  serviceIds: string[],
+): { dueOn: DateStr; serviceId: string } | undefined {
+  const config = location.salon;
+  if (!config) return undefined;
+
+  let best: { days: number; serviceId: string } | undefined;
+  for (const serviceId of serviceIds) {
+    const service = config.services.find((s) => s.id === serviceId);
+    if (!service?.recallDays) continue;
+    if (!best || service.recallDays > best.days) {
+      best = { days: service.recallDays, serviceId };
+    }
+  }
+  return best ? { dueOn: addDays(date, best.days), serviceId: best.serviceId } : undefined;
+}
+
+/**
+ * Save it, let the caller's hold go, and mirror it outward.
+ *
+ * The hold is released the moment the booking is real. Leaving it would cost
+ * the venue the next ninety seconds of that table for no reason, and the
+ * commonest next thing a caller says is "actually, can we make it two tables".
+ */
+function settled(location: Location, booking: Booking, callId?: string): Booking {
+  const saved = saveBooking(booking);
+  if (callId) releaseCall(callId);
+  return mirrored(location, saved);
 }
 
 /**
  * Mirror a booking into the venue's own calendar, if one is connected.
  *
- * Not awaited on purpose. The booking is already saved and is real either
- * way; a slow or broken Google must never hold a caller on the line. Failures
- * land on the connection so the dashboard can say so.
+ * Not awaited on purpose. The booking is already saved and is real either way;
+ * a slow or broken Google must never hold a caller on the line. Failures land
+ * on the connection so the dashboard can say so.
  */
 function mirrored(location: Location, booking: Booking): Booking {
   if (location.google) void pushBooking(location, booking);
   return booking;
 }
+
+export { chainDuration, resolveServices };

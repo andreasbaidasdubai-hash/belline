@@ -272,7 +272,32 @@ const MARK = `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
     <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
   </svg>`;
 
-const BELL_FAB = `<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Hear Belline now">
+/** Die Glocke im Sprechblasen-Umriss. Dasselbe Zeichen, getippt statt gesprochen. */
+const BUBBLE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M3 11.2C3 6.9 7.03 3.5 12 3.5s9 3.4 9 7.7c0 4.3-4.03 7.7-9 7.7a11 11 0 0 1-2.4-.26L5.4 20.5l.5-3.2A7.7 7.7 0 0 1 3 11.2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <circle cx="12" cy="7.4" r="1.05" fill="currentColor"/>
+    <path d="M8.7 13.1a3.3 3.3 0 0 1 6.6 0Z" fill="currentColor"/>
+    <rect x="7.8" y="13.8" width="8.4" height="1.35" rx=".68" fill="currentColor"/>
+  </svg>`;
+
+/**
+ * Beide Wege herein, auf jeder Unterseite.
+ *
+ * Der Chat steht über der Glocke und ist der leisere von beiden: wer auf
+ * /salons landet, soll dieselben zwei Möglichkeiten haben wie auf der
+ * Startseite — sonst hängt es davon ab, über welche Anzeige jemand kam.
+ *
+ * Der Knopf ist versteckt und wird von site.js eingeblendet: ohne JavaScript
+ * gibt es nichts zu öffnen, und ein toter Knopf ist schlimmer als keiner.
+ */
+const BELL_FAB = `<button class="chat-fab" type="button" hidden
+        data-chat="https://app.belline.ai/embed/be_belline_site/chat"
+        aria-label="Chat with Belline">
+  ${BUBBLE}
+  <span class="chat-fab-say">Chat with Belline</span>
+</button>
+
+<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Hear Belline now">
   ${MARK}
   <span class="bell-fab-say">Hear Belline</span>
 </a>`;

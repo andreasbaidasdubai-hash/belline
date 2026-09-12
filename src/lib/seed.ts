@@ -89,6 +89,23 @@ const restaurant: Location = {
     maxCallSeconds: 420,
     bookingHorizonDays: 90,
   },
+  // Twenty minutes' notice, so the host sees a booking coming rather than
+  // hearing the door; four hours to cancel without a conversation; and a
+  // deposit on the parties that hurt when they do not turn up. All three are
+  // things this restaurant would say on the phone anyway — the point of
+  // putting them here is that the agent now says them at the right moment,
+  // and cannot quietly break them.
+  policy: {
+    minNoticeMin: 20,
+    cancellationWindowHours: 4,
+    deposit: {
+      amount: 100,
+      per: "person",
+      minPartySize: 6,
+      wording:
+        "For a table of six or more we take a hundred dirhams a head as a deposit, taken off the bill on the night. The team will send a link.",
+    },
+  },
   restaurant: {
     slotMinutes: 15,
     maxCoversPerSlot: 14,
@@ -96,8 +113,31 @@ const restaurant: Location = {
     // more. The agent never can - pacing is what keeps the pass alive.
     overbookPerSlot: 4,
     maxPartySize: 8,
+    // Ten minutes to clear, wipe and re-lay. Without it the book promises
+    // 21:30 on a table whose 20:00 sitting is still finding its coats.
+    resetMinutes: 10,
+    maxCombine: 3,
     largePartyPolicy:
       "Parties of nine or more are handled by the events manager, who will call back the same day.",
+    sections: [
+      // Fill the room before the terrace: an empty dining room reads as a bad
+      // restaurant, and the terrace sells itself once the sun is down.
+      { id: "Main", priority: 2 },
+      {
+        id: "Terrace",
+        priority: 1,
+        // The terrace has its own pass and a smaller one. Twelve covers a slot
+        // out there is a service; sixteen is an apology.
+        maxCoversPerSlot: 8,
+      },
+      {
+        id: "Counter",
+        // Six seats at the pass, sold as an experience rather than seated as a
+        // table. The agent takes the enquiry; a person takes the booking.
+        online: false,
+        priority: 0,
+      },
+    ],
     tables: [
       { id: "t1", name: "1", minSeats: 1, maxSeats: 2, section: "Main" },
       { id: "t2", name: "2", minSeats: 1, maxSeats: 2, section: "Main" },
@@ -107,10 +147,13 @@ const restaurant: Location = {
       { id: "t6", name: "6", minSeats: 3, maxSeats: 4, section: "Main" },
       { id: "t7", name: "7", minSeats: 4, maxSeats: 6, section: "Main" },
       { id: "t8", name: "8", minSeats: 5, maxSeats: 8, section: "Main" },
-      { id: "t20", name: "20", minSeats: 2, maxSeats: 2, section: "Terrace" },
-      { id: "t21", name: "21", minSeats: 2, maxSeats: 2, section: "Terrace" },
-      { id: "t22", name: "22", minSeats: 2, maxSeats: 4, section: "Terrace" },
-      { id: "t23", name: "23", minSeats: 4, maxSeats: 6, section: "Terrace" },
+      // The two window two-tops push together and nothing else out there does
+      // — 22 is against a planter and 23 is round.
+      { id: "t20", name: "20", minSeats: 2, maxSeats: 2, section: "Terrace", combinesWith: ["t21"] },
+      { id: "t21", name: "21", minSeats: 2, maxSeats: 2, section: "Terrace", combinesWith: ["t20"] },
+      { id: "t22", name: "22", minSeats: 2, maxSeats: 4, section: "Terrace", combinesWith: [] },
+      { id: "t23", name: "23", minSeats: 4, maxSeats: 6, section: "Terrace", combinesWith: [] },
+      { id: "c1", name: "Counter", minSeats: 1, maxSeats: 6, section: "Counter" },
     ],
     services: [
       {
@@ -240,11 +283,19 @@ const salon: Location = {
     maxCallSeconds: 420,
     bookingHorizonDays: 120,
   },
+  // Twenty-four hours to cancel, which the agent already says out loud in its
+  // policies — now it is also a rule the booking carries, so the salon can see
+  // which cancellations were late instead of taking the caller's word for it.
+  policy: { cancellationWindowHours: 24, lateCancelFee: 65, minNoticeMin: 60 },
   salon: {
     slotMinutes: 15,
+    // Colour develops whether or not anybody is standing over it, and this is
+    // the salon that proves it: with the phases below, Marie's Thursday fits
+    // three colour clients instead of two.
+    dovetail: true,
     services: [
-      { id: "cut_w", name: "Ladies cut & finish", durationMin: 60, bufferMin: 15, price: 130 },
-      { id: "cut_m", name: "Gents cut", durationMin: 30, bufferMin: 10, price: 75 },
+      { id: "cut_w", name: "Ladies cut & finish", durationMin: 60, bufferMin: 15, price: 130, recallDays: 56 },
+      { id: "cut_m", name: "Gents cut", durationMin: 30, bufferMin: 10, price: 75, recallDays: 28 },
       { id: "blowdry", name: "Blow-dry", durationMin: 45, bufferMin: 10, price: 85 },
       {
         id: "colour_root",
@@ -253,6 +304,14 @@ const salon: Location = {
         bufferMin: 20,
         price: 190,
         resourceType: "colour_station",
+        // Thirty minutes applying, forty developing, twenty washing off and
+        // finishing. The middle forty are the stylist's to sell.
+        phases: [
+          { name: "Apply", durationMin: 30 },
+          { name: "Develop", durationMin: 40, staffFree: true },
+          { name: "Finish", durationMin: 20 },
+        ],
+        recallDays: 42,
       },
       {
         id: "balayage",
@@ -261,15 +320,63 @@ const salon: Location = {
         bufferMin: 30,
         price: 380,
         resourceType: "colour_station",
+        phases: [
+          { name: "Section & paint", durationMin: 75 },
+          { name: "Develop", durationMin: 45, staffFree: true },
+          { name: "Wash, tone & finish", durationMin: 60 },
+        ],
+        recallDays: 84,
       },
-      { id: "treatment", name: "Keratin treatment", durationMin: 120, bufferMin: 20, price: 260 },
+      {
+        id: "treatment",
+        name: "Keratin treatment",
+        durationMin: 120,
+        bufferMin: 20,
+        price: 260,
+        phases: [
+          { name: "Apply", durationMin: 45 },
+          { name: "Process", durationMin: 30, staffFree: true },
+          { name: "Seal & blow out", durationMin: 45 },
+        ],
+      },
       { id: "consult", name: "Consultation", durationMin: 15, bufferMin: 0, price: 0 },
       { id: "patch", name: "Patch test", durationMin: 10, bufferMin: 0, price: 0 },
+      // Sold with a colour, never on its own — fifteen minutes on somebody
+      // else's appointment rather than a visit anybody makes a trip for.
+      { id: "gloss", name: "Gloss finish", durationMin: 15, bufferMin: 0, price: 45, addOnOnly: true },
     ],
     staff: [
-      stylist("st_marie", "Marie", ["cut_w", "cut_m", "blowdry", "colour_root", "balayage", "consult", "patch"], [2, 3, 4, 5, 6]),
-      stylist("st_jonas", "Jonas", ["cut_w", "cut_m", "blowdry", "consult"], [1, 2, 3, 4, 5]),
-      stylist("st_aisha", "Aisha", ["cut_w", "blowdry", "colour_root", "treatment", "consult", "patch"], [1, 3, 4, 5, 6], H(10), H(19)),
+      {
+        ...stylist(
+          "st_marie",
+          "Marie",
+          ["cut_w", "cut_m", "blowdry", "colour_root", "balayage", "consult", "patch", "gloss"],
+          [2, 3, 4, 5, 6],
+        ),
+        role: "Senior stylist",
+        // Twelve years in: quicker on a cut, and priced accordingly. Level
+        // pricing is how this trade actually sells, and quoting the wall price
+        // for a senior colourist is an argument at the till.
+        durationOverrides: { cut_w: 45, colour_root: 75 },
+        priceOverrides: { cut_w: 165, colour_root: 230, balayage: 440 },
+        breaks: weekdaysOnly([2, 3, 4, 5, 6], H(13), H(13, 45)),
+      },
+      {
+        ...stylist("st_jonas", "Jonas", ["cut_w", "cut_m", "blowdry", "consult"], [1, 2, 3, 4, 5]),
+        role: "Stylist",
+        breaks: weekdaysOnly([1, 2, 3, 4, 5], H(12, 30), H(13, 15)),
+      },
+      {
+        ...stylist(
+          "st_aisha",
+          "Aisha",
+          ["cut_w", "blowdry", "colour_root", "treatment", "consult", "patch", "gloss"],
+          [1, 3, 4, 5, 6],
+          H(10),
+          H(19),
+        ),
+        role: "Colourist",
+      },
     ],
     resources: [
       { id: "cs1", name: "Colour station 1", type: "colour_station" },
@@ -350,28 +457,101 @@ const clinic: Location = {
     maxCallSeconds: 480,
     bookingHorizonDays: 120,
   },
+  // A clinic's rules are harder than a restaurant's and for better reasons:
+  // a chart has to be pulled and a surgery prepared, so two hours' notice is
+  // the floor; the cancellation window is the one already quoted in the FAQ
+  // above; and a patient who has missed twice is not refused by a machine —
+  // the agent takes the request and a person rings them back.
+  policy: {
+    minNoticeMin: 120,
+    cancellationWindowHours: 24,
+    noShowsBeforeReview: 2,
+    maxOpenPerGuest: 3,
+  },
   salon: {
     slotMinutes: 15,
     services: [
-      { id: "dent_consult", name: "Dental consultation", durationMin: 30, bufferMin: 10, price: 350 },
-      { id: "hygiene", name: "Hygiene and polish", durationMin: 45, bufferMin: 15, price: 550 },
+      {
+        id: "dent_consult",
+        name: "Dental consultation",
+        durationMin: 30,
+        bufferMin: 10,
+        price: 350,
+        // A first visit is a history, a chart and a set of x-rays before
+        // anybody looks in a mouth. Booking it as thirty minutes is how a
+        // practice runs forty minutes late by half past ten.
+        newGuestDurationMin: 45,
+      },
+      {
+        id: "hygiene",
+        name: "Hygiene and polish",
+        durationMin: 45,
+        bufferMin: 15,
+        price: 550,
+        // The hour is the hygienist's; ten minutes of it, near the end, is the
+        // dentist's for the exam. A practice that cannot say this blocks a
+        // whole hour of dentist time per cleaning — which is why their
+        // dentist's diary looks full while the dentist sits idle.
+        secondary: { role: "dentist", atMin: 35, durationMin: 10 },
+        // Six months. This one number is the whole of dental recall, and the
+        // recall list is what the practice is actually buying.
+        recallDays: 182,
+      },
       { id: "filling", name: "Composite filling", durationMin: 60, bufferMin: 15, price: 750, resourceType: "surgery" },
       { id: "root_canal", name: "Root canal treatment", durationMin: 120, bufferMin: 20, price: 2900, resourceType: "surgery" },
-      { id: "whitening", name: "Whitening", durationMin: 75, bufferMin: 15, price: 2200, resourceType: "surgery" },
+      {
+        id: "whitening",
+        name: "Whitening",
+        durationMin: 75,
+        bufferMin: 15,
+        price: 2200,
+        // A surgery and the lamp. The old single-resource field checked
+        // whichever came first and let the other be double-booked.
+        resourceTypes: ["surgery", "whitening_lamp"],
+        phases: [
+          { name: "Prepare & isolate", durationMin: 25 },
+          { name: "Activate", durationMin: 30, staffFree: true },
+          { name: "Remove & finish", durationMin: 20 },
+        ],
+      },
       { id: "aes_consult", name: "Aesthetic consultation", durationMin: 30, bufferMin: 10, price: 400 },
-      { id: "injectables", name: "Injectables", durationMin: 45, bufferMin: 15, price: 1800, resourceType: "treatment_room" },
-      { id: "skin", name: "Skin treatment", durationMin: 60, bufferMin: 20, price: 950, resourceType: "treatment_room" },
+      {
+        id: "injectables",
+        name: "Injectables",
+        durationMin: 45,
+        bufferMin: 15,
+        price: 1800,
+        resourceType: "treatment_room",
+        // Prescription-only, whoever else has been on the course.
+        role: "doctor",
+        recallDays: 120,
+      },
+      { id: "skin", name: "Skin treatment", durationMin: 60, bufferMin: 20, price: 950, resourceType: "treatment_room", recallDays: 42 },
     ],
     staff: [
-      stylist("dr_haddad", "Dr Haddad", ["dent_consult", "hygiene", "filling", "root_canal", "whitening"], [0, 1, 2, 3, 4], H(9), H(18)),
-      stylist("dr_novak", "Dr Novak", ["dent_consult", "hygiene", "filling", "whitening"], [1, 2, 3, 4, 6], H(11), H(20)),
-      stylist("dr_saeed", "Dr Saeed", ["aes_consult", "injectables", "skin"], [0, 2, 3, 4, 6], H(10), H(19)),
-      stylist("nurse_rana", "Rana", ["hygiene", "skin"], [0, 1, 2, 3, 4], H(9), H(17)),
+      {
+        ...stylist("dr_haddad", "Dr Haddad", ["dent_consult", "hygiene", "filling", "root_canal", "whitening"], [0, 1, 2, 3, 4], H(9), H(18)),
+        role: "dentist",
+        breaks: weekdaysOnly([0, 1, 2, 3, 4], H(13), H(14)),
+      },
+      {
+        ...stylist("dr_novak", "Dr Novak", ["dent_consult", "hygiene", "filling", "whitening"], [1, 2, 3, 4, 6], H(11), H(20)),
+        role: "dentist",
+      },
+      {
+        ...stylist("dr_saeed", "Dr Saeed", ["aes_consult", "injectables", "skin"], [0, 2, 3, 4, 6], H(10), H(19)),
+        role: "doctor",
+      },
+      {
+        ...stylist("nurse_rana", "Rana", ["hygiene", "skin"], [0, 1, 2, 3, 4], H(9), H(17)),
+        role: "hygienist",
+      },
     ],
     resources: [
       { id: "surg1", name: "Surgery 1", type: "surgery" },
       { id: "surg2", name: "Surgery 2", type: "surgery" },
       { id: "room1", name: "Treatment room", type: "treatment_room" },
+      { id: "lamp1", name: "Whitening lamp", type: "whitening_lamp" },
     ],
   },
 };
@@ -490,6 +670,11 @@ function refreshInternalVenues(): void {
       demo: fixture.demo,
       agent: fixture.agent,
       salon: fixture.salon,
+      // Only ever fill a blank, unlike the fields above. The others are
+      // configuration nobody edits at runtime; this one holds a key that a
+      // stored venue may have had minted for it, and overwriting that would
+      // break the widget on a live site to match a fixture.
+      embed: stored.embed ?? fixture.embed,
     });
   }
 }
