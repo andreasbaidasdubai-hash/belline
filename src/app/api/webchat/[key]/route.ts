@@ -58,6 +58,17 @@ async function resolve(
   key: string,
   token: string | undefined,
 ): Promise<Resolved | NextResponse> {
+  // The token first. It is an HMAC check, costs nothing, and refuses the
+  // unauthenticated flood before it reaches the database — the migration
+  // ledger and the seed were running for every request that arrived here,
+  // token or no token.
+  const claim = verifyVisitorToken(token);
+  if (!claim) {
+    // Includes the expired case. The page mints a fresh one on reload, so the
+    // recovery a visitor needs is the one they would try anyway.
+    return NextResponse.json({ error: "expired" }, { status: 401 });
+  }
+
   if (!isConfigured()) {
     // Reception needs Postgres. Said plainly rather than as a 500, because the
     // one person who will ever see it is a developer without DATABASE_URL.
@@ -65,13 +76,6 @@ async function resolve(
   }
   await migrateReception();
   seedIfEmpty();
-
-  const claim = verifyVisitorToken(token);
-  if (!claim) {
-    // Includes the expired case. The page mints a fresh one on reload, so the
-    // recovery a visitor needs is the one they would try anyway.
-    return NextResponse.json({ error: "expired" }, { status: 401 });
-  }
 
   const location = listLocations({ includeInternal: true }).find(
     (l) => l.embed?.enabled && l.embed.key === key,

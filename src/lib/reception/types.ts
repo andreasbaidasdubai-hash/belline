@@ -40,11 +40,6 @@ export type ConversationStatus =
   /** Finished. A new message starts a new conversation. */
   | "CLOSED";
 
-/** Belline may generate a reply in exactly one of these. */
-export function aiMaySpeak(status: ConversationStatus): boolean {
-  return status === "AI_ACTIVE";
-}
-
 export type Sender = "customer" | "ai" | "human" | "system";
 
 export type ContentType =
@@ -214,4 +209,13 @@ export interface StatusUpdate {
   status: DeliveryStatus;
   error?: string;
   timestamp: string;
+  /**
+   * The business number the receipt is about — how the account, and so the
+   * tenant, is found. Without one of these a receipt has no tenant to be
+   * applied under and is dropped, which is what every receipt was for a day:
+   * the webhook passed an empty match, and `delivered`, `read` and `failed`
+   * all went nowhere.
+   */
+  toE164?: string;
+  externalNumberId?: string;
 }

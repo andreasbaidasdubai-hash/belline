@@ -14,7 +14,8 @@ import {
 import { reconcileStaleCalls, startCall } from "./src/lib/calls";
 import type { User } from "./src/lib/types";
 import { greetingFor } from "./src/lib/agent/runtime";
-import { checkDemoGate } from "./src/lib/demo";
+import { checkConsoleGate, checkDemoGate } from "./src/lib/demo";
+import { checkEmbedGate } from "./src/lib/embed";
 import { mayStreamTo, watchLiveness, sweepLiveness, type Liveness } from "./src/lib/voice/entitlement";
 import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
@@ -122,9 +123,18 @@ server.on("upgrade", (req, socket, head) => {
       socket.destroy();
       return;
     }
+    // Bounded. Not billed — test calls never are — but a signup is a minute
+    // and a call is eight, and nothing else stood between the two.
+    const consoleLocationId = String(query.locationId ?? "");
+    const consoleVenue = getLocation(consoleLocationId) ?? listLocations()[0];
+    if (consoleVenue && canSeeLocation(user, consoleVenue.id) && !checkConsoleGate(consoleVenue).allowed) {
+      socket.write("HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
     browserWss.handleUpgrade(req, socket, head, (ws) => {
       watch(ws);
-      handleBrowser(ws, String(query.locationId ?? ""), String(query.from ?? ""), user);
+      handleBrowser(ws, consoleLocationId, String(query.from ?? ""), user, "browser");
     });
     return;
   }
@@ -144,7 +154,13 @@ server.on("upgrade", (req, socket, head) => {
       socket.destroy();
       return;
     }
-    const gate = checkDemoGate(location);
+    // Two kinds of venue arrive here and each has its own ceiling. A demo
+    // line is ours and counts its calls as demos; a customer's widget counts
+    // against the cap the customer set. The page checks the same gate before
+    // it mints a token, but a token lives an hour and opens as many sockets as
+    // anybody cares to open — so the check that holds is this one.
+    const demo = Boolean(location.demo?.enabled);
+    const gate = demo ? checkDemoGate(location) : checkEmbedGate(location);
     if (!gate.allowed) {
       socket.write("HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n");
       socket.destroy();
@@ -152,7 +168,7 @@ server.on("upgrade", (req, socket, head) => {
     }
     browserWss.handleUpgrade(req, socket, head, (ws) => {
       watch(ws);
-      handleBrowser(ws, location.id, "", null);
+      handleBrowser(ws, location.id, "", null, demo ? "browser" : "embed");
     });
     return;
   }
@@ -179,6 +195,8 @@ function handleBrowser(
   from: string,
   /** Null on a public prospect demo, where the signed token stood in for one. */
   user: User | null,
+  /** Which door: the venue's own console and our demos, or a customer's widget. */
+  channel: "browser" | "embed",
 ): void {
   const location = getLocation(locationId) ?? listLocations()[0];
   if (!location) {
@@ -199,7 +217,18 @@ function handleBrowser(
   // A caller id can be supplied from the console so guest recognition and
   // "look up my booking" are testable without a phone line.
   const callerNumber = from.trim() || undefined;
-  const call = startCall(location, "browser", callerNumber ?? "browser-console");
+  const call = startCall(
+    location,
+    channel,
+    callerNumber ?? (channel === "embed" ? "website" : "browser-console"),
+  );
+  // A demo line's calls are demos whichever way they arrive. This was set only
+  // on the telephone path, so the bell on our own front page — the door most
+  // strangers use — never counted toward the demo cap at all.
+  if (location.demo?.enabled && channel === "browser" && !user) {
+    call.isDemo = true;
+    saveCall(call);
+  }
   const session = new VoiceSession(
     location,
     call,

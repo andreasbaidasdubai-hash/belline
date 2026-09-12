@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
+import { isBellineStaff } from "@/lib/auth";
 import { isConfigured, one, tx } from "@/lib/sales/db/client";
 import { audit, log } from "@/lib/sales/db/repo/activity";
 import { suppress } from "@/lib/sales/compliance/suppression";
@@ -20,7 +21,8 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const auth = await requireApiUser();
   if (auth.response) return auth.response;
-  if (auth.user.role !== "owner") {
+  // Belline staff, not any owner — see isBellineStaff.
+  if (!isBellineStaff(auth.user)) {
     return NextResponse.json({ error: "Not permitted." }, { status: 403 });
   }
   if (!isConfigured()) {

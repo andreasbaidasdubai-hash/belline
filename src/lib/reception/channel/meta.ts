@@ -190,6 +190,8 @@ export const metaAdapter: ChannelAdapter = {
             status,
             error: s.errors?.[0]?.message ?? s.errors?.[0]?.title,
             timestamp: isoFrom(s.timestamp),
+            toE164: toNumber ? toE164(toNumber) : undefined,
+            externalNumberId: numberId,
           });
         }
       }

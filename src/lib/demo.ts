@@ -94,10 +94,45 @@ export function clearOldDemoBookings(location: Location): number {
  * How long a call on this venue may run. A demo makes its point in three
  * minutes; a real caller sorting out a booking sometimes needs seven.
  */
-export function maxCallSeconds(location: Location): number {
-  return location.demo?.enabled
-    ? Math.min(location.demo.maxCallSeconds, location.agent.maxCallSeconds)
-    : location.agent.maxCallSeconds;
+export function maxCallSeconds(location: Location, channel: Call["channel"]): number {
+  let limit = location.agent.maxCallSeconds;
+  if (location.demo?.enabled) limit = Math.min(limit, location.demo.maxCallSeconds);
+  // The widget's own ceiling, on the widget's own calls and nowhere else. It
+  // was configurable, shown on the dashboard, and read by nothing — a venue
+  // that set it to 300 got 480. Applied to the telephone it would be wrong the
+  // other way: a stranger's browser call is not a caller sorting out a booking.
+  if (channel === "embed" && location.embed?.enabled) {
+    limit = Math.min(limit, location.embed.maxCallSeconds);
+  }
+  return limit;
+}
+
+/**
+ * Calls a venue's own test console has made today.
+ *
+ * The console is behind a session, and for a while that was the whole gate:
+ * anyone who could sign in could run eight-minute calls back to back for as
+ * long as they liked, at our cost with three vendors, and a signup takes a
+ * minute. Not billed — the pricing page promises test calls do not count, and
+ * that promise stands — but bounded. Forty a day is a venue genuinely testing
+ * its agent; four hundred is something else.
+ */
+export const CONSOLE_CALLS_PER_DAY = 40;
+
+export function checkConsoleGate(location: Location): DemoGate {
+  const today = todayIn(location.timezone);
+  const used = listCalls(location.id).filter(
+    (c) => c.channel === "browser" && !c.isDemo && dayOf(c, location) === today,
+  ).length;
+  if (used < CONSOLE_CALLS_PER_DAY) {
+    return { allowed: true, used, limit: CONSOLE_CALLS_PER_DAY };
+  }
+  return {
+    allowed: false,
+    used,
+    limit: CONSOLE_CALLS_PER_DAY,
+    message: "The test console has had its day's worth of calls. It opens again tomorrow.",
+  };
 }
 
 /** Every venue currently acting as a public demo. */

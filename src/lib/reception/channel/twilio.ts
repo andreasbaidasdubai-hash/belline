@@ -93,6 +93,9 @@ export const twilioAdapter: ChannelAdapter = {
           status,
           error: p.get("ErrorMessage") ?? p.get("ErrorCode") ?? undefined,
           timestamp: new Date().toISOString(),
+          // `From` on a status callback is our number — the one the message
+          // went out on — which is the account it belongs to.
+          toE164: p.get("From") ? toE164(p.get("From")!) : undefined,
         });
       }
       return { messages, statuses };

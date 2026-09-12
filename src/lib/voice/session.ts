@@ -231,7 +231,7 @@ export class VoiceSession {
     // hold a session (and a meter) open indefinitely. Shorter on a demo line.
     this.timeout = setTimeout(
       () => void this.end("abandoned", "Call exceeded the maximum duration."),
-      maxCallSeconds(this.location) * 1000,
+      maxCallSeconds(this.location, this.call.channel) * 1000,
     );
 
     const greeting = this.agent.greeting();

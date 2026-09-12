@@ -194,8 +194,12 @@ export function checkEmbedGate(location: Location): EmbedGate {
   }
 
   const today = todayIn(location.timezone);
+  // `embed`, not `browser`: the test console is `browser` too, and counting it
+  // here meant a member of staff trying their agent forty times switched the
+  // widget off for the day — while the widget screen reported their calls as
+  // visitors'.
   const used = listCalls(location.id).filter(
-    (call) => call.channel === "browser" && call.startedAt.slice(0, 10) === today,
+    (call) => call.channel === "embed" && call.startedAt.slice(0, 10) === today,
   ).length;
 
   if (used < config.maxCallsPerDay) {

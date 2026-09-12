@@ -928,9 +928,16 @@ export interface Call {
    * synthesis by the second, the other costs tokens by the message, and a busy
    * afternoon on one must not switch the other off.
    *
+   * `embed` is the bell on a customer's own website — a stranger, spending
+   * under that venue's widget ceilings. `browser` is the venue's own test
+   * console and our own demo pages. They were one value for a day, and in that
+   * day a member of staff testing their agent forty times switched their
+   * website widget off, and the widget screen reported the staff's calls as
+   * visitors'. Different budgets, different values.
+   *
    * Only `phone` is billable; see billing/usage.ts, which checks this.
    */
-  channel: "browser" | "phone" | "whatsapp" | "webchat";
+  channel: "browser" | "embed" | "phone" | "whatsapp" | "webchat";
   from: string;
   startedAt: string;
   endedAt?: string;

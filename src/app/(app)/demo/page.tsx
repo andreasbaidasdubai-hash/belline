@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canManageUsers } from "@/lib/auth";
+import { canManageUsers, visibleLocations } from "@/lib/auth";
 import { requireUser } from "@/lib/auth-server";
-import { listCalls, listLocations } from "@/lib/store";
+import { listCalls } from "@/lib/store";
 import { callsToday, demoLocations, maxCallSeconds } from "@/lib/demo";
 import { callDurationSeconds } from "@/lib/calls";
 import { seedIfEmpty } from "@/lib/seed";
@@ -18,8 +18,11 @@ export default async function DemoPage() {
   const user = await requireUser();
   if (!canManageUsers(user)) notFound();
 
-  const lines = demoLocations(listLocations());
-  const allDemoCalls = listCalls().filter((c) => c.isDemo);
+  // Scoped. This read every tenant's demo venues — names, numbers, greetings
+  // — and every tenant's demo calls, to any owner who opened the page.
+  const lines = demoLocations(visibleLocations(user));
+  const mine = new Set(lines.map((l) => l.id));
+  const allDemoCalls = listCalls().filter((c) => c.isDemo && mine.has(c.locationId));
   const minutes = allDemoCalls.reduce(
     (n, c) => n + callDurationSeconds(c) / 60,
     0,
@@ -108,7 +111,7 @@ export default async function DemoPage() {
                       )}
                     </td>
                     <td className="mono" style={{ fontSize: 12.5 }}>
-                      {Math.round(maxCallSeconds(l) / 60)} min
+                      {Math.round(maxCallSeconds(l, "phone") / 60)} min
                     </td>
                     <td className="muted" style={{ fontSize: 12 }}>
                       {l.demo!.disclosure}

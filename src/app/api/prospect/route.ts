@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
+import { isBellineStaff } from "@/lib/auth";
 import { createProspectDemo, listProspects } from "@/lib/prospect";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,11 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const auth = await requireApiUser();
   if (auth.response) return auth.response;
+  // Ours. Reads a stranger's website through the model and builds a venue
+  // from it — a selling tool, not something a customer's owner does.
+  if (!isBellineStaff(auth.user)) {
+    return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+  }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
@@ -49,6 +55,9 @@ export async function POST(request: Request) {
 export async function GET() {
   const auth = await requireApiUser();
   if (auth.response) return auth.response;
+  if (!isBellineStaff(auth.user)) {
+    return NextResponse.json({ error: "Not permitted." }, { status: 403 });
+  }
 
   return NextResponse.json({
     prospects: listProspects().map((l) => ({

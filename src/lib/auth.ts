@@ -5,6 +5,7 @@ import {
   findUserByEmail,
   getSession,
   getLocation,
+  getTenant,
   getUser,
   id,
   listLocations,
@@ -267,6 +268,24 @@ export function canEditAgent(user: User, locationId: string): boolean {
 
 export function canManageUsers(user: User): boolean {
   return user.role === "owner";
+}
+
+/**
+ * Does this person work for Belline?
+ *
+ * A different question from "is this person an owner". Every self-serve
+ * signup is the owner of its own tenant, and for a day the sales console —
+ * every prospect, every drafted message, the approve button — was gated on
+ * `role === "owner"` alone. So it was open to anybody who had filled in the
+ * signup form.
+ *
+ * The tenant decides. Belline's own tenants carry `internal`, set by the
+ * migration and never by a signup; a role can be granted inside a tenant and
+ * cannot lift anybody across one.
+ */
+export function isBellineStaff(user: User): boolean {
+  if (user.role !== "owner") return false;
+  return getTenant(user.tenantId)?.internal === true;
 }
 
 // ---------------------------------------------------------------------------

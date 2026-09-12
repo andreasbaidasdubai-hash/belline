@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Brand from "@/components/Brand";
 import { requireUser } from "@/lib/auth-server";
-import { canManageUsers, canSeeLocation } from "@/lib/auth";
+import { canManageUsers, canSeeLocation, isBellineStaff } from "@/lib/auth";
 import { listLocations } from "@/lib/store";
 import { attentionFor } from "@/lib/attention";
 import { recallSummary } from "@/lib/booking/recall";
@@ -71,7 +71,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       : []),
     // Personalised demos are built *for* a prospect but are still a selling
     // tool, so they stay owner-only.
-    ...(user.role === "owner" ? [{ href: "/prospects", label: "Personalised demos" }] : []),
+    ...(isBellineStaff(user) ? [{ href: "/prospects", label: "Personalised demos" }] : []),
   ];
 
   return (
@@ -146,7 +146,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             Set apart below a rule rather than listed with the venue's own
             pages, because it leads somewhere that is not about this venue.
           */}
-          {user.role === "owner" && (
+          {isBellineStaff(user) && (
             <div
               style={{
                 marginTop: 16,

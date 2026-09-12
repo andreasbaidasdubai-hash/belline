@@ -23,6 +23,8 @@ import {
 import { asBookings as holdsAsBookings, releaseCall } from "./holds";
 import { bookingKey, describeWhat, findDuplicate, type BookingIdentity } from "./idempotency";
 import { pushBooking } from "../integrations/google";
+import { listWaitlist } from "../store";
+import { markConverted } from "../waitlist";
 
 /**
  * The booking facade the agent talks to.
@@ -35,13 +37,6 @@ import { pushBooking } from "../integrations/google";
  * truth, it wants the agent writing into the book its staff already stare at
  * all day. See provider.ts.
  */
-export interface BookingBackend {
-  name: string;
-  search(location: Location, query: AvailabilityQuery): Promise<Slot[]>;
-  create(location: Location, input: CreateInput): Promise<BookingResult>;
-  cancel(location: Location, booking: Booking, reason?: string): Promise<void>;
-}
-
 export interface CreateInput {
   date: DateStr;
   startMin: Minutes;
@@ -506,12 +501,6 @@ export function markProgress(booking: Booking, event: Progress): Booking {
 // live next to the logic that produced the numbers rather than in the prompt.
 // ---------------------------------------------------------------------------
 
-export function describeSlot(location: Location, slot: Slot): string {
-  const time = minutesToSpoken(slot.startMin);
-  if (location.vertical === "restaurant") return time;
-  return slot.staffName ? `${time} with ${slot.staffName}` : time;
-}
-
 /**
  * Just what the booking is, with no name or date — for lists that already
  * carry those in their own columns.
@@ -628,7 +617,28 @@ function recallFor(
 function settled(location: Location, booking: Booking, callId?: string): Booking {
   const saved = saveBooking(booking);
   if (callId) releaseCall(callId);
+  convertWaitlist(saved);
   return mirrored(location, saved);
+}
+
+/**
+ * The waitlist entry this booking answers, if there is one.
+ *
+ * `markConverted` existed, was documented, and was called by nothing — so the
+ * conversion the waitlist page reports was zero for every venue for ever. A
+ * booking by the same number on the same day, inside the window the guest
+ * said they would accept, is that guest taking the slot they were waiting for.
+ */
+function convertWaitlist(booking: Booking): void {
+  const key = normalisePhone(booking.guestPhone);
+  if (key.length < 6) return;
+  for (const entry of listWaitlist({ locationId: booking.locationId, date: booking.date })) {
+    if (entry.status !== "waiting" && entry.status !== "offered") continue;
+    if (normalisePhone(entry.guestPhone) !== key) continue;
+    if (booking.startMin < entry.earliestMin || booking.startMin > entry.latestMin) continue;
+    markConverted(entry.id, booking);
+    return;
+  }
 }
 
 /**

@@ -34,7 +34,12 @@ export function startCall(
  * boot, before anything reads the call list.
  */
 export function reconcileStaleCalls(): number {
-  const stale = listCalls().filter((c) => c.status === "active");
+  // Spoken channels only. A message thread's episode record is *meant* to
+  // stay active for hours — the customer replies after lunch — and sweeping
+  // it here marked every open WhatsApp and website chat "Interrupted — the
+  // server stopped mid-call" on every deploy, which the health panel then
+  // read as a run of hang-ups.
+  const stale = listCalls().filter((c) => c.status === "active" && isSpoken(c.channel));
   for (const call of stale) {
     const lastActivity =
       call.transcript[call.transcript.length - 1]?.at ?? call.startedAt;
@@ -47,6 +52,11 @@ export function reconcileStaleCalls(): number {
     });
   }
   return stale.length;
+}
+
+/** A call with a line to hang up, as opposed to a thread that goes quiet. */
+export function isSpoken(channel: Call["channel"]): boolean {
+  return channel === "phone" || channel === "browser" || channel === "embed";
 }
 
 export function callDurationSeconds(call: Call): number {

@@ -173,7 +173,7 @@ await test("a fresh widget is within its cap", () => {
 await test("the cap counts website calls and stops at the limit", () => {
   const live = getLocation(venue.id)!;
   for (let i = 0; i < live.embed!.maxCallsPerDay; i++) {
-    saveCall(startCall(live, "browser", "+971500000000"));
+    saveCall(startCall(live, "embed", "+971500000000"));
   }
   const gate = checkEmbedGate(getLocation(venue.id)!);
   assert.equal(gate.allowed, false);
@@ -208,7 +208,7 @@ await test("a busy telephone does not switch the website widget off", async () =
 
 await test("another venue's calls do not count against this one", () => {
   const belline = getLocation(BELLINE_LOCATION_ID)!;
-  for (let i = 0; i < 100; i++) saveCall(startCall(belline, "browser", "+971500000002"));
+  for (let i = 0; i < 100; i++) saveCall(startCall(belline, "embed", "+971500000002"));
   assert.equal(checkEmbedGate(getLocation(venue.id)!).allowed, false, "state changed unexpectedly");
   // The venue we just filled is still the one that is full, not this one.
   const other = getLocation(BELLINE_LOCATION_ID)!;

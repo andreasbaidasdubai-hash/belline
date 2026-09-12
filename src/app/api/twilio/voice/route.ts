@@ -1,5 +1,5 @@
-import crypto from "node:crypto";
 import { listLocations } from "@/lib/store";
+import { twilioSignatureValid } from "@/lib/voice/twilio-signature";
 import { signStreamToken } from "@/lib/auth";
 import { checkDemoGate, clearOldDemoBookings, isDemo } from "@/lib/demo";
 import { seedIfEmpty } from "@/lib/seed";
@@ -27,24 +27,14 @@ function digitsOnly(value: string): string {
 /**
  * Twilio signs every webhook. Without this check the endpoint is an open door
  * to anyone who guesses the URL — and each forged request starts a call that
- * bills real money to three vendors.
+ * bills real money to three vendors. See lib/voice/twilio-signature.ts for what
+ * happens when the token is missing, which is the case that matters.
  */
 function signatureValid(url: string, params: Record<string, string>, signature: string | null): boolean {
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  if (!token) return true; // Unconfigured: development only.
-  if (!signature) return false;
-
-  const payload =
-    url +
-    Object.keys(params)
-      .sort()
-      .map((k) => k + params[k])
-      .join("");
-  const expected = crypto.createHmac("sha1", token).update(payload, "utf8").digest("base64");
-
-  const a = Buffer.from(expected);
-  const b = Buffer.from(signature);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  return twilioSignatureValid(url, params, signature, {
+    token: process.env.TWILIO_AUTH_TOKEN,
+    production: process.env.NODE_ENV === "production",
+  });
 }
 
 export async function POST(request: Request) {

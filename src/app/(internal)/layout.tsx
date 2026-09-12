@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Brand from "@/components/Brand";
 import { requireUser } from "@/lib/auth-server";
+import { isBellineStaff } from "@/lib/auth";
 import SignOutButton from "@/components/SignOutButton";
 
 /**
@@ -28,10 +29,11 @@ import SignOutButton from "@/components/SignOutButton";
 export default async function InternalLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
 
-  // Not `canManageUsers`: that answers "may this person manage a venue's
-  // team", which is a different question from "does this person work for
-  // Belline". Deliberately the narrowest check available.
-  if (user.role !== "owner") {
+  // Not the role. Every self-serve signup is the owner of its own tenant, and
+  // gating this on `role === "owner"` alone left every prospect in the
+  // pipeline readable by anybody who had filled in the signup form. The
+  // tenant is what says somebody works here — see `isBellineStaff`.
+  if (!isBellineStaff(user)) {
     return (
       <div className="shell">
         <main className="content">

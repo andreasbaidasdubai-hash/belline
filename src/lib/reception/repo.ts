@@ -250,35 +250,6 @@ export async function upsertCustomer(
   return toCustomer(row!);
 }
 
-/** A deliberate overwrite, from staff or from a booking the customer confirmed. */
-export async function updateCustomer(
-  tenantId: string,
-  id: number,
-  fields: Partial<Pick<Customer, "firstName" | "lastName" | "email" | "language" | "notes">>,
-): Promise<Customer | undefined> {
-  const row = await one<CustomerRow>(
-    `update customer set
-       first_name = coalesce($3, first_name),
-       last_name  = coalesce($4, last_name),
-       email      = coalesce($5, email),
-       language   = coalesce($6, language),
-       notes      = coalesce($7, notes),
-       updated_at = now()
-     where tenant_id = $1 and id = $2
-     returning *`,
-    [
-      tenantId,
-      id,
-      fields.firstName ?? null,
-      fields.lastName ?? null,
-      fields.email ?? null,
-      fields.language ?? null,
-      fields.notes ?? null,
-    ],
-  );
-  return row && toCustomer(row);
-}
-
 // ---------------------------------------------------------------------------
 // Channel accounts
 // ---------------------------------------------------------------------------
@@ -480,24 +451,6 @@ export async function patchState(
       where tenant_id = $1 and id = $2
       returning *`,
     [tenantId, id, JSON.stringify(patch)],
-  );
-  return row && toConversation(row);
-}
-
-export async function setConversationFields(
-  tenantId: string,
-  id: number,
-  fields: Partial<Pick<Conversation, "locationId" | "language" | "bookingId">>,
-): Promise<Conversation | undefined> {
-  const row = await one<ConversationRow>(
-    `update conversation set
-       location_id = coalesce($3, location_id),
-       language    = coalesce($4, language),
-       booking_id  = coalesce($5, booking_id),
-       updated_at  = now()
-     where tenant_id = $1 and id = $2
-     returning *`,
-    [tenantId, id, fields.locationId ?? null, fields.language ?? null, fields.bookingId ?? null],
   );
   return row && toConversation(row);
 }

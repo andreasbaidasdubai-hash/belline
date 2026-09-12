@@ -418,6 +418,18 @@ export function listUsers(): User[] {
   return load().users;
 }
 
+/**
+ * The people in one tenant.
+ *
+ * The unscoped `listUsers` above exists for the migration and the CLI, and it
+ * was reached from the Team page — which handed every tenant's owners, with
+ * their ids, to every other tenant's owner. Anything a signed-in person sees
+ * comes through here.
+ */
+export function listUsersFor(tenantId: string): User[] {
+  return load().users.filter((u) => u.tenantId === tenantId);
+}
+
 export function getUser(userId: string): User | undefined {
   return load().users.find((u) => u.id === userId);
 }

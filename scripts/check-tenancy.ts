@@ -239,6 +239,86 @@ test("a user written without a tenant is adopted by the migration", () => {
   assert.equal(listUsers().find((u) => u.id === "usr_legacy")?.tenantId, DEFAULT_TENANT_ID);
 });
 
+
+console.log("\nPeople across tenants\n");
+
+test("a self-serve owner sees only their own tenant's people", async () => {
+  const { signUp } = await import("../src/lib/onboarding");
+  const { teamFor } = await import("../src/lib/team");
+  const { listUsers } = await import("../src/lib/store");
+
+  const a = await signUp({ businessName: "Tenant A", email: "a@tenant-a.test", password: "Correct-Horse-Battery-9", vertical: "salon" });
+  const b = await signUp({ businessName: "Tenant B", email: "b@tenant-b.test", password: "Correct-Horse-Battery-9", vertical: "clinic" });
+  assert.ok(a.ok && b.ok);
+  if (!a.ok || !b.ok) return;
+
+  const seenByA = teamFor(a.user).map((u) => u.id);
+  assert.ok(seenByA.includes(a.user.id));
+  assert.ok(!seenByA.includes(b.user.id), "tenant A's Team page listed tenant B's owner");
+  // And the unscoped accessor still knows about both — it is the page that
+  // must not use it, not the store that must forget.
+  assert.ok(listUsers().some((u) => u.id === b.user.id));
+});
+
+test("one tenant's owner cannot reset, disable or remove another tenant's people", async () => {
+  const { updateTeammate, removeTeammate } = await import("../src/lib/team");
+  const { findUserByEmail, getUser } = await import("../src/lib/store");
+  const a = findUserByEmail("a@tenant-a.test")!;
+  const b = findUserByEmail("b@tenant-b.test")!;
+
+  // The chain the audit found: list, take an id, reset the password, sign in.
+  const reset = updateTeammate(a, { userId: b.id, password: "Taken-Over-Now-1234" });
+  assert.equal(reset.ok, false);
+  assert.equal(!reset.ok && reset.status, 404, "a foreign id must read as nonexistent, not as forbidden");
+  assert.equal(getUser(b.id)!.passwordHash, b.passwordHash, "the password was changed");
+
+  assert.equal(updateTeammate(a, { userId: b.id, disabled: true }).ok, false);
+  assert.equal(getUser(b.id)!.disabled, undefined);
+  assert.equal(removeTeammate(a, b.id).ok, false);
+  assert.ok(getUser(b.id), "tenant B's owner was deleted by tenant A");
+});
+
+test("a teammate an owner adds lands in the owner's tenant and can see the venue", async () => {
+  const { addTeammate } = await import("../src/lib/team");
+  const { findUserByEmail, listLocationsFor } = await import("../src/lib/store");
+  const { visibleLocations } = await import("../src/lib/auth");
+  const a = findUserByEmail("a@tenant-a.test")!;
+
+  const added = addTeammate(a, { email: "manager@tenant-a.test", password: "Correct-Horse-Battery-9", role: "manager" });
+  assert.equal(added.ok, true);
+  const manager = findUserByEmail("manager@tenant-a.test")!;
+  assert.equal(manager.tenantId, a.tenantId, "the invite landed in the migration tenant");
+  assert.equal(visibleLocations(manager).length, listLocationsFor(a.tenantId).length, "the manager signs in to no venues");
+});
+
+test("the last owner of a tenant is protected per tenant, not globally", async () => {
+  const { updateTeammate } = await import("../src/lib/team");
+  const { findUserByEmail } = await import("../src/lib/store");
+  const a = findUserByEmail("a@tenant-a.test")!;
+  // A is the only owner of tenant A. Other tenants having owners is irrelevant.
+  const demote = updateTeammate(a, { userId: a.id, role: "staff" });
+  assert.equal(demote.ok, false);
+  assert.equal(!demote.ok && demote.status, 409);
+});
+
+test("Belline staff is a tenant, not a role", async () => {
+  const { isBellineStaff } = await import("../src/lib/auth");
+  const { findUserByEmail, getTenant } = await import("../src/lib/store");
+  const { DEFAULT_TENANT_ID, BELLINE_TENANT_ID } = await import("../src/lib/tenancy");
+
+  // The migration marks both of ours internal; a signup's tenant never is.
+  assert.equal(getTenant(DEFAULT_TENANT_ID)?.internal, true);
+  assert.equal(getTenant(BELLINE_TENANT_ID)?.internal, true);
+
+  const a = findUserByEmail("a@tenant-a.test")!;
+  assert.equal(a.role, "owner");
+  assert.equal(isBellineStaff(a), false, "a self-serve owner could open the sales console");
+
+  const ours = { ...a, tenantId: DEFAULT_TENANT_ID };
+  assert.equal(isBellineStaff(ours), true, "the company's own owner was locked out");
+  assert.equal(isBellineStaff({ ...ours, role: "manager" }), false, "a manager of ours is not staff of the console");
+});
+
 await queue;
 
 console.log(

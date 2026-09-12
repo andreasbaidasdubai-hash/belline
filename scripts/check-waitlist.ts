@@ -278,6 +278,53 @@ test("the allowance is a ceiling, not a removal", () => {
   }
 });
 
+
+console.log("\nConversion\n");
+
+test("a booking by the waiting guest, inside their window, converts the entry", () => {
+  const venue = listLocations().find((l) => l.vertical === "restaurant")!;
+  const date = "2030-06-01";
+  const entry = join({
+    locationId: venue.id,
+    guestName: "Converted Guest",
+    guestPhone: "+971 50 777 0001",
+    date,
+    earliestMin: 19 * 60,
+    latestMin: 21 * 60,
+    partySize: 2,
+  });
+  const booked = createBooking(venue, {
+    date,
+    startMin: 19 * 60 + 30,
+    guestName: "Converted Guest",
+    guestPhone: "+971507770001",
+    partySize: 2,
+    staffOverride: true,
+  });
+  assert.equal(booked.ok, true, !booked.ok ? booked.detail : "");
+  const after = listWaitlist({ locationId: venue.id, date }).find((w) => w.id === entry.id)!;
+  assert.equal(after.status, "converted", "markConverted was never called for a real booking");
+  assert.equal(after.bookingId, booked.ok ? booked.booking.id : undefined);
+});
+
+test("a booking outside the window, or by somebody else, converts nothing", () => {
+  const venue = listLocations().find((l) => l.vertical === "restaurant")!;
+  const date = "2030-06-02";
+  const entry = join({
+    locationId: venue.id,
+    guestName: "Still Waiting",
+    guestPhone: "+971507770002",
+    date,
+    earliestMin: 19 * 60,
+    latestMin: 20 * 60,
+    partySize: 2,
+  });
+  createBooking(venue, { date, startMin: 12 * 60, guestName: "Still Waiting", guestPhone: "+971507770002", partySize: 2, staffOverride: true });
+  createBooking(venue, { date, startMin: 19 * 60 + 30, guestName: "Somebody Else", guestPhone: "+971507770003", partySize: 2, staffOverride: true });
+  const after = listWaitlist({ locationId: venue.id, date }).find((w) => w.id === entry.id)!;
+  assert.equal(after.status, "waiting");
+});
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 console.log(

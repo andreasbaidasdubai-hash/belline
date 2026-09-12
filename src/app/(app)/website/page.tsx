@@ -44,7 +44,7 @@ export default async function WebsitePage({
   // "may another one start" and this answers "what has it done today" — which
   // are the same number until the ceiling is reached and then are not.
   const used = {
-    voice: calls.filter((c) => c.channel === "browser").length,
+    voice: calls.filter((c) => c.channel === "embed").length,
     chat: calls.filter((c) => c.channel === "webchat").length,
   };
 

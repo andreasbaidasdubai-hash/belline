@@ -1,4 +1,4 @@
-import type { DateStr, Minutes, TimeRange } from "./types";
+import type { DateStr, Minutes } from "./types";
 
 const DAY_NAMES = [
   "Sunday",
@@ -166,12 +166,4 @@ export function dateToSpoken(date: DateStr, timezone?: string): string {
   if (date === today) return `today, ${label}`;
   if (date === addDays(today, 1)) return `tomorrow, ${label}`;
   return label;
-}
-
-export function rangesOverlap(a: TimeRange, b: TimeRange): boolean {
-  return a.start < b.end && b.start < a.end;
-}
-
-export function withinAnyRange(range: TimeRange, ranges: TimeRange[]): boolean {
-  return ranges.some((r) => range.start >= r.start && range.end <= r.end);
 }

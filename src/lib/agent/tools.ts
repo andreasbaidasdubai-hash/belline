@@ -798,11 +798,3 @@ export async function executeTool(
   }
 }
 
-/** Used by the dashboard's "today at a glance" panel. */
-export function todaysBookings(location: Location): Booking[] {
-  return listBookings({
-    locationId: location.id,
-    date: todayIn(location.timezone),
-    status: "confirmed",
-  }).sort((a, b) => a.startMin - b.startMin);
-}

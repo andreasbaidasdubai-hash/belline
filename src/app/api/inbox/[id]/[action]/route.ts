@@ -11,20 +11,11 @@ import {
   accountCredentials,
 } from "@/lib/reception/repo";
 import { openCredentials } from "@/lib/db/credentials";
-import { metaAdapter } from "@/lib/reception/channel/meta";
-import { twilioAdapter } from "@/lib/reception/channel/twilio";
-import { internalAdapter } from "@/lib/reception/channel/internal";
+import { ADAPTERS, closeEpisode } from "@/lib/reception/respond";
 import { track } from "@/lib/reception/events";
 import { seedIfEmpty } from "@/lib/seed";
-import type { ChannelAdapter } from "@/lib/reception/channel";
 
 export const dynamic = "force-dynamic";
-
-const ADAPTERS: Record<string, ChannelAdapter> = {
-  meta: metaAdapter,
-  twilio: twilioAdapter,
-  internal: internalAdapter,
-};
 
 /**
  * Taking a conversation over, giving it back, and answering it.
@@ -117,6 +108,13 @@ export async function POST(
       await transition(user.tenantId, conversationId, "CLOSED", {
         expect: ["AI_ACTIVE", "HANDOFF_REQUESTED", "HUMAN_ACTIVE"],
       });
+      // The venue's own episode record, finished. A conversation has no moment
+      // of hanging up; without this the call sat "active" for ever and the
+      // attention inbox kept offering it. Written, exported, and called by
+      // nothing until now.
+      if (conversation.callId) {
+        closeEpisode(conversation.callId, `Closed by ${user.name}.`);
+      }
       await track({
         tenantId: user.tenantId,
         businessId: conversation.businessId,

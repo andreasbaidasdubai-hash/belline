@@ -274,7 +274,7 @@ await test("a busy bell does not switch the chat off, or the other way round", (
   });
   // Two spoken calls through the website, on a venue whose chat is already at
   // its own ceiling from the test above.
-  for (let i = 0; i < 2; i++) saveCall(startCall(both, "browser", "Website"));
+  for (let i = 0; i < 2; i++) saveCall(startCall(both, "embed", "Website"));
   const fresh = getLocation(both.id)!;
   assert.equal(checkEmbedGate(fresh).allowed, false, "the bell reached its own cap");
   // And a third venue-wide channel, untouched by either.

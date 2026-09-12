@@ -42,7 +42,18 @@ import {
  * and "which of your branches is closest?" had nowhere to be answered from.
  */
 
-/** Everything that existed before tenancy belongs here. */
+/**
+ * Everything that existed before tenancy belongs here.
+ *
+ * Which makes it ours. Before self-serve signup there was one installation —
+ * Belline's own, with the seeded demo lines and the people who run the
+ * company — and that is what was migrated into this tenant. It is marked
+ * `internal` below for that reason: the sales console and the prospect tools
+ * are gated on the tenant, and the owner of the company has to pass.
+ *
+ * If a real customer is ever found in here, the fix is to move them to a
+ * tenant of their own, not to widen this one.
+ */
 export const DEFAULT_TENANT_ID = "tnt_default";
 
 /**
@@ -97,11 +108,18 @@ function businessFrom(location: Location, tenantId: string): Business {
  * it touches nothing.
  */
 export function ensureTenancy(): void {
-  if (!getTenant(DEFAULT_TENANT_ID)) {
-    saveTenant(tenant(DEFAULT_TENANT_ID, "Belline customer"));
-  }
-  if (!getTenant(BELLINE_TENANT_ID)) {
-    saveTenant(tenant(BELLINE_TENANT_ID, "Belline", true));
+  for (const [id, name] of [
+    [DEFAULT_TENANT_ID, "Belline"],
+    [BELLINE_TENANT_ID, "Belline"],
+  ] as const) {
+    const existing = getTenant(id);
+    if (!existing) {
+      saveTenant(tenant(id, name, true));
+    } else if (!existing.internal) {
+      // Written on a store that predates the flag. Fill the blank and nothing
+      // else — the name and the dates are whatever they were.
+      saveTenant({ ...existing, internal: true });
+    }
   }
 
   for (const location of listLocations({ includeInternal: true })) {

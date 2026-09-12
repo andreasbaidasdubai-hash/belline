@@ -18,7 +18,7 @@ Belline is a working voice agent with a deterministic booking engine, a real
 phone number, an eight-page marketing site with four vertical pages, a
 personalised-demo generator, a versioned Business Brain, an Action Inbox, a
 diary you can work in, a waitlist that converts, and one-way Google Calendar
-sync. 187 unit tests and 48 rendered-browser checks pass. What is still
+sync. 620 unit tests across 28 suites and 48 rendered-browser checks pass. What is still
 missing is the commercial machinery — billing, CRM, multi-tenancy worth the
 name, observability — and the four partner-gated integrations, which are
 blocked on contracts rather than engineering. Roughly 45% of the two

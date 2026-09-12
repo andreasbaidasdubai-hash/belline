@@ -7,6 +7,8 @@ import { listCalls } from "@/lib/store";
 import { todayIn } from "@/lib/time";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
+import ManageBilling from "./ManageBilling";
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -287,6 +289,13 @@ export default async function BillingPage({
                 plan — if the allowance runs short, the answer is a bigger plan, not
                 a bigger bill.
               </p>
+              {location.stripe?.customerId && (
+                // Stripe's own portal: change the card, download invoices,
+                // cancel. Written months ago as `portalUrl` and reached from
+                // nowhere, so a paying customer had no way to do any of those
+                // without emailing us.
+                <ManageBilling locationId={location.id} />
+              )}
             </div>
           </div>
 

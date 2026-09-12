@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { canManageUsers } from "@/lib/auth";
 import { requireUser } from "@/lib/auth-server";
-import { listLocations, listUsers } from "@/lib/store";
+import { listLocationsFor } from "@/lib/store";
+import { teamFor } from "@/lib/team";
 import { PageHeader } from "@/components/LocationTabs";
 import TeamManager from "./TeamManager";
 
@@ -11,18 +12,11 @@ export default async function TeamPage() {
   const user = await requireUser();
   if (!canManageUsers(user)) notFound();
 
-  // Password hashes never cross to the client, even to an owner.
-  const people = listUsers().map((u) => ({
-    id: u.id,
-    email: u.email,
-    name: u.name,
-    role: u.role,
-    locationIds: u.locationIds,
-    disabled: Boolean(u.disabled),
-    lastSeenAt: u.lastSeenAt ?? null,
-  }));
-
-  const venues = listLocations().map((l) => ({ id: l.id, name: l.name }));
+  // This tenant's people and this tenant's venues. Password hashes never
+  // cross to the client, even to an owner — and neither, any more, does
+  // anybody else's staff list.
+  const people = teamFor(user);
+  const venues = listLocationsFor(user.tenantId).map((l) => ({ id: l.id, name: l.name }));
 
   return (
     <>

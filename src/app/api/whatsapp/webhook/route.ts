@@ -131,7 +131,11 @@ async function handle(
 ): Promise<void> {
   for (const status of statuses) {
     try {
-      await acceptStatus(adapter.channel, {}, status);
+      await acceptStatus(
+        adapter.channel,
+        { phoneE164: status.toE164, externalNumberId: status.externalNumberId },
+        status,
+      );
     } catch (err) {
       console.error(`[whatsapp ${traceId}] status ${status.providerMessageId}:`, err);
     }

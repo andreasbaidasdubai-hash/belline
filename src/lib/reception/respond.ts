@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Call, Location } from "../types";
-import type { Conversation } from "./types";
+import type { Conversation, Provider } from "./types";
 import { getCall, getLocation, saveCall } from "../store";
 import { startCall } from "../calls";
 import { AgentSession } from "../agent/runtime";
@@ -48,7 +48,15 @@ import type { ChannelAdapter } from "./channel";
  * the correct price for never talking over a member of staff.
  */
 
-const ADAPTERS: Record<string, ChannelAdapter> = {
+/**
+ * Every provider's adapter, in one place.
+ *
+ * Exported because the inbox needs it too, and for a day the inbox kept its
+ * own copy — which was missing `webchat`, so a member of staff replying to
+ * a website visitor got a 500 after the message had already been recorded.
+ * Two registries drift; one cannot.
+ */
+export const ADAPTERS: Record<Provider, ChannelAdapter> = {
   meta: metaAdapter,
   twilio: twilioAdapter,
   // No wire. The same pipeline with the delivery recorded rather than sent —
