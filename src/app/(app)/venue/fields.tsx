@@ -183,7 +183,9 @@ export function Toggle({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        style={{ width: "auto", margin: 0 }}
+        // 13px was the browser default. A thumb needs more than that, and so
+        // does anybody over forty reading a rota on a phone.
+        style={{ width: 22, height: 22, margin: 0, accentColor: "var(--accent)", flexShrink: 0 }}
       />
       {label}
     </label>

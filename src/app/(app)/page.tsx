@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { overviewFor, summarise } from "@/lib/overview";
+import { readiness } from "@/lib/onboarding";
 import { callDurationSeconds } from "@/lib/calls";
 import { isRestaurant, terms } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -54,12 +55,16 @@ export default async function OverviewPage({
   const { did, worth, health, needsYou, recent } = overviewFor(location);
   const t = terms(location);
   const unwell = health.filter((h) => !h.ok);
+  // A venue with no number, no services and no staff cannot answer anybody,
+  // and the summary used to say it was listening. The missing list already
+  // existed for the setup screen; the home page is where it is needed.
+  const setup = readiness(location);
 
   return (
     <>
       <PageHeader
         title={location.name}
-        subtitle={`${location.address} · ${location.phone || "no number yet"}`}
+        subtitle={[location.address, location.phone || "no number yet"].filter(Boolean).join(" · ")}
         right={
           <Link href={`/calendar?loc=${location.id}`} className="btn btn-accent">
             Today&apos;s diary
@@ -71,8 +76,21 @@ export default async function OverviewPage({
       {/* What it did. One sentence first, because that is what gets read. */}
       <div className="panel" style={{ padding: "20px 22px", marginBottom: 14 }}>
         <p style={{ fontSize: 16, lineHeight: 1.5, margin: 0, maxWidth: "58ch", color: "var(--text)" }}>
-          {summarise(location, did)}
+          {setup.ready || did.answered > 0
+            ? summarise(location, did)
+            : `Belline can't answer for ${location.name} yet — a few things to finish first.`}
         </p>
+        {!setup.ready && (
+          <ul style={{ margin: "14px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
+            {setup.missing.map((m) => (
+              <li key={m.label} style={{ fontSize: 13.5 }}>
+                <Link href={`${m.where}?loc=${location.id}`} style={{ color: "var(--accent)", textDecoration: "underline" }}>
+                  {m.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {did.answered > 0 && (
           <div

@@ -249,7 +249,14 @@ export function applyStripeEvent(event: Stripe.Event): { locationId?: string; ap
         typeof invoice.parent?.subscription_details?.metadata?.belline_location === "string"
           ? invoice.parent.subscription_details.metadata.belline_location
           : undefined;
-      return { locationId, applied: "payment failed, noted" };
+      if (!locationId) return { applied: "ignored: no venue on the invoice" };
+      const location = getLocation(locationId);
+      if (!location?.subscription) return { locationId, applied: "ignored: unknown venue" };
+      upsertLocation({
+        ...location,
+        subscription: { ...location.subscription, paymentFailedAt: new Date().toISOString() },
+      });
+      return { locationId, applied: "payment failed, recorded" };
     }
 
     default:

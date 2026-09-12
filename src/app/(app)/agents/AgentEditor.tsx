@@ -61,6 +61,10 @@ export default function AgentEditor({
   const [agent, setAgent] = useState<AgentConfig>(initial);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Whether anything differs from what was loaded. The Save button was three
+  // and a half thousand pixels below the first field with no sign that leaving
+  // would lose the edit.
+  const dirty = JSON.stringify(agent) !== JSON.stringify(initial);
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -204,6 +208,7 @@ export default function AgentEditor({
         >
           <div style={{ display: "flex", gap: 8 }}>
             <select
+              aria-label="Voice"
               value={knownVoice ? agent.voiceId : "__custom"}
               onChange={(e) => {
                 if (e.target.value !== "__custom") set("voiceId", e.target.value);
@@ -277,6 +282,7 @@ export default function AgentEditor({
           }
         >
           <select
+            aria-label="Voice quality"
             value={agent.voiceModel ?? DEFAULT_VOICE_MODEL}
             onChange={(e) => set("voiceModel", e.target.value)}
           >
@@ -292,7 +298,7 @@ export default function AgentEditor({
           label="Model"
           hint="Measured on a simple booking: Haiku answers in about 1.3 seconds, Opus in about 2.8. Callers read three seconds of silence as a dropped line, so start on Haiku and only move up if this venue's rules are genuinely intricate."
         >
-          <select value={agent.model} onChange={(e) => set("model", e.target.value)}>
+          <select aria-label="Model" value={agent.model} onChange={(e) => set("model", e.target.value)}>
             {MODELS.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
@@ -389,10 +395,15 @@ export default function AgentEditor({
           + Add question
         </button>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button className="btn btn-accent" onClick={save} disabled={saving}>
+        <div className="save-bar">
+          <button className="btn btn-accent" onClick={save} disabled={saving || !dirty}>
             {saving ? "Saving…" : "Save"}
           </button>
+          {dirty && !saved && (
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              unsaved
+            </span>
+          )}
           {saved && (
             <span style={{ color: "var(--ok)", fontSize: 12.5 }}>
               Saved — the next call uses it.

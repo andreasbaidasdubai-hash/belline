@@ -40,7 +40,17 @@ export default async function LoginPage() {
         >
           {firstRun
             ? "This account can see every venue and add the rest of your team."
-            : "Ask whoever set this up if you need an account."}
+            : (
+                <>
+                  Part of a team? Ask whoever set this up for an account.
+                  <br />
+                  New to Belline?{" "}
+                  <a href="/checkout" style={{ color: "var(--accent)", textDecoration: "underline" }}>
+                    Start free
+                  </a>
+                  .
+                </>
+              )}
         </p>
       </div>
     </div>

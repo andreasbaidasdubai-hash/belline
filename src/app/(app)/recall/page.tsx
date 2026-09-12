@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
+import { visibleLocations } from "@/lib/auth";
 import { seedIfEmpty } from "@/lib/seed";
 import { recallDue, recallSummary } from "@/lib/booking/recall";
 import { terms } from "@/lib/verticals";
@@ -34,6 +36,14 @@ export default async function RecallPage({
   const { loc, show } = await searchParams;
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
+
+  // The link appears in the sidebar because *some* venue this person can see
+  // has people due back. If the venue that resolved is a restaurant, go to
+  // the one that does rather than explaining why there is nothing here.
+  if (!location.salon && !loc) {
+    const diary = visibleLocations(user).find((l) => l.salon);
+    if (diary) redirect(`/recall?loc=${diary.id}`);
+  }
 
   const t = terms(location);
   const showSnoozed = show === "all";

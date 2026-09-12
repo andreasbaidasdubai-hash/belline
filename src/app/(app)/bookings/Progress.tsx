@@ -52,9 +52,11 @@ export default function Progress({
     }
   }
 
+  // Sized for a thumb at a host stand, not a cursor. They were 27px tall.
   const btn = {
-    padding: "4px 10px",
-    fontSize: 11.5,
+    padding: "9px 14px",
+    fontSize: 12.5,
+    minHeight: 40,
   } as const;
 
   if (error) {

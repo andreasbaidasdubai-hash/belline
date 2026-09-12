@@ -14,7 +14,7 @@ export async function LocationTabs({ base, active }: { base: string; active: str
       <div className="loc-tabs">
         <span className="pill">
           {locations[0].name}
-          <span style={{ opacity: 0.65, fontWeight: 400 }}>
+          <span style={{ fontWeight: 400 }}>
             {locations[0].vertical}
           </span>
         </span>
@@ -61,6 +61,7 @@ export function PageHeader({
 }) {
   return (
     <div
+      className="page-head"
       style={{
         display: "flex",
         alignItems: "flex-start",

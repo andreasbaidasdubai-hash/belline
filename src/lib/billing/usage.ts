@@ -273,6 +273,15 @@ function notesFor(plan: Plan, sub: Subscription, usage: Usage, bill: Bill): stri
     notes.push("Cancelled. Belline keeps answering until the end of this period, then stops.");
   }
 
+  if (sub.paymentFailedAt) {
+    // First, above everything else about the period: it is the one line on
+    // this screen that needs something done today.
+    notes.unshift(
+      "The last payment did not go through. Belline is still answering — update the card " +
+        "and we will try again; nothing stops before the retries run out.",
+    );
+  }
+
   if (usage.included === null) {
     notes.push("Unlimited minutes. Nothing to watch.");
   } else if (usage.overBy > 0) {

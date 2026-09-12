@@ -134,6 +134,7 @@ export default function TeamManager({
                   <td>
                     <select
                       value={person.role}
+                      aria-label={`Role for ${person.name}`}
                       disabled={busy}
                       onChange={(e) =>
                         send("PATCH", { userId: person.id, role: e.target.value })

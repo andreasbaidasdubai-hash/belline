@@ -201,7 +201,7 @@ export function connectionState(location: Location): {
     return {
       connected: false,
       healthy: false,
-      detail: "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to offer this.",
+      detail: "Google Calendar isn't available on this account yet.",
     };
   }
   if (!location.google) {

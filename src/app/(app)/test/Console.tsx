@@ -881,7 +881,7 @@ export default function Console({
                   <input
                     value={from}
                     onChange={(e) => setFrom(e.target.value)}
-                    placeholder="Calling from… (optional)"
+                    placeholder="Your number (optional)"
                     title="Give a number that already has a booking and the agent will recognise the caller."
                     style={{ width: 190 }}
                   />

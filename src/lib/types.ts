@@ -222,6 +222,16 @@ export interface Subscription {
   status: "trialing" | "active" | "cancelled";
   /** Set when someone cancels. Service runs to the end of the paid period. */
   cancelledAt?: string;
+  /**
+   * The last time Stripe told us a charge failed. Cleared when one succeeds.
+   *
+   * Not a status of its own: the receptionist keeps answering while Stripe
+   * retries for a fortnight, and switching a venue off over one declined card
+   * would do more damage than the unpaid invoice. But the webhook used to
+   * "note" this and store nothing, so the customer whose card had expired found
+   * out when the retries ran out. Now the dashboard can say so.
+   */
+  paymentFailedAt?: string;
   /** Trialing only. Nothing is charged, and the allowance is its own. */
   trial?: {
     endsOn: DateStr;

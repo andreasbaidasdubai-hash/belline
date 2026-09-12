@@ -359,17 +359,17 @@ export function readiness(location: Location): {
   if (!location.address.trim()) missing.push({ label: "An address", where: "/agents" });
   if (location.vertical === "restaurant") {
     if (!location.restaurant?.tables.length) {
-      missing.push({ label: "Your tables", where: "/agents" });
+      missing.push({ label: "Your tables", where: "/venue" });
     }
     if (!location.restaurant?.services.length) {
-      missing.push({ label: "Service times", where: "/agents" });
+      missing.push({ label: "Service times", where: "/venue" });
     }
   } else {
     if (!location.salon?.services.length) {
-      missing.push({ label: "What you offer", where: "/agents" });
+      missing.push({ label: "What you offer", where: "/venue" });
     }
     if (!location.salon?.staff.length) {
-      missing.push({ label: "Who works there", where: "/agents" });
+      missing.push({ label: "Who works there", where: "/venue" });
     }
   }
   if (!location.agent.faqs.length) {

@@ -187,7 +187,9 @@ export function overviewFor(location: Location): Overview {
       ok: hoursSinceCall < 72,
       detail: lastCall
         ? `Last call ${new Date(lastCall.startedAt).toLocaleString()}`
-        : "No calls yet. Check the number is forwarded.",
+        : location.phone.trim()
+          ? "No calls yet. Check the number is forwarded."
+          : "No phone number yet. Add one under How it works.",
     },
     {
       label: "Calls completing",
@@ -215,6 +217,16 @@ export function overviewFor(location: Location): Overview {
       ok: !google.connected || google.healthy,
       detail: google.detail,
     },
+    ...(location.subscription?.paymentFailedAt
+      ? [
+          {
+            label: "Payment",
+            ok: false,
+            detail: "The last payment did not go through. Belline is still answering.",
+            fix: "Update the card under Plan and usage.",
+          },
+        ]
+      : []),
     {
       label: "Speech and model",
       ok: Boolean(

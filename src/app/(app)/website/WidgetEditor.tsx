@@ -148,10 +148,10 @@ export default function WidgetEditor({
           {enabled && (
             <span className="muted" style={{ fontWeight: 400 }}>
               {offering.voice && offering.chat
-                ? "· talking and messages"
+                ? " · talking and messages"
                 : offering.chat
-                  ? "· messages"
-                  : "· talking"}
+                  ? " · messages"
+                  : " · talking"}
             </span>
           )}
         </div>

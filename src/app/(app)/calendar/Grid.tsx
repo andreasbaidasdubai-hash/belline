@@ -250,7 +250,7 @@ export default function Grid({
         </div>
       )}
 
-      <div className="cal-scroll">
+      <div className="cal-scroll" tabIndex={0}>
         <div
           className="cal-inner"
           style={{ gridTemplateColumns: `56px repeat(${view.columns.length}, minmax(108px, 1fr))` }}
@@ -265,6 +265,10 @@ export default function Grid({
               {column.availableMin > 0 && (
                 <span
                   className="cal-head-util"
+                  // role="img": aria-label on a plain span is ignored by
+                  // assistive technology, so the utilisation existed only as a
+                  // tooltip. With a role it is read out.
+                  role="img"
                   title={`${Math.round(column.utilisation * 100)}% of ${Math.round(column.availableMin / 60)}h sold`}
                   aria-label={`${Math.round(column.utilisation * 100)} per cent sold`}
                 >

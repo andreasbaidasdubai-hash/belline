@@ -208,7 +208,7 @@ select {
 
 input::placeholder,
 textarea::placeholder {
-  color: #A9A199;
+  color: #8E867C;
 }
 
 /* Number inputs, without the spinner.
@@ -961,20 +961,11 @@ tbody tr:hover {
     display: none;
   }
 
+  /* The sidebar's list is replaced by the menu button below this width.
+     It used to become a horizontally scrolling strip with its scrollbar
+     hidden — swipeable, and nothing said so. */
   .nav {
-    flex-direction: row;
-    gap: 4px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .nav::-webkit-scrollbar {
     display: none;
-  }
-
-  .nav a {
-    white-space: nowrap;
   }
 
   .content {
@@ -1560,6 +1551,7 @@ body:has(.callbar) {
   color: var(--muted);
   transition: background 0.14s ease, color 0.14s ease;
 }
+.plan-switch a { color: var(--text-2); }
 .plan-switch a strong { font-size: 12px; font-weight: 600; letter-spacing: -0.005em; }
 .plan-switch a span { font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .plan-switch a:hover { color: var(--text); }
@@ -1717,4 +1709,164 @@ body:has(.callbar) {
   .inbox-list { max-height: 280px; }
   .inbox-thread { min-height: 60vh; }
   .bubble { max-width: 88%; }
+}
+
+
+/* ===========================================================================
+   Fixes from the interface audit
+   =========================================================================== */
+
+/* --- The menu on a phone -------------------------------------------------- */
+
+.mobile-nav { display: none; }
+
+@media (max-width: 860px) {
+  .mobile-nav { display: block; margin-left: auto; }
+  .who { margin-left: 0; }
+
+  .mobile-nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .mobile-nav-badge {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--bad);
+    color: #fff;
+    font-size: 11.5px;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The panel drops below the header, full width, one link per row at a
+     height a thumb hits without looking. */
+  .mobile-nav-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    display: grid;
+    padding: 8px 10px 12px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 18px 40px -20px rgba(20, 17, 13, 0.35);
+    max-height: calc(100vh - 70px);
+    overflow-y: auto;
+  }
+  .mobile-nav-panel[hidden] { display: none; }
+  .mobile-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 12px;
+    border-radius: 9px;
+    font-size: 15px;
+    color: var(--text);
+  }
+  .mobile-nav-link.is-on { background: var(--accent-soft); font-weight: 600; }
+  .mobile-nav-count {
+    margin-left: auto;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: var(--bad);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+  }
+  .mobile-nav-count.is-quiet { background: var(--accent-soft); color: var(--accent); }
+}
+
+/* --- Things a thumb has to hit --------------------------------------------- */
+
+.navlink { min-height: 36px; }
+.btn { min-height: 38px; }
+/* A button inside a table row: full height without the row growing. */
+.btn-row { min-height: 36px; padding: 7px 12px; font-size: 12.5px; }
+.who button { min-height: 38px; }
+
+@media (pointer: coarse) {
+  .btn, .btn-row, .who button, .navlink { min-height: 44px; }
+}
+
+/* --- Page titles ------------------------------------------------------------- */
+
+/* Three screens used this class and it had no rule, so they came out as a
+   bare h1 next to twenty screens set through PageHeader. */
+.page-title {
+  font-size: 25px;
+  font-weight: 600;
+  margin: 0 0 20px;
+  letter-spacing: -0.02em;
+}
+
+/* The header's action sat beside a subtitle and squeezed it into a column
+   eight lines tall on a phone. Stacked, the subtitle gets the width. */
+@media (max-width: 600px) {
+  .page-head { flex-direction: column; align-items: stretch !important; gap: 12px !important; }
+}
+
+/* --- Tables on a phone ------------------------------------------------------- */
+
+/* A table squeezed to 375px crushes its columns rather than overflowing, which
+   is how Calls lost two columns and Team hid its buttons. Give it a floor and
+   let the wrapper scroll. */
+@media (max-width: 760px) {
+  .table-wrap > table:not(.booking-table) { min-width: 640px; }
+}
+
+/* Bookings is the one table used mid-shift, so it becomes cards rather than
+   a scroll: time and name, then the phone, then a row of actions that a
+   thumb can reach without dragging sideways. */
+@media (max-width: 760px) {
+  .booking-table,
+  .booking-table tbody,
+  .booking-table tr,
+  .booking-table td { display: block; width: auto !important; }
+  .booking-table tr { padding: 12px 14px 14px; border-bottom: 1px solid var(--border-soft); }
+  .booking-table tr:last-child { border-bottom: none; }
+  .booking-table td { padding: 0; border: none; text-align: left !important; }
+  .booking-table td:nth-child(1) { font-size: 12.5px; margin-bottom: 4px; }
+  .booking-table td:nth-child(3) { margin-top: 6px; }
+  .booking-table td:nth-child(4) { display: inline-block; margin-top: 10px; margin-right: 8px; }
+  .booking-table td:nth-child(5) { display: inline-block; margin-top: 10px; }
+  .booking-table td:nth-child(5) > div { display: inline-flex; }
+  .booking-table td:nth-child(6) { display: inline-block; margin-top: 10px; margin-left: 8px; }
+}
+
+/* --- Sticky save on the long editors ----------------------------------------- */
+
+.save-bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 12px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(20, 17, 13, 0.09);
 }

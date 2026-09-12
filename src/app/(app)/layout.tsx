@@ -6,6 +6,7 @@ import { listLocations } from "@/lib/store";
 import { attentionFor } from "@/lib/attention";
 import { recallSummary } from "@/lib/booking/recall";
 import SignOutButton from "@/components/SignOutButton";
+import MobileNav from "@/components/MobileNav";
 
 /**
  * The signed-in shell.
@@ -83,6 +84,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             AI reception
           </div>
         </div>
+
+        {/* On a phone the list below is replaced by a menu button. The
+            scrolling strip it used to become was swipeable and looked like
+            two links; a menu that cannot be seen is not a menu. */}
+        <MobileNav items={nav} />
 
         <nav className="nav">
           {nav.map((item) => (

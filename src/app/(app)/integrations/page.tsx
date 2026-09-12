@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
+import { isBellineStaff } from "@/lib/auth";
 import { seedIfEmpty } from "@/lib/seed";
 import { connectionState, googleConfigured } from "@/lib/integrations/google";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -116,8 +117,10 @@ export default async function IntegrationsPage({
             </div>
           ) : (
             <p style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 14 }}>
-              Set <span className="mono">GOOGLE_CLIENT_ID</span> and{" "}
-              <span className="mono">GOOGLE_CLIENT_SECRET</span> to offer this.
+              Google Calendar isn&apos;t available on this account yet.
+              {isBellineStaff(user) && (
+                <span className="muted"> (Ours to fix: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.)</span>
+              )}
             </p>
           )}
         </div>

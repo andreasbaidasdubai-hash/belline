@@ -107,7 +107,7 @@ export default async function SalesOverview() {
               No vertical agents yet.
             </p>
           ) : (
-            <table>
+            <div className="table-wrap" tabIndex={0}><table>
               <thead>
                 <tr>
                   <th style={{ textAlign: "left" }}>Agent</th>
@@ -122,7 +122,7 @@ export default async function SalesOverview() {
                   <AgentRow key={agent.id} agent={agent} depth={depth} />
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
 
@@ -139,7 +139,7 @@ export default async function SalesOverview() {
               stages fill in as agents work through them.
             </p>
           ) : (
-            <table>
+            <div className="table-wrap" tabIndex={0}><table>
               <tbody>
                 {STAGE_ORDER.filter((s) => (stageMap.get(s) ?? 0) > 0).map((stage) => {
                   const n = stageMap.get(stage) ?? 0;
@@ -169,7 +169,7 @@ export default async function SalesOverview() {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
       </div>
@@ -186,7 +186,7 @@ export default async function SalesOverview() {
                 No runs yet.
               </p>
             ) : (
-              <table>
+              <div className="table-wrap" tabIndex={0}><table>
                 <tbody>
                   {runs.map((run) => {
                     const stats = run.stats as Record<string, number | undefined>;
@@ -214,7 +214,8 @@ export default async function SalesOverview() {
                           </div>
                           {run.error && (
                             <div style={{ fontSize: 11.5, marginTop: 3, color: "var(--warn)" }}>
-                              {run.error.slice(0, 120)}
+                              {/* The first sentence. The rest is a JSON body nobody reads in a list. */}
+                              {run.error.split(/[{\n]/)[0].replace(/[:\s]+$/, "").slice(0, 120)}
                             </div>
                           )}
                         </td>
@@ -236,7 +237,7 @@ export default async function SalesOverview() {
                     );
                   })}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
 
@@ -278,7 +279,7 @@ export default async function SalesOverview() {
                 Nothing spent yet.
               </p>
             ) : (
-              <table>
+              <div className="table-wrap" tabIndex={0}><table>
                 <tbody>
                   {spend.map((s) => (
                     <tr key={s.category}>
@@ -297,7 +298,7 @@ export default async function SalesOverview() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
         </div>

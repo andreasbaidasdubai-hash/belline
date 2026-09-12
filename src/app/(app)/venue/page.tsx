@@ -6,6 +6,8 @@ import { terms } from "@/lib/verticals";
 import { validateVenue } from "@/lib/booking/config";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import VenueEditor from "./VenueEditor";
+import VersionHistory from "./VersionHistory";
+import { historyFor } from "@/lib/brain";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +61,19 @@ export default async function VenuePage({
         // misconfigured — seeded years ago, or edited by an older build — is
         // told before it changes anything else.
         initialFindings={validateVenue(location)}
+      />
+
+      <VersionHistory
+        locationId={location.id}
+        versions={historyFor(location)
+          .slice(0, 25)
+          .map((v) => ({
+            number: v.number,
+            by: v.authorName,
+            at: v.createdAt,
+            note: v.note ?? "",
+            revertedFrom: v.revertedFrom,
+          }))}
       />
     </>
   );

@@ -7,6 +7,7 @@ import { terms } from "@/lib/verticals";
 import { seedIfEmpty } from "@/lib/seed";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import Progress from "./Progress";
+import CancelBooking from "./CancelBooking";
 
 export const dynamic = "force-dynamic";
 
@@ -75,17 +76,14 @@ export default async function BookingsPage({
               }}
             >
               {dateToSpoken(date, location.timezone)}
-              <span className="muted mono" style={{ fontWeight: 400, fontSize: 11.5 }}>
-                {date}
-              </span>
               <span className="muted" style={{ fontWeight: 400, fontSize: 12, marginLeft: "auto" }}>
                 {location.vertical === "restaurant"
                   ? `${list.filter((b) => b.status === "confirmed").reduce((n, b) => n + (b.partySize ?? 0), 0)} covers`
                   : `${list.filter((b) => b.status === "confirmed").length} appointments`}
               </span>
             </div>
-            <div className="table-wrap">
-            <table>
+            <div className="table-wrap" tabIndex={0}>
+            <table className="booking-table">
               <tbody>
                 {list.map((b) => {
                   const cancelled = b.status !== "confirmed";
@@ -134,7 +132,11 @@ export default async function BookingsPage({
                           />
                         ) : b.status === "cancelled" ? (
                           <span className="pill">cancelled{b.lateCancel ? " · late" : ""}</span>
-                        ) : null}
+                        ) : (
+                          // Tomorrow's booking, still confirmed: the only thing
+                          // to do to it from the desk is take it off the book.
+                          <CancelBooking bookingId={b.id} guestName={b.guestName} />
+                        )}
                       </td>
                       <td style={{ width: 80, textAlign: "right" }}>
                         <span className="pill mono">{b.ref}</span>

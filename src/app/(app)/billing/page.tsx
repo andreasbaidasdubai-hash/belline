@@ -4,7 +4,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import { accountFor, MINUTE_DEFINITION, billableMinutes } from "@/lib/billing/usage";
 import { aed, annualPerMonth, FILS, PLANS } from "@/lib/billing/plans";
 import { listCalls } from "@/lib/store";
-import { todayIn } from "@/lib/time";
+import { addDays, dateToSpoken, todayIn } from "@/lib/time";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
 import ManageBilling from "./ManageBilling";
@@ -117,9 +117,12 @@ export default async function BillingPage({
           <p style={{ margin: 0, fontSize: 14.5 }}>This venue is not on a plan yet.</p>
           <p className="muted" style={{ fontSize: 13, marginTop: 10, lineHeight: 1.6, maxWidth: "60ch" }}>
             Calls are still answered and everything is recorded — nothing is being
-            charged and no allowance is being counted against. Talk to us and we
-            will put it on {PLANS.map((p) => p.name).join(" or ")}.
+            charged and no allowance is being counted against. Choose{" "}
+            {PLANS.map((p) => p.name).join(", ")} whenever you are ready.
           </p>
+          <Link href={`/checkout?locationId=${location.id}`} className="btn btn-accent" style={{ marginTop: 16, display: "inline-block" }}>
+            Choose a plan
+          </Link>
         </div>
       </>
     );
@@ -193,7 +196,7 @@ export default async function BillingPage({
             <div className="panel-head">
               This period
               <span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>
-                {usage.period.start} to {usage.period.end}
+                {dateToSpoken(usage.period.start)} to {dateToSpoken(addDays(usage.period.end, -1))}
               </span>
             </div>
             <div style={{ padding: "18px 18px 20px" }}>
