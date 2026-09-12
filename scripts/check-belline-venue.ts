@@ -24,6 +24,7 @@ const { startCall } = await import("../src/lib/calls");
 const { executeTool, toolsFor } = await import("../src/lib/agent/tools");
 const { findAvailability } = await import("../src/lib/booking");
 const { mayStreamTo, watchLiveness, sweepLiveness } = await import("../src/lib/voice/entitlement");
+const { verifyStreamToken } = await import("../src/lib/auth");
 const { greetingClip, voiceParams } = await import("../src/lib/voice/session");
 const { toSpoken } = await import("../src/lib/voice/spoken");
 const { greetingFor } = await import("../src/lib/agent/runtime");
@@ -355,6 +356,58 @@ test("a mangled address asks them to say it again rather than failing", async ()
   assert.equal(out.result.booked, false);
   assert.equal(out.result.reason, "email_unclear");
   assert.match(String(out.result.say), /say it again|spell/i);
+});
+
+console.log("\nThe dialled number reaches the venue that owns it\n");
+
+/**
+ * Ring a number and see which venue picks up.
+ *
+ * Straight at the webhook, because the bug this is here for lived in the
+ * lookup rather than in the engine: our own number is on an *internal* venue,
+ * the webhook listed venues the way the dashboard does — which hides internal
+ * ones — and so the number could never match the venue holding it. The call
+ * fell through to whichever customer sorted first and was answered as their
+ * restaurant. `TWILIO_AUTH_TOKEN` is unset here, so the handler takes the
+ * request unsigned, as it does in development.
+ */
+async function dial(to: string): Promise<string | null> {
+  const { POST } = await import("../src/app/api/twilio/voice/route");
+  const response = await POST(
+    new Request("https://app.belline.ai/api/twilio/voice", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ To: to, From: "+15551230000", CallSid: "CAtest" }).toString(),
+    }),
+  );
+  const xml = await response.text();
+  const token = xml.match(/name="token" value="([^"]+)"/)?.[1];
+  return token ? verifyStreamToken(token) : null;
+}
+
+test("Belline's own number reaches Belline, not the first customer", async () => {
+  const belline = getLocation(BELLINE_LOCATION_ID)!;
+  const answered = await dial(belline.phone);
+  assert.equal(
+    answered,
+    BELLINE_LOCATION_ID,
+    "our own number was answered by somebody else's venue",
+  );
+});
+
+test("a customer's own number still reaches them", async () => {
+  const customer = listLocations()[0];
+  assert.ok(customer, "no customer venue to test against");
+  assert.equal(await dial(customer.phone), customer.id);
+});
+
+test("a number nobody owns is refused rather than given to whoever sorts first", async () => {
+  const answered = await dial("+1 999 000 1234");
+  assert.equal(
+    answered,
+    null,
+    "an unrecognised number was connected to a venue, spending their minutes",
+  );
 });
 
 queue.then(() => {

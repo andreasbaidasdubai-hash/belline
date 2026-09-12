@@ -84,17 +84,42 @@ export async function POST(request: Request) {
     return new Response("Invalid signature", { status: 403 });
   }
 
-  const locations = listLocations();
+  // Internal venues included, and this is load-bearing.
+  //
+  // `listLocations()` hides Belline's own venue everywhere else, which is
+  // right: it has no business in a customer's switcher or their bookings. Here
+  // it meant our own number could never match the venue that holds it, so
+  // dialling Belline reached whichever customer happened to sort first and
+  // answered as their restaurant. Matching is by the number actually dialled,
+  // and a number nobody else can be given is not a leak.
+  const locations = listLocations({ includeInternal: true });
   const to = params.To ?? "";
-  // Match the dialled number to a venue; fall back to an explicit query
-  // parameter, then to the only venue configured.
-  const location =
-    locations.find((l) => digitsOnly(l.phone) === digitsOnly(to)) ??
-    locations.find((l) => l.id === url.searchParams.get("loc")) ??
-    locations[0];
+
+  const dialled = locations.find((l) => digitsOnly(l.phone) === digitsOnly(to));
+  const asked = locations.find((l) => l.id === url.searchParams.get("loc"));
+
+  // The last resort is a single-venue convenience, not a default.
+  //
+  // It used to be `locations[0]` unconditionally, which turns an unrecognised
+  // number into somebody else's phone line — a stranger hears a venue they did
+  // not ring, and that venue pays for the minutes. Where there is exactly one
+  // venue there is nothing to get wrong; beyond that, say so.
+  const only = locations.length === 1 ? locations[0] : undefined;
+  const location = dialled ?? asked ?? only;
 
   if (!location) {
-    return xml(`<Response><Say>This number is not configured.</Say><Hangup/></Response>`);
+    console.warn(
+      "[twilio] no venue for the dialled number. to=%s known=%s",
+      digitsOnly(to).slice(-4),
+      locations.length,
+    );
+    return xml(
+      `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">Sorry, this number is not set up to take calls yet.</Say>
+  <Hangup/>
+</Response>`,
+    );
   }
 
   if (isDemo(location)) {
