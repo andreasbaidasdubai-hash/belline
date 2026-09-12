@@ -689,10 +689,36 @@ export function seedIfEmpty(): void {
   }
   addMissingVenues();
   backfillAgentDefaults();
+  refreshOurOwnKnowledge();
   // Before the brains: a baseline is written against a venue, and a venue
   // without an owner is not one we want to write history for.
   ensureTenancy();
   baselineBrains();
+}
+
+/**
+ * Keep what Belle says about Belline in step with the code.
+ *
+ * Every other venue's knowledge belongs to its operator and is never touched
+ * after the first seed. Ours is different: the answers on the demo line are
+ * sales copy, they are reviewed in the same commit as the website, and a
+ * line taken off the site — "about half an hour to set up" — kept being said
+ * on the phone for as long as the stored copy outlived the fixture. So for
+ * our own venue, and only ours, the questions, answers and policies are
+ * re-read from the fixture on every boot. Everything else about the venue —
+ * voice, pace, greeting — stays as set in the dashboard.
+ */
+function refreshOurOwnKnowledge(): void {
+  const stored = listLocations({ includeInternal: true }).find((l) => l.id === bellineVenue.id);
+  if (!stored) return;
+  const same =
+    JSON.stringify(stored.agent.faqs) === JSON.stringify(bellineVenue.agent.faqs) &&
+    JSON.stringify(stored.agent.policies) === JSON.stringify(bellineVenue.agent.policies);
+  if (same) return;
+  upsertLocation({
+    ...stored,
+    agent: { ...stored.agent, faqs: bellineVenue.agent.faqs, policies: bellineVenue.agent.policies },
+  });
 }
 
 /**

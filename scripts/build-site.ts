@@ -537,7 +537,7 @@ ${CALL_PANEL}
       <span>Belline</span>
     </a>
     <p>
-      AI reception for clinics, dental practices, salons and restaurants.<br>
+      AI reception for businesses across the UAE that take bookings — clinics, dental practices, salons, restaurants and more.<br>
       <a href="tel:+15717785920">+1 571 778 5920</a> ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
       <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>

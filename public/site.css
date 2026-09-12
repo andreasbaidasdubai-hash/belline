@@ -1387,6 +1387,16 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .trade-cards a:hover,
 .trade-cards a:focus-visible { background: var(--paper-2, rgba(20, 17, 13, 0.025)); }
 
+/* Unter den vier Karten: die Zeile für alle anderen. Gedämpft, damit die
+   Karten die Bühne behalten, aber ein ganzer Satz — nicht eine Fußnote. */
+.trade-more {
+  margin: 28px 0 0;
+  max-width: 62ch;
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.trade-more a { color: var(--ink); text-underline-offset: 3px; }
 .trade-cards h3 {
   margin: 0 0 10px;
   font-family: var(--serif);
