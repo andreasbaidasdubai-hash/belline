@@ -1310,3 +1310,152 @@ body:has(.callbar) {
   box-shadow: var(--lift);
 }
 .plan-switch a.is-on span { color: var(--gold-ink); }
+
+/* --- Der Posteingang ---------------------------------------------------------
+ * Links wer wartet, rechts das Gespräch. Drei Stimmen, die man auf einen Blick
+ * auseinanderhält — Kunde, Belline, Kollegin — und zwar nach Seite, Fläche
+ * *und* Beschriftung, nicht nach einer davon: wer sie verwechselt, beantwortet
+ * vor dem Kunden eine Frage, die schon beantwortet war.
+ */
+.inbox {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+  align-items: start;
+}
+
+.inbox-list {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--lift);
+  overflow: hidden;
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+.inbox-row {
+  display: block;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--border-soft);
+  text-decoration: none;
+  color: inherit;
+}
+.inbox-row:last-child { border-bottom: 0; }
+.inbox-row:hover { background: var(--panel-2); }
+.inbox-row.is-on { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--gold-ink); }
+.inbox-row-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.inbox-row-top strong { font-size: 13px; font-weight: 600; }
+.inbox-row-top span { font-size: 10.5px; font-weight: 500; white-space: nowrap; }
+.inbox-row p {
+  margin: 4px 0 3px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inbox-row time { font-size: 10.5px; color: var(--muted); }
+
+.inbox-thread {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--lift);
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 160px);
+}
+.inbox-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+}
+
+/* Die Zusammenfassung, die beim Übergeben geschrieben wurde. Sie steht oben,
+   damit niemand vierzig Nachrichten liest, um herauszufinden, worum es geht. */
+.inbox-summary {
+  margin: 14px 18px 0;
+  padding: 12px 14px;
+  border-radius: 9px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+}
+.inbox-summary strong { font-size: 12px; display: block; margin-bottom: 4px; color: var(--warn); }
+.inbox-summary p { margin: 0; font-size: 13px; line-height: 1.55; }
+
+.inbox-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bubble { max-width: 76%; }
+/* Not `.who` — the sidebar's signed-in panel already owns that name, and it is
+   position: absolute. Every bubble label was being flung to the bottom of the
+   shell and stacked there, which is why none of them appeared above a message
+   and one mysterious "ANDREAS" sat under the navigation. */
+.bubble-who {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.bubble p {
+  margin: 0;
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.bubble time { display: block; font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+/* Der Kunde links auf Papier. */
+.bubble-customer { align-self: flex-start; }
+.bubble-customer p { background: var(--panel-2); border: 1px solid var(--border-soft); }
+
+/* Belline rechts in Messing — dieselbe Farbe wie überall sonst im Produkt. */
+.bubble-ai { align-self: flex-end; text-align: right; }
+.bubble-ai p { background: var(--accent-soft); border: 1px solid var(--accent-line); }
+.bubble-ai time { text-align: right; }
+
+/* Eine Kollegin rechts in Tinte. Ein Mensch sieht anders aus als Belline,
+   nicht nur anders beschriftet. */
+.bubble-human { align-self: flex-end; text-align: right; }
+.bubble-human p { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+.bubble-human time { text-align: right; }
+
+/* Was das System getan hat: eine Zeile in der Mitte, keine Sprechblase. */
+.bubble-system { align-self: center; max-width: 100%; }
+.bubble-system .bubble-who { display: none; }
+.bubble-system p {
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: center;
+}
+.bubble-system time { display: none; }
+
+.inbox-act { border-top: 1px solid var(--border-soft); padding: 14px 18px; }
+.inbox-act > p { margin: 0 0 10px; font-size: 12.5px; }
+.inbox-act form { display: flex; gap: 10px; align-items: flex-end; }
+.inbox-act textarea { flex: 1; resize: vertical; }
+.inbox-act-more { display: flex; gap: 10px; margin-top: 10px; }
+
+@media (max-width: 900px) {
+  .inbox { grid-template-columns: 1fr; }
+  .inbox-list { max-height: 280px; }
+  .inbox-thread { min-height: 60vh; }
+  .bubble { max-width: 88%; }
+}

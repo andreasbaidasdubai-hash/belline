@@ -121,6 +121,12 @@ export interface Location {
   agent: AgentConfig;
   restaurant?: RestaurantConfig;
   salon?: SalonConfig;
+  /**
+   * The house rules about *when* and *on what terms*, as opposed to what is
+   * physically free. Absent means the engine only answers the physical
+   * question, which is what it did before this existed.
+   */
+  policy?: BookingPolicy;
   /** Set when this venue is a public showcase rather than a real business. */
   demo?: DemoConfig;
   /** Set when this venue was read off a prospect's website for a sales demo. */
@@ -323,6 +329,69 @@ export interface Table {
   minSeats: number;
   maxSeats: number;
   section: string;
+  /**
+   * Tables this one can physically be pushed against.
+   *
+   * Absent means "anything else in the same section", which is what the engine
+   * assumed before a floor plan could say otherwise. It is wrong often enough
+   * to matter — a banquette does not join the window two-top, and a host who
+   * arrives to find the agent has promised it stops trusting the agent.
+   */
+  combinesWith?: string[];
+  /**
+   * May be given away without a person in the loop.
+   *
+   * Off for the tables a venue sells rather than seats: the chef's counter,
+   * the private room, table one by the window. They exist in the diary and a
+   * manager can put anybody there; the agent may not.
+   */
+  online?: boolean;
+  /** Preference between tables that fit equally well. Higher goes first. */
+  priority?: number;
+}
+
+/**
+ * A named part of the room.
+ *
+ * Sections already existed as a string on each table, which was enough to stop
+ * the engine pushing the terrace into the dining room and nothing else. A real
+ * floor is run section by section: the terrace closes when it rains, the bar
+ * paces differently from the dining room because the kitchen barely touches
+ * it, and the private room is not something a caller may simply take.
+ *
+ * Absent entirely, every section behaves the way it did before this existed.
+ */
+export interface Section {
+  /** Matches the `section` string on the tables in it. */
+  id: string;
+  name?: string;
+  /** Covers this section may seat per slot, under the house cap. */
+  maxCoversPerSlot?: number;
+  /** Whether tables here may be combined at all. Default true. */
+  combinable?: boolean;
+  /** Whether the agent may seat here unasked. Default true. */
+  online?: boolean;
+  /** Order sections are tried in. Higher first — fill the bar before the terrace. */
+  priority?: number;
+  /** Dates this section is not in use: weather, a private hire, a refit. */
+  closedOn?: DateStr[];
+}
+
+/**
+ * A table out of play for part of a day.
+ *
+ * Not a booking and not a closure: a wobbly leg, a supplier delivery across
+ * the terrace, four tables held back for a party that has not confirmed. Every
+ * real reservation book has this, and a venue that cannot express it ends up
+ * entering fake bookings named "DO NOT BOOK" — which then count as covers.
+ */
+export interface TableBlock {
+  id: string;
+  date: DateStr;
+  tableIds: string[];
+  startMin: Minutes;
+  endMin: Minutes;
+  reason: string;
 }
 
 export interface ServiceWindow {
@@ -336,6 +405,17 @@ export interface ServiceWindow {
   lastSeating: Minutes;
   /** Turn time by party size: first entry whose `upTo` >= party size wins. */
   turnTimes: { upTo: number; minutes: number }[];
+  /**
+   * Pacing for this service alone, overriding the house cap.
+   *
+   * Saturday brunch and a Tuesday lunch put very different pressure on the
+   * same kitchen, and one number for both is a number that is wrong twice.
+   */
+  maxCoversPerSlot?: number;
+  /** Notice this service needs, in minutes. A tasting menu is not a walk-in. */
+  minNoticeMin?: number;
+  /** Covers held back for walk-ins and never offered on the phone. */
+  walkInHoldback?: number;
 }
 
 export interface RestaurantConfig {
@@ -360,11 +440,71 @@ export interface RestaurantConfig {
    * software cannot. Zero means the cap is absolute.
    */
   overbookPerSlot?: number;
+  /** The room, section by section. Absent leaves every section unrestricted. */
+  sections?: Section[];
+  /**
+   * Minutes a table is held after a party is due to leave.
+   *
+   * The single most common way a booking system embarrasses a venue: the turn
+   * ends at 21:30, the next party is promised 21:30, and nobody has cleared,
+   * reset or re-laid the table. Every real system holds a few minutes back.
+   * Zero or absent keeps the old behaviour — back-to-back to the minute.
+   */
+  resetMinutes?: number;
+  /** Most tables that may be pushed together. Default 2. */
+  maxCombine?: number;
+  /** Tables out of play for part of a day. */
+  blocks?: TableBlock[];
 }
 
 // ---------------------------------------------------------------------------
 // Salon / clinic
 // ---------------------------------------------------------------------------
+
+/**
+ * One stretch of a service, from the diary's point of view.
+ *
+ * This is the feature that separates a salon system from a calendar, and the
+ * reason a colourist can take three clients in the time a generic scheduler
+ * gives them two. A full head of highlights is not 180 solid minutes of a
+ * stylist: it is 45 minutes applying, 40 minutes of the colour developing with
+ * the client sitting under a lamp reading a magazine, then 60 minutes washing,
+ * cutting and finishing. During the middle stretch the *chair* is occupied and
+ * the *stylist is not* — and that gap is where the day's third client goes.
+ *
+ * Fresha calls it processing time, Boulevard calls it gap time, and a clinic
+ * has the same shape whenever something has to take effect before the
+ * practitioner comes back. Modelled once, here.
+ */
+export interface ServicePhase {
+  /** For the diary: "Apply", "Develop", "Finish". */
+  name: string;
+  durationMin: number;
+  /**
+   * True where the guest is occupied but the person doing the work is free.
+   * The room, chair or machine stays held either way — the client is sitting
+   * in it.
+   */
+  staffFree?: boolean;
+}
+
+/**
+ * A second person needed for part of an appointment.
+ *
+ * Dental scheduling turns on this: a hygiene visit is an hour of the
+ * hygienist's time containing ten minutes of the dentist's, for the exam. A
+ * practice that cannot express it either blocks a whole hour of dentist time
+ * per cleaning — which is why their dentist looks fully booked while sitting
+ * idle — or schedules the exam by shouting down the corridor. Salons have the
+ * same shape for a double-up blow-dry on a bridal party.
+ */
+export interface SecondaryStaffNeed {
+  /** The role the second person must hold, matched against `StaffMember.role`. */
+  role: string;
+  /** Minutes into the appointment when they are needed. */
+  atMin: number;
+  durationMin: number;
+}
 
 export interface SalonService {
   id: string;
@@ -375,6 +515,47 @@ export interface SalonService {
   price: number;
   /** Optional shared equipment this service needs (colour room, basin...). */
   resourceType?: string;
+  /**
+   * Everything this service needs at once.
+   *
+   * `resourceType` handles the common case of one thing; a treatment that ties
+   * up both a room and a machine needs both held, and the old single field
+   * silently checked whichever one happened to come first in the chain.
+   */
+  resourceTypes?: string[];
+  /**
+   * The shape of the appointment, when it is not one solid block.
+   *
+   * Durations must add up to `durationMin`; `serviceShape` in booking/services.ts
+   * is the only thing that should read this, and it falls back to a single
+   * busy phase when the field is absent.
+   */
+  phases?: ServicePhase[];
+  /** A second person needed partway through — see `SecondaryStaffNeed`. */
+  secondary?: SecondaryStaffNeed;
+  /**
+   * How long this takes the first time.
+   *
+   * A new patient exam is not a returning patient exam, and a first colour
+   * starts with a consultation and a skin test. Absent means the same either
+   * way, which is true of a haircut and of almost nothing in a clinic.
+   */
+  newGuestDurationMin?: number;
+  /** Only bookable alongside something else: a treatment add-on, not a visit. */
+  addOnOnly?: boolean;
+  /** Role required to perform it, where a qualification list is not enough. */
+  role?: string;
+  /** May the agent book it at all? Off for anything needing a consultation first. */
+  online?: boolean;
+  /**
+   * Days until this brings the guest back.
+   *
+   * A cleaning is six months, a root touch-up is six weeks, a filling is
+   * nothing. This single number is the whole of dental recall and the whole of
+   * a salon's rebooking list — see booking/recall.ts, which turns it into the
+   * outbound call the venue is actually paying for.
+   */
+  recallDays?: number;
 }
 
 export interface StaffMember {
@@ -384,12 +565,34 @@ export interface StaffMember {
   serviceIds: string[];
   hours: WeeklyHours;
   timeOff: { date: DateStr; start: Minutes; end: Minutes }[];
+  /** "dentist", "hygienist", "senior stylist" — matched by `SecondaryStaffNeed`. */
+  role?: string;
+  /** Lunch and the rest of it, weekly. Subtracted from the shift like time off. */
+  breaks?: WeeklyHours;
+  /**
+   * A rota, which beats the weekly pattern on the dates it covers.
+   *
+   * Weekly hours describe a stable week and almost nobody works one. An empty
+   * `ranges` is a day off, and is not the same as having no entry — that
+   * distinction is the difference between "not scheduled" and "unknown".
+   */
+  shifts?: { date: DateStr; ranges: TimeRange[] }[];
+  /** This person's own timing, by service id. A senior colourist is quicker. */
+  durationOverrides?: Record<string, number>;
+  /** This person's own prices, by service id. Level-based pricing, as sold. */
+  priceOverrides?: Record<string, number>;
+  /** Never offered by the engine; bookable only when a guest asks by name. */
+  requestOnly?: boolean;
 }
 
 export interface Resource {
   id: string;
   name: string;
   type: string;
+  /** How many appointments it can hold at once. Default 1. */
+  capacity?: number;
+  /** Out of service: a machine being serviced, a surgery being deep-cleaned. */
+  outOfService?: { date: DateStr; start: Minutes; end: Minutes }[];
 }
 
 export interface SalonConfig {
@@ -397,6 +600,112 @@ export interface SalonConfig {
   staff: StaffMember[];
   resources: Resource[];
   slotMinutes: number;
+  /**
+   * How the engine fills the diary when the guest has not asked for anybody.
+   *
+   * `spread` gives the next appointment to whoever is least busy, which is
+   * fair, keeps a team happy, and is what this engine did before there was a
+   * choice. `pack` gives it to whoever it leaves the fewest dead minutes with
+   * — the whole team's day closes up, one person may go home early, and the
+   * salon sells more hours. Fresha's automatic assignment is the second; a
+   * commission-based team will want the first. It is the owner's call, not
+   * ours. Default `spread`.
+   */
+  assignment?: "spread" | "pack";
+  /**
+   * May a second guest be booked into the gap in someone's appointment?
+   *
+   * The pay-off of `ServicePhase`, and off by default on purpose: a salon that
+   * has never done it will see a stylist double-booked and panic. Turn it on
+   * once the owner understands what it is doing.
+   */
+  dovetail?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// House rules
+// ---------------------------------------------------------------------------
+
+/**
+ * When a booking may be taken, and on what terms.
+ *
+ * Separate from availability on purpose. "Is a chair free at nine tomorrow" is
+ * a question about the room; "will we take a booking for nine tomorrow from
+ * someone ringing at half past eight tonight" is a question about the
+ * business, and conflating the two is why an agent books a two-hour treatment
+ * for twenty minutes' time and the practice finds out when the patient
+ * arrives.
+ *
+ * Every field is optional and every absent field means "no rule", so a venue
+ * that has said nothing gets exactly the behaviour it had before.
+ */
+export interface BookingPolicy {
+  /**
+   * Notice required, in minutes, between now and the start of the booking.
+   *
+   * A restaurant may want twenty minutes so the host can see it coming. A
+   * clinic wants a day, because the chart has to be pulled and the surgery
+   * prepared. This is enforced against the venue's own clock, not the server's.
+   */
+  minNoticeMin?: number;
+  /** Furthest ahead a booking may be taken, in days. Beyond it, the agent says so. */
+  maxHorizonDays?: number;
+  /**
+   * After this time of day, nothing more is taken for today.
+   *
+   * Distinct from notice: a kitchen that stops taking same-day bookings at
+   * 4pm is not saying "four hours' notice", it is saying the ordering is done.
+   */
+  sameDayCutoffMin?: Minutes;
+  /**
+   * Hours before the start inside which cancelling is late.
+   *
+   * Belline never charges anybody. What this does is let the agent *say* the
+   * policy at the moment it applies, and mark the booking so the venue can
+   * decide — which is the honest version of a cancellation fee and the only
+   * version a phone agent should be trusted with.
+   */
+  cancellationWindowHours?: number;
+  /** What the venue charges for a late cancellation, in its own currency. */
+  lateCancelFee?: number;
+  /** What the venue charges for a no-show. */
+  noShowFee?: number;
+  /** When a card or a deposit is wanted before the booking stands. */
+  deposit?: DepositRule;
+  /**
+   * Guests with this many no-shows are not given a booking by the agent alone.
+   *
+   * The agent takes the request and hands it to a person rather than refusing
+   * it — an automated system telling somebody they are barred is a review the
+   * venue will be reading for years. Zero or absent disables the rule.
+   */
+  noShowsBeforeReview?: number;
+  /** Bookings the agent may hold at one time for one number. Stops a jammed line. */
+  maxOpenPerGuest?: number;
+}
+
+/**
+ * When money is asked for up front.
+ *
+ * Deliberately a description rather than a charge. Belline works out that a
+ * deposit *applies*, says so on the call, and writes it on the booking; taking
+ * the money is the venue's payment provider's job and putting a card number
+ * through a voice agent is not something this product will ever do.
+ */
+export interface DepositRule {
+  amount: number;
+  /** A flat sum for the booking, or a sum per head. */
+  per: "booking" | "person";
+  /** Only for parties at least this large. */
+  minPartySize?: number;
+  /** Only when the services booked come to at least this much. */
+  minValue?: number;
+  /** Only for a caller with no completed visit here. */
+  newGuestsOnly?: boolean;
+  /** Only on these weekdays, 0 = Sunday. Absent means every day. */
+  weekdays?: number[];
+  /** What the agent says about it, in the venue's own words. */
+  wording?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -476,6 +785,40 @@ export interface Booking {
   serviceIds?: string[];
   staffId?: string;
   resourceId?: string;
+  /**
+   * Every resource this booking holds.
+   *
+   * `resourceId` stays for the single-resource case that every existing
+   * booking has, and is the first of these. A treatment needing a room *and* a
+   * laser holds two, and checking only one of them is how two clients end up
+   * in front of the same machine.
+   */
+  resourceIds?: string[];
+  /** The second person, where the service needs one — the dentist on a hygiene visit. */
+  secondaryStaffId?: string;
+  /**
+   * Front-of-house progress, which is not the same question as whether the
+   * booking is on. A seated party and a booked party both hold their table;
+   * only one of them can be chased for running twenty minutes late.
+   */
+  service?: { arrivedAt?: string; seatedAt?: string; leftAt?: string };
+  /** Worked out at booking time from the venue's `DepositRule`. Never charged here. */
+  deposit?: { amount: number; currency: string; status: "required" | "paid" | "waived" };
+  /** Set when it was cancelled inside the venue's own cancellation window. */
+  lateCancel?: boolean;
+  cancelledAt?: string;
+  cancelReason?: string;
+  /**
+   * When this guest is due back, and for what.
+   *
+   * Written at booking time from the service's `recallDays` so that the recall
+   * list is a query rather than a nightly job that can fail silently. See
+   * booking/recall.ts.
+   */
+  recallDueOn?: DateStr;
+  recallServiceId?: string;
+  /** The recall this booking answered, so a due list can close itself out. */
+  recallOf?: string;
   source: "voice" | "manual" | "web" | "whatsapp";
   callId?: string;
   /**
@@ -639,6 +982,19 @@ export interface Slot {
   staffId?: string;
   staffName?: string;
   resourceId?: string;
+  resourceIds?: string[];
+  /** What it would cost at this time, with this person. Level pricing moves it. */
+  price?: number;
+  /** Restaurant: the part of the room this would be. */
+  section?: string;
+  /**
+   * Why the engine put this slot in front of the others, 0–1.
+   *
+   * Not shown to a guest and not a probability. It exists so the agent can
+   * offer three times in an order that is good for the venue as well as
+   * convenient for the caller — see `rankSlots` in booking/ranking.ts.
+   */
+  score?: number;
 }
 
 export interface AvailabilityQuery {
@@ -653,4 +1009,21 @@ export interface AvailabilityQuery {
   windowMin?: number;
   /** Ignore this booking when checking conflicts (used when modifying). */
   excludeBookingId?: string;
+  /**
+   * Who is asking.
+   *
+   * Optional, and the engine works without it — but a first visit can be a
+   * longer appointment and a returning guest can be offered the person they
+   * always see, and neither is possible from a date and a party size alone.
+   */
+  guestPhone?: string;
+  newGuest?: boolean;
+  /**
+   * A manager working the book rather than a caller on the line.
+   *
+   * Lifts the rules that exist to stop the *agent* doing something — a
+   * request-only stylist, a section that is not sold online, a pacing cap —
+   * and none of the rules that exist to stop anyone double-booking a room.
+   */
+  staffOverride?: boolean;
 }

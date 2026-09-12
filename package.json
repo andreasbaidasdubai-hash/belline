@@ -25,7 +25,7 @@
     "check:sales": "node --import tsx scripts/check-sales.ts",
     "check:import": "node --import tsx scripts/check-import.ts",
     "check:places": "node --import tsx scripts/check-places.ts",
-    "check:all": "npm run check && npm run check:tenancy && npm run check:reception && npm run check:channel && npm run check:whatsapp && npm run check:signup && npm run check:checkout && npm run check:embed && npm run check:brain && npm run check:calendar && npm run check:waitlist && npm run check:attention && npm run check:idempotency && npm run check:authority && npm run check:spoken && npm run check:speculation && npm run check:prospect && npm run check:overview && npm run check:billing && npm run check:leads && npm run check:belline && npm run check:slots",
+    "check:all": "npm run check && npm run check:tenancy && npm run check:reception && npm run check:channel && npm run check:honesty && npm run check:whatsapp && npm run check:signup && npm run check:checkout && npm run check:embed && npm run check:brain && npm run check:calendar && npm run check:waitlist && npm run check:attention && npm run check:idempotency && npm run check:authority && npm run check:spoken && npm run check:speculation && npm run check:prospect && npm run check:overview && npm run check:billing && npm run check:leads && npm run check:belline && npm run check:slots",
     "audit": "playwright test",
     "audit:ui": "playwright test --ui",
     "site": "node --import tsx scripts/build-site.ts",
@@ -61,7 +61,9 @@
     "whatsapp": "node --import tsx --env-file-if-exists=.env scripts/whatsapp-connect.ts",
     "check:signup": "node --import tsx scripts/check-signup.ts",
     "check:checkout": "node --import tsx scripts/check-checkout.ts",
-    "check:embed": "node --import tsx scripts/check-embed.ts"
+    "check:embed": "node --import tsx scripts/check-embed.ts",
+    "whatsapp:demo": "node --import tsx --env-file-if-exists=.env scripts/whatsapp-demo.ts",
+    "check:honesty": "node --import tsx scripts/check-honesty.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

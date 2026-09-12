@@ -3,8 +3,10 @@ import type { Call, Location } from "../types";
 import { getCall, getLocation, saveCall } from "../store";
 import { startCall } from "../calls";
 import { AgentSession } from "../agent/runtime";
+import { checkTimes, honestAlternative } from "../agent/honesty";
 import { metaAdapter } from "./channel/meta";
 import { twilioAdapter } from "./channel/twilio";
+import { internalAdapter } from "./channel/internal";
 import { openCredentials } from "../db/credentials";
 import {
   agentHistory,
@@ -46,6 +48,10 @@ import type { ChannelAdapter } from "./channel";
 const ADAPTERS: Record<string, ChannelAdapter> = {
   meta: metaAdapter,
   twilio: twilioAdapter,
+  // No wire. The same pipeline with the delivery recorded rather than sent —
+  // how the journey is demonstrated before a business's own number exists,
+  // and how web chat will arrive later.
+  internal: internalAdapter,
 };
 
 /** The reason a turn produced nothing, for the log. Never shown to a customer. */
@@ -158,6 +164,36 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
       error: modelError,
     },
   });
+
+  // Did it name a time nothing came back with?
+  //
+  // The prompt forbids it twice and the model did it anyway — "I have 2:00,
+  // 3:30 and 5:00" at a salon whose only free slots were before half past ten.
+  // A guest turning up for an appointment that does not exist is the worst
+  // failure this product has, so it is a check rather than a request.
+  const honesty = checkTimes(reply, call.toolCalls);
+  if (!honesty.ok) {
+    console.warn(
+      `[whatsapp ${traceId}] invented ${honesty.invented.join(", ")} — offered ${
+        honesty.offered.join(", ") || "nothing"
+      }
+           replaced: ${reply}`,
+    );
+    await track({
+      tenantId,
+      businessId: conversation.businessId,
+      channel: conversation.channel,
+      conversationId,
+      traceId,
+      name: "ai.invented_availability",
+      // The original is kept: a guard nobody can audit is a guard nobody
+      // trusts, and a false positive is invisible without it.
+      payload: { invented: honesty.invented, offered: honesty.offered, replaced: reply },
+    });
+    // Replaced from the tool's own output rather than regenerated: a second
+    // model call costs a second and might invent a different set.
+    reply = honestAlternative(honesty);
+  }
 
   if (modelError && !reply) {
     // Nothing usable came back. Escalating is the honest answer: a customer
