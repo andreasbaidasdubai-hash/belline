@@ -21,9 +21,9 @@ const PAGES = [
   { slug: "clinics", url: "/clinics/" },
   { slug: "salons", url: "/salons/" },
   { slug: "restaurants", url: "/restaurants/" },
-  { slug: "plan", url: "/plan.html" },
-  { slug: "market", url: "/market.html" },
-  { slug: "golive", url: "/golive.html" },
+  // The plan, market study and runbook are internal and no longer published
+  // (docs/site/). The 404 is a public page and gets the same checks.
+  { slug: "404", url: "/404.html" },
 ];
 
 const OUT = "audit";

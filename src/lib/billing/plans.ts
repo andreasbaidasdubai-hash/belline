@@ -110,7 +110,10 @@ export const PLANS: Plan[] = [
       { text: "Everything in Starter", status: "live" },
       { text: "Your own rules about what it may and may not decide", status: "live" },
       { text: "Every change versioned, with one-click revert", status: "live" },
-      { text: "Waitlist — it offers a slot the moment one frees", status: "live" },
+      // Not "it offers a slot": Belline does not ring the guest. It matches the
+      // freed slot to whoever wanted it and puts them at the top of the venue's
+      // own list, held for half an hour. The ringing is the team's.
+      { text: "Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number", status: "live" },
       { text: "Priority support", status: "live" },
     ],
   },

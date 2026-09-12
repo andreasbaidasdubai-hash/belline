@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://belline.ai/sitemap.xml

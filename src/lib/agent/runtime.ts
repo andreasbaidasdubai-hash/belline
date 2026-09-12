@@ -767,7 +767,7 @@ ${
       yield { type: "error", message };
       yield {
         type: "sentence",
-        text: "I'm sorry, our system just dropped out. Let me put you through to the team.",
+        text: "I'm sorry, our system just dropped out. Let me take your number and the team will ring you back.",
       };
     }
 

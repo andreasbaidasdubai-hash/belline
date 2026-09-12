@@ -45,13 +45,21 @@ export interface AuthorityRule {
   then: "transfer" | "end_call" | "message";
 }
 
+// 998 is the UAE ambulance number, and "emergency department" is what the
+// hospitals here call it. The first draft said "ring 999" and "A&E", which is
+// London — a caller in Dubai who did as told would have reached the police.
 const EMERGENCY_ADVICE =
-  "That needs proper medical attention now, not an appointment. Please ring 999, or go " +
-  "straight to your nearest accident and emergency department. I'm not the right place for this.";
+  "That needs proper medical attention now, not an appointment. Please call 998 for an " +
+  "ambulance, or go to the nearest emergency department. I'm not the right place for this.";
 
+// Not "let me put you through": there is no live transfer, and a receptionist
+// who says there is, and then hangs up, has told the caller something untrue
+// at the moment they were most anxious. What actually happens is a message,
+// marked urgent, and a call back — so that is what is said.
 const CLINICAL_REFUSAL =
-  "I'm not able to advise on that, and I'm not going to guess at it. Let me put you " +
-  "through to the clinical team.";
+  "I'm not able to advise on that, and I'm not going to guess at it. Let me take your " +
+  "number and exactly what you've told me — the clinical team will ring you back, and " +
+  "I'm marking it urgent.";
 
 /**
  * Symptoms that describe an emergency in progress. Paired with the urgency

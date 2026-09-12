@@ -11,16 +11,69 @@
 <meta property="og:site_name" content="Belline">
 <meta property="og:url" content="https://belline.ai/">
 <meta property="og:title" content="Belline — Someone always answers">
-<meta property="og:description" content="Belline answers your phone and your website 24/7, handles customer questions and books appointments — so you never miss another customer.">
+<meta property="og:description" content="An AI receptionist for Dubai's clinics, dental practices, salons and restaurants. Answers 24/7, books into your diary, hands anything it shouldn't decide to you.">
 <meta property="og:image" content="https://belline.ai/img/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A concierge bell on a reception counter, a call arriving on a phone beside it.">
+<meta property="og:locale" content="en_AE">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Belline — Someone always answers">
-<meta name="twitter:description" content="An AI receptionist for clinics, dental practices, salons and restaurants.">
+<meta name="twitter:description" content="An AI receptionist for Dubai's clinics, dental practices, salons and restaurants. Answers 24/7 and books into your diary.">
 <meta name="twitter:image" content="https://belline.ai/img/og.jpg">
-<title>Belline — Someone always answers</title>
-<meta name="description" content="Belline answers your phone and your website 24/7, handles customer questions and books appointments — so you never miss another customer. Fourteen days free, no card.">
+<title>Belline — AI receptionist for clinics, salons and restaurants in Dubai</title>
+<meta name="description" content="Belline answers the calls your team can't reach — mid-service, mid-treatment, after close — and books straight into your diary. For clinics, dental practices, salons and restaurants in Dubai. Fourteen days free, no card.">
+
+<!--
+  Strukturierte Daten. Die Fragen unten sind echte Fragen mit echten
+  Antworten, und die Preise stehen auf der Seite — beides bekommt Google
+  sonst nur durch Raten. Muss mit dem FAQ-Block unten übereinstimmen; wer
+  dort eine Antwort ändert, ändert sie hier mit.
+-->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "name": "Belline",
+      "url": "https://belline.ai/",
+      "logo": "https://belline.ai/icon.svg",
+      "email": "hello@belline.ai",
+      "telephone": "+1-571-778-5920",
+      "areaServed": "AE",
+      "description": "An AI receptionist for clinics, dental practices, salons and restaurants in Dubai."
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Belline",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://belline.ai/",
+      "offers": [
+        { "@type": "Offer", "name": "Starter", "price": "179", "priceCurrency": "AED", "billingIncrement": "P1M" },
+        { "@type": "Offer", "name": "Business", "price": "365", "priceCurrency": "AED", "billingIncrement": "P1M" },
+        { "@type": "Offer", "name": "Enterprise", "price": "899", "priceCurrency": "AED", "billingIncrement": "P1M" }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "Do we have to change our phone number?", "acceptedAnswer": { "@type": "Answer", "text": "No. You keep the number on your signage and your listings, and set call forwarding on the line you already have. You can turn it off yourself at any time." } },
+        { "@type": "Question", "name": "Does it work with Fresha, SevenRooms or OpenTable?", "acceptedAnswer": { "@type": "Answer", "text": "Not yet. Belline keeps its own diary — you and your team work in it, and it is the diary the receptionist books into. A one-way feed into Google Calendar is built and waiting on Google's approval. The booking-platform integrations need a partner agreement with each of them, which we do not have yet." } },
+        { "@type": "Question", "name": "Will it sound like a robot?", "acceptedAnswer": { "@type": "Answer", "text": "Ring it and decide — the number and the bell on belline.ai reach the same receptionist your callers would. It speaks like a person and does not read a script. On the demo line it tells you it is an AI; on your line, what it says about itself is your choice." } },
+        { "@type": "Question", "name": "What if it books something wrong?", "acceptedAnswer": { "@type": "Answer", "text": "It can only offer a time that is actually free — availability comes from the booking engine, not from the conversation, so it cannot invent a slot. Every booking has the full transcript beside it. If it is unsure of a name, a date or a number it asks again rather than guessing." } },
+        { "@type": "Question", "name": "Can it put a caller through to us?", "acceptedAnswer": { "@type": "Answer", "text": "Not live, not yet. When a call needs a person it takes the number and the reason, marks it urgent if it is, and ends the call so you can ring back with the whole story in front of you." } },
+        { "@type": "Question", "name": "Does it speak Arabic?", "acceptedAnswer": { "@type": "Answer", "text": "Not yet. It answers in English today. Arabic is planned, but nobody has made a real Arabic call on it, so we are not selling you one." } },
+        { "@type": "Question", "name": "What happens if we run out of minutes?", "acceptedAnswer": { "@type": "Answer", "text": "Belline keeps answering. Your dashboard tells you that you have gone past, and which plan would cover it. You are never charged a dirham more than the plan fee for that." } },
+        { "@type": "Question", "name": "Will it answer calls our staff would have taken?", "acceptedAnswer": { "@type": "Answer", "text": "Only the ones nobody reaches. It sits behind your line: it picks up when the phone has rung unanswered, or when the line is engaged. Your team always gets first refusal." } },
+        { "@type": "Question", "name": "Are we tied in?", "acceptedAnswer": { "@type": "Answer", "text": "No. Monthly plans are cancelled whenever you like and run to the end of the period you have paid for. Annual is two months free in exchange for paying up front. Standard onboarding costs nothing." } },
+        { "@type": "Question", "name": "What do you do with our guests' data?", "acceptedAnswer": { "@type": "Answer", "text": "Transcripts and bookings are stored so you can audit what was said; call audio is not recorded. The data belongs to your venue, and we hand all of it over if you leave." } }
+      ]
+    }
+  ]
+}
+</script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -72,11 +125,19 @@
   <section class="hero">
     <div class="wrap hero-in">
       <div class="hero-copy">
-        <p class="eyebrow rise">Your AI receptionist</p>
+        <p class="eyebrow rise">AI reception for Dubai’s clinics, salons and restaurants</p>
         <h1 class="display rise rise-1">Someone always answers.</h1>
+        <!--
+          Der Satz des Käufers, nicht der des Produkts. Vorher stand hier eine
+          Funktionsliste, die in "you never miss another customer" endete —
+          ein Absolutum, das niemand belegen kann. Was der Inhaber tatsächlich
+          verliert, ist der Anruf, den er gerade nicht annehmen konnte.
+        -->
         <p class="lead rise rise-2">
-          Belline answers your phone and your website 24/7, handles customer
-          questions and books appointments — so you never miss another customer.
+          The calls your team can’t reach — mid-treatment, mid-service, nine at
+          night — Belline picks up. It answers from your own hours, prices and
+          rules, books straight into your diary, and takes a message on
+          anything it shouldn’t decide.
         </p>
 
         <div class="cta-row rise rise-3">
@@ -84,8 +145,8 @@
         </div>
 
         <p class="hero-note rise rise-4">
-          Fourteen days free, no card. Keep your own number — nothing changes
-          for your callers.
+          Fourteen days free, no card. Keep your number — nothing changes for
+          your callers. English, for now.
         </p>
       </div>
 
@@ -122,9 +183,16 @@
 
     <div class="wrap">
       <div class="facts facts-3">
+        <!--
+          "Never a caller sent to voicemail" war ein Zuverlässigkeitsversprechen
+          ohne Ausfallsicherung dahinter, und "it books into the real one" ließ
+          jeden Fresha-Kunden sein eigenes System vermuten. Beides ersetzt durch
+          das, was tatsächlich stimmt — und durch die eine Zeile, die Retell
+          und Vapi nicht sagen können.
+        -->
         <div class="fact"><div class="n">24/7</div><div class="k">including after you close</div></div>
-        <div class="fact"><div class="n">Never</div><div class="k">a caller sent to voicemail</div></div>
-        <div class="fact"><div class="n">Your diary</div><div class="k">it books into the real one</div></div>
+        <div class="fact"><div class="n">No voicemail</div><div class="k">every call is answered, or a message taken with a number to ring back</div></div>
+        <div class="fact"><div class="n">Your rules</div><div class="k">it knows a colour needs a patch test and a six-top needs two hours</div></div>
       </div>
     </div>
   </section>
@@ -157,15 +225,20 @@
         </div>
         <div>
           <h3>Books customers</h3>
-          <p>Checks what is genuinely free in your diary, then takes the appointment.</p>
+          <p>Checks what is genuinely free, then takes the appointment. Belline keeps the diary — you and your team work in it, and it never offers a time that isn’t there.</p>
         </div>
         <div>
           <h3>Knows your business</h3>
           <p>Your hours, services, prices and policies — answered in your own words.</p>
         </div>
+        <!--
+          Kein "hands over": es gibt keine Live-Weiterleitung. Was es gibt —
+          Nummer, Wortlaut, markiert, Rückruf — ist stark genug, um es genau so
+          zu sagen.
+        -->
         <div>
-          <h3>Hands over when it should</h3>
-          <p>A complaint, or anything it should not decide, goes to your team with the context.</p>
+          <h3>Takes a message when it should</h3>
+          <p>A complaint, anything clinical, anything it shouldn’t decide: it takes the number and what was said, flags it, and you ring back. It does not guess.</p>
         </div>
       </div>
     </div>
@@ -242,26 +315,24 @@
       </div>
 
       <div class="trade-cards">
+        <!-- Keine Nummern: die Reihenfolge der Gewerbe bedeutet nichts. Bei
+             den Schritten weiter unten bedeutet sie etwas, dort bleiben sie. -->
         <a href="/salons">
-          <span class="trade-n">01</span>
           <h3>Salons &amp; spas</h3>
           <p>Knows which stylist does colour, how long it takes, and that a first colour needs a patch test.</p>
           <span class="trade-go">See a salon call</span>
         </a>
         <a href="/clinics">
-          <span class="trade-n">02</span>
           <h3>Clinics</h3>
           <p>Books the right practitioner into the right room, and never gives clinical advice.</p>
           <span class="trade-go">See a clinic call</span>
         </a>
         <a href="/dental">
-          <span class="trade-n">03</span>
           <h3>Dental practices</h3>
-          <p>Check-ups, hygienist and emergencies — and it can tell which one it is being asked for.</p>
+          <p>Check-ups, hygienist and emergencies — and it knows an emergency is not a check-up.</p>
           <span class="trade-go">See a dental call</span>
         </a>
         <a href="/restaurants">
-          <span class="trade-n">04</span>
           <h3>Restaurants</h3>
           <p>Holds the pass to a pace your kitchen can cook, instead of filling one sitting and drowning it.</p>
           <span class="trade-go">See a restaurant call</span>
@@ -273,7 +344,9 @@
   <section id="how" class="rule">
     <div class="wrap">
       <p class="eyebrow">Getting started</p>
-      <h2 class="display">Three steps, and we do one of them with you.</h2>
+      <!-- "and we do one of them with you" war ein Versprechen über Menschen,
+           nicht über das Produkt. Der Einrichtungsweg ist selbstbedient. -->
+      <h2 class="display">Three steps. Ring it before your customers do.</h2>
 
       <div class="steps">
         <div class="step">
@@ -289,7 +362,7 @@
         <div class="step">
           <div class="num">03</div>
           <h3>Ring it yourself</h3>
-          <p>Try to catch it out before your customers do. When you're happy, it's live.</p>
+          <p>Try to catch it out before your customers do. When you’re happy, switch the forwarding on and it’s live.</p>
         </div>
       </div>
 
@@ -357,7 +430,7 @@
             <li>Everything in Starter</li>
             <li>Your own rules about what it may and may not decide</li>
             <li>Every change versioned, with one-click revert</li>
-            <li>Waitlist — it offers a slot the moment one frees</li>
+            <li>Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number</li>
             <li>Priority support</li>
           </ul>
           <a class="btn" href="https://app.belline.ai/checkout?plan=business" data-cta="plan-business">Get Business</a>
@@ -383,11 +456,14 @@
         </div>
       </div>
 
-      <p class="compare">A receptionist works office hours. Belline answers 24/7.</p>
+      <p class="compare">An answering service takes a message. Belline takes the booking — and answers at three in the morning.</p>
 
       <div class="terms">
         <div>
           <h4>What counts as a voice minute</h4>
+          <!-- Wörtlich MINUTE_DEFINITION aus src/lib/billing/usage.ts; ein
+               Test vergleicht die beiden. Der Satz über Störungen stimmt:
+               ein Anruf mit Status "failed" zählt null Minuten. -->
           <p>A voice minute is time Belline spends on a live call with your caller — from the moment it answers to the moment the call ends — rounded up to the next whole minute. Calls you make from your own test console do not count, and neither do calls cut short by a fault on our side.</p>
         </div>
         <div>
@@ -396,7 +472,7 @@
         </div>
         <div>
           <h4>14 days free</h4>
-          <p>A limited number of live-call minutes, no card, nothing charged. Standard onboarding is free — we set your venue up with you.</p>
+          <p>Thirty minutes of live calls, no card, nothing charged. Standard onboarding is free.</p>
         </div>
       </div>
     </div>
@@ -411,9 +487,34 @@
           <summary>Do we have to change our phone number?</summary>
           <div class="answer"><p>No. You keep the number on your signage and your listings, and set call forwarding on the line you already have. You can turn it off yourself at any time.</p></div>
         </details>
+        <!--
+          Die Frage, die den Verkauf stoppt, steht als zweite: ein Salon auf
+          Fresha, ein Restaurant auf SevenRooms muss es hier erfahren, nicht
+          bei der Einrichtung.
+        -->
+        <details>
+          <summary>Does it work with Fresha, SevenRooms or OpenTable?</summary>
+          <div class="answer"><p>Not yet, and we won’t pretend otherwise. Belline keeps its own diary — you and your team work in it, and it is the diary the receptionist books into. A one-way feed into Google Calendar is built and waiting on Google’s approval. The booking-platform integrations need a partner agreement with each of them; we have not got those yet. If your whole business lives in one of them, the honest advice today is to try Belline on the trial and see whether the diary is enough.</p></div>
+        </details>
+        <details>
+          <summary>Will it sound like a robot?</summary>
+          <div class="answer"><p>Ring it and decide — the number and the bell on this page reach the same receptionist your callers would. It speaks like a person, it says “sure” and “let me see”, and it will not read you a script. On the demo line it tells you it is an AI; on your line, what it says about itself is your choice.</p></div>
+        </details>
+        <details>
+          <summary>What if it books something wrong?</summary>
+          <div class="answer"><p>It can only offer a time that is actually free — availability comes from the booking engine, not from the conversation, so it cannot invent a slot. Every booking has the full transcript beside it. If it is unsure of a name, a date or a number it asks again rather than guessing, and anything outside its rules becomes a message for you instead of a booking.</p></div>
+        </details>
+        <details>
+          <summary>Can it put a caller through to us?</summary>
+          <div class="answer"><p>Not live, not yet. When a call needs a person it takes the number and the reason, marks it urgent if it is, and ends the call so you can ring back with the whole story in front of you. Live transfer is on the way; we will say so here when it works.</p></div>
+        </details>
+        <details>
+          <summary>Does it speak Arabic?</summary>
+          <div class="answer"><p>Not yet. It answers in English today. Arabic is planned, but nobody has made a real Arabic call on it, so we are not selling you one.</p></div>
+        </details>
         <details>
           <summary>What happens if we run out of minutes?</summary>
-          <div class="answer"><p>Belline keeps answering. A receptionist that stops picking up because of an invoice is not a receptionist, so we do not build one — your dashboard tells you that you have gone past, and which plan would cover it. You are never charged a penny more than the plan fee for that.</p></div>
+          <div class="answer"><p>Belline keeps answering. A receptionist that stops picking up because of an invoice is not a receptionist, so we do not build one — your dashboard tells you that you have gone past, and which plan would cover it. You are never charged a dirham more than the plan fee for that.</p></div>
         </details>
         <details>
           <summary>Will it answer calls our staff would have taken?</summary>
@@ -425,7 +526,8 @@
         </details>
         <details>
           <summary>What do you do with our guests’ data?</summary>
-          <div class="answer"><p>Transcripts and bookings are stored so you can audit what was said; call audio is not recorded. The data belongs to your venue and is exportable. We are happy to sign whatever your legal counsel requires.</p></div>
+          <!-- Nicht "exportable": es gibt keinen Export. Übergeben können wir. -->
+          <div class="answer"><p>Transcripts and bookings are stored so you can audit what was said; call audio is not recorded. The data belongs to your venue, and we hand all of it over if you leave. We are happy to sign whatever your legal counsel requires.</p></div>
         </details>
       </div>
     </div>
@@ -444,13 +546,31 @@
       </div>
       <p class="fine" style="margin-top:16px">Fourteen days free · No card · Cancel anytime</p>
 
+      <!--
+        Der Knopf vor der Nummer: Speak to Belle ist kostenlos und ein Tipp,
+        die Nummer ist für einen Inhaber in Dubai ein Auslandsgespräch.
+      -->
       <div class="proof">
-        <h3>Or ring it yourself, first.</h3>
+        <h3>Or be the caller, first.</h3>
         <p>
-          A live line, answered by the same agent your callers would reach.
-          Nothing you book is real — it says so itself.
+          The same receptionist your callers would reach. Nothing you book is
+          real — it says so itself.
         </p>
-        <a class="dial" href="tel:+15717785920">+1 571 778 5920</a>
+        <div class="cta-row" style="margin-top:22px">
+          <a class="btn" href="https://app.belline.ai/call?start=1" data-call>
+            <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
+              <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
+              <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
+            </svg>
+            Speak to Belle
+          </a>
+        </div>
+        <p class="fine" style="margin-top:14px">
+          Free, in your browser. Or ring
+          <a class="dial-inline" href="tel:+15717785920">+1 571 778 5920</a>
+          — an international call from the UAE; your usual charges apply.
+        </p>
         <ul>
           <li>Ask what time it closes</li>
           <li>Try to book something</li>

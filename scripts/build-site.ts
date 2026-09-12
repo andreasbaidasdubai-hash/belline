@@ -30,7 +30,7 @@ fs.mkdirSync(OUT, { recursive: true });
 // ships a site that is unstyled, inert or silent while the build reports
 // success. This filter has quietly broken the site twice; add to it whenever
 // a page starts referencing a new kind of file.
-const ASSET = /\.(css|js|json|mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
+const ASSET = /\.(css|js|json|txt|xml|mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
 
 /**
  * Every asset under `public/`, as a path relative to it.
@@ -47,7 +47,25 @@ function assetsUnder(dir: string, prefix = ""): string[] {
   });
 }
 
-const pages = fs.readdirSync(SOURCE).filter((f) => f.endsWith(".html"));
+/**
+ * Only these become public pages.
+ *
+ * It used to be every `.html` under `public/`, which is how the market study,
+ * the 90-day plan and the go-live runbook were served on belline.ai for
+ * anybody who guessed the filename. Those now live in docs/site/. A page has
+ * to be named here to ship — a new one that is not is a build error, not a
+ * leak.
+ */
+const PAGES = ["landing.html", "404.html"];
+const pages = PAGES.filter((f) => {
+  if (fs.existsSync(path.join(SOURCE, f))) return true;
+  console.error(`  page missing: ${SOURCE}/${f}`);
+  process.exit(1);
+});
+for (const stray of fs.readdirSync(SOURCE).filter((f) => f.endsWith(".html") && !PAGES.includes(f))) {
+  console.error(`\n  ${SOURCE}/${stray} is not in PAGES and will not be published. Move it or list it.\n`);
+  process.exit(1);
+}
 
 /**
  * Clip filenames for a scene's lines, in order.
@@ -244,7 +262,7 @@ function navFor(active: string): string {
       <a href="/#what">What it does</a>
       <a href="/#price">Pricing</a>
       <a class="nav-cta" href="https://app.belline.ai/checkout">Get Belline</a>
-      <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>`;
+      <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Sign in</a>`;
 }
 
 /**
@@ -474,8 +492,8 @@ ${CALL_PANEL}
       <p class="eyebrow">Hear it now</p>
       <h2 class="display">Be the caller.</h2>
       <p class="lead" style="margin-top:26px; max-width:50ch">
-        A live line, answered by the same agent your callers would reach. Book
-        something, change it, then try to catch it out.
+        The same receptionist your callers would reach. Book something, change
+        it, then try to catch it out.
       </p>
 
       <div class="cta-row" style="margin-top:34px">
@@ -483,13 +501,14 @@ ${CALL_PANEL}
           ${MARK}
           Speak to Belle
         </a>
-        <a class="btn line" href="tel:+15717785920">Ring +1 571 778 5920</a>
       </div>
 
       <p class="fine" style="max-width:56ch">
-        Answered 24 hours a day. Nothing you book is real — the agent says so
-        itself. Calls last up to six minutes and the line is capped each day.
-        Your own call charges apply.
+        Free, in your browser, 24 hours a day. Or ring
+        <a href="tel:+15717785920">+1 571 778 5920</a> — an international call
+        from the UAE; your usual charges apply. Nothing you book is real — the
+        agent says so itself. Calls last up to six minutes and the line is
+        capped each day.
       </p>
 
       <div class="terms">
@@ -499,11 +518,11 @@ ${CALL_PANEL}
         </div>
         <div>
           <h4>Nothing to install</h4>
-          <p>No new handset, no app for your staff, no change to what is printed on your door. Setting a venue up takes about half an hour.</p>
+          <p>No new handset, no app for your staff, no change to what is printed on your door.</p>
         </div>
         <div>
           <h4>14 days free</h4>
-          <p>A limited number of live-call minutes, no card, nothing charged. Standard onboarding is free — we set your venue up with you.</p>
+          <p>Thirty minutes of live calls, no card, nothing charged. Standard onboarding is free.</p>
         </div>
       </div>
     </div>

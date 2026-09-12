@@ -86,7 +86,9 @@ const CLINIC_SCENES: Scene[] = [
     turns: [
       ["caller", "My chest has felt tight since this afternoon and I'm a bit short of breath."],
       ["agent", "That needs proper medical attention now, not an appointment."],
-      ["agent", "Please ring 999, or go straight to your nearest A&E. I'm not the right place for this."],
+      // 998, not 999: the UAE ambulance number. The line on the page is the
+      // line on the call (EMERGENCY_ADVICE in authority.ts) — change both.
+      ["agent", "Please call 998 for an ambulance, or go to the nearest emergency department. I'm not the right place for this."],
     ],
     outcome: { tag: "Escalated", what: "Directed to emergency care · no booking taken", human: true },
   },
