@@ -19,7 +19,7 @@ import { checkEmbedGate } from "./src/lib/embed";
 import { mayStreamTo, watchLiveness, sweepLiveness, type Liveness } from "./src/lib/voice/entitlement";
 import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
-import { VoiceSession, greetingClip } from "./src/lib/voice/session";
+import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voice/session";
 import { BrowserTransport, TwilioTransport } from "./src/lib/voice/transports";
 
 /**
@@ -369,6 +369,14 @@ async function warmGreetings(): Promise<void> {
       try {
         const { text, ...voice } = greetingClip(location, greetingFor(location), format);
         await speakClip(text, voice);
+        // And the "sure" / "okay" said while an answer is being worked out.
+        // Cold, the first one arrives too late to be worth saying and is
+        // dropped — which is safe, and is also silence on the first turn of
+        // the first call after a deploy, the one turn this is all for.
+        for (const clip of acknowledgementClips(location, format)) {
+          const { text: line, ...params } = clip;
+          await speakClip(line, params);
+        }
       } catch {
         // Left cold on purpose; the first real call will fill it.
       }

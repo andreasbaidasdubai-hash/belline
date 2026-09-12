@@ -17,25 +17,25 @@
  */
 export const VOICE_MODELS = [
   {
-    id: "eleven_v3_conversational",
-    label: "Conversational",
-    hint: "Tuned for talking to someone rather than reading to them. Measured at 669 ms to first audio — no slower than the others. Recommended.",
-    // Rejects previous_text outright with a 400. It carries conversational
-    // cadence natively, which is the reason to pick it, so it needs the
-    // conditioning less than the models that do accept it.
-    takesContext: false,
+    id: "eleven_flash_v2_5",
+    label: "Fastest",
+    hint: "About 340 ms to first audio — roughly half the Conversational model. A little flatter. Recommended for anything answering live.",
+    takesContext: true,
   },
   {
     id: "eleven_turbo_v2_5",
     label: "Neutral",
-    hint: "Even, professional delivery. Slightly more announcement than conversation.",
+    hint: "Even, professional delivery, about 390 ms to first audio. Slightly more announcement than conversation.",
     takesContext: true,
   },
   {
-    id: "eleven_flash_v2_5",
-    label: "Fastest",
-    hint: "Flattest delivery. Only worth it if a venue is on a slow connection.",
-    takesContext: true,
+    id: "eleven_v3_conversational",
+    label: "Conversational",
+    hint: "The warmest, tuned for talking rather than reading — and 550 to 760 ms to first audio, which the caller hears as a pause on every turn.",
+    // Rejects previous_text outright with a 400. It carries conversational
+    // cadence natively, which is the reason to pick it, so it needs the
+    // conditioning less than the models that do accept it.
+    takesContext: false,
   },
   {
     id: "eleven_multilingual_v2",
@@ -58,12 +58,18 @@ function takesContext(model: string): boolean {
 }
 
 /**
- * Measured, not assumed: at 8 kHz µ-law, first audio arrives in 669 ms on the
- * conversational model against 751 ms on turbo and 688 ms on flash. The model
- * that sounds least synthetic is not the one that costs latency, so there is
- * no trade to make here and the warmest option is the default.
+ * Measured, not assumed — and re-measured, because it changed.
+ *
+ * An earlier run at 8 kHz µ-law put the conversational model at 669 ms to
+ * first audio against 688 ms on flash, and on that evidence the warmest voice
+ * was the default at no cost. Measured again at the browser's 16 kHz PCM, two
+ * runs each, the same sentence: conversational 550–760 ms, turbo 380–390 ms,
+ * flash 340–350 ms. Three to four hundred milliseconds on every single turn
+ * is a pause the caller hears, and it is the largest single item in the
+ * time between their last word and Belline's first. The warmth is real and a
+ * venue can still choose it; it is no longer the default.
  */
-export const DEFAULT_VOICE_MODEL = "eleven_v3_conversational";
+export const DEFAULT_VOICE_MODEL = "eleven_flash_v2_5";
 
 /** Enough preceding speech to carry a contour; more buys nothing. */
 const PREVIOUS_TEXT_CHARS = 300;
@@ -135,12 +141,14 @@ export async function* speak(
   const model = opts.modelId ?? DEFAULT_VOICE_MODEL;
 
   const params = new URLSearchParams({ output_format: opts.format });
-  // 0 = none, 4 = maximum. Every step above 0 weakens the text normaliser,
-  // which is what turns "7pm" into "seven p.m." and reads a phone number back
-  // in groups. On the flash model that trade is worth it; on the models chosen
-  // *for* their delivery it defeats the point of choosing them.
+  // 0 = none, 3 = every latency optimisation, 4 = the same with the text
+  // normaliser switched off. The normaliser is what turns "7pm" into "seven
+  // p.m." and reads a phone number back in groups, and `toSpoken` already does
+  // most of that work before the text gets here — but not all of it, so 3 is
+  // as far as this goes. Only on the model chosen for speed; on the models
+  // chosen *for* their delivery it defeats the point of choosing them.
   if (model === "eleven_flash_v2_5") {
-    params.set("optimize_streaming_latency", "2");
+    params.set("optimize_streaming_latency", "3");
   }
 
   const response = await fetch(
@@ -206,7 +214,12 @@ export async function* speak(
  * voice being changed in the dashboard, and a stale greeting on disk would be
  * a genuinely confusing bug to chase.
  */
-const CLIP_CACHE_MAX = 24;
+// Greetings and acknowledgements, in both formats, for every demo venue plus
+// whichever customer venues have taken a call lately. 24 was enough when it
+// held greetings alone; the acknowledgements are four more per venue and
+// format, and evicting a greeting to make room for one would cost the caller
+// the very silence the clips exist to remove.
+const CLIP_CACHE_MAX = 96;
 const clipCache = new Map<string, Buffer>();
 
 export async function speakClip(text: string, opts: SpeakOptions): Promise<Buffer> {

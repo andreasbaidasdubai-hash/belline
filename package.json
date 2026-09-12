@@ -73,6 +73,7 @@
     "bench:voice": "node --import tsx --env-file-if-exists=.env scripts/bench-voice.ts",
     "voice:samples": "node --import tsx --env-file-if-exists=.env scripts/voice-samples.ts",
     "bench:model": "node --import tsx --env-file-if-exists=.env scripts/bench-model.ts",
+    "bench:session": "node --import tsx --env-file-if-exists=.env scripts/bench-session.ts",
     "check:config": "node --import tsx scripts/check-config.ts"
   },
   "dependencies": {

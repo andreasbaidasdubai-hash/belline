@@ -8,7 +8,10 @@
  *
  * A guess must change nothing. These test the safety property first and the
  * speed second, because the failure mode of getting this wrong is a table
- * booked for someone who was still mid-sentence.
+ * booked for someone who was still mid-sentence. A guess that reaches a tool
+ * that writes stops there, and the real turn continues from that point — so
+ * the booking is made once, by the turn allowed to make it, and the sentence
+ * the model said on the way to it is not said twice.
  *
  *   npm run check:speculation
  */
@@ -71,7 +74,7 @@ await test("speculating does not create a booking", async () => {
   assert.equal(after, before, "a guess wrote a booking to the book");
 });
 
-await test("a guess that needs a writing tool abandons rather than running it", async () => {
+await test("a guess that needs a writing tool stops rather than running it", async () => {
   if (!live) return;
   const agent = session();
   agent.greeting();
@@ -80,17 +83,91 @@ await test("a guess that needs a writing tool abandons rather than running it", 
     "Book me a table for two tomorrow at eight, the name is Andreas, number 07700900123.",
     true,
   );
-  // Either it abandoned, or it never reached for a writing tool at all — both
-  // are correct. What must not happen is a booking, asserted above.
+  // Either it stopped at the writing tool, or it never reached for one at all
+  // — both are correct. What must not happen is a booking, asserted above.
   assert.ok(
     events.includes("abandon") || !events.includes("tool"),
     `unexpected events: ${events.join(", ")}`,
   );
 });
 
-await test("an abandoned guess cannot be adopted", async () => {
+await test("nothing to adopt on a fresh session", async () => {
   const agent = session();
   assert.equal(agent.adopt("anything at all"), false);
+});
+
+console.log("\nA guess that stopped at a booking is continued, not repeated\n");
+
+await test("the real turn runs the booking the guess asked for, exactly once", async () => {
+  if (!live) return;
+  const agent = session();
+  agent.greeting();
+  const ask = "Book me a table for two tomorrow at eight, the name is Andreas, number 07700900123.";
+  const before = listBookings({ locationId: restaurant.id }).length;
+
+  // The guess: says its opening, reaches for `book`, stops.
+  const guessed: string[] = [];
+  let stopped = false;
+  for await (const event of agent.respond(ask, { speculative: true })) {
+    if (event.type === "sentence") guessed.push(event.text);
+    if (event.type === "abandon") stopped = true;
+  }
+  if (!stopped) return; // The model asked a question instead of booking; nothing to continue.
+  assert.equal(listBookings({ locationId: restaurant.id }).length, before, "the guess booked");
+
+  // Adopted, and flagged as unfinished.
+  assert.equal(agent.adopt(ask), true, "a stopped guess could not be adopted");
+  assert.equal(agent.needsContinuation, true);
+
+  // The real turn picks up at the tool call, not at the caller's words.
+  const events: string[] = [];
+  let turnText = "";
+  let toolsRun = 0;
+  for await (const event of agent.respond(ask)) {
+    events.push(event.type);
+    if (event.type === "tool" && event.trace.name === "book") toolsRun++;
+    if (event.type === "turn_end") turnText = event.text;
+  }
+  assert.equal(agent.needsContinuation, false);
+  assert.equal(toolsRun, 1, `book ran ${toolsRun} times`);
+  assert.equal(
+    listBookings({ locationId: restaurant.id }).length,
+    before + 1,
+    "the continued turn did not make exactly one booking",
+  );
+  // The opening the guess spoke is part of the turn's record, and said once.
+  // Only sentences long enough to be distinctive are checked for repeats: a
+  // "Lovely." can legitimately recur inside "Lovely, you're all booked".
+  const opening = guessed.join(" ");
+  assert.ok(turnText.startsWith(opening), `the turn lost its opening "${opening.slice(0, 60)}"`);
+  for (const sentence of guessed.filter((s) => s.length >= 15)) {
+    assert.equal(turnText.split(sentence).length, 2, `"${sentence}" was said twice`);
+  }
+  // And the history is whole: every tool call answered, so the next turn can
+  // be built on it.
+  const history = agent.history();
+  const asked = new Set<string>();
+  const answered = new Set<string>();
+  for (const m of history) {
+    if (!Array.isArray(m.content)) continue;
+    for (const b of m.content as { type: string; id?: string; tool_use_id?: string }[]) {
+      if (b.type === "tool_use" && b.id) asked.add(b.id);
+      if (b.type === "tool_result" && b.tool_use_id) answered.add(b.tool_use_id);
+    }
+  }
+  assert.deepEqual([...asked].filter((id) => !answered.has(id)), [], "a tool call went unanswered");
+});
+
+await test("an unfinished guess is written down as what was heard", () => {
+  const agent = session();
+  agent.greeting();
+  agent.recordUnfinished("What time do you close?", "We close at");
+  const history = agent.history();
+  assert.equal(history.length, 2);
+  assert.equal(history[0].role, "user");
+  assert.equal(history[1].role, "assistant");
+  assert.equal(history[1].content, "We close at");
+  assert.equal(agent.adopt("What time do you close?"), false);
 });
 
 console.log("\nAdoption is exact\n");

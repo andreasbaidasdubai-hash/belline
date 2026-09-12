@@ -70,11 +70,39 @@ interface Guess {
   text: string;
   /** Fragments, already synthesised, waiting to be released. */
   ready: { text: string; audio: Buffer }[];
-  /** Set when the model reached for a tool that writes, or the run failed. */
+  /** The run has stopped producing — finished, handed over, or failed. */
+  finished: boolean;
+  /** It failed. What is in `ready` was said correctly; nothing after it exists. */
   dead: boolean;
-  /** Resolves when the speculative run has finished one way or another. */
-  done: Promise<void>;
+  /**
+   * The model asked for a tool that writes, which a guess may not run. The
+   * words it produced first are in `ready`; the real turn continues from the
+   * tool call, without saying them again.
+   */
+  handoff: boolean;
+  /** Resolves the next time a fragment is ready or the run stops. */
+  changed: () => Promise<void>;
   abort: AbortController;
+}
+
+/**
+ * A promise that resolves when poked, then arms itself again.
+ *
+ * The consumer of a guess waits on this between fragments rather than on the
+ * whole run, which is the difference between the caller hearing the first
+ * sentence when it is ready and hearing it when the last one is.
+ */
+function signal(): { wait: () => Promise<void>; fire: () => void } {
+  let resolve: () => void = () => {};
+  let pending = new Promise<void>((r) => (resolve = r));
+  return {
+    wait: () => pending,
+    fire: () => {
+      const done = resolve;
+      pending = new Promise<void>((r) => (resolve = r));
+      done();
+    },
+  };
 }
 
 /**
@@ -148,6 +176,38 @@ export function greetingClip(location: Location, greeting: string, format: TtsFo
   return voiceParams(location, toSpoken(greeting), format);
 }
 
+/**
+ * What Belline says the instant a caller finishes, while the answer is still
+ * being worked out.
+ *
+ * The model's first clause takes the better part of a second to arrive and
+ * the voice a third of one more, and nothing about either is going to get
+ * much faster. What a person does with that second is not sit in silence:
+ * they say "sure" or "let me see", and the silence that follows is a person
+ * thinking rather than a line that has gone dead. Each of these is a cached
+ * clip, so it costs nothing at the time, and each is a bare acknowledgement
+ * rather than a promise — "Sure." commits to nothing, and reads correctly in
+ * front of a yes, a no, and a question back.
+ *
+ * Rotated rather than random so the same caller does not hear the same one
+ * three turns running, and never on a turn that already has audio to play.
+ */
+export const ACKNOWLEDGEMENTS = ["Sure.", "Okay.", "Right.", "Let me see."] as const;
+
+/**
+ * How long a turn may be silent before an acknowledgement is said.
+ *
+ * Long enough that a guess with its first fragment already waiting is not
+ * pre-empted, short enough that the caller is never left wondering. A person
+ * takes about this long to say "sure" after a question.
+ */
+const ACKNOWLEDGE_AFTER_MS = 250;
+
+/** The acknowledgement clips, as the session will ask for them — for warming. */
+export function acknowledgementClips(location: Location, format: TtsFormat) {
+  return ACKNOWLEDGEMENTS.map((line) => voiceParams(location, toSpoken(line), format));
+}
+
 export class VoiceSession {
   private readonly agent: AgentSession;
   private readonly call: Call;
@@ -169,8 +229,14 @@ export class VoiceSession {
    * finished. That half second was dead time: nothing started until it
    * elapsed, so the caller paid for it twice — once waiting to be understood,
    * again waiting for an answer. Now the model and the voice run during it
-   * and the audio is held. If the guess was right it is already in the
-   * caller's ear the moment the endpointer agrees.
+   * and the audio is held until the endpointer agrees — then released a
+   * fragment at a time, as each one is ready.
+   *
+   * It used to be released only once the *whole* run had finished: every
+   * sentence generated, every sentence synthesised. A right guess — the
+   * common case — therefore made the caller wait for the end of the answer
+   * before hearing the start of it, which on a three-sentence reply was two
+   * to three seconds of silence that the cold path would not have had.
    */
   private guess: Guess | null = null;
   private guessTimer: NodeJS.Timeout | null = null;
@@ -186,6 +252,14 @@ export class VoiceSession {
   private bargeInTimer: NodeJS.Timeout | null = null;
   private closed = false;
   private timeout: NodeJS.Timeout | null = null;
+  /** Fires if the turn has produced no audio soon enough — see ACKNOWLEDGEMENTS. */
+  private ackTimer: NodeJS.Timeout | null = null;
+  /** The acknowledgement said this turn, if one was, for the transcript. */
+  private ackSaid = "";
+  /** Whether any of the answer proper has reached the caller this turn. */
+  private answered = false;
+  /** Caller turns so far, to rotate the acknowledgements. */
+  private turns = 0;
 
   constructor(
     location: Location,
@@ -356,14 +430,27 @@ export class VoiceSession {
     }
 
     const abort = new AbortController();
-    const guess: Guess = { text, ready: [], dead: false, done: Promise.resolve(), abort };
+    const tick = signal();
+    const guess: Guess = {
+      text,
+      ready: [],
+      finished: false,
+      dead: false,
+      handoff: false,
+      changed: tick.wait,
+      abort,
+    };
     this.guess = guess;
 
-    guess.done = (async () => {
+    void (async () => {
       try {
         for await (const event of this.agent.respond(text, { speculative: true })) {
           if (abort.signal.aborted) return;
-          if (event.type === "abandon" || event.type === "error") {
+          if (event.type === "abandon") {
+            guess.handoff = true;
+            return;
+          }
+          if (event.type === "error") {
             guess.dead = true;
             return;
           }
@@ -383,9 +470,13 @@ export class VoiceSession {
           }
           if (abort.signal.aborted) return;
           guess.ready.push({ text: event.text, audio: Buffer.concat(chunks) });
+          tick.fire();
         }
       } catch {
         guess.dead = true;
+      } finally {
+        guess.finished = true;
+        tick.fire();
       }
     })();
   }
@@ -404,12 +495,18 @@ export class VoiceSession {
   /**
    * Use a guess, if it turned out to be right.
    *
-   * Everything has to line up: the caller said what we guessed, the run
-   * finished without reaching for a tool that writes, and the agent agrees
-   * the history it built belongs to this exact sentence. Anything short of
-   * that and the real turn runs from scratch — the cost of being wrong is
-   * some wasted tokens, and the cost of being wrong *and using it anyway* is
-   * answering a question nobody asked.
+   * The caller must have said what we guessed — to the word, ignoring
+   * punctuation — or the real turn runs from scratch. Given that, whatever
+   * the guess has ready goes into the caller's ear now, and each further
+   * fragment follows the moment it is synthesised, while the run is still
+   * going.
+   *
+   * Three ways it ends. It finishes, and the history is adopted whole. It
+   * reached for a tool that writes and stopped there: the history is adopted
+   * up to that point and the caller returns false so the real turn *continues*
+   * it — runs the tool, lets the model carry on — rather than starting over
+   * and saying the opening twice. Or it failed: what was already said is
+   * written down as said, and the turn ends there.
    */
   private async useGuess(text: string, gen: number): Promise<boolean> {
     const guess = this.guess;
@@ -418,24 +515,63 @@ export class VoiceSession {
       return false;
     }
 
-    await guess.done;
-    if (gen !== this.generation) return false;
-    if (guess.dead || guess.ready.length === 0 || !this.agent.adopt(guess.text)) {
-      this.dropGuess();
+    // Ours from here. Detached from `this.guess` so a later dropGuess() does
+    // not abort it, and attached to `this.abort` so an interruption does.
+    this.guess = null;
+    if (this.guessTimer) {
+      clearTimeout(this.guessTimer);
+      this.guessTimer = null;
+    }
+    this.abort = guess.abort;
+
+    let released = 0;
+    for (;;) {
+      while (released < guess.ready.length) {
+        if (gen !== this.generation) return true;
+        const fragment = guess.ready[released++];
+        this.answering();
+        this.transport.sendEvent({ type: "transcript", role: "agent", text: fragment.text });
+        if (!this.speaking) this.speakingSince = Date.now();
+        this.speaking = true;
+        this.transport.sendAudio(fragment.audio);
+        this.spokenThisTurn = `${this.spokenThisTurn} ${fragment.text}`.trim();
+      }
+      if (guess.finished) break;
+      await guess.changed();
+      if (gen !== this.generation) return true;
+    }
+    if (this.abort === guess.abort) this.abort = null;
+    this.speaking = false;
+
+    const said = guess.ready.map((f) => f.text).join(" ");
+
+    if (guess.dead || (!guess.handoff && !this.agent.adopt(guess.text))) {
+      this.agent.discardSpeculation();
+      // Nothing reached the caller, so nothing is lost by starting over.
+      if (released === 0) return false;
+      // Something did, and then the run broke. The half they heard is
+      // recorded as said; the next thing they say gets a fresh turn.
+      this.agent.recordUnfinished(text, said);
+      this.appendAgentTurn(said, 0);
+      this.transport.sendEvent({ type: "turn_end", latencyMs: 0 });
+      saveCall(this.call);
+      return true;
+    }
+
+    if (guess.handoff) {
+      // The opening has been said. The real turn takes the history from here
+      // and runs the tool the guess was not allowed to.
+      if (!this.agent.adopt(guess.text)) {
+        this.agent.recordUnfinished(text, said);
+        this.appendAgentTurn(said, 0);
+        this.transport.sendEvent({ type: "turn_end", latencyMs: 0 });
+        saveCall(this.call);
+        return true;
+      }
       return false;
     }
 
-    this.guess = null;
-    for (const fragment of guess.ready) {
-      if (gen !== this.generation) return true;
-      this.transport.sendEvent({ type: "transcript", role: "agent", text: fragment.text });
-      this.speaking = true;
-      this.speakingSince = Date.now();
-      this.transport.sendAudio(fragment.audio);
-      this.spokenThisTurn = `${this.spokenThisTurn} ${fragment.text}`.trim();
-    }
-    this.speaking = false;
-    this.appendAgentTurn(guess.ready.map((f) => f.text).join(" "), 0);
+    this.appendAgentTurn(said, 0);
     this.transport.sendEvent({ type: "turn_end", latencyMs: 0 });
     saveCall(this.call);
     return true;
@@ -451,6 +587,9 @@ export class VoiceSession {
     // turn is abandoned, not undone — it was said, it is on the recording,
     // and a transcript that skips it reads as though Belline sat silent
     // while the caller talked over nothing.
+    this.cancelAcknowledgement();
+    // `spokenThisTurn` already carries the acknowledgement, if there was one.
+    this.ackSaid = "";
     if (this.spokenThisTurn.trim()) this.appendAgentTurn(this.spokenThisTurn.trim(), 0);
     this.spokenThisTurn = "";
     this.clearBargeIn();
@@ -487,6 +626,9 @@ export class VoiceSession {
     // A new answer starts a new contour — the previous turn's words would
     // condition this one toward a cadence that no longer fits.
     this.spokenThisTurn = "";
+    this.answered = false;
+    this.ackSaid = "";
+    this.turns++;
     this.pushTranscript("caller", text);
     this.transport.sendEvent({ type: "transcript", role: "caller", text });
 
@@ -500,6 +642,10 @@ export class VoiceSession {
       await this.enforce(breach, gen);
       return;
     }
+
+    // From here the caller is waiting. If nothing has reached them shortly,
+    // Belline says so out loud rather than leaving the line silent.
+    this.armAcknowledgement(gen);
 
     // The answer may already be synthesised and waiting, prepared while the
     // endpointer was still deciding the caller had stopped.
@@ -751,12 +897,14 @@ export class VoiceSession {
         // because clearAudio flushes whatever the far end has buffered.
         const audio = await speakClip(spoken.text, { ...voice, previousText: undefined });
         if (gen !== this.generation) return;
+        this.answering();
         if (audio.length) this.transport.sendAudio(audio);
         return;
       }
 
       for await (const chunk of speak(spoken.text, voice)) {
         if (gen !== this.generation) return;
+        this.answering();
         this.transport.sendAudio(chunk);
       }
     } catch (err) {
@@ -784,19 +932,67 @@ export class VoiceSession {
    * turn, so fragments are merged rather than appended one line each.
    */
   private appendAgentTurn(text: string, latencyMs: number): void {
-    if (!text.trim()) return;
+    // The acknowledgement was heard, so it is written down — once, in front
+    // of whichever part of the answer follows it.
+    const said = this.ackSaid ? `${this.ackSaid} ${text}`.trim() : text;
+    this.ackSaid = "";
+    if (!said.trim()) return;
     this.call.transcript.push({
       role: "agent",
-      text,
+      text: said,
       at: new Date().toISOString(),
       latencyMs,
     });
+  }
+
+  // --- acknowledging -------------------------------------------------------
+
+  /** Say something soon, unless the answer gets there first. */
+  private armAcknowledgement(gen: number): void {
+    this.cancelAcknowledgement();
+    if (!ttsEnabled()) return;
+    this.ackTimer = setTimeout(() => {
+      this.ackTimer = null;
+      void this.acknowledge(gen);
+    }, ACKNOWLEDGE_AFTER_MS);
+  }
+
+  private cancelAcknowledgement(): void {
+    if (this.ackTimer) clearTimeout(this.ackTimer);
+    this.ackTimer = null;
+  }
+
+  /** The answer proper has started; an acknowledgement would now be in its way. */
+  private answering(): void {
+    this.answered = true;
+    this.cancelAcknowledgement();
+  }
+
+  private async acknowledge(gen: number): Promise<void> {
+    if (gen !== this.generation || this.answered || this.closed) return;
+    const line = ACKNOWLEDGEMENTS[this.turns % ACKNOWLEDGEMENTS.length];
+    const spoken = toSpoken(line);
+    let audio: Buffer;
+    try {
+      audio = await speakClip(spoken.text, voiceParams(this.location, spoken, this.transport.output));
+    } catch {
+      // A missing acknowledgement is silence, which is what there was before.
+      return;
+    }
+    // The clip may have been cold and taken a moment; if the answer arrived
+    // in the meantime, or the caller spoke, it is too late to say "sure".
+    if (gen !== this.generation || this.answered || this.closed || !audio.length) return;
+    this.ackSaid = line;
+    this.spokenThisTurn = line;
+    this.transport.sendEvent({ type: "transcript", role: "agent", text: line });
+    this.transport.sendAudio(audio);
   }
 
   async end(outcome: Call["outcome"], summary?: string): Promise<void> {
     if (this.closed) return;
     this.closed = true;
     if (this.timeout) clearTimeout(this.timeout);
+    this.cancelAcknowledgement();
     this.dropGuess();
     this.abort?.abort();
     this.stt?.close();

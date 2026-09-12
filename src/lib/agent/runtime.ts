@@ -50,11 +50,29 @@ interface TurnState {
  * Tools a guess may run.
  *
  * Both only read. Running check_availability twice costs a lookup; running
- * `book` twice costs a table, and a caller who never asked for it. If a
- * speculative turn reaches for anything outside this set it is thrown away
- * and the real turn starts over.
+ * `book` twice costs a table, and a caller who never asked for it. When a
+ * speculative turn reaches for anything outside this set it stops there, and
+ * the real turn picks up from that exact point — the tool call the model
+ * already asked for is run once, by the turn that is allowed to.
  */
 const READ_ONLY_TOOLS = new Set(["check_availability", "lookup_booking"]);
+
+/**
+ * Where a guess stopped, for the real turn to carry on from.
+ *
+ * A guess used to be thrown away whole the moment the model reached for a
+ * writing tool, and the real turn started again from the caller's words. That
+ * was safe and it was slow: the sentence the model had already written before
+ * asking to book — "Lovely, let me put that in for you" — was generated twice,
+ * and the caller waited through both. Now the guess keeps its words and hands
+ * over the tool call unrun.
+ */
+interface Resume {
+  /** The writing calls the model asked for, not yet executed. */
+  toolUses: Anthropic.ToolUseBlock[];
+  /** Every clause the guess produced before it stopped. Already spoken. */
+  spoken: string;
+}
 
 // ---------------------------------------------------------------------------
 // Sentence chunking
@@ -235,7 +253,13 @@ export class AgentSession {
   private readonly tools: Anthropic.Tool[];
   private ended = false;
   /** A successful speculation waiting to be adopted, or discarded. */
-  private pendingAdopt: { userText: string; messages: Anthropic.MessageParam[] } | null = null;
+  private pendingAdopt: {
+    userText: string;
+    messages: Anthropic.MessageParam[];
+    resume?: Resume;
+  } | null = null;
+  /** An adopted guess that stopped at a writing tool; the next turn continues it. */
+  private resume: Resume | null = null;
   /** What was actually said on pickup — the model must not repeat it. */
   private spokenGreeting: string | null = null;
 
@@ -280,8 +304,9 @@ export class AgentSession {
    *
    * Everything is local: a copy of the history, no writes to the call record,
    * and read-only tools. Yields the same events as a real turn so the caller
-   * can buffer them, plus `abandon` when the guess turns out to need a tool
-   * that writes.
+   * can buffer them, plus `abandon` when the guess reaches a tool that writes
+   * — at which point it stops, and the history it built (including the tool
+   * call it was not allowed to run) is kept for the real turn to continue.
    *
    * `adopt()` is what makes the work count if the guess was right.
    */
@@ -292,6 +317,7 @@ export class AgentSession {
       ...this.messages,
       { role: "user", content: userText },
     ];
+    let spoken = "";
 
     try {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -301,12 +327,16 @@ export class AgentSession {
         for await (const event of stream) {
           if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
             for (const sentence of chunker.push(event.delta.text)) {
+              spoken += (spoken ? " " : "") + sentence;
               yield { type: "sentence", text: sentence };
             }
           }
         }
         const tail = chunker.flush();
-        if (tail) yield { type: "sentence", text: tail };
+        if (tail) {
+          spoken += (spoken ? " " : "") + tail;
+          yield { type: "sentence", text: tail };
+        }
 
         const message = await stream.finalMessage();
         if (message.stop_reason === "refusal") return;
@@ -318,8 +348,11 @@ export class AgentSession {
           (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
         );
 
-        // The line this whole mechanism turns on.
+        // The line this whole mechanism turns on. Nothing that writes runs
+        // here — but nothing already said or decided is thrown away either.
+        // The real turn adopts this history and runs the call itself.
         if (toolUses.some((use) => !READ_ONLY_TOOLS.has(use.name))) {
+          this.pendingAdopt = { userText, messages, resume: { toolUses, spoken } };
           yield { type: "abandon" };
           return;
         }
@@ -359,12 +392,34 @@ export class AgentSession {
   adopt(userText: string): boolean {
     if (!this.pendingAdopt || this.pendingAdopt.userText !== userText) return false;
     this.messages = this.pendingAdopt.messages;
+    this.resume = this.pendingAdopt.resume ?? null;
     this.pendingAdopt = null;
     return true;
   }
 
+  /** Whether the adopted guess stopped short, leaving work for the next turn. */
+  get needsContinuation(): boolean {
+    return this.resume !== null;
+  }
+
   discardSpeculation(): void {
     this.pendingAdopt = null;
+  }
+
+  /**
+   * Write down a turn that was heard but never finished.
+   *
+   * For the rare case where a guess was right, part of it had already been
+   * spoken, and then the run failed before it could be adopted. Starting the
+   * real turn from scratch would say the opening again; leaving the history
+   * empty would have the agent believe it said nothing. This is the honest
+   * middle: the caller's words, and the part of the answer they heard.
+   */
+  recordUnfinished(userText: string, spoken: string): void {
+    this.pendingAdopt = null;
+    this.resume = null;
+    this.messages.push({ role: "user", content: userText });
+    if (spoken.trim()) this.messages.push({ role: "assistant", content: spoken.trim() });
   }
 
 
@@ -468,7 +523,13 @@ ${
       yield* this.speculate(userText);
       return;
     }
-    this.messages.push({ role: "user", content: userText });
+
+    // An adopted guess that stopped at a writing tool already put the caller's
+    // words — and the model's reply so far — into the history. This turn is
+    // its second half, not a new one.
+    const resume = this.resume;
+    this.resume = null;
+    if (!resume) this.messages.push({ role: "user", content: userText });
 
     if (!hasApiKey()) {
       yield* this.mockRespond(userText);
@@ -480,9 +541,9 @@ ${
     // state the next turn cannot recover from. `closeInterruptedTurn` is what
     // makes that survivable, and it can only run from a `finally` — hence the
     // split into two methods rather than one long one.
-    const turn: TurnState = { spoken: "", results: [], settled: false };
+    const turn: TurnState = { spoken: resume?.spoken ?? "", results: [], settled: false };
     try {
-      yield* this.runTurn(turn);
+      yield* this.runTurn(turn, resume);
     } finally {
       if (!turn.settled) this.closeInterruptedTurn(turn);
     }
@@ -545,11 +606,98 @@ ${
     }
   }
 
-  private async *runTurn(turn: TurnState): AsyncGenerator<AgentEvent> {
+  /**
+   * Run the tools one model round asked for, and write their answers down.
+   *
+   * Returns the control the tools handed back — end the call, transfer — or
+   * null to carry on. Shared by an ordinary round and by a turn resuming an
+   * adopted guess, which starts here rather than at the model.
+   */
+  private async *runTools(
+    toolUses: Anthropic.ToolUseBlock[],
+    turn: TurnState,
+  ): AsyncGenerator<AgentEvent, Extract<AgentEvent, { type: "control" }> | null> {
+    // Held on the turn, not local to the round: if the caller interrupts
+    // between a tool returning and its result being written down, the
+    // repair needs whatever did come back.
+    const results: Anthropic.ToolResultBlockParam[] = (turn.results = []);
+    let control: Extract<AgentEvent, { type: "control" }> | null = null;
+
+    for (const use of toolUses) {
+      const t0 = Date.now();
+      let outcome;
+      let ok = true;
+      try {
+        outcome = await executeTool(
+          use.name,
+          use.input as Record<string, unknown>,
+          { location: this.location, call: this.call, callerNumber: this.callerNumber },
+        );
+      } catch (err) {
+        ok = false;
+        outcome = {
+          result: {
+            error: `The system did not respond. Apologise briefly and offer to take a message. (${
+              err instanceof Error ? err.message : String(err)
+            })`,
+          },
+        };
+      }
+
+      const trace: ToolTrace = {
+        at: new Date().toISOString(),
+        name: use.name,
+        input: use.input,
+        output: outcome.result,
+        ms: Date.now() - t0,
+        ok,
+      };
+      this.call.toolCalls.push(trace);
+      yield { type: "tool", trace };
+
+      results.push({
+        type: "tool_result",
+        tool_use_id: use.id,
+        content: JSON.stringify(outcome.result),
+        is_error: !ok,
+      });
+
+      if (outcome.control) {
+        control = {
+          type: "control",
+          action: outcome.control.type === "end_call" ? "end_call" : "transfer",
+          detail:
+            outcome.control.type === "end_call"
+              ? outcome.control.summary
+              : outcome.control.reason,
+        };
+      }
+    }
+
+    // All results in one user message — splitting them teaches the model
+    // to stop making parallel calls.
+    this.messages.push({ role: "user", content: results });
+    return control;
+  }
+
+  private async *runTurn(turn: TurnState, resume?: Resume | null): AsyncGenerator<AgentEvent> {
     const startedAt = Date.now();
     let firstAudioMs = -1;
 
     try {
+      // Picking up where a guess left off: the model has already spoken and
+      // asked for a tool that writes. Run it, then let the model carry on.
+      if (resume) {
+        const control = yield* this.runTools(resume.toolUses, turn);
+        if (control) {
+          this.ended = control.action === "end_call" || control.action === "transfer";
+          yield control;
+          turn.settled = true;
+          yield { type: "turn_end", text: turn.spoken, firstAudioMs: 0 };
+          return;
+        }
+      }
+
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         const chunker = new SentenceChunker();
         const stream = this.open(this.messages);
@@ -593,66 +741,7 @@ ${
         const toolUses = message.content.filter(
           (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
         );
-        // Held on the turn, not local to the round: if the caller interrupts
-        // between a tool returning and its result being written down, the
-        // repair needs whatever did come back.
-        const results: Anthropic.ToolResultBlockParam[] = (turn.results = []);
-        let control: AgentEvent | null = null;
-
-        for (const use of toolUses) {
-          const t0 = Date.now();
-          let outcome;
-          let ok = true;
-          try {
-            outcome = await executeTool(
-              use.name,
-              use.input as Record<string, unknown>,
-              { location: this.location, call: this.call, callerNumber: this.callerNumber },
-            );
-          } catch (err) {
-            ok = false;
-            outcome = {
-              result: {
-                error: `The system did not respond. Apologise briefly and offer to take a message. (${
-                  err instanceof Error ? err.message : String(err)
-                })`,
-              },
-            };
-          }
-
-          const trace: ToolTrace = {
-            at: new Date().toISOString(),
-            name: use.name,
-            input: use.input,
-            output: outcome.result,
-            ms: Date.now() - t0,
-            ok,
-          };
-          this.call.toolCalls.push(trace);
-          yield { type: "tool", trace };
-
-          results.push({
-            type: "tool_result",
-            tool_use_id: use.id,
-            content: JSON.stringify(outcome.result),
-            is_error: !ok,
-          });
-
-          if (outcome.control) {
-            control = {
-              type: "control",
-              action: outcome.control.type === "end_call" ? "end_call" : "transfer",
-              detail:
-                outcome.control.type === "end_call"
-                  ? outcome.control.summary
-                  : outcome.control.reason,
-            };
-          }
-        }
-
-        // All results in one user message — splitting them teaches the model
-        // to stop making parallel calls.
-        this.messages.push({ role: "user", content: results });
+        const control = yield* this.runTools(toolUses, turn);
 
         if (control) {
           this.ended = control.action === "end_call" || control.action === "transfer";
