@@ -75,6 +75,7 @@
     "bench:model": "node --import tsx --env-file-if-exists=.env scripts/bench-model.ts",
     "bench:session": "node --import tsx --env-file-if-exists=.env scripts/bench-session.ts",
     "probe:live": "node scripts/probe-live.mjs",
+    "probe:voice": "node --env-file-if-exists=.env scripts/probe-voice-note.mjs",
     "check:config": "node --import tsx scripts/check-config.ts"
   },
   "dependencies": {
