@@ -52,11 +52,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // Personalised demos are built *for* a prospect but are still a selling
     // tool, so they stay owner-only.
     ...(user.role === "owner" ? [{ href: "/prospects", label: "Personalised demos" }] : []),
-    // The sales console is deliberately NOT linked from here. It lives in the
-    // `(internal)` route group with its own layout and guard, and it holds
-    // every prospect in every market — other businesses' data, which has no
-    // business appearing in a customer's shell even behind a role check.
-    // Reach it directly at /sales.
   ];
 
   return (
@@ -109,6 +104,49 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               ) : null}
             </Link>
           ))}
+
+          {/*
+            The way into Belline's own sales console.
+
+            It was left out on the grounds that the console holds other
+            businesses' data and should not surface in a customer's shell. That
+            conflated two things: a *link* is not data, the nav is built per
+            user, and nobody but an owner ever renders this. Leaving it out did
+            not protect anything — it just meant the only person allowed in had
+            to type the URL from memory, having arrived at the customer
+            dashboard because they were already signed in.
+
+            Set apart below a rule rather than listed with the venue's own
+            pages, because it leads somewhere that is not about this venue.
+          */}
+          {user.role === "owner" && (
+            <div
+              style={{
+                marginTop: 16,
+                paddingTop: 14,
+                borderTop: "1px solid var(--border)",
+              }}
+            >
+              <Link
+                href="/sales"
+                className="navlink"
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  fontSize: 12.5,
+                  color: "var(--muted)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                Sales console
+                <span aria-hidden="true" style={{ marginLeft: "auto", opacity: 0.6 }}>
+                  →
+                </span>
+              </Link>
+            </div>
+          )}
         </nav>
 
         <div className="who">
