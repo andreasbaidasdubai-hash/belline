@@ -115,11 +115,26 @@ export async function POST(req: Request) {
   // Everything past this point is deliberately not awaited by the response.
   void handle(adapter, messages, statuses, traceId);
 
-  return acknowledge();
+  return acknowledge(adapter);
 }
 
-/** 200, always, and as fast as possible. */
-function acknowledge() {
+/**
+ * 200, always, and as fast as possible.
+ *
+ * Twilio gets an empty TwiML document with its content type rather than an
+ * empty body. The empty body was answered in 30 ms by our side and still
+ * logged by Twilio as error 11200 with a 502, followed by a second delivery of
+ * the same message eleven seconds later. TwiML is what its webhook expects,
+ * and `<Response/>` tells it there is nothing to send back — the reply goes
+ * out separately through the API once Belline has written it.
+ */
+function acknowledge(adapter?: ChannelAdapter) {
+  if (adapter?.provider === "twilio") {
+    return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response/>', {
+      status: 200,
+      headers: { "content-type": "text/xml; charset=utf-8" },
+    });
+  }
   return new NextResponse(null, { status: 200 });
 }
 

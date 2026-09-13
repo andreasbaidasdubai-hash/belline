@@ -4,7 +4,7 @@ import type { Conversation, Provider } from "./types";
 import { getCall, getLocation, saveCall } from "../store";
 import { startCall } from "../calls";
 import { AgentSession } from "../agent/runtime";
-import { checkTimes, honestAlternative } from "../agent/honesty";
+import { checkTimes, publishedTimes, repairReply } from "../agent/honesty";
 import { metaAdapter } from "./channel/meta";
 import { twilioAdapter } from "./channel/twilio";
 import { internalAdapter } from "./channel/internal";
@@ -188,7 +188,7 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   // 3:30 and 5:00" at a salon whose only free slots were before half past ten.
   // A guest turning up for an appointment that does not exist is the worst
   // failure this product has, so it is a check rather than a request.
-  const honesty = checkTimes(reply, call.toolCalls);
+  const honesty = checkTimes(reply, call.toolCalls, publishedTimes(location));
   if (!honesty.ok) {
     console.warn(
       `[reception ${traceId}] invented ${honesty.invented.join(", ")} — offered ${
@@ -207,9 +207,10 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
       // trusts, and a false positive is invisible without it.
       payload: { invented: honesty.invented, offered: honesty.offered, replaced: reply },
     });
-    // Replaced from the tool's own output rather than regenerated: a second
-    // model call costs a second and might invent a different set.
-    reply = honestAlternative(honesty);
+    // Only the sentences naming an invented time are taken out; the rest of
+    // the answer stays. Repaired from the tool's own output rather than
+    // regenerated: a second model call costs a second and might invent again.
+    reply = repairReply(reply, honesty);
   }
 
   if (modelError && !reply) {

@@ -1,4 +1,4 @@
-import type { Minutes, Slot, ToolTrace } from "../types";
+import type { Location, Minutes, Slot, ToolTrace } from "../types";
 import { minutesToClock } from "../time";
 
 /**
@@ -136,12 +136,98 @@ export interface HonestyVerdict {
   offered: Minutes[];
 }
 
-export function checkTimes(reply: string, traces: ToolTrace[]): HonestyVerdict {
+/**
+ * The times a venue publishes: when it opens and closes, last seating, the
+ * same-day cut-off.
+ *
+ * These are facts about the venue, not availability, and quoting them is the
+ * receptionist's job. The guard treated them as inventions — "we're open 8:00
+ * to 9:00 PM" came back as two invented times, and a customer asking when the
+ * venue closes was told nothing was free. Staff diaries are deliberately not
+ * read: someone's time off is not something a reply should be able to quote.
+ */
+export function publishedTimes(location: Pick<Location, "hours" | "restaurant" | "policy">): Set<Minutes> {
+  const out = new Set<Minutes>();
+  const walk = (value: unknown) => {
+    if (value == null) return;
+    if (Array.isArray(value)) return value.forEach(walk);
+    if (typeof value !== "object") return;
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof v === "number" && /^(start|end|lastSeating|sameDayCutoffMin)$/.test(key)) {
+        if (v >= 0 && v <= 24 * 60) out.add(v);
+      } else if (typeof v === "object") {
+        walk(v);
+      }
+    }
+  };
+  walk(location.hours);
+  walk(location.restaurant);
+  walk(location.policy);
+  return out;
+}
+
+/**
+ * Words that make a sentence about opening hours rather than about a slot.
+ *
+ * A published time is only let through in a sentence that is plainly about
+ * hours. "We open at 8:00" passes; "I have 8:00 tomorrow" does not, even at a
+ * venue that opens at eight — an opening time offered as a free slot is
+ * exactly the invention this file exists to stop.
+ */
+const HOURS_WORDS =
+  /\b(open|opens|opening|close|closes|closed|closing|hours|until|till|last seating|last orders?|last booking|stop taking|cut-?off)\b/i;
+
+/** Sentences, as a person would split them. Keeps the punctuation. */
+function sentencesOf(text: string): string[] {
+  return text.split(/(?<=[.!?])\s+/).filter((s) => s.trim());
+}
+
+export function checkTimes(
+  reply: string,
+  traces: ToolTrace[],
+  published?: Set<Minutes>,
+): HonestyVerdict {
   const offered = timesOffered(traces);
-  const claimed = timesIn(reply);
+  const invented = new Set<Minutes>();
+  for (const sentence of sentencesOf(reply)) {
+    const aboutHours = HOURS_WORDS.test(sentence);
+    for (const t of timesIn(sentence)) {
+      if (offered.has(t)) continue;
+      if (aboutHours && published?.has(t)) continue;
+      invented.add(t);
+    }
+  }
   // A reply naming no times cannot invent one.
-  const invented = claimed.filter((t) => !offered.has(t));
-  return { ok: invented.length === 0, invented, offered: [...offered].sort((a, b) => a - b) };
+  return {
+    ok: invented.size === 0,
+    invented: [...invented],
+    offered: [...offered].sort((a, b) => a - b),
+  };
+}
+
+/**
+ * The reply, with only the invention taken out.
+ *
+ * The first version threw the whole reply away and sent a fixed line instead.
+ * That was safe and it was wrong: asked "what is your service?", Belline wrote
+ * a good explanation and then suggested three times it had not checked — and
+ * the customer received "I haven't got anything free there", three messages
+ * running, to questions that were not about availability at all.
+ *
+ * Now the sentences that name an invented time go, the rest stays, and the
+ * message ends on a question the next turn can answer honestly. Only when
+ * nothing is left does the old replacement stand in.
+ */
+export function repairReply(reply: string, verdict: HonestyVerdict): string {
+  if (verdict.ok) return reply;
+  const invented = new Set(verdict.invented);
+  const kept = sentencesOf(reply).filter((s) => !timesIn(s).some((t) => invented.has(t)));
+  if (!kept.length) return honestAlternative(verdict);
+
+  const follow = verdict.offered.length
+    ? honestAlternative(verdict)
+    : "I'll tell you exactly what's free — which day would suit you?";
+  return `${kept.join(" ")} ${follow}`;
 }
 
 /**

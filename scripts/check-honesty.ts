@@ -20,9 +20,8 @@
 import assert from "node:assert/strict";
 import type { ToolTrace } from "../src/lib/types";
 
-const { timesIn, timesOffered, checkTimes, honestAlternative } = await import(
-  "../src/lib/agent/honesty"
-);
+const { timesIn, timesOffered, checkTimes, honestAlternative, publishedTimes, repairReply } =
+  await import("../src/lib/agent/honesty");
 
 let passed = 0;
 let failed = 0;
@@ -197,6 +196,70 @@ test("the replacement never names more than three times", () => {
   });
   const said = honestAlternative(checkTimes("I have 2:00.", [many]));
   assert.ok((said.match(/\d{1,2}:\d{2}/g) ?? []).length <= 3, said);
+});
+
+console.log("\n\x1b[1mOpening hours are facts, not availability\x1b[0m\n");
+
+// Belline's own venue: open 08:00 to 21:00 every day.
+const HOURS = publishedTimes({
+  hours: Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [d, [{ start: 480, end: 1260 }]])),
+});
+
+test("the venue's hours are read as published times", () => {
+  assert.ok(HOURS.has(480) && HOURS.has(1260));
+});
+
+test("quoting opening hours is not an invention", () => {
+  // Verbatim shape of the reply the guard used to replace.
+  const v = checkTimes("We're open every day from 8:00 AM until 9:00 PM.", [], HOURS);
+  assert.equal(v.ok, true, `false positive on: ${JSON.stringify(v.invented)}`);
+  assert.equal(checkTimes("We close at 9pm on Saturdays.", [], HOURS).ok, true);
+});
+
+test("an opening time offered as a slot is still an invention", () => {
+  const v = checkTimes("I have 8:00 AM free tomorrow if that suits.", [], HOURS);
+  assert.equal(v.ok, false);
+  assert.deepEqual(v.invented, [480]);
+});
+
+test("a closing time the venue does not have is still an invention", () => {
+  assert.equal(checkTimes("We close at 11pm.", [], HOURS).ok, false);
+});
+
+console.log("\n\x1b[1mRepairing rather than replacing\x1b[0m\n");
+
+test("the answer stays and only the unchecked times go", () => {
+  // From the WhatsApp test that found this.
+  const reply =
+    "Belline is an AI receptionist that answers your phone and books appointments into your diary. " +
+    "You keep your own number and just forward calls to us. " +
+    "Which time tomorrow suits you — 10:00 AM, 2:30 PM or 4:00 PM?";
+  const v = checkTimes(reply, [], HOURS);
+  assert.equal(v.ok, false);
+  const said = repairReply(reply, v);
+  assert.ok(said.startsWith("Belline is an AI receptionist"), said);
+  assert.ok(said.includes("forward calls"), said);
+  assert.equal(/\d{1,2}:\d{2}/.test(said), false, `an invented time survived: ${said}`);
+  assert.ok(said.trim().endsWith("?"), said);
+  assert.equal(/haven't got anything free/i.test(said), false, "it still says nothing is free");
+});
+
+test("when the tool did return times, the repair quotes those", () => {
+  const reply = "Great choice. I have 2:00 and 3:30 on Wednesday.";
+  const said = repairReply(reply, checkTimes(reply, [AVAILABILITY]));
+  assert.ok(said.startsWith("Great choice."), said);
+  assert.ok(said.includes("09:00"), said);
+  assert.equal(said.includes("2:00 "), false, said);
+});
+
+test("a reply that was nothing but the invention falls back to the honest line", () => {
+  const reply = "I have 4:30 free.";
+  assert.equal(repairReply(reply, checkTimes(reply, [])), honestAlternative(checkTimes(reply, [])));
+});
+
+test("an honest reply is returned untouched", () => {
+  const reply = "We're open until 9:00 PM. Would you like to book a demo call?";
+  assert.equal(repairReply(reply, checkTimes(reply, [], HOURS)), reply);
 });
 
 console.log(
