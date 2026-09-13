@@ -242,6 +242,14 @@ export interface AgentSessionOptions {
    * written down. Passing it here is how it resumes.
    */
   history?: Anthropic.MessageParam[];
+  /**
+   * Whether this conversation can actually be put through to a person.
+   *
+   * True only on a real phone call with a transfer number. The test console
+   * and the website bell cannot dial anybody, and a tool that says
+   * "transferred" there would end the conversation on a promise.
+   */
+  liveTransfer?: boolean;
 }
 
 export class AgentSession {
@@ -249,6 +257,7 @@ export class AgentSession {
   readonly call: Call;
   readonly channel: AgentChannel;
   private readonly callerNumber?: string;
+  private readonly liveTransfer: boolean;
   private messages: Anthropic.MessageParam[] = [];
   private readonly tools: Anthropic.Tool[];
   private ended = false;
@@ -267,6 +276,7 @@ export class AgentSession {
     this.location = location;
     this.call = call;
     this.callerNumber = opts.callerNumber;
+    this.liveTransfer = Boolean(opts.liveTransfer);
     this.channel = opts.channel ?? "voice";
     this.messages = opts.history ? [...opts.history] : [];
     this.tools = toolsFor(location, this.channel);
@@ -362,7 +372,7 @@ export class AgentSession {
           const outcome = await executeTool(
             use.name,
             use.input as Record<string, unknown>,
-            { location: this.location, call: this.call, callerNumber: this.callerNumber },
+            { location: this.location, call: this.call, callerNumber: this.callerNumber, liveTransfer: this.liveTransfer },
           );
           results.push({
             type: "tool_result",
@@ -631,7 +641,7 @@ ${
         outcome = await executeTool(
           use.name,
           use.input as Record<string, unknown>,
-          { location: this.location, call: this.call, callerNumber: this.callerNumber },
+          { location: this.location, call: this.call, callerNumber: this.callerNumber, liveTransfer: this.liveTransfer },
         );
       } catch (err) {
         ok = false;

@@ -50,6 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       : []),
     { href: "/guests", label: "Guests" },
     { href: "/test", label: "Test console" },
+    { href: "/golive", label: "Go live" },
     // Floor staff read the book; they do not rewrite the agent's rules.
     ...(user.role !== "staff"
       ? [

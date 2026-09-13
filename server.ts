@@ -22,6 +22,7 @@ import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voice/session";
 import { ensureOwnWhatsAppAccount, ensureTwilioSandboxAccount } from "./src/lib/whatsapp";
 import { BrowserTransport, TwilioTransport } from "./src/lib/voice/transports";
+import { sendDueReminders } from "./src/lib/reminders";
 
 /**
  * Custom server.
@@ -66,6 +67,20 @@ void ensureTwilioSandboxAccount().then((r) => {
 // Built at image time. Absent in a bare dev checkout, where the marketing
 // pages are served by Next out of public/ instead.
 const marketingReady = marketingSiteExists();
+
+// Reminder texts, swept every five minutes. In this process rather than the
+// sales worker because the bookings live in this process's store. Idempotent
+// per booking, so a restart mid-sweep cannot text anybody twice.
+const REMINDER_SWEEP_MS = 5 * 60 * 1000;
+function sweepReminders(): void {
+  void sendDueReminders()
+    .then((r) => {
+      if (r.sent || r.failed) console.log(`[reminders] ${r.sent} sent, ${r.failed} failed`);
+    })
+    .catch((err) => console.error("[reminders] sweep failed:", err));
+}
+setTimeout(sweepReminders, 30_000).unref?.();
+setInterval(sweepReminders, REMINDER_SWEEP_MS).unref?.();
 
 const server = createServer((req, res) => {
   // The website and the product share this process, chosen by hostname. See
@@ -319,7 +334,7 @@ function handleTwilio(ws: WebSocket): void {
         session = new VoiceSession(
           location,
           call,
-          new TwilioTransport(ws, streamSid),
+          new TwilioTransport(ws, streamSid, params.callSid ?? ""),
           params.from,
         );
         void session.start();

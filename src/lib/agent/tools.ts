@@ -13,7 +13,10 @@ import { checkShape } from "../leads/email";
 import { join } from "../waitlist";
 import { serviceShape } from "../booking/services";
 import { depositWording, horizonDays } from "../booking/policy";
-import { listBookings } from "../store";
+import { depositsReady, requestDeposit } from "../billing/deposits";
+import { sendBookingEmail } from "../booking/manage";
+import { usesStaffDiary } from "../verticals";
+import { getBooking, listBookings } from "../store";
 import {
   daysBetween,
   isValidDate,
@@ -44,6 +47,8 @@ export interface ToolContext {
   location: Location;
   call: Call;
   callerNumber?: string;
+  /** A real phone call that can be put through to the venue's transfer number. */
+  liveTransfer?: boolean;
 }
 
 export interface ToolOutcome {
@@ -110,12 +115,13 @@ export function toolsFor(
           time: { type: "string", description: TIME_DESC },
           guest_name: { type: "string" },
           guest_phone: { type: "string", description: "Contact number, digits as spoken." },
-          ...(location.requiresEmail
+          ...(location.requiresEmail || usesStaffDiary(location)
             ? {
                 guest_email: {
                   type: "string",
-                  description:
-                    "Email address, confirmed with them. Write it as an address — 'andreas at gmail dot com' becomes andreas@gmail.com.",
+                  description: location.requiresEmail
+                    ? "Email address, confirmed with them. Write it as an address — 'andreas at gmail dot com' becomes andreas@gmail.com."
+                    : "Optional. Offer to email the confirmation with a link to change or cancel. If they give an address, spell it back and write it as an address — 'andreas at gmail dot com' becomes andreas@gmail.com. Leave it out if they would rather not.",
                 },
                 email_confirmed: {
                   type: "boolean",
@@ -479,7 +485,9 @@ export async function executeTool(
       // the only one that fails silently — so it is checked here rather than
       // trusted, and the agent is handed words to say rather than an error.
       let guestEmail: string | undefined;
-      if (location.requiresEmail) {
+      // Required where the venue needs one; checked the same way wherever a
+      // guest at an appointment venue offered one for their confirmation.
+      if (location.requiresEmail || (usesStaffDiary(location) && String(input.guest_email ?? "").trim())) {
         const check = checkShape(String(input.guest_email ?? ""));
         if (!check.valid) {
           return {
@@ -571,6 +579,11 @@ export async function executeTool(
 
       const texted = await confirmByText(location, result.booking);
       const deposit = result.booking.deposit;
+      // Once card payments are on, the guest is texted a link to pay. Until
+      // then — and whenever the link fails — the team sends it, as before.
+      const link = deposit && depositsReady(location) ? await requestDeposit(location, result.booking.id) : null;
+      // After the deposit link, so the email can carry it.
+      const emailed = await sendBookingEmail(location, getBooking(result.booking.id) ?? result.booking, "confirmed");
       return {
         result: {
           booked: true,
@@ -583,10 +596,13 @@ export async function executeTool(
           ...(deposit
             ? {
                 deposit: `${deposit.currency} ${deposit.amount}`,
-                say: depositWording(location, deposit),
+                say: depositWording(location, deposit, { linkTexted: Boolean(link?.texted) }),
               }
             : {}),
           ...texted,
+          email: emailed.sent
+            ? "Sent. Tell them a confirmation email is on its way, with a link to change or cancel."
+            : "Not sent — do not mention an email.",
         },
       };
     }
@@ -681,6 +697,7 @@ export async function executeTool(
       }
       ctx.call.bookingId = result.booking.id;
       const texted = await confirmByText(location, result.booking);
+      await sendBookingEmail(location, result.booking, "changed");
       return {
         result: {
           changed: true,
@@ -705,6 +722,7 @@ export async function executeTool(
       }
       const updated = cancelled.booking;
       ctx.call.bookingId = updated.id;
+      await sendBookingEmail(location, updated, "cancelled");
       return {
         result: {
           cancelled: true,
@@ -767,7 +785,7 @@ export async function executeTool(
     }
 
     case "transfer_call": {
-      const number = location.agent.transferNumber;
+      const number = location.agent.transferNumber?.trim();
       if (!number) {
         return {
           result: {
@@ -776,9 +794,23 @@ export async function executeTool(
           },
         };
       }
+      // A number exists but this line cannot dial it — the test console, the
+      // website bell. Saying "putting you through" and ending the call here
+      // would be the lie the authority rules were written to prevent.
+      if (!ctx.liveTransfer) {
+        return {
+          result: {
+            transferred: false,
+            say: "This line cannot put calls through. Take their number and what they need with take_message, marked urgent if it is.",
+          },
+        };
+      }
       ctx.call.escalation = `Transfer requested: ${String(input.reason ?? "")}`;
       return {
-        result: { transferred: true, number },
+        result: {
+          transferred: true,
+          say: "In one short sentence, tell the caller you are putting them through to the team now. Say nothing after that.",
+        },
         control: { type: "transfer", reason: String(input.reason ?? "") },
       };
     }

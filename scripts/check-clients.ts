@@ -43,6 +43,8 @@ function row(over: Partial<ClientRow>): ClientRow {
     cycle: "monthly",
     status: "active",
     trialEndsOn: null,
+    lapsed: null,
+    phone: "",
     paymentFailedAt: null,
     mrrFils: 36500,
     minutes: { used: 100, included: 180 },

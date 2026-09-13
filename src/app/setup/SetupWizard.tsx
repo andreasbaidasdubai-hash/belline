@@ -143,6 +143,9 @@ export default function SetupWizard({
           <a className="btn btn-accent" href="/test" style={{ padding: "12px 20px" }}>
             Talk to {venueName}
           </a>
+          <a className="btn" href="/golive" style={{ padding: "12px 20px" }}>
+            Put it on my phone line
+          </a>
           <a className="btn" href="/" style={{ padding: "12px 20px" }}>
             Open the dashboard
           </a>

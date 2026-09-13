@@ -78,22 +78,15 @@ export const PLANS: Plan[] = [
       { text: "Summary and full transcript of every call", status: "live" },
       { text: "Flags anything it should not handle for you to call back", status: "live" },
       { text: "No setup fee", status: "live" },
+      { text: "Puts urgent calls through to your team, live", status: "live" },
+      { text: "A reminder text the day before every booking", status: "live" },
       {
-        text: "English and Arabic",
+        text: "Deposit links by text, paid into your own Stripe account",
         status: "not-yet",
         gap:
-          "Speech recognition is pinned to English in src/lib/providers/stt.ts. " +
-          "Deepgram and ElevenLabs both support Arabic, but nothing is configured, " +
-          "prompted or tested for it, and no Arabic call has ever been made.",
-      },
-      {
-        text: "Warm call transfer to a member of staff",
-        status: "not-yet",
-        gap:
-          "The agent decides to transfer and then hangs up. There is no Twilio " +
-          "<Dial> anywhere in the codebase, so the caller is never connected to a " +
-          "person — the call is recorded as 'transferred' and raised in the Action " +
-          "Inbox for a callback. What works today is a flagged callback, not a transfer.",
+          "Built in src/lib/billing/deposits.ts on Stripe Connect, but inert until " +
+          "STRIPE_SECRET_KEY and a Connect webhook are set and a venue has finished " +
+          "Stripe onboarding.",
       },
     ],
   },

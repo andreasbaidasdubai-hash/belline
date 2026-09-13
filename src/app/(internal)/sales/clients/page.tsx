@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
+import NumberCell from "./NumberCell";
 import { PageHeader } from "@/components/LocationTabs";
 import { seedIfEmpty } from "@/lib/seed";
 import { clientBook, totalsOf } from "@/lib/sales/clients";
@@ -122,6 +123,7 @@ export default async function ClientsPage() {
                   <th style={{ textAlign: "right" }}>Calls</th>
                   <th style={{ textAlign: "right" }}>Bookings 30d</th>
                   <th style={{ textAlign: "right" }}>MRR</th>
+                  <th>Line</th>
                   <th>WhatsApp</th>
                 </tr>
               </thead>
@@ -165,6 +167,11 @@ export default async function ClientsPage() {
                       {r.status === "trialing" && r.trialEndsOn && (
                         <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>ends {r.trialEndsOn}</div>
                       )}
+                      {r.lapsed && (
+                        <div style={{ fontSize: 11, marginTop: 3, color: "var(--bad)" }}>
+                          {r.lapsed === "trial_ended" ? "trial over" : r.lapsed === "trial_minutes_used" ? "trial minutes used" : "cancelled, period over"}
+                        </div>
+                      )}
                     </td>
                     <td className="mono" style={{ fontSize: 12 }}>{r.since || "—"}</td>
                     <td className="mono" style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
@@ -175,6 +182,9 @@ export default async function ClientsPage() {
                     <td className="mono" style={{ textAlign: "right" }}>{r.bookingsLast30Days}</td>
                     <td className="mono" style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                       {r.mrrFils ? aed(r.mrrFils) : <span className="muted">—</span>}
+                    </td>
+                    <td>
+                      <NumberCell venueId={r.venueId} phone={r.phone} />
                     </td>
                     <td>
                       <WhatsAppCell venueId={r.venueId} number={whatsapp.get(r.venueId) ?? null} ready={whatsappReady} />

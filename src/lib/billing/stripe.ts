@@ -45,7 +45,7 @@ export function stripeEnabled(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 
-function stripe(): Stripe {
+export function stripe(): Stripe {
   if (!process.env.STRIPE_SECRET_KEY) {
     throw new Error("STRIPE_SECRET_KEY is not set — Belline cannot take a payment.");
   }
@@ -172,12 +172,24 @@ export async function portalUrl(customerId: string, returnUrl: string): Promise<
 // ---------------------------------------------------------------------------
 
 export function verifyWebhook(raw: string, signature: string | null): Stripe.Event {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET is not set.");
+  // Two endpoints' secrets: the account's own events, and — for deposits —
+  // events on venues' connected accounts, which Stripe signs separately.
+  const secrets = [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_CONNECT_WEBHOOK_SECRET].filter(
+    (s): s is string => Boolean(s),
+  );
+  if (!secrets.length) throw new Error("STRIPE_WEBHOOK_SECRET is not set.");
   if (!signature) throw new Error("No Stripe signature on that request.");
   // Over the raw bytes, and Stripe's own constructEvent so the timestamp
   // tolerance that stops a replay is applied too.
-  return stripe().webhooks.constructEvent(raw, signature, secret);
+  let last: unknown;
+  for (const secret of secrets) {
+    try {
+      return stripe().webhooks.constructEvent(raw, signature, secret);
+    } catch (err) {
+      last = err;
+    }
+  }
+  throw last instanceof Error ? last : new Error("Signature did not verify.");
 }
 
 /**
@@ -192,6 +204,10 @@ export function applyStripeEvent(event: Stripe.Event): { locationId?: string; ap
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
+      // A guest's deposit is not a venue's plan. See billing/deposits.ts.
+      if (session.mode === "payment" || session.metadata?.belline_booking) {
+        return { applied: "ignored: a deposit, not a subscription" };
+      }
       const locationId =
         session.metadata?.belline_location ?? session.client_reference_id ?? undefined;
       const planId = (session.metadata?.belline_plan ?? PLANS[0].id) as PlanId;

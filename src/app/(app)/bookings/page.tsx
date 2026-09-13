@@ -8,6 +8,8 @@ import { seedIfEmpty } from "@/lib/seed";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import Progress from "./Progress";
 import CancelBooking from "./CancelBooking";
+import DepositActions from "./DepositActions";
+import { depositsReady } from "@/lib/billing/deposits";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,7 @@ export default async function BookingsPage({
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
   const t = terms(location);
+  const canSendDeposits = depositsReady(location);
 
   const today = todayIn(location.timezone);
   // A few days back as well as forward.
@@ -111,6 +114,16 @@ export default async function BookingsPage({
                         {b.notes && (
                           <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 3 }}>
                             ✎ {b.notes}
+                          </div>
+                        )}
+                        {b.deposit && b.status !== "cancelled" && (
+                          <div style={{ marginTop: 5 }}>
+                            <DepositActions
+                              bookingId={b.id}
+                              label={`${b.deposit.currency} ${b.deposit.amount}`}
+                              status={b.deposit.status}
+                              canSend={canSendDeposits}
+                            />
                           </div>
                         )}
                       </td>

@@ -817,6 +817,31 @@ section { padding: 110px 0; }
 .f-note { font-size: 0.82rem; color: var(--ink-3); margin: 0; }
 .f-note.is-good { color: #2F6B4F; }
 .f-note.is-bad { color: #A33327; }
+
+/* --- Was die verpassten Anrufe wert sind ----------------------------------- */
+.roi { max-width: 760px; margin-top: 34px; }
+.roi input[type="number"] { font-variant-numeric: tabular-nums; }
+.roi-out {
+  font-family: var(--serif);
+  font-size: clamp(1.4rem, 2.6vw, 1.9rem);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  max-width: 34ch;
+  margin: 34px 0 12px;
+}
+.roi-fine { font-size: 0.86rem; color: var(--ink-3); max-width: 60ch; margin: 0; }
+
+/* --- Rechtliches ------------------------------------------------------------ */
+.legal { max-width: 760px; padding-top: 72px; padding-bottom: 96px; }
+.legal .display { font-size: clamp(2.2rem, 5vw, 3.4rem); margin: 10px 0 8px; }
+.legal-updated { font-size: 0.86rem; color: var(--ink-3); margin: 0 0 36px; }
+.legal h2 { font-family: var(--serif); font-weight: 400; font-size: 1.5rem; margin: 44px 0 12px; }
+.legal h3 { font-size: 1rem; font-weight: 600; margin: 24px 0 8px; }
+.legal p, .legal li { color: var(--ink-2); line-height: 1.65; }
+.legal ul { padding-left: 20px; }
+.legal li { margin-bottom: 8px; }
+.legal a { color: var(--ink); text-underline-offset: 3px; }
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 
 /* --- Fuß ------------------------------------------------------------------- */
@@ -1787,7 +1812,9 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   /* Drei, seit die Website auch getippt beantwortet wird. Bei zwei Spalten
      stünde die dritte Karte allein in einer eigenen Zeile — dieselbe Angabe,
      aber optisch ein Nachtrag statt ein gleichwertiger Kanal. */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Vier, seit WhatsApp dazugekommen ist: zwei mal zwei, damit keine Karte
+     allein in einer Zeile steht. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 48px;
   margin-top: 52px;
   border-top: 1px solid var(--rule);
@@ -1820,7 +1847,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 
 /* Drei oder eins, nichts dazwischen: zwei Spalten für drei Karten lassen
    immer eine allein in der letzten Zeile stehen. */
-@media (max-width: 1040px) {
+@media (max-width: 760px) {
   .channels { grid-template-columns: 1fr; gap: 0; margin-top: 40px; }
 }
 

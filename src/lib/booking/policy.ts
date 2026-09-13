@@ -229,10 +229,12 @@ function depositApplies(rule: DepositRule, request: DepositRequest): boolean {
 export function depositWording(
   location: Location,
   deposit: NonNullable<Booking["deposit"]>,
+  opts: { linkTexted?: boolean } = {},
 ): string {
   const rule = location.policy?.deposit;
-  if (rule?.wording) return rule.wording;
-  return `There is a ${deposit.currency} ${deposit.amount} deposit on this booking. The team will send a link to settle it.`;
+  const base = rule?.wording ?? `There is a ${deposit.currency} ${deposit.amount} deposit on this booking.`;
+  if (opts.linkTexted) return `${base} A text with a link to pay it is on its way to this number.`;
+  return rule?.wording ? rule.wording : `${base} The team will send a link to settle it.`;
 }
 
 // ---------------------------------------------------------------------------

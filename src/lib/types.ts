@@ -151,6 +151,15 @@ export interface Location {
    * numbers better than we do, and unset shows no estimate rather than zero.
    */
   averageBookingValue?: number;
+  /** Reminder texts to this venue's guests. Absent means on, 24 hours before. */
+  reminders?: { enabled: boolean; hoursBefore: number };
+  /**
+   * The venue's own Stripe account, for deposits.
+   *
+   * The venue's, not ours: a deposit is the venue's money, and Belline is never
+   * the merchant for it. Set by Connect onboarding; see billing/deposits.ts.
+   */
+  payments?: { stripeAccountId?: string; chargesEnabled?: boolean; updatedAt?: string };
   /** What this venue pays, and what it is owed. Absent until it signs up. */
   subscription?: Subscription;
   /**
@@ -878,7 +887,19 @@ export interface Booking {
    */
   service?: { arrivedAt?: string; seatedAt?: string; leftAt?: string };
   /** Worked out at booking time from the venue's `DepositRule`. Never charged here. */
-  deposit?: { amount: number; currency: string; status: "required" | "paid" | "waived" };
+  deposit?: {
+    amount: number;
+    currency: string;
+    status: "required" | "paid" | "waived";
+    /** The Stripe payment page, once card payments are on. See billing/deposits.ts. */
+    link?: string;
+    checkoutId?: string;
+    requestedAt?: string;
+    paidAt?: string;
+    linkExpiredAt?: string;
+  };
+  /** The text the day before. Set before sending, so it can never go twice. */
+  reminder?: { sentAt?: string; failedAt?: string; reason?: string };
   /** Set when it was cancelled inside the venue's own cancellation window. */
   lateCancel?: boolean;
   cancelledAt?: string;
@@ -1010,6 +1031,8 @@ export interface Call {
    * show someone and a claim you can only make.
    */
   authorityRuleId?: string;
+  /** A live transfer attempted on this call, and whether Twilio took it. */
+  transfer?: { to: string; at: string; ok: boolean; detail?: string };
   /**
    * The Business Brain version that handled this call.
    *

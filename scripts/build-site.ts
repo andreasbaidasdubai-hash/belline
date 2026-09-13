@@ -56,7 +56,40 @@ function assetsUnder(dir: string, prefix = ""): string[] {
  * to be named here to ship — a new one that is not is a build error, not a
  * leak.
  */
-const PAGES = ["landing.html", "404.html"];
+const PAGES = ["landing.html", "404.html", "privacy.html", "terms.html"];
+
+/**
+ * Who the legal pages name.
+ *
+ * Fill these in before the pages mean anything in law. Empty, the pages say
+ * "Belline" and give the email address, and the build says so every time —
+ * loudly, because a privacy policy that does not name its controller is a
+ * page that looks finished and is not.
+ */
+const LEGAL = {
+  /** The registered company, exactly as on the trade licence. */
+  entity: "",
+  /** Its registered address. */
+  address: "",
+  /** Governing law and courts, e.g. "the laws of the Emirate of Dubai and the federal laws of the UAE, with the courts of Dubai". */
+  law: "",
+};
+if (!LEGAL.entity || !LEGAL.address || !LEGAL.law) {
+  console.warn(
+    "\n  ⚠  privacy.html and terms.html: company name, address or governing law not filled in (LEGAL in scripts/build-site.ts).\n",
+  );
+}
+
+function fillLegal(html: string): string {
+  const put = (key: string, value: string) =>
+    value
+      ? html.replace(new RegExp(`<span data-legal="${key}">[^<]*</span>`, "g"), `<span data-legal="${key}">${value}</span>`)
+      : html;
+  html = put("entity", LEGAL.entity);
+  html = put("address", LEGAL.address);
+  html = put("law", LEGAL.law);
+  return html;
+}
 const pages = PAGES.filter((f) => {
   if (fs.existsSync(path.join(SOURCE, f))) return true;
   console.error(`  page missing: ${SOURCE}/${f}`);
@@ -210,7 +243,7 @@ for (const page of pages) {
     `<script type="application/json" id="call-scenes">${JSON.stringify(LANDING_SCENES)}</script>`,
   );
 
-  html = repoint(html);
+  html = repoint(fillLegal(html));
 
   fs.writeFileSync(path.join(OUT, target), html, "utf8");
   bytes += Buffer.byteLength(html);
@@ -556,7 +589,9 @@ ${CALL_PANEL}
       AI reception for businesses across the UAE that take bookings — clinics, dental practices, salons, restaurants and more.<br>
       <a href="tel:+15717785920">+1 571 778 5920</a> ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
-      <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>
+      <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a><br>
+      <a href="/privacy">Privacy policy</a> ·
+      <a href="/terms">Terms of service</a>
     </p>
   </div>
 </footer>

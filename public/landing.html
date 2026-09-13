@@ -63,9 +63,10 @@
         { "@type": "Question", "name": "Does it work with Fresha, SevenRooms or OpenTable?", "acceptedAnswer": { "@type": "Answer", "text": "Not yet. Belline keeps its own diary — you and your team work in it, and it is the diary the receptionist books into. A one-way feed into Google Calendar is built and waiting on Google's approval. The booking-platform integrations need a partner agreement with each of them, which we do not have yet." } },
         { "@type": "Question", "name": "Will it sound like a robot?", "acceptedAnswer": { "@type": "Answer", "text": "Ring it and decide — the number and the bell on belline.ai reach the same receptionist your callers would. It speaks like a person and does not read a script. On the demo line it tells you it is an AI; on your line, what it says about itself is your choice." } },
         { "@type": "Question", "name": "What if it books something wrong?", "acceptedAnswer": { "@type": "Answer", "text": "It can only offer a time that is actually free — availability comes from the booking engine, not from the conversation, so it cannot invent a slot. Every booking has the full transcript beside it. If it is unsure of a name, a date or a number it asks again rather than guessing." } },
-        { "@type": "Question", "name": "Can it put a caller through to us?", "acceptedAnswer": { "@type": "Answer", "text": "Not live, not yet. When a call needs a person it takes the number and the reason, marks it urgent if it is, and ends the call so you can ring back with the whole story in front of you." } },
-        { "@type": "Question", "name": "Does it speak Arabic?", "acceptedAnswer": { "@type": "Answer", "text": "Not yet. It answers in English today. Arabic is planned, but nobody has made a real Arabic call on it, so we are not selling you one." } },
+        { "@type": "Question", "name": "Can it put a caller through to us?", "acceptedAnswer": { "@type": "Answer", "text": "Yes, when it matters. Give Belline a number for your team and it puts urgent calls through live. If nobody picks up, the caller is told the team will ring back, and the call is at the top of your list with their number and what they said." } },
+        { "@type": "Question", "name": "Does it send reminders?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Every booking gets a text the day before with the time, the reference and your number, so fewer people forget. You choose how far ahead, or switch it off." } },
         { "@type": "Question", "name": "What happens if we run out of minutes?", "acceptedAnswer": { "@type": "Answer", "text": "Belline keeps answering. Your dashboard tells you that you have gone past, and which plan would cover it. You are never charged a dirham more than the plan fee for that." } },
+        { "@type": "Question", "name": "Does call forwarding cost us anything?", "acceptedAnswer": { "@type": "Answer", "text": "It can, and your phone provider decides how much. Some plans include forwarding; others charge a forwarded call like one you make yourself. Belline answers on a number of its own, and if that number is outside the UAE, your provider charges its international rate for each forwarded call. Ask them before you switch forwarding on." } },
         { "@type": "Question", "name": "Will it answer calls our staff would have taken?", "acceptedAnswer": { "@type": "Answer", "text": "Only the ones nobody reaches. It sits behind your line: it picks up when the phone has rung unanswered, or when the line is engaged. Your team always gets first refusal." } },
         { "@type": "Question", "name": "Are we tied in?", "acceptedAnswer": { "@type": "Answer", "text": "No. Monthly plans are cancelled whenever you like and run to the end of the period you have paid for. Annual is two months free in exchange for paying up front. Standard onboarding costs nothing." } },
         { "@type": "Question", "name": "What do you do with our guests' data?", "acceptedAnswer": { "@type": "Answer", "text": "Transcripts and bookings are stored so you can audit what was said; call audio is not recorded. The data belongs to your venue, and we hand all of it over if you leave." } }
@@ -146,7 +147,7 @@
 
         <p class="hero-note rise rise-4">
           Fourteen days free, no card. Keep your number — nothing changes for
-          your callers. English, for now.
+          your callers. Answers in English.
         </p>
       </div>
 
@@ -232,8 +233,8 @@
           zu sagen.
         -->
         <div>
-          <h3>Takes a message when it should</h3>
-          <p>A complaint, anything clinical, anything it shouldn’t decide: it takes the number and what was said, flags it, and you ring back. It does not guess.</p>
+          <h3>Puts people through, or takes a message</h3>
+          <p>An urgent call goes straight to your team, live. A complaint, anything clinical, anything it shouldn’t decide: it takes the number and what was said, flags it, and you ring back. It does not guess.</p>
         </div>
       </div>
     </div>
@@ -244,11 +245,12 @@
       <div class="sec-head">
         <div>
           <p class="eyebrow">Where it answers</p>
-          <h2 class="display">Your phone line,<br>and your website.</h2>
+          <h2 class="display">Your phone, your website<br>and WhatsApp.</h2>
         </div>
         <p class="sec-lead lead">
           The same receptionist in every one — the same diary, the same prices,
-          the same things it will not decide on its own. Not three products.
+          the same things it will not decide on its own.
+          WhatsApp is not connected yet: it switches on the day Meta’s verification clears.
         </p>
       </div>
 
@@ -280,6 +282,15 @@
           </p>
           <p class="channel-how">Same line of HTML. Your choice which appears.</p>
         </div>
+        <div>
+          <h3>WhatsApp</h3>
+          <p>
+            Most of your customers would rather send a message than ring. Belline
+            answers a WhatsApp number for your business — questions, bookings,
+            changes, voice notes — and your own WhatsApp stays exactly as it is.
+          </p>
+          <p class="channel-how">Switching on as soon as Meta’s business verification clears.</p>
+        </div>
       </div>
 
       <!--
@@ -289,11 +300,10 @@
         bruch, den dieses Produkt sich nicht leisten kann.
       -->
       <p class="channel-note">
-        WhatsApp is built and runs on the same engine, but it is not connected
-        yet — Meta's business verification has to clear first. The
-        <em>WhatsApp Belle</em> button on this page will take you straight to
-        her the day it does, and says so plainly until then. We will not sell
-        it to you until it answers.
+        WhatsApp is built on the same receptionist and waits only on Meta’s
+        business verification. The <em>WhatsApp Belle</em> button on this page
+        takes you straight to her the day it clears, and says so plainly until
+        then.
       </p>
     </div>
   </section>
@@ -383,6 +393,61 @@
     </div>
   </section>
 
+  <!--
+    Der Rechner. Nur die drei Zahlen des Besuchers — kein Branchendurchschnitt,
+    keine erfundene Quote. Die Beispielwerte stehen da, um ersetzt zu werden,
+    und der Satz darunter ist für genau diese Werte schon ausgerechnet, damit
+    die Seite ohne JavaScript nichts Falsches sagt.
+  -->
+  <section id="worth" class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Your numbers</p>
+          <h2 class="display">What the unanswered<br>calls are worth.</h2>
+        </div>
+        <p class="sec-lead lead">
+          Put in your own figures. The ones below are an example to replace,
+          not an average we made up.
+        </p>
+      </div>
+
+      <form class="book-form roi" id="roi" novalidate>
+        <div class="f-row">
+          <label class="f">
+            <span>Calls a week nobody picks up</span>
+            <input name="missed" type="number" min="0" step="1" value="10" inputmode="numeric">
+          </label>
+          <label class="f">
+            <span>Of those, the share that would have booked <span class="opt">%</span></span>
+            <input name="share" type="number" min="0" max="100" step="5" value="30" inputmode="numeric">
+          </label>
+        </div>
+        <div class="f-row">
+          <label class="f">
+            <span>What one booking is worth to you <span class="opt">AED</span></span>
+            <input name="value" type="number" min="0" step="10" value="250" inputmode="numeric">
+          </label>
+          <label class="f">
+            <span>Compare with</span>
+            <select name="plan">
+              <option value="179" data-name="Starter">Starter — AED 179 a month</option>
+              <option value="365" data-name="Business" selected>Business — AED 365 a month</option>
+              <option value="899" data-name="Enterprise">Enterprise — AED 899 a month</option>
+            </select>
+          </label>
+        </div>
+      </form>
+
+      <p class="roi-out" id="roi-out" aria-live="polite">About 13 bookings a month, worth roughly AED 3,250. Business is AED 365 a month.</p>
+      <p class="roi-fine">
+        Only you know the two numbers that matter: how many calls really go
+        unanswered, and how many of those people would have booked. Your phone
+        provider can usually tell you the first.
+      </p>
+    </div>
+  </section>
+
   <section id="price" class="rule">
     <div class="wrap">
       <div class="sec-head">
@@ -422,6 +487,8 @@
             <li>Answers questions from your own hours, prices and policies</li>
             <li>Summary and full transcript of every call</li>
             <li>Flags anything it should not handle for you to call back</li>
+            <li>Puts urgent calls through to your team, live</li>
+            <li>A reminder text the day before every booking</li>
           </ul>
           <a class="btn line" href="https://app.belline.ai/checkout?plan=starter" data-cta="plan-starter">Get Starter</a>
         </div>
@@ -517,19 +584,25 @@
         </details>
         <details>
           <summary>Can it put a caller through to us?</summary>
-          <div class="answer"><p>Not live, not yet. When a call needs a person it takes the number and the reason, marks it urgent if it is, and ends the call so you can ring back with the whole story in front of you. Live transfer is on the way; we will say so here when it works.</p></div>
+          <div class="answer"><p>Yes, when it matters. Give Belline a number for your team and it puts urgent calls through live. If nobody picks up, the caller is told the team will ring back, and the call is at the top of your list with their number and what they said. Anything that should not go straight to a person — a clinical question, a complaint — becomes a message marked urgent instead.</p></div>
+        </details>
+        <details>
+          <summary>Does it send reminders?</summary>
+          <div class="answer"><p>Yes. Every booking gets a text the day before with the time, the reference and your number, so fewer people forget. You choose how far ahead, or switch it off. A booking made on the day is not reminded — its confirmation already was.</p></div>
         </details>
         <details>
           <summary>We’re not a clinic, salon or restaurant — can we still use it?</summary>
           <div class="answer"><p>Yes. If people ring you to book a time — a physio, a vet, a garage, a studio, a tutor, a barber — Belline answers, takes the booking against your diary and knows your hours and prices. The four trades on this page are the ones whose particular rules are built in already: patch tests, kitchen pacing, surgeries as a separate constraint. Everyone else picks the closest trade at sign-up and tells Belline their own rules in plain words. If yours is unusual, email us and we’ll set it up with you.</p></div>
         </details>
         <details>
-          <summary>Does it speak Arabic?</summary>
-          <div class="answer"><p>Not yet. It answers in English today. Arabic is planned, but nobody has made a real Arabic call on it, so we are not selling you one.</p></div>
-        </details>
-        <details>
           <summary>What happens if we run out of minutes?</summary>
           <div class="answer"><p>Belline keeps answering. A receptionist that stops picking up because of an invoice is not a receptionist, so we do not build one — your dashboard tells you that you have gone past, and which plan would cover it. You are never charged a dirham more than the plan fee for that.</p></div>
+        </details>
+        <!-- Die Frage, die bei einer Weiterleitung ins Ausland teuer wird.
+             Lieber hier als auf der ersten Telefonrechnung. -->
+        <details>
+          <summary>Does call forwarding cost us anything?</summary>
+          <div class="answer"><p>It can, and your phone provider decides how much. Some plans include forwarding; others charge a forwarded call like one you make yourself. Belline answers on a number of its own, and if that number is outside the UAE, your provider charges its international rate for each forwarded call. Ask them before you switch forwarding on — the dashboard shows the exact number you would be forwarding to.</p></div>
         </details>
         <details>
           <summary>Will it answer calls our staff would have taken?</summary>
@@ -618,7 +691,9 @@
       AI reception for businesses across the UAE that take bookings — clinics, dental practices, salons, restaurants and more.<br>
       <a href="tel:+15717785920">+1 571 778 5920</a> ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
-      <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a>
+      <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a><br>
+      <a href="/privacy">Privacy policy</a> ·
+      <a href="/terms">Terms of service</a>
     </p>
   </div>
 </footer>

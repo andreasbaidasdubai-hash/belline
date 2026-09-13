@@ -2,6 +2,7 @@ import type { Location, Subscription } from "../types";
 import { getTenant, listBookings, listCalls, listLocations, listUsersFor } from "../store";
 import { annualPerMonth, planById, type BillingCycle, type PlanId } from "../billing/plans";
 import { accountFor } from "../billing/usage";
+import { lapseOf, type Lapse } from "../billing/entitlement";
 import { todayIn } from "../time";
 
 /**
@@ -34,6 +35,10 @@ export interface ClientRow {
   cycle: BillingCycle | null;
   status: ClientStatus;
   trialEndsOn: string | null;
+  /** Past what they have paid for — shown whether or not the line has been stopped. */
+  lapsed: Lapse | null;
+  /** The number forwarded calls reach. Empty means no call can arrive at all. */
+  phone: string;
   paymentFailedAt: string | null;
   /** Monthly recurring revenue this venue represents today, fils. Zero unless active. */
   mrrFils: number;
@@ -107,6 +112,8 @@ export function clientBook(now = new Date()): ClientRow[] {
         cycle: sub?.cycle ?? null,
         status: sub?.status ?? "none",
         trialEndsOn: sub?.trial?.endsOn ?? null,
+        lapsed: lapseOf(location, today),
+        phone: location.phone,
         paymentFailedAt: sub?.paymentFailedAt ?? null,
         mrrFils: mrrOf(sub),
         minutes: { used: account?.usage.minutes ?? 0, included: account?.usage.included ?? null },

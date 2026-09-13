@@ -27,7 +27,7 @@
     "check:sales": "node --import tsx scripts/check-sales.ts",
     "check:import": "node --import tsx scripts/check-import.ts",
     "check:places": "node --import tsx scripts/check-places.ts",
-    "check:all": "npm run check && npm run check:engine && npm run check:config && npm run check:tenancy && npm run check:reception && npm run check:channel && npm run check:honesty && npm run check:whatsapp && npm run check:signup && npm run check:checkout && npm run check:embed && npm run check:webchat && npm run check:guards && npm run check:brain && npm run check:calendar && npm run check:waitlist && npm run check:attention && npm run check:idempotency && npm run check:authority && npm run check:spoken && npm run check:speculation && npm run check:interruption && npm run check:prospect && npm run check:overview && npm run check:billing && npm run check:clients && npm run check:leads && npm run check:belline && npm run check:slots",
+    "check:all": "npm run check && npm run check:engine && npm run check:config && npm run check:tenancy && npm run check:reception && npm run check:channel && npm run check:honesty && npm run check:whatsapp && npm run check:signup && npm run check:checkout && npm run check:embed && npm run check:webchat && npm run check:guards && npm run check:brain && npm run check:calendar && npm run check:waitlist && npm run check:attention && npm run check:idempotency && npm run check:authority && npm run check:spoken && npm run check:speculation && npm run check:interruption && npm run check:prospect && npm run check:overview && npm run check:billing && npm run check:clients && npm run check:leads && npm run check:belline && npm run check:slots && npm run check:entitlement && npm run check:outreach && npm run check:reminders && npm run check:deposits && npm run check:transfer && npm run check:manage",
     "audit": "playwright test",
     "audit:ui": "playwright test --ui",
     "site": "node --import tsx scripts/build-site.ts",
@@ -77,7 +77,12 @@
     "bench:session": "node --import tsx --env-file-if-exists=.env scripts/bench-session.ts",
     "probe:live": "node scripts/probe-live.mjs",
     "probe:voice": "node --env-file-if-exists=.env scripts/probe-voice-note.mjs",
-    "check:config": "node --import tsx scripts/check-config.ts"
+    "check:config": "node --import tsx scripts/check-config.ts",
+    "check:entitlement": "node --import tsx scripts/check-entitlement.ts",
+    "check:reminders": "node --import tsx scripts/check-reminders.ts",
+    "check:deposits": "node --import tsx scripts/check-deposits.ts",
+    "check:transfer": "node --import tsx scripts/check-transfer.ts",
+    "check:manage": "node --import tsx scripts/check-manage.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

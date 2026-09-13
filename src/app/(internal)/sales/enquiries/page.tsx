@@ -58,9 +58,10 @@ export default async function EnquiriesPage() {
         <div className="panel" style={{ padding: "28px 24px" }}>
           <p style={{ margin: 0, fontSize: 14 }}>Nothing yet.</p>
           <p className="muted" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6, maxWidth: "60ch" }}>
-            The form at <span className="mono">belline.ai/#book</span> writes here. Every
-            address has had its domain checked for deliverability before it landed,
-            so a reply should not bounce.
+            The website has no enquiry form at the moment — the landing page sends
+            people to the checkout, and &ldquo;Email us&rdquo; goes to hello@belline.ai.
+            Anything posted to <span className="mono">/api/leads</span> still lands here,
+            with its domain checked for deliverability first.
           </p>
         </div>
       ) : (

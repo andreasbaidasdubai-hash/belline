@@ -411,7 +411,8 @@ export const FIRST_AGENT_CONFIG: PartialAgentConfig = {
     "after_hours_answering",
     "appointment_booking",
     "faq_handling",
-    "multilingual_support",
+    // Not multilingual_support: offered to the model as a service, it became
+    // "answers in English or Arabic" in a real draft. Belline is English-only.
   ],
   qualification_rules: {
     min_score_to_contact: 55,

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { EmbedConfig, EmbedMode, Location } from "./types";
 import { listCalls } from "./store";
 import { todayIn } from "./time";
+import { serviceState } from "./billing/entitlement";
 import type { ChannelAccount } from "./reception/types";
 import { listAccounts, saveAccount } from "./reception/repo";
 
@@ -162,6 +163,14 @@ export interface ChatGate {
 export function chatGate(location: Location): ChatGate {
   const config = location.embed;
   if (!chatAllowed(config)) return { allowed: false, used: 0, limit: 0 };
+  if (!serviceState(location, todayIn(location.timezone)).answering) {
+    return {
+      allowed: false,
+      used: 0,
+      limit: 0,
+      message: "We can't reply here just now. Please try again a little later.",
+    };
+  }
 
   const limit = config?.maxChatsPerDay ?? WEBCHAT_DEFAULTS.maxChatsPerDay;
   const today = todayIn(location.timezone);

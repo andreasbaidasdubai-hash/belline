@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { EmbedAppearance, EmbedConfig, EmbedMode, Location } from "./types";
 import { listCalls, upsertLocation } from "./store";
 import { todayIn } from "./time";
+import { serviceState } from "./billing/entitlement";
 
 /**
  * What a venue's widget offers a visitor: the bell, the chat, or both.
@@ -184,6 +185,15 @@ export interface EmbedGate {
 export function checkEmbedGate(location: Location): EmbedGate {
   const config = location.embed;
   if (!config?.enabled) return { allowed: false, used: 0, limit: 0 };
+  // Past the trial, the website bell stops with the phone. Same rule, same file.
+  if (!serviceState(location, todayIn(location.timezone)).answering) {
+    return {
+      allowed: false,
+      used: 0,
+      limit: 0,
+      message: "Nobody can take a call through the website just now. Please try again a little later.",
+    };
+  }
   // A venue that chose the chat and not the bell. The key is real and the
   // origin is allowed; the spoken channel is simply not one they switched on.
   if (!voiceAllowed(config)) {

@@ -355,6 +355,31 @@ export function verifyVisitorToken(
   return { locationId, visitorId };
 }
 
+/**
+ * The link in a guest's confirmation that lets them see, change or cancel.
+ *
+ * No expiry: a booking made in March for June must still be manageable in
+ * June, and the page itself refuses anything already past or cancelled. The
+ * token names one booking and nothing else, and a guessed id without the
+ * signature opens nothing.
+ */
+export function signBookingToken(bookingId: string): string {
+  const mac = crypto.createHmac("sha256", streamSecret()).update(`booking:${bookingId}`).digest("base64url");
+  return `${bookingId}.${mac.slice(0, 32)}`;
+}
+
+export function verifyBookingToken(token: string | undefined): string | null {
+  if (!token) return null;
+  const dot = token.lastIndexOf(".");
+  if (dot <= 0) return null;
+  const bookingId = token.slice(0, dot);
+  const expected = signBookingToken(bookingId);
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  return bookingId;
+}
+
 export function verifyStreamToken(token: string | undefined): string | null {
   if (!token) return null;
   const parts = token.split(".");

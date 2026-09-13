@@ -9,6 +9,7 @@ import type {
 import { bookingRef, id, listBookings, saveBooking } from "../store";
 import { addDays, minutesToSpoken, dateToSpoken } from "../time";
 import { normalisePhone } from "../guests";
+import { signBookingToken } from "../auth";
 import { checkRestaurantSlot, searchRestaurant } from "./restaurant";
 import { checkSalonSlot, chainDuration, resolveServices, searchSalon } from "./salon";
 import { serviceShape } from "./services";
@@ -528,7 +529,10 @@ export function confirmationMessage(location: Location, booking: Booking): strin
           .services.map((s) => s.name)
           .join(" + ");
 
-  return `${location.name}: ${what} confirmed for ${when}. Reference ${booking.ref}. Call ${location.phone} to change it.`;
+  // The same link the email carries, so a guest with no email can still change
+  // or cancel without ringing.
+  const manage = `${(process.env.PUBLIC_ORIGIN || "https://app.belline.ai").replace(/\/$/, "")}/b/${signBookingToken(booking.id)}`;
+  return `${location.name}: ${what} confirmed for ${when}. Reference ${booking.ref}. Change or cancel: ${manage}`;
 }
 
 export function describeBooking(location: Location, booking: Booking): string {

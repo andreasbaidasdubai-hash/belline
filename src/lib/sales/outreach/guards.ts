@@ -87,6 +87,20 @@ const TECH_TALK = [
   /\bchatbot\b/i,
 ];
 
+/**
+ * What an email must not say Belline does, because it does not yet.
+ *
+ * Mirrors the `not-yet` features in billing/plans.ts and the FAQ on the
+ * website. Remove a line here the day the thing works, not before.
+ */
+const NOT_LIVE: { pattern: RegExp; why: string }[] = [
+  { pattern: /\b(?:arabic|bilingual|multilingual|multiple languages|any language|in (?:their|your) (?:own )?language)\b/i, why: "English only" },
+  { pattern: /\b(?:puts? (?:them|you|the (?:patient|caller|client|guest)s?) through|transfers? (?:the |a )?(?:call|caller|patient)s?|live transfer|patch(?:es)? (?:them|it|the call) through)\b/i, why: "no live transfer" },
+  { pattern: /\bwhats\s?app\b/i, why: "WhatsApp not connected" },
+  { pattern: /\b(?:fresha|sevenrooms|opentable|treatwell|dentally|dentrix|zenoti|phorest|booksy|eat app)\b/i, why: "no booking-system integrations" },
+  { pattern: /\b(?:reminders?|sms|texts? (?:them|you|patients?|clients?|guests?|callers?))\b/i, why: "no reminders or texts" },
+];
+
 const MONEY =
   /(?:aed|sar|chf|usd|eur|gbp|\$|£|€|dhs?)\s?\d[\d,.]*|\d[\d,.]*\s?(?:aed|sar|chf|dirhams?|riyals?|francs?)/gi;
 
@@ -150,6 +164,17 @@ export function checkDraft(parts: DraftParts, ctx: GuardContext): GuardResult {
   if (/\b(?:guarantee|guaranteed|never miss(?:es)? a(?: single)? call)\b/i.test(all)) {
     // "Never miss a call" is a promise no phone system can keep.
     problems.push("makes an absolute promise");
+  }
+
+  // Capabilities that are not live. Checked only in what the email says
+  // Belline does — "your multilingual team" in the observation is a true fact
+  // about them, "answers in English or Arabic" in the solution is a false one
+  // about us. A research agent drafted exactly that sentence to a Dubai
+  // practice, and nothing stopped it.
+  const aboutUs = `${parts.solution} ${parts.cta}`;
+  for (const { pattern, why } of NOT_LIVE) {
+    const hit = aboutUs.match(pattern);
+    if (hit) problems.push(`promises something that is not live yet (${why}): "${hit[0]}"`);
   }
 
   // --- tone ---------------------------------------------------------------

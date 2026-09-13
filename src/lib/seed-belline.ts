@@ -60,12 +60,16 @@ const FAQS = [
     a: "Fourteen days with a limited number of live-call minutes. No card, nothing charged, and we set your venue up with you — that part is free too.",
   },
   {
-    q: "Does it speak Arabic?",
-    a: "Not yet, and I will not pretend otherwise. It answers in English today. Arabic is coming, but nobody has made a real Arabic call on it, so I am not going to sell you one.",
+    q: "What languages does it speak?",
+    a: "English. That is the language it answers in, and I would rather tell you that plainly than promise one it does not speak.",
   },
   {
     q: "Can it transfer a call to a person?",
-    a: "Not as a live transfer yet. What it does today is recognise that a call needs a person, take the details, and put it at the top of your Action Inbox for a callback. A proper warm transfer is being built.",
+    a: "Yes, when it matters. Give Belline a number for your team and it puts urgent calls through live. If nobody picks up, the caller is told the team will ring back, and the call is at the top of your list with their number and what they said.",
+  },
+  {
+    q: "Does it send reminders?",
+    a: "Yes. Every booking gets a text the day before, so fewer people forget. You can switch it off or change how far ahead it goes.",
   },
   {
     q: "Does it connect to our booking system?",

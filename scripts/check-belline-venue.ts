@@ -78,16 +78,19 @@ test("it answers wider than office hours, because prospects are everywhere", () 
 
 console.log("\nWhat it says about us\n");
 
-test("it will not claim Arabic, which is not live", () => {
-  const arabic = belline.agent.faqs.find((f) => /arabic/i.test(f.q))!;
-  assert.ok(arabic, "no answer prepared for the Arabic question");
-  assert.match(arabic.a, /not yet|will not pretend/i, `got: ${arabic.a}`);
+test("it says plainly that it answers in English", () => {
+  const languages = belline.agent.faqs.find((f) => /language/i.test(f.q))!;
+  assert.ok(languages, "no answer prepared for the language question");
+  assert.match(languages.a, /English/, `got: ${languages.a}`);
+  assert.ok(!belline.agent.faqs.some((f) => /arabic/i.test(f.a)), "an answer mentions Arabic");
 });
 
-test("it will not claim live call transfer, which is not live", () => {
+test("it describes live transfer honestly, including when nobody picks up", () => {
   const transfer = belline.agent.faqs.find((f) => /transfer/i.test(f.q))!;
   assert.ok(transfer, "no answer prepared for the transfer question");
-  assert.match(transfer.a, /not as a live transfer|not yet/i, `got: ${transfer.a}`);
+  assert.match(transfer.a, /live/i, `got: ${transfer.a}`);
+  // The half that keeps it true: a transfer nobody answers becomes a callback.
+  assert.match(transfer.a, /nobody picks up|ring back/i, `got: ${transfer.a}`);
 });
 
 test("it quotes the real prices and no others", () => {

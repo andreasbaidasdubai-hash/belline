@@ -81,7 +81,7 @@ export default function WhatsAppPage() {
             Speak to Belle
           </a>
           <a
-            href="https://belline.ai/#channels"
+            href="https://belline.ai/?chat=1"
             style={{
               padding: "13px 22px",
               borderRadius: 999,

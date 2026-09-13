@@ -3,6 +3,8 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { overviewFor, summarise } from "@/lib/overview";
 import { readiness } from "@/lib/onboarding";
+import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
+import { todayIn } from "@/lib/time";
 import { callDurationSeconds } from "@/lib/calls";
 import { isRestaurant, terms } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -59,6 +61,7 @@ export default async function OverviewPage({
   // and the summary used to say it was listening. The missing list already
   // existed for the setup screen; the home page is where it is needed.
   const setup = readiness(location);
+  const service = serviceState(location, todayIn(location.timezone));
 
   return (
     <>
@@ -72,6 +75,20 @@ export default async function OverviewPage({
         }
       />
       <LocationTabs base="/" active={location.id} />
+
+      {/* The two things that stop a real call arriving, above everything else. */}
+      {(service.lapsed || !location.phone) && !location.demo?.enabled && (
+        <div className="panel" style={{ padding: "15px 18px", marginBottom: 14, borderColor: service.lapsed ? "var(--bad)" : "var(--warn)" }}>
+          <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
+            {service.lapsed
+              ? lapseSentence(service.lapsed, !service.answering)
+              : "No phone line points at Belline yet, so no real call can reach it."}{" "}
+            <Link href={`/golive?loc=${location.id}`} style={{ color: "var(--accent)", textDecoration: "underline" }}>
+              Go live
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* What it did. One sentence first, because that is what gets read. */}
       <div className="panel" style={{ padding: "20px 22px", marginBottom: 14 }}>

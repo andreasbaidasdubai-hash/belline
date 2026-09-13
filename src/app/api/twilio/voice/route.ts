@@ -3,6 +3,8 @@ import { twilioSignatureValid } from "@/lib/voice/twilio-signature";
 import { signStreamToken } from "@/lib/auth";
 import { checkDemoGate, clearOldDemoBookings, isDemo } from "@/lib/demo";
 import { seedIfEmpty } from "@/lib/seed";
+import { serviceState } from "@/lib/billing/entitlement";
+import { todayIn } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +112,19 @@ export async function POST(request: Request) {
   <Hangup/>
 </Response>`,
     );
+  }
+
+  // A customer past their trial, checked before any stream opens for the
+  // same reason as the demo cap: a refused call costs one TwiML response.
+  // Only enforced once card payments are on — see billing/entitlement.ts.
+  const service = serviceState(location, todayIn(location.timezone));
+  if (!service.answering) {
+    console.warn("[twilio] not answering for %s: %s", location.id, service.lapsed);
+    return xml(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">${escapeXml(service.callerMessage ?? "Nobody is able to take your call just now.")}</Say>
+  <Hangup/>
+</Response>`);
   }
 
   if (isDemo(location)) {

@@ -43,6 +43,13 @@ export interface AuthorityRule {
   say: string;
   /** What happens to the call afterwards. */
   then: "transfer" | "end_call" | "message";
+  /**
+   * Said instead of `say` when a transfer rule fires on a line that cannot put
+   * anybody through — the test console, the website, or a venue with no
+   * transfer number. A receptionist that says "putting you through" and then
+   * hangs up has lied at the most anxious moment of the call.
+   */
+  sayIfNoTransfer?: string;
 }
 
 // 998 is the UAE ambulance number, and "emergency department" is what the
@@ -52,10 +59,9 @@ const EMERGENCY_ADVICE =
   "That needs proper medical attention now, not an appointment. Please call 998 for an " +
   "ambulance, or go to the nearest emergency department. I'm not the right place for this.";
 
-// Not "let me put you through": there is no live transfer, and a receptionist
-// who says there is, and then hangs up, has told the caller something untrue
-// at the moment they were most anxious. What actually happens is a message,
-// marked urgent, and a call back — so that is what is said.
+// A message and a call back from the clinical team, not a live transfer: the
+// person at the desk who would pick up a transfer is not a clinician either,
+// and the promise made here is that a clinician rings back.
 const CLINICAL_REFUSAL =
   "I'm not able to advise on that, and I'm not going to guess at it. Let me take your " +
   "number and exactly what you've told me — the clinical team will ring you back, and " +
@@ -193,7 +199,7 @@ const RULES: Record<Vertical, AuthorityRule[]> = {
         "producing a confident answer here, which is exactly why it is not asked.",
       requires: [CLINICAL_QUESTION, CLINICAL_CONTEXT],
       say: CLINICAL_REFUSAL,
-      then: "transfer",
+      then: "message",
     },
   ],
   // Dental practices run on the clinic vertical today; the rules are the same
@@ -210,6 +216,8 @@ const RULES: Record<Vertical, AuthorityRule[]> = {
       ],
       say:
         "That needs someone to look at it properly, not me. I'm putting you through to the team now.",
+      sayIfNoTransfer:
+        "That needs someone to look at it properly, not me. Let me take your number and exactly what happened — the team will ring you back, and I'm marking it urgent.",
       then: "transfer",
     },
   ],

@@ -137,6 +137,9 @@ export interface Transport {
   /** Drop whatever is buffered at the far end — used for barge-in. */
   clearAudio(): void;
   close(): void;
+  /** Whether this transport can put the caller through to a person. Telephone only. */
+  readonly canTransfer?: boolean;
+  transfer?(to: string): Promise<{ ok: boolean; detail?: string }>;
 }
 
 /**
@@ -270,7 +273,17 @@ export class VoiceSession {
     this.location = location;
     this.call = call;
     this.transport = transport;
-    this.agent = new AgentSession(location, call, { callerNumber, channel: "voice" });
+    this.agent = new AgentSession(location, call, {
+      callerNumber,
+      channel: "voice",
+      liveTransfer: Boolean(transport.canTransfer && transport.transfer && location.agent.transferNumber?.trim()),
+    });
+  }
+
+  private get liveTransfer(): boolean {
+    return Boolean(
+      this.transport.canTransfer && this.transport.transfer && this.location.agent.transferNumber?.trim(),
+    );
   }
 
   async start(): Promise<void> {
@@ -716,11 +729,15 @@ export class VoiceSession {
     const { rule } = breach;
     this.call.authorityRuleId = rule.id;
 
-    this.pushTranscript("agent", rule.say);
-    this.transport.sendEvent({ type: "transcript", role: "agent", text: rule.say });
+    // "Putting you through" only where somebody can actually be put through.
+    const said =
+      rule.then === "transfer" && !this.liveTransfer && rule.sayIfNoTransfer ? rule.sayIfNoTransfer : rule.say;
+
+    this.pushTranscript("agent", said);
+    this.transport.sendEvent({ type: "transcript", role: "agent", text: said });
     this.transport.sendEvent({ type: "escalated", ruleId: rule.id, reason: rule.reason });
 
-    await this.say(rule.say, gen);
+    await this.say(said, gen);
     if (gen !== this.generation) return;
 
     if (rule.then === "end_call") {
@@ -1009,6 +1026,29 @@ export class VoiceSession {
     saveCall(this.call);
 
     this.transport.sendEvent({ type: "ended", outcome: this.call.outcome, summary: this.call.summary });
+
+    // Put them through. The call is redirected before the socket closes, so
+    // Twilio dials the team instead of hanging up when the stream ends. A
+    // short pause first: "putting you through now" is still playing, and a
+    // redirect cuts it off mid-word.
+    if (this.call.outcome === "transferred" && this.liveTransfer) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const to = this.location.agent.transferNumber!.trim();
+      const result = await this.transport.transfer!(to);
+      this.call.transfer = { to, at: new Date().toISOString(), ok: result.ok, detail: result.detail };
+      saveCall(this.call);
+      if (!result.ok) {
+        console.warn("[transfer] failed for %s: %s", this.call.id, result.detail);
+        // Never a silent hang-up after "putting you through".
+        const sorry =
+          "I'm sorry, I couldn't put you through just now. The team has your number and what you told me, and they'll call you back.";
+        this.pushTranscript("agent", sorry);
+        saveCall(this.call);
+        await this.say(sorry, this.generation).catch(() => undefined);
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+      }
+    }
+
     // Give the last audio frames a moment to drain before hanging up.
     setTimeout(() => this.transport.close(), 600);
   }

@@ -187,6 +187,10 @@ export default function CheckoutForm({
 
       <p className="muted" style={{ fontSize: 10.5, margin: 0, textAlign: "center", lineHeight: 1.6 }}>
         Next: paste your website and Belline reads your business off it.
+        <br />
+        By continuing you agree to the{" "}
+        <a href="https://belline.ai/terms" target="_blank" rel="noopener">Terms</a> and{" "}
+        <a href="https://belline.ai/privacy" target="_blank" rel="noopener">Privacy policy</a>.
       </p>
     </form>
   );

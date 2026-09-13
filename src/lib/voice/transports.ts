@@ -65,7 +65,55 @@ export class TwilioTransport implements Transport {
   constructor(
     private readonly socket: WebSocket,
     private readonly streamSid: string,
+    /** Twilio's id for the phone call itself, which is what a transfer redirects. */
+    private readonly callSid = "",
   ) {}
+
+  /** Only a real phone call with a call id can be put through to somebody. */
+  get canTransfer(): boolean {
+    return Boolean(this.callSid && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+  }
+
+  /**
+   * Put the caller through to a person.
+   *
+   * Replaces the call's instructions while it is live: Twilio drops the media
+   * stream to us and dials the number. If nobody picks up, the `action` route
+   * tells the caller the team will ring back — the one thing this must never
+   * do is leave somebody listening to silence.
+   */
+  async transfer(to: string): Promise<{ ok: boolean; detail?: string }> {
+    if (!this.canTransfer) return { ok: false, detail: "No call id or Twilio credentials." };
+    const sid = process.env.TWILIO_ACCOUNT_SID!;
+    const token = process.env.TWILIO_AUTH_TOKEN!;
+    const number = to.replace(/[^\d+]/g, "");
+    const origin = (process.env.PUBLIC_ORIGIN || "https://app.belline.ai").replace(/\/$/, "");
+    const twiml =
+      `<Response><Dial timeout="25" action="${origin}/api/twilio/transfer" method="POST">` +
+      `<Number>${number}</Number></Dial></Response>`;
+
+    try {
+      const res = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}/Calls/${encodeURIComponent(this.callSid)}.json`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({ Twiml: twiml }),
+          signal: AbortSignal.timeout(6000),
+        },
+      );
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        return { ok: false, detail: `Twilio ${res.status}: ${detail.slice(0, 160)}` };
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+    }
+  }
 
   sendAudio(chunk: Buffer): void {
     const buf: Buffer = this.carry.length ? Buffer.concat([this.carry, chunk]) : chunk;

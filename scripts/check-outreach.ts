@@ -277,6 +277,40 @@ test("the whole email stays short", () => {
   assert.ok(words < 160, `${words} words including the frame`);
 });
 
+console.log("\n  Nothing that is not live yet\n");
+
+test("the real draft that promised Arabic is refused", () => {
+  const r = checkDraft(
+    {
+      ...GOOD,
+      solution:
+        "Belline picks up the calls your front desk can't reach — answers in English or Arabic, and books the patient into the right branch.",
+    },
+    CTX,
+  );
+  assert.ok(r.problems.some((p) => p.includes("English only")), JSON.stringify(r.problems));
+});
+
+test("live transfer, WhatsApp, integrations and reminders are refused in the solution", () => {
+  for (const [solution, why] of [
+    ["Belline answers and puts the patient through to your team when it matters.", "no live transfer"],
+    ["Belline answers on the phone and on WhatsApp, alongside your front desk.", "WhatsApp"],
+    ["Belline answers after hours and books straight into Fresha.", "integrations"],
+    ["Belline answers after hours and sends patients a reminder the day before.", "reminders"],
+  ] as const) {
+    const r = checkDraft({ ...GOOD, solution }, CTX);
+    assert.ok(r.problems.some((p) => p.includes(why)), `${solution} → ${JSON.stringify(r.problems)}`);
+  }
+});
+
+test("a true fact about their own team is not a claim about us", () => {
+  const r = checkDraft(
+    { ...GOOD, observation: "Your multilingual team runs thirteen clinics across Dubai and takes bookings through a request form." },
+    CTX,
+  );
+  assert.ok(!r.problems.some((p) => p.includes("not live")), JSON.stringify(r.problems));
+});
+
 console.log("\n  Opt-out detection\n");
 
 test("opt-outs are caught across languages", () => {

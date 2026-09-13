@@ -517,6 +517,11 @@
 
   fab.addEventListener("click", open);
   fab.hidden = false;
+
+  // "Write with Belle on belline.ai" from the WhatsApp page lands here with
+  // ?chat=1. It used to land on #channels, a paragraph about the chat rather
+  // than the chat.
+  if (/[?&]chat=1(?:&|$)/.test(window.location.search)) open();
 })();
 
 /* --- monthly / annual ------------------------------------------------------
@@ -799,6 +804,50 @@
         say("Could not reach us just then. Email hello@belline.ai and we will reply today.", "bad");
       });
   }
+})();
+
+/* --- what the missed calls are worth ---------------------------------------
+   The visitor's own three numbers and nothing else. No industry average, no
+   "venues lose 30%": an owner knows how many calls go unanswered and what a
+   booking is worth far better than we do, and an invented figure is the
+   fastest way to lose the one who knows. The markup carries the answer for
+   the example numbers, so the page reads correctly without JavaScript. */
+(function () {
+  var form = document.getElementById("roi");
+  var out = document.getElementById("roi-out");
+  if (!form || !out) return;
+
+  function num(name) {
+    var v = parseFloat(form.elements[name].value);
+    return isFinite(v) && v >= 0 ? v : 0;
+  }
+
+  function aed(n) {
+    return "AED " + Math.round(n).toLocaleString("en-AE");
+  }
+
+  function render() {
+    var missed = num("missed");
+    var share = Math.min(num("share"), 100) / 100;
+    var value = num("value");
+    var plan = form.elements.plan;
+    var price = parseFloat(plan.value) || 0;
+    var planName = plan.options[plan.selectedIndex].getAttribute("data-name");
+    if (!missed || !share || !value) {
+      out.textContent = "Fill in all three to see what they add up to.";
+      return;
+    }
+    // 52 weeks over 12 months, not four weeks a month.
+    var bookings = (missed * share * 52) / 12;
+    out.textContent =
+      "About " + Math.round(bookings) + " bookings a month, worth roughly " +
+      aed(bookings * value) + ". " + planName + " is " + aed(price) + " a month.";
+  }
+
+  form.addEventListener("input", render);
+  form.addEventListener("change", render);
+  form.addEventListener("submit", function (e) { e.preventDefault(); });
+  render();
 })();
 
 /* The buy bar that used to replace the three buttons on a phone once the hero
