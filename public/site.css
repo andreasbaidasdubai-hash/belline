@@ -1010,6 +1010,17 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .wa-fab:hover::after,
 .wa-fab:focus-visible::after { animation: none; }
 
+/* Das Zeichen schwingt mit, wie in der Glocke. Nur Rucken und Ring waren auf
+   dem Laptop zu leise, um als Klingeln gelesen zu werden. */
+.chat-fab svg,
+.wa-fab svg { animation: bell-shake 1.5s ease-in-out infinite; }
+.chat-fab svg { animation-delay: 1.2s; }
+.wa-fab svg { animation-delay: 1.7s; }
+.chat-fab:hover svg,
+.chat-fab:focus-visible svg,
+.wa-fab:hover svg,
+.wa-fab:focus-visible svg { animation: none; }
+
 /* Der Chat braucht Höhe, das Gespräch nicht — ein Anruf ist eine Leiste, ein
    Chat ist ein Fenster. Auf dem Telefon nimmt er den ganzen Schirm: 380 px
    Chat in einem 390-px-Gerät sind kein Panel, sondern ein Versehen. */
@@ -1039,21 +1050,11 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
  * Zeichen, ein Viertel der Fläche. Die Reiter dürfen nicht mehr umbrechen;
  * "RESTAURANTS" allein in einer zweiten Zeile sah nach einem Fehler aus. */
 @media (max-width: 620px) {
-  .bell-fab,
-  .chat-fab,
-  .wa-fab {
-    right: 18px;
-    width: 56px;
-    height: 56px;
-    padding: 0;
-    justify-content: center;
-  }
-  .bell-fab { bottom: 18px; }
-  .chat-fab { bottom: 84px; }
-  .wa-fab { bottom: 150px; }
-  .bell-fab-say,
-  .chat-fab-say,
-  .wa-fab-say { display: none; }
+  /* Die Position der drei Knöpfe auf dem Telefon steht weiter unten, im
+     900px-Block, an einer einzigen Stelle. Hier stand eine zweite Fassung,
+     die der spätere Block halb überschrieb: der Chat-Knopf landete 4px unter
+     WhatsApp, sein Papierrand lag über dessen Kante, und WhatsApp sah beim
+     Scrollen aus, als rutsche er dahinter. */
 
   /* `.call .call-tabs`, nicht `.call-tabs`: die Grundregel weiter unten
      setzt flex-wrap: wrap und stünde bei gleicher Spezifität später. */
@@ -1142,21 +1143,28 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   .f-row { grid-template-columns: 1fr; }
   .script .caller p { font-size: 1.25rem; }
   .compare { font-size: 1.3rem; text-align: left; }
+  /* Die drei Knöpfe als Stapel, an genau dieser Stelle und nirgends sonst.
+     Glocke 60px unten, darüber Chat und WhatsApp je 56px, mit 14px Luft
+     dazwischen — genug, dass der 4px-Papierrand und der Ring eines Knopfes
+     nie über den nächsten laufen. */
   .bell-fab {
     right: 18px;
     bottom: calc(18px + env(safe-area-inset-bottom, 0px));
     width: 60px; height: 60px; padding: 0; justify-content: center; gap: 0;
   }
-  /* Der Chat-Knopf macht dasselbe wie die Glocke, sonst steht auf dem Telefon
-     ein runder Knopf neben einer beschrifteten Pille — zwei Knöpfe, die
-     aussehen, als gehörten sie nicht zusammen. */
   .chat-fab {
-    right: 18px;
-    bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+    right: 20px;
+    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+    width: 56px; height: 56px; padding: 0; justify-content: center; gap: 0;
+  }
+  .wa-fab {
+    right: 20px;
+    bottom: calc(162px + env(safe-area-inset-bottom, 0px));
     width: 56px; height: 56px; padding: 0; justify-content: center; gap: 0;
   }
   .bell-fab-say,
-  .chat-fab-say {
+  .chat-fab-say,
+  .wa-fab-say {
     position: absolute; width: 1px; height: 1px;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
@@ -1169,8 +1177,10 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   .bell-fab svg,
   .bell-fab::after,
   .chat-fab,
+  .chat-fab svg,
   .chat-fab::after,
   .wa-fab,
+  .wa-fab svg,
   .wa-fab::after,
   .call-wave i { animation: none; }
   .bell-fab,
