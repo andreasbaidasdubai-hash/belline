@@ -78,6 +78,10 @@ export function clientBook(now = new Date()): ClientRow[] {
   const cutoff = new Date(now.getTime() - 30 * 86_400_000).toISOString();
 
   return listLocations()
+    // Our own venues — the demo lines and Belline itself — sit in internal
+    // tenants and pay nothing. In the book they would read as three clients
+    // with no plan, which is the opposite of what the page is for.
+    .filter((location) => !getTenant(location.tenantId)?.internal && !location.demo?.enabled)
     .map((location): ClientRow => {
       const tenant = getTenant(location.tenantId);
       const owner = listUsersFor(location.tenantId).find((u) => u.role === "owner") ?? null;
