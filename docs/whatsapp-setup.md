@@ -86,3 +86,23 @@ Restart the service. The boot log says one of:
   Meta audio path is a small follow-up once the number exists to test it on.
 - Customers' own WhatsApp numbers are a separate, per-business connection
   (each business proves it owns its number). Not self-serve yet.
+
+## Connecting a customer's venue (the second-number model)
+
+A customer keeps their own WhatsApp exactly as it is. Belle answers a *second*
+number that lives in **our** WhatsApp business account — so our verification
+covers it and the customer does no Meta paperwork at all.
+
+1. Meta → WhatsApp Manager → our business → **Phone numbers → Add phone
+   number**. Use a number the customer bought (a SIM they can receive the OTP
+   on) or one we provide. Display name: the venue's name.
+2. Copy that number's **Phone number ID**.
+3. app.belline.ai/sales/clients → the venue's row → **Connect a number** →
+   paste the number (E.164) and the ID → Connect.
+4. Message it. The thread appears in the venue's inbox; Belle answers as that
+   venue. Tell the customer to put the number on their site, Google profile
+   and Instagram; their Integrations page now shows it.
+5. To stop answering on it: the same row → **Pause**. The history stays.
+
+The token used is our own (`WHATSAPP_ACCESS_TOKEN`), which is why our number
+has to be connected before any venue's can be.

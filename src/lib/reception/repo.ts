@@ -278,6 +278,27 @@ export async function accountForInbound(
   return row && toAccount(row);
 }
 
+/**
+ * Pause or revoke a number, or bring it back.
+ *
+ * A row is never deleted: the conversations that arrived through it point at
+ * it, and a venue that leaves and returns should get its history back.
+ * `accountForInbound` only matches active rows, so a paused number simply
+ * stops receiving.
+ */
+export async function setAccountStatus(
+  tenantId: string,
+  id: number,
+  status: ChannelAccount["status"],
+): Promise<ChannelAccount | undefined> {
+  const row = await one<AccountRow>(
+    `update channel_account set status = $3, updated_at = now()
+      where tenant_id = $1 and id = $2 returning *`,
+    [tenantId, id, status],
+  );
+  return row && toAccount(row);
+}
+
 export async function listAccounts(tenantId: string): Promise<ChannelAccount[]> {
   const rows = await query<AccountRow>(
     "select * from channel_account where tenant_id = $1 order by id",

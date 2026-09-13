@@ -4,8 +4,13 @@ import { PageHeader } from "@/components/LocationTabs";
 import { seedIfEmpty } from "@/lib/seed";
 import { clientBook, totalsOf } from "@/lib/sales/clients";
 import { defaultAssumptions } from "@/lib/sales/projection";
+import { isConfigured } from "@/lib/db/client";
+import { migrateReception } from "@/lib/reception/migrate";
+import { listAccounts } from "@/lib/reception/repo";
+import { whatsappConfigured } from "@/lib/whatsapp";
 import { Stat } from "../ui";
 import Projection from "./Projection";
+import WhatsAppCell from "./WhatsAppCell";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +52,21 @@ export default async function ClientsPage() {
   const mix = Object.entries(t.planMix)
     .map(([name, n]) => `${n} ${name}`)
     .join(" · ");
+
+  // Which venues have a WhatsApp number answered by Belle. Postgres, not the
+  // file store, so read once for every tenant on the page.
+  const whatsapp = new Map<string, string>();
+  if (isConfigured()) {
+    await migrateReception();
+    for (const tenantId of new Set(rows.map((r) => r.tenantId))) {
+      for (const a of await listAccounts(tenantId)) {
+        if (a.channel === "whatsapp" && a.status === "active" && a.locationId && a.phoneE164) {
+          whatsapp.set(a.locationId, a.phoneE164);
+        }
+      }
+    }
+  }
+  const whatsappReady = whatsappConfigured() && isConfigured();
 
   return (
     <>
@@ -102,6 +122,7 @@ export default async function ClientsPage() {
                   <th style={{ textAlign: "right" }}>Calls</th>
                   <th style={{ textAlign: "right" }}>Bookings 30d</th>
                   <th style={{ textAlign: "right" }}>MRR</th>
+                  <th>WhatsApp</th>
                 </tr>
               </thead>
               <tbody>
@@ -154,6 +175,9 @@ export default async function ClientsPage() {
                     <td className="mono" style={{ textAlign: "right" }}>{r.bookingsLast30Days}</td>
                     <td className="mono" style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                       {r.mrrFils ? aed(r.mrrFils) : <span className="muted">—</span>}
+                    </td>
+                    <td>
+                      <WhatsAppCell venueId={r.venueId} number={whatsapp.get(r.venueId) ?? null} ready={whatsappReady} />
                     </td>
                   </tr>
                 ))}

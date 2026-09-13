@@ -1,9 +1,11 @@
 import { getLocation } from "./store";
+import type { Location } from "./types";
+import type { ChannelAccount } from "./reception/types";
 import { BELLINE_LOCATION_ID } from "./seed-belline";
 import { isConfigured } from "./db/client";
 import { credentialsConfigured, sealCredentials } from "./db/credentials";
 import { migrateReception } from "./reception/migrate";
-import { listAccounts, saveAccount } from "./reception/repo";
+import { listAccounts, saveAccount, setAccountStatus } from "./reception/repo";
 
 /**
  * Belline's own WhatsApp number.
@@ -117,4 +119,94 @@ export async function ensureOwnWhatsAppAccount(): Promise<
   } catch (err) {
     return { state: "skipped", why: err instanceof Error ? err.message : String(err) };
   }
+}
+
+// ---------------------------------------------------------------------------
+// A customer's number — the second-number model
+// ---------------------------------------------------------------------------
+
+/**
+ * WhatsApp for a customer's venue, without touching the customer's WhatsApp.
+ *
+ * A number is on the WhatsApp app or on the API, never both, and the number a
+ * salon has used for years is not one they will hand over. So a venue gets a
+ * *second* number that Belle answers: one we register under Belline's own
+ * WhatsApp business account — one business account holds many numbers, and
+ * our verification covers all of them — and the venue puts it on its website
+ * and its Google profile. Their own WhatsApp stays exactly as it was.
+ *
+ * Because the number lives in our account, the token is ours (the same one
+ * that answers Belle's line) and the webhook is the same: Meta tells us which
+ * number a message arrived on, and `accountForInbound` routes it to the venue
+ * by that id. What differs per venue is the number, Meta's id for it, and
+ * which venue it books into — which is all this function records.
+ *
+ * Connected by a member of Belline staff from the Clients console, after the
+ * number has been added in Meta's dashboard. Not self-serve: adding a number
+ * to our account is something only we can do, and the honest thing is a
+ * button we press rather than a form a customer fills in and waits on.
+ */
+export async function connectVenueNumber(input: {
+  location: Location;
+  number: string;
+  phoneNumberId: string;
+  aiEnabled?: boolean;
+}): Promise<{ ok: true; account: ChannelAccount } | { ok: false; error: string }> {
+  const number = input.number.replace(/[^\d+]/g, "");
+  if (!/^\+\d{8,15}$/.test(number)) {
+    return { ok: false, error: "The number has to be in international form, like +9715XXXXXXXX." };
+  }
+  const phoneNumberId = input.phoneNumberId.trim();
+  if (!/^\d{6,}$/.test(phoneNumberId)) {
+    return { ok: false, error: "Meta's phone number ID is a long number, shown under the number in the WhatsApp dashboard." };
+  }
+  if (!whatsappConfigured()) {
+    return {
+      ok: false,
+      error: `Belline's own WhatsApp account is not connected yet (missing ${whatsappMissing().join(", ")}). A venue's number lives inside it, so ours comes first.`,
+    };
+  }
+  if (!isConfigured()) return { ok: false, error: "No database." };
+  if (!credentialsConfigured()) return { ok: false, error: "CREDENTIALS_KEY is not set." };
+  if (input.location.demo?.enabled) return { ok: false, error: "That is a demo venue." };
+
+  try {
+    await migrateReception();
+    const account = await saveAccount({
+      tenantId: input.location.tenantId,
+      businessId: input.location.businessId,
+      locationId: input.location.id,
+      channel: "whatsapp",
+      provider: "meta",
+      phoneE164: number,
+      externalNumberId: phoneNumberId,
+      credentialsEnc: sealCredentials({
+        accessToken: process.env.WHATSAPP_ACCESS_TOKEN!.trim(),
+        phoneNumberId,
+      }),
+      aiEnabled: input.aiEnabled ?? true,
+    });
+    return { ok: true, account };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** The venue's WhatsApp number, if one is connected. Null without a database. */
+export async function venueWhatsApp(location: Location): Promise<ChannelAccount | null> {
+  if (!isConfigured()) return null;
+  await migrateReception();
+  return (
+    (await listAccounts(location.tenantId)).find(
+      (a) => a.channel === "whatsapp" && a.locationId === location.id && a.status === "active",
+    ) ?? null
+  );
+}
+
+/** Stop answering on a venue's number. The row stays, for the history it holds. */
+export async function disconnectVenueNumber(location: Location): Promise<boolean> {
+  const account = await venueWhatsApp(location);
+  if (!account) return false;
+  await setAccountStatus(location.tenantId, account.id, "paused");
+  return true;
 }

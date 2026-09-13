@@ -583,6 +583,22 @@ console.log("\nOur own number\n");
     assert.equal(whatsappConfigured(), true);
   });
 
+  await test("a venue's number is refused before it can be sealed: bad number, bad id, or ours not yet connected", async () => {
+    clear();
+    const { connectVenueNumber } = await import("../src/lib/whatsapp");
+    const { listLocations } = await import("../src/lib/store");
+    const venue = listLocations().find((l) => !l.demo?.enabled) ?? listLocations()[0];
+    const bad = await connectVenueNumber({ location: venue, number: "050 123", phoneNumberId: "123456789" });
+    assert.equal(bad.ok, false);
+    assert.match((bad as { error: string }).error, /international form/);
+    const badId = await connectVenueNumber({ location: venue, number: "+971501234567", phoneNumberId: "abc" });
+    assert.equal(badId.ok, false);
+    assert.match((badId as { error: string }).error, /phone number ID/);
+    const oursFirst = await connectVenueNumber({ location: venue, number: "+971501234567", phoneNumberId: "123456789" });
+    assert.equal(oursFirst.ok, false);
+    assert.match((oursFirst as { error: string }).error, /ours comes first/);
+  });
+
   process.env = keep;
 }
 

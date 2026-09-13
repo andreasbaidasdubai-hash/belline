@@ -3,6 +3,7 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { seedIfEmpty } from "@/lib/seed";
 import { connectionState, googleConfigured } from "@/lib/integrations/google";
+import { venueWhatsApp } from "@/lib/whatsapp";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ export default async function IntegrationsPage({
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
 
   const google = connectionState(location);
+  const whatsapp = await venueWhatsApp(location);
 
   return (
     <>
@@ -74,6 +76,48 @@ export default async function IntegrationsPage({
           {error}
         </div>
       )}
+
+      {/*
+        WhatsApp, the second-number way: the venue keeps its own WhatsApp
+        untouched and Belle answers a number we register for it. Connected by
+        us, shown here, and honest when it is not.
+      */}
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="panel-head">WhatsApp</div>
+        <div style={{ padding: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <span
+              className="pill"
+              style={
+                whatsapp
+                  ? { background: "var(--ok-soft)", color: "var(--ok)", borderColor: "var(--ok)" }
+                  : undefined
+              }
+            >
+              {whatsapp ? "Connected" : "Not connected"}
+            </span>
+            {whatsapp && (
+              <span className="mono" style={{ fontSize: 13.5 }}>
+                {whatsapp.phoneE164}
+              </span>
+            )}
+          </div>
+          {whatsapp ? (
+            <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
+              Belline answers this number on WhatsApp — questions, bookings, changes — and every
+              thread is in your inbox. Put it on your website, your Google profile and your
+              Instagram as &ldquo;WhatsApp us&rdquo;. Your own WhatsApp is untouched.
+            </p>
+          ) : (
+            <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
+              Belline can answer a WhatsApp number for {location.name} — a second number, so your
+              own WhatsApp stays exactly as it is. We register it and connect it for you; there is
+              nothing to install. <a href="mailto:hello@belline.ai?subject=WhatsApp%20for%20my%20venue">Email us</a> and
+              it is usually live the same day.
+            </p>
+          )}
+        </div>
+      </div>
 
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head">Google Calendar</div>
