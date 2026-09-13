@@ -159,7 +159,12 @@ if (pages.length === 0) {
  * call-scenes.json itself.
  */
 const TEXT = /\.(html|css|js|json)$/i;
-const HASHED = /\.(mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
+// The stylesheet and the script are hashed too. They were not, and a phone
+// that had cached yesterday's site.css kept yesterday's buttons after a
+// deploy had removed them — "must-revalidate" is a request, not a promise.
+// Text assets are both rewritten *and* renamed: the name changes with the
+// bytes, and every reference follows.
+const HASHED = /\.(css|js|mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
 
 const hashedName = new Map<string, string>();
 for (const asset of assets) {
