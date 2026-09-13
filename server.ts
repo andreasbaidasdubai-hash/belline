@@ -20,7 +20,7 @@ import { mayStreamTo, watchLiveness, sweepLiveness, type Liveness } from "./src/
 import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voice/session";
-import { ensureOwnWhatsAppAccount } from "./src/lib/whatsapp";
+import { ensureOwnWhatsAppAccount, ensureTwilioSandboxAccount } from "./src/lib/whatsapp";
 import { BrowserTransport, TwilioTransport } from "./src/lib/voice/transports";
 
 /**
@@ -58,6 +58,10 @@ void ensureOwnWhatsAppAccount().then((r) =>
       : `[whatsapp] not connected — ${r.why}`,
   ),
 );
+// The Twilio sandbox, for trying Belle on WhatsApp before Meta is ready.
+void ensureTwilioSandboxAccount().then((r) => {
+  if (r.state === "connected") console.log(`[whatsapp] Twilio sandbox answering on ${r.number}`);
+});
 
 // Built at image time. Absent in a bare dev checkout, where the marketing
 // pages are served by Next out of public/ instead.

@@ -106,3 +106,36 @@ covers it and the customer does no Meta paperwork at all.
 
 The token used is our own (`WHATSAPP_ACCESS_TOKEN`), which is why our number
 has to be connected before any venue's can be.
+
+## Self-serve, for the customer (no Meta account on their side)
+
+Once our line is connected, add one more variable to Railway:
+
+```
+WHATSAPP_BUSINESS_ACCOUNT_ID=<the WABA id, from WhatsApp Manager → Business settings>
+```
+
+Then a venue owner does it themselves on **Integrations → WhatsApp**: types
+the number (a SIM that has never been on WhatsApp), Meta texts it a code,
+they type the code, Belle answers it. Four Graph calls behind the button —
+add the number to our account, request the code, verify it, register it with
+a two-step PIN we generate and seal with the number's credentials. About a
+minute. The staff "Connect a number" in the Clients console stays for the
+cases where we add the number by hand.
+
+## Trying Belle on WhatsApp today — the Twilio sandbox
+
+No Meta account needed. The sandbox is Twilio's shared number
+(+1 415 523 8886) that only answers phones that have joined it.
+
+1. Twilio Console → Messaging → Try it out → **Send a WhatsApp message** →
+   *Sandbox settings*: "When a message comes in" =
+   `https://app.belline.ai/api/whatsapp/webhook`, method POST. Save.
+2. Railway: `TWILIO_WHATSAPP_FROM=+14155238886` (already set). On boot the
+   log says `[whatsapp] Twilio sandbox answering on +14155238886`.
+3. From your phone, WhatsApp the sandbox number the words shown on that
+   Twilio page (`join <two-words>`). Then ask Belle anything.
+
+The threads land in the Belline venue's inbox like any other. The public
+"WhatsApp Belle" button stays on the "not yet" page — a link to the sandbox
+would open a chat that ignores anyone who has not joined.

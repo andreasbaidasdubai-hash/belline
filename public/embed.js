@@ -48,41 +48,55 @@
   var origin = new URL(script.src, location.href).origin;
   var side = script.getAttribute("data-side") === "left" ? "left" : "right";
 
+  var attrMode = script.hasAttribute("data-mode");
   var mode = (script.getAttribute("data-mode") || "voice").toLowerCase();
   if (mode !== "chat" && mode !== "both") mode = "voice";
 
+  // The words on the buttons. An attribute on the tag is page-specific and
+  // wins; otherwise the venue's own choice from the dashboard arrives a moment
+  // later (see `dress`), and until then these.
   var voiceLabel = script.getAttribute("data-label") || "Talk to us";
   var chatLabel = script.getAttribute("data-chat-label") || "Chat with us";
+  var whatsappLabel = script.getAttribute("data-whatsapp-label") || "WhatsApp us";
+  var attrSide = script.hasAttribute("data-side");
+  var attrVoice = script.hasAttribute("data-label");
+  var attrChat = script.hasAttribute("data-chat-label");
 
   // One widget per page, whatever a page builder does with duplicate blocks.
   if (window.__bellineEmbed) return;
   window.__bellineEmbed = true;
 
   var css =
-    ".belline-dock{position:fixed;bottom:24px;" + side + ":24px;z-index:2147483000;" +
-    "display:flex;flex-direction:column;align-items:" + (side === "left" ? "flex-start" : "flex-end") +
-    ";gap:10px}" +
-    ".belline-fab{display:inline-flex;align-items:center;gap:10px;" +
-    "padding:14px 22px 14px 18px;border:0;border-radius:999px;background:#14110D;color:#FBF9F5;" +
+    ".belline-dock{position:fixed;bottom:24px;right:24px;z-index:2147483000;" +
+    "display:flex;flex-direction:column;align-items:flex-end;gap:10px;" +
+    "--belline-accent:#14110D;--belline-accent-text:#FBF9F5;--belline-accent-mark:#E8DCC6}" +
+    ".belline-dock.belline-left{right:auto;left:24px;align-items:flex-start}" +
+    ".belline-fab{display:inline-flex;align-items:center;gap:10px;text-decoration:none;" +
+    "padding:14px 22px 14px 18px;border:0;border-radius:999px;" +
+    "background:var(--belline-accent);color:var(--belline-accent-text);" +
     "cursor:pointer;font:500 15px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;" +
     "box-shadow:0 14px 34px -14px rgba(0,0,0,.5);transition:transform .16s ease}" +
     ".belline-fab:hover{transform:translateY(-2px)}" +
-    ".belline-fab svg{width:24px;height:24px;color:#E8DCC6;display:block;flex:none}" +
-    // The second button is the quieter one: paper rather than ink, so the pair
-    // reads as one offer with a primary in it, not as two competing calls.
+    ".belline-fab svg{width:24px;height:24px;color:var(--belline-accent-mark);display:block;flex:none}" +
+    // The second and third buttons are the quieter ones: paper rather than
+    // the accent, so the set reads as one offer with a primary in it.
     ".belline-fab.belline-second{background:#F4F0E8;color:#14110D;" +
     "box-shadow:0 10px 26px -14px rgba(0,0,0,.42)}" +
     ".belline-fab.belline-second svg{color:#8A672E}" +
-    ".belline-panel{position:fixed;bottom:24px;" + side + ":24px;z-index:2147483001;" +
+    // Round: the mark alone, as on a phone, at every width.
+    ".belline-dock.belline-round .belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
+    ".belline-dock.belline-round .belline-fab span{display:none}" +
+    ".belline-panel{position:fixed;bottom:24px;right:24px;z-index:2147483001;" +
     "width:380px;max-width:calc(100vw - 32px);height:520px;max-height:calc(100vh - 48px);" +
     "border:0;border-radius:16px;overflow:hidden;background:#14110D;" +
     "box-shadow:0 24px 60px -20px rgba(0,0,0,.55)}" +
+    ".belline-panel.belline-left{right:auto;left:24px}" +
     ".belline-shut{position:fixed;z-index:2147483002;width:32px;height:32px;border:0;" +
     "border-radius:999px;background:rgba(251,249,245,.14);color:#FBF9F5;cursor:pointer;" +
     "font:16px/1 sans-serif;display:grid;place-items:center}" +
-    "@media (max-width:520px){.belline-panel{inset:0;width:100%;height:100%;" +
+    "@media (max-width:520px){.belline-panel,.belline-panel.belline-left{inset:0;width:100%;height:100%;" +
     "max-width:none;max-height:none;border-radius:0}" +
-    ".belline-dock{bottom:18px;" + side + ":18px}" +
+    ".belline-dock{bottom:18px;right:18px}.belline-dock.belline-left{left:18px}" +
     ".belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
     ".belline-fab span{display:none}}" +
     "@media (prefers-reduced-motion:reduce){.belline-fab{transition:none}}";
@@ -109,12 +123,22 @@
     '<path d="M8.7 13.1a3.3 3.3 0 0 1 6.6 0Z" fill="currentColor"/>' +
     '<rect x="7.8" y="13.8" width="8.4" height="1.35" rx=".68" fill="currentColor"/></svg>';
 
+  // WhatsApp, drawn in the same hand as the bell and the bubble.
+  var WA =
+    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" ' +
+    'stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>' +
+    '<path d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4' +
+    'a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4' +
+    '-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z" fill="currentColor"/></svg>';
+
   var dock = document.createElement("div");
-  dock.className = "belline-dock";
+  dock.className = "belline-dock" + (side === "left" ? " belline-left" : "");
 
   var panel = null;
   var shut = null;
   var reopen = null;
+  var fabs = {};
 
   function fabFor(kind, label, icon, second) {
     var fab = document.createElement("button");
@@ -126,19 +150,93 @@
       reopen = fab;
       open(kind, label);
     });
+    fabs[kind] = fab;
     return fab;
   }
 
   // Chat first in the column, so on `both` it sits above the bell. The bell
   // stays the filled button: it is the thing this product does that a chat
   // widget does not.
-  if (mode === "chat") {
-    dock.appendChild(fabFor("chat", chatLabel, BUBBLE, false));
-  } else if (mode === "both") {
-    dock.appendChild(fabFor("chat", chatLabel, BUBBLE, true));
-    dock.appendChild(fabFor("voice", voiceLabel, BELL, false));
-  } else {
-    dock.appendChild(fabFor("voice", voiceLabel, BELL, false));
+  function buildMode(m) {
+    ["voice", "chat"].forEach(function (k) {
+      if (fabs[k]) {
+        fabs[k].remove();
+        delete fabs[k];
+      }
+    });
+    if (m === "chat") {
+      dock.appendChild(fabFor("chat", chatLabel, BUBBLE, false));
+    } else if (m === "both") {
+      dock.appendChild(fabFor("chat", chatLabel, BUBBLE, true));
+      dock.appendChild(fabFor("voice", voiceLabel, BELL, false));
+    } else {
+      dock.appendChild(fabFor("voice", voiceLabel, BELL, false));
+    }
+  }
+  buildMode(mode);
+
+  /**
+   * The venue's own choices, fetched after the buttons are on screen.
+   *
+   * Words, colour, shape, corner, and a WhatsApp button when the venue has a
+   * number. Applied on top of the defaults rather than waited for, so a slow
+   * or failed fetch costs the venue its colour for a second, never its widget.
+   * An attribute on the tag is page-specific and keeps precedence.
+   */
+  function relabel(kind, label) {
+    var fab = fabs[kind];
+    if (!fab || !label) return;
+    fab.setAttribute("aria-label", label);
+    var span = fab.querySelector("span");
+    if (span) span.textContent = label;
+  }
+
+  function dress(cfg) {
+    if (!cfg || typeof cfg !== "object") return;
+    // No attribute on the tag means the dashboard decides what is offered —
+    // so switching chat on in Belline reaches the site without a re-paste.
+    if (!attrMode && (cfg.mode === "voice" || cfg.mode === "chat" || cfg.mode === "both") && cfg.mode !== mode) {
+      mode = cfg.mode;
+      buildMode(mode);
+    }
+    if (!attrVoice) relabel("voice", cfg.voiceLabel);
+    if (!attrChat) relabel("chat", cfg.chatLabel);
+    if (cfg.accent && cfg.accentText) {
+      dock.style.setProperty("--belline-accent", cfg.accent);
+      dock.style.setProperty("--belline-accent-text", cfg.accentText);
+      dock.style.setProperty("--belline-accent-mark", cfg.accentMark || "#E8DCC6");
+    }
+    if (cfg.shape === "round") dock.classList.add("belline-round");
+    if (!attrSide && cfg.corner === "left") {
+      dock.classList.add("belline-left");
+      side = "left";
+    }
+    if (cfg.whatsappLink && !fabs.whatsapp) {
+      var wa = document.createElement("a");
+      wa.className = "belline-fab belline-second";
+      wa.href = cfg.whatsappLink;
+      wa.target = "_blank";
+      wa.rel = "noopener";
+      var label = cfg.whatsappLabel || whatsappLabel;
+      wa.setAttribute("aria-label", label);
+      wa.innerHTML = WA + "<span>" + escapeHtml(label) + "</span>";
+      // Above the others: the quietest of the three, furthest from the bell.
+      dock.insertBefore(wa, dock.firstChild);
+      fabs.whatsapp = wa;
+    }
+  }
+
+  try {
+    fetch(origin + "/api/embed/" + encodeURIComponent(key) + "/config", { mode: "cors" })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(dress)
+      .catch(function () {
+        /* the defaults are already on screen */
+      });
+  } catch (e) {
+    /* an old browser without fetch keeps the defaults */
   }
 
   function open(kind, label) {
@@ -155,7 +253,7 @@
       (kind === "chat" ? "/chat" : "") +
       "?o=" +
       encodeURIComponent(location.origin);
-    panel.className = "belline-panel";
+    panel.className = "belline-panel" + (side === "left" ? " belline-left" : "");
     // The call is ink and the chat is paper, and the frame behind each has to
     // match — otherwise the wrong colour flashes for as long as the iframe
     // takes to paint, which on a slow connection is not a flash.

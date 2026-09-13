@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { getLocation, listLocationsFor } from "@/lib/store";
-import { disableEmbed, embedSnippet, enableEmbed, normaliseOrigin, parseMode } from "@/lib/embed";
+import { disableEmbed, embedSnippet, enableEmbed, normaliseOrigin, parseAppearance, parseMode } from "@/lib/embed";
 import { publish } from "@/lib/brain";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,13 @@ export async function POST(req: Request) {
   if (auth.response) return auth.response;
   const user = auth.user;
 
-  let body: { locationId?: string; origins?: unknown; enabled?: boolean; mode?: unknown };
+  let body: {
+    locationId?: string;
+    origins?: unknown;
+    enabled?: boolean;
+    mode?: unknown;
+    appearance?: unknown;
+  };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -57,9 +63,24 @@ export async function POST(req: Request) {
     );
   }
 
+  // How it looks. Checked against the guidelines, and the first problem is
+  // said in words the owner can act on — a pale colour, a label that is a
+  // sentence. Absent means "leave it as it was".
+  let appearance = undefined;
+  if (body.appearance !== undefined) {
+    const parsed = parseAppearance(body.appearance);
+    if (!parsed.ok) {
+      return NextResponse.json(
+        { error: parsed.problem.message, field: parsed.problem.field },
+        { status: 422 },
+      );
+    }
+    appearance = parsed.appearance;
+  }
+
   // What the widget offers. Unrecognised leaves the venue where it was — see
   // parseMode.
-  const updated = enableEmbed(location, origins, undefined, parseMode(body.mode));
+  const updated = enableEmbed(location, origins, undefined, parseMode(body.mode), appearance);
   const offers =
     updated.embed!.mode === "both"
       ? "talking and messages"

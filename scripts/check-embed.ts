@@ -248,6 +248,91 @@ await test("the widget script is served and has no secrets in it either", () => 
   assert.equal(/sk_|whsec_|belline_session/.test(js), false);
 });
 
+// ---------------------------------------------------------------------------
+console.log("\nHow it looks — the venue's choices, within the guidelines\n");
+
+{
+  const { parseAppearance, resolveAppearance, widgetConfig, contrastRatio, EMBED_PALETTE, APPEARANCE_RULES } =
+    await import("../src/lib/embed");
+
+  await test("nothing chosen means the defaults, and the defaults are readable", () => {
+    const r = parseAppearance({});
+    assert.ok(r.ok);
+    const look = resolveAppearance(r.ok ? r.appearance : {});
+    assert.equal(look.voiceLabel, "Talk to us");
+    assert.equal(look.accent, EMBED_PALETTE.ink);
+    assert.equal(look.accentText, "#FBF9F5");
+    assert.ok(contrastRatio(look.accent, look.accentText) >= APPEARANCE_RULES.minContrast);
+  });
+
+  await test("words are the venue's, up to the limit, and never a link", () => {
+    const ok = parseAppearance({ voiceLabel: "  Ring   Marina  ", chatLabel: "Message us" });
+    assert.ok(ok.ok && ok.appearance.voiceLabel === "Ring Marina");
+    const long = parseAppearance({ voiceLabel: "a".repeat(APPEARANCE_RULES.labelMaxChars + 1) });
+    assert.ok(!long.ok && long.problem.field === "voiceLabel");
+    const link = parseAppearance({ chatLabel: "Chat at www.example.com" });
+    assert.ok(!link.ok && link.problem.field === "chatLabel");
+  });
+
+  await test("a colour from the palette by name, or a hex that keeps the words readable", () => {
+    const named = parseAppearance({ accent: "Forest" });
+    assert.ok(named.ok && named.appearance.accent === "forest");
+    const hex = parseAppearance({ accent: "#1f2e4a" });
+    assert.ok(hex.ok && hex.appearance.accent === "#1F2E4A");
+    // Pale is fine — the words go in ink. A mid grey reads on neither.
+    const pale = parseAppearance({ accent: "#F0EAD6" });
+    assert.ok(pale.ok);
+    const mid = parseAppearance({ accent: "#7B7B7B" });
+    assert.ok(!mid.ok && /contrast/.test(mid.problem.message));
+    const junk = parseAppearance({ accent: "reddish" });
+    assert.ok(!junk.ok && junk.problem.field === "accent");
+  });
+
+  await test("light accents get ink text and a brass mark; dark ones paper and brass-soft", () => {
+    // Deep enough to pass, and light enough that ink reads better than paper.
+    const light = resolveAppearance({ accent: "#C9A227" });
+    assert.equal(light.accentText, "#14110D");
+    assert.equal(light.accentMark, "#8A672E");
+    const dark = resolveAppearance({ accent: "wine" });
+    assert.equal(dark.accentText, "#FBF9F5");
+  });
+
+  await test("shape and corner are one of two, and anything else is refused", () => {
+    assert.ok(parseAppearance({ shape: "round", corner: "left" }).ok);
+    assert.ok(!parseAppearance({ shape: "square" }).ok);
+    assert.ok(!parseAppearance({ corner: "top" }).ok);
+  });
+
+  await test("what the widget fetches carries no allowlist, no ceilings and no owner", () => {
+    const cfg = widgetConfig(
+      {
+        key: "be_x",
+        enabled: true,
+        allowedOrigins: ["https://secret.example"],
+        maxCallsPerDay: 40,
+        maxCallSeconds: 300,
+        mode: "both",
+        appearance: { voiceLabel: "Ring us", whatsapp: false },
+      },
+      "https://wa.me/971501234567",
+    );
+    const json = JSON.stringify(cfg);
+    assert.ok(!json.includes("secret.example"));
+    assert.ok(!json.includes("maxCalls"));
+    assert.equal(cfg.mode, "both");
+    assert.equal(cfg.voiceLabel, "Ring us");
+    assert.equal(cfg.whatsappLink, null, "the venue switched the WhatsApp button off");
+  });
+
+  await test("the widget fetches its look and keeps the defaults if that fails", () => {
+    const js = fs.readFileSync(path.join(process.cwd(), "public", "embed.js"), "utf8");
+    assert.ok(js.includes('"/api/embed/" + encodeURIComponent(key) + "/config"'));
+    assert.ok(js.includes("the defaults are already on screen"));
+    // The mark is not configurable: no path in the bell comes from the config.
+    assert.ok(!/cfg\.(bell|icon|mark|svg)/.test(js));
+  });
+}
+
 console.log(
   failed === 0
     ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n`

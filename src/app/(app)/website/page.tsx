@@ -4,6 +4,7 @@ import { listCalls } from "@/lib/store";
 import { todayIn } from "@/lib/time";
 import { chatAllowed, voiceAllowed, WEBCHAT_DEFAULTS } from "@/lib/webchat";
 import { EMBED_DEFAULTS, embedSnippet } from "@/lib/embed";
+import { venueWhatsApp } from "@/lib/whatsapp";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import WidgetEditor from "./WidgetEditor";
 
@@ -49,6 +50,7 @@ export default async function WebsitePage({
   };
 
   const origin = process.env.PUBLIC_APP_ORIGIN || "https://app.belline.ai";
+  const whatsapp = await venueWhatsApp(location).catch(() => null);
 
   return (
     <>
@@ -74,6 +76,8 @@ export default async function WebsitePage({
           chat: embed?.maxChatsPerDay ?? WEBCHAT_DEFAULTS.maxChatsPerDay,
         }}
         minutesCount={location.subscription ? true : false}
+        appearance={embed?.appearance ?? {}}
+        whatsappNumber={whatsapp?.phoneE164 ?? null}
       />
     </>
   );

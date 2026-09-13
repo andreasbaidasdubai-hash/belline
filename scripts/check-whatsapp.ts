@@ -599,7 +599,109 @@ console.log("\nOur own number\n");
     assert.match((oursFirst as { error: string }).error, /ours comes first/);
   });
 
+  await test("the Twilio sandbox is opt-in, and needs a real number and the Twilio keys", async () => {
+    const { ensureTwilioSandboxAccount } = await import("../src/lib/whatsapp");
+    delete process.env.TWILIO_WHATSAPP_FROM;
+    assert.deepEqual(await ensureTwilioSandboxAccount(), { state: "skipped", why: "TWILIO_WHATSAPP_FROM not set" });
+    process.env.TWILIO_WHATSAPP_FROM = "415 523 8886";
+    assert.match((await ensureTwilioSandboxAccount() as { why: string }).why, /E\.164/);
+    process.env.TWILIO_WHATSAPP_FROM = "+14155238886";
+    delete process.env.TWILIO_ACCOUNT_SID;
+    assert.match((await ensureTwilioSandboxAccount() as { why: string }).why, /TWILIO_ACCOUNT_SID/);
+  });
+
   process.env = keep;
+}
+
+// ---------------------------------------------------------------------------
+console.log("\nA venue's number, self-serve\n");
+
+{
+  const { splitNumber, startNumber, finishNumber, resendCode, explain, provisioningMissing } =
+    await import("../src/lib/whatsapp-provision");
+  type Reply = import("../src/lib/whatsapp-provision").GraphReply;
+
+  /** A Meta that answers what it is told to, and remembers what it was asked. */
+  function fakeGraph(script: Record<string, Reply | ((body: Record<string, unknown>) => Reply)>) {
+    const calls: { path: string; body: Record<string, unknown> }[] = [];
+    return {
+      calls,
+      graph: {
+        async post(path: string, body: Record<string, unknown>) {
+          calls.push({ path, body });
+          const key = Object.keys(script).find((k) => path.endsWith(k)) ?? "";
+          const reply = script[key];
+          if (!reply) return { ok: false, status: 404, body: { error: { message: `no script for ${path}` } } };
+          return typeof reply === "function" ? reply(body) : reply;
+        },
+      },
+    };
+  }
+  const ok = (body: Record<string, unknown> = { success: true }): Reply => ({ ok: true, status: 200, body });
+  const fail = (message: string, code?: number): Reply => ({ ok: false, status: 400, body: { error: { message, code } } });
+
+  await test("a number is split the way Meta wants it, and only from countries we serve", () => {
+    assert.deepEqual(splitNumber("+971 50 123 4567"), { cc: "971", national: "501234567", e164: "+971501234567" });
+    assert.deepEqual(splitNumber("+41 79 123 45 67"), { cc: "41", national: "791234567", e164: "+41791234567" });
+    assert.equal(splitNumber("0501234567"), null, "no plus, no idea which country");
+    assert.equal(splitNumber("+9999 1234567"), null, "not a country code we serve");
+  });
+
+  await test("step one adds the number under our account and asks for the SMS", async () => {
+    const meta = fakeGraph({ "/phone_numbers": ok({ id: "1122334455" }), "/request_code": ok() });
+    const r = await startNumber({ wabaId: "WABA1", number: "+971501234567", displayName: "  Marina  Hair ", graph: meta.graph });
+    assert.deepEqual(r, { ok: true, phoneNumberId: "1122334455" });
+    assert.equal(meta.calls[0].path, "WABA1/phone_numbers");
+    assert.deepEqual(meta.calls[0].body, { cc: "971", phone_number: "501234567", verified_name: "Marina Hair" });
+    assert.equal(meta.calls[1].path, "1122334455/request_code");
+    assert.equal(meta.calls[1].body.code_method, "SMS");
+  });
+
+  await test("a number already on WhatsApp is refused with what to do about it", async () => {
+    const meta = fakeGraph({ "/phone_numbers": fail("Phone number is already registered", 100) });
+    const r = await startNumber({ wabaId: "W", number: "+971501234567", displayName: "Marina", graph: meta.graph });
+    assert.ok(!r.ok && /already on WhatsApp/.test(r.error));
+    assert.equal(meta.calls.length, 1, "no code was requested for a number that was not added");
+  });
+
+  await test("step two verifies the code, registers with a fresh PIN, and returns the PIN to be sealed", async () => {
+    let registeredWith: Record<string, unknown> | null = null;
+    const meta = fakeGraph({
+      "/verify_code": (body) => (body.code === "123456" ? ok() : fail("Invalid verification code")),
+      "/register": (body) => {
+        registeredWith = body;
+        return ok();
+      },
+    });
+    const wrong = await finishNumber({ phoneNumberId: "11", code: "000000", graph: meta.graph });
+    assert.ok(!wrong.ok && /isn't right/.test(wrong.error));
+    const right = await finishNumber({ phoneNumberId: "11", code: "12 34 56", graph: meta.graph });
+    assert.ok(right.ok);
+    assert.match(right.ok ? right.pin : "", /^\d{6}$/);
+    assert.equal((registeredWith as Record<string, unknown> | null)?.messaging_product, "whatsapp");
+    assert.equal((registeredWith as Record<string, unknown> | null)?.pin, right.ok ? right.pin : null);
+  });
+
+  await test("the code can be sent again, by SMS or by a call", async () => {
+    const meta = fakeGraph({ "/request_code": ok() });
+    assert.deepEqual(await resendCode("11", meta.graph, "VOICE"), { ok: true });
+    assert.equal(meta.calls[0].body.code_method, "VOICE");
+  });
+
+  await test("Meta's errors come out as sentences, never codes", () => {
+    assert.match(explain(fail("Error validating access token", 190)), /ours to fix/);
+    assert.match(explain(fail("Too many attempts", 4)), /slow down/);
+    assert.match(explain(fail("Something new")), /Meta said: Something new/);
+    assert.match(explain({ ok: false, status: 500, body: {} }), /didn't answer/);
+  });
+
+  await test("self-serve needs the business account id as well as the token", () => {
+    const keep2 = { ...process.env };
+    delete process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+    delete process.env.WHATSAPP_ACCESS_TOKEN;
+    assert.deepEqual(provisioningMissing(), ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_BUSINESS_ACCOUNT_ID"]);
+    process.env = keep2;
+  });
 }
 
 console.log(

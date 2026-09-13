@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { EmbedConfig, EmbedMode, Location } from "./types";
+import type { EmbedAppearance, EmbedConfig, EmbedMode, Location } from "./types";
 import { listCalls, upsertLocation } from "./store";
 import { todayIn } from "./time";
 
@@ -98,10 +98,12 @@ export function enableEmbed(
     Pick<EmbedConfig, "maxCallsPerDay" | "maxCallSeconds" | "maxChatsPerDay" | "maxMessagesPerChat">
   >,
   mode?: EmbedMode,
+  appearance?: EmbedAppearance,
 ): Location {
   const cleaned = origins.map(normaliseOrigin).filter((o): o is string => Boolean(o));
   const embed: EmbedConfig = {
     key: location.embed?.key ?? newEmbedKey(),
+    appearance: appearance ?? location.embed?.appearance,
     enabled: true,
     allowedOrigins: [...new Set(cleaned)],
     maxCallsPerDay: limits?.maxCallsPerDay ?? location.embed?.maxCallsPerDay ?? EMBED_DEFAULTS.maxCallsPerDay,
@@ -230,4 +232,35 @@ export function embedSnippet(location: Location, origin = "https://app.belline.a
   // this line — and a venue that chose chat should not have to discover an
   // attribute to get it.
   return `<script src="${origin}/embed.js" data-belline="${key}" data-mode="${mode}" async></script>`;
+}
+
+// ---------------------------------------------------------------------------
+// How it looks
+
+export {
+  APPEARANCE_RULES,
+  EMBED_PALETTE,
+  accentHex,
+  contrastRatio,
+  parseAppearance,
+  resolveAppearance,
+  textOn,
+  type AppearanceProblem,
+} from "./embed-look";
+import { resolveAppearance } from "./embed-look";
+
+/**
+ * What the widget fetches on load: the venue's choices and nothing else.
+ *
+ * Public by design — it is served to every visitor of the customer's site —
+ * so it is built from a whitelist. The origins list, the ceilings and the
+ * key's owner are not in it and must not be.
+ */
+export function widgetConfig(config: EmbedConfig, whatsappLink: string | null) {
+  const look = resolveAppearance(config.appearance);
+  return {
+    mode: modeOf(config) ?? "voice",
+    ...look,
+    whatsappLink: look.whatsapp ? whatsappLink : null,
+  };
 }

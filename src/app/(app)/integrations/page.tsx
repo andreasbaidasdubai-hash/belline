@@ -3,8 +3,10 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { seedIfEmpty } from "@/lib/seed";
 import { connectionState, googleConfigured } from "@/lib/integrations/google";
-import { venueWhatsApp } from "@/lib/whatsapp";
+import { venueWhatsApp, whatsappConfigured } from "@/lib/whatsapp";
+import { provisioningReady } from "@/lib/whatsapp-provision";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
+import ConnectWhatsApp from "./ConnectWhatsApp";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +110,23 @@ export default async function IntegrationsPage({
               thread is in your inbox. Put it on your website, your Google profile and your
               Instagram as &ldquo;WhatsApp us&rdquo;. Your own WhatsApp is untouched.
             </p>
+          ) : whatsappConfigured() && provisioningReady() && !location.demo?.enabled ? (
+            <>
+              <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
+                Belline can answer a WhatsApp number for {location.name} — a second number, so your
+                own WhatsApp stays exactly as it is. Type the number, type the code Meta texts to
+                it, done: about a minute, no Meta account, nothing to install.
+              </p>
+              <ConnectWhatsApp
+                locationId={location.id}
+                venueName={location.name}
+                pending={
+                  location.whatsappPending
+                    ? { number: location.whatsappPending.number, displayName: location.whatsappPending.displayName }
+                    : null
+                }
+              />
+            </>
           ) : (
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
               Belline can answer a WhatsApp number for {location.name} — a second number, so your

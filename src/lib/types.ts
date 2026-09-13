@@ -191,6 +191,8 @@ export interface Location {
    * a default they discover.
    */
   embed?: EmbedConfig;
+  /** A WhatsApp number waiting for its code — see whatsapp-provision.ts. */
+  whatsappPending?: WhatsAppPending;
   /**
    * A logo to show behind the call.
    *
@@ -282,9 +284,45 @@ export interface DemoConfig {
  * controls who can open it, and the two caps are the backstop for an
  * allowlisted page being refreshed by somebody bored on a slow afternoon.
  */
+/**
+ * How the widget looks and what its buttons say — the venue's choices,
+ * within the guidelines.
+ *
+ * What may change: the words on the buttons, the colour of the filled one,
+ * pill or circle, which corner. What may not: the mark. The bell in the
+ * button is what makes a Belline widget recognisable as one from across the
+ * room, on any site, and it stays.
+ */
+export interface EmbedAppearance {
+  voiceLabel?: string;
+  chatLabel?: string;
+  whatsappLabel?: string;
+  /** A name from the palette, or a hex the contrast rule allows. */
+  accent?: string;
+  shape?: "pill" | "round";
+  corner?: "right" | "left";
+  /** Show the WhatsApp button when the venue has a number. Default on. */
+  whatsapp?: boolean;
+}
+
+/**
+ * A WhatsApp number half-way to being Belle's.
+ *
+ * Self-serve provisioning is two steps a minute apart — Meta texts a code to
+ * the SIM, the owner types it — and this is what survives between them. It is
+ * cleared the moment the number is registered or the owner gives up.
+ */
+export interface WhatsAppPending {
+  number: string;
+  phoneNumberId: string;
+  displayName: string;
+  startedAt: string;
+}
+
 export interface EmbedConfig {
   /** Public. It sits in the customer's page source; see embed.ts. */
   key: string;
+  appearance?: EmbedAppearance;
   enabled: boolean;
   /** Origins allowed to frame it, scheme and host only. Empty allows nothing. */
   allowedOrigins: string[];

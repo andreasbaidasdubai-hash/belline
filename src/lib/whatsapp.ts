@@ -151,6 +151,8 @@ export async function connectVenueNumber(input: {
   number: string;
   phoneNumberId: string;
   aiEnabled?: boolean;
+  /** The two-step PIN the number was registered with, when we did the registering. */
+  pin?: string;
 }): Promise<{ ok: true; account: ChannelAccount } | { ok: false; error: string }> {
   const number = input.number.replace(/[^\d+]/g, "");
   if (!/^\+\d{8,15}$/.test(number)) {
@@ -183,6 +185,7 @@ export async function connectVenueNumber(input: {
       credentialsEnc: sealCredentials({
         accessToken: process.env.WHATSAPP_ACCESS_TOKEN!.trim(),
         phoneNumberId,
+        ...(input.pin ? { pin: input.pin } : {}),
       }),
       aiEnabled: input.aiEnabled ?? true,
     });
@@ -209,4 +212,58 @@ export async function disconnectVenueNumber(location: Location): Promise<boolean
   if (!account) return false;
   await setAccountStatus(location.tenantId, account.id, "paused");
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// The Twilio sandbox — Belle on WhatsApp today, for us
+// ---------------------------------------------------------------------------
+
+/**
+ * Twilio's WhatsApp sandbox, as a way to try Belle on WhatsApp before Meta
+ * has issued anything.
+ *
+ * The sandbox is a shared Twilio number that answers only to phones that have
+ * sent it "join <two words>" first, which makes it useless for the public and
+ * perfect for a test: no business verification, no Meta account, no waiting.
+ * Our Twilio adapter already speaks it — same webhook, form-encoded, signed
+ * with the auth token that is already in the environment.
+ *
+ * `TWILIO_WHATSAPP_FROM` is the sandbox number (+14155238886 for every
+ * account). Set it and our venue gets a WhatsApp account on that number at
+ * boot; unset it and nothing changes. Never the public button: `/whatsapp`
+ * only redirects for a Meta number, because a wa.me link to the sandbox
+ * would open a chat that ignores everyone who has not joined.
+ */
+export async function ensureTwilioSandboxAccount(): Promise<
+  { state: "connected"; number: string } | { state: "skipped"; why: string }
+> {
+  const raw = (process.env.TWILIO_WHATSAPP_FROM ?? "").replace(/[^\d+]/g, "");
+  if (!raw) return { state: "skipped", why: "TWILIO_WHATSAPP_FROM not set" };
+  if (!/^\+\d{8,15}$/.test(raw)) return { state: "skipped", why: "TWILIO_WHATSAPP_FROM is not an E.164 number" };
+  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+    return { state: "skipped", why: "no TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN" };
+  }
+  if (!isConfigured()) return { state: "skipped", why: "no DATABASE_URL" };
+
+  const venue = getLocation(BELLINE_LOCATION_ID);
+  if (!venue) return { state: "skipped", why: "our own venue is not seeded" };
+
+  try {
+    await migrateReception();
+    // No credentials sealed: the adapter falls back to the environment's
+    // account SID and token, which is exactly right for a number that is
+    // Twilio's rather than ours.
+    await saveAccount({
+      tenantId: venue.tenantId,
+      businessId: venue.businessId,
+      locationId: venue.id,
+      channel: "whatsapp",
+      provider: "twilio",
+      phoneE164: raw,
+      aiEnabled: true,
+    });
+    return { state: "connected", number: raw };
+  } catch (err) {
+    return { state: "skipped", why: err instanceof Error ? err.message : String(err) };
+  }
 }
