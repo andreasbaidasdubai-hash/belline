@@ -534,6 +534,58 @@ if (!isConfigured()) {
   await close();
 }
 
+// ---------------------------------------------------------------------------
+console.log("\nOur own number\n");
+
+{
+  const { whatsappNumber, whatsappMissing, whatsappConfigured, whatsappLink, ensureOwnWhatsAppAccount } =
+    await import("../src/lib/whatsapp");
+  const keep = { ...process.env };
+  const clear = () => {
+    for (const k of ["WHATSAPP_NUMBER", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_ACCESS_TOKEN", "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN"]) {
+      delete process.env[k];
+    }
+  };
+
+  await test("with nothing set, it says what is missing and links nowhere", () => {
+    clear();
+    assert.equal(whatsappConfigured(), false);
+    assert.equal(whatsappMissing().length, 5);
+    assert.equal(whatsappLink("hi"), null);
+  });
+
+  await test("the number has to be a real E.164 number", () => {
+    clear();
+    process.env.WHATSAPP_NUMBER = "05 5 123";
+    assert.equal(whatsappNumber(), null);
+    process.env.WHATSAPP_NUMBER = "+971 55 123 4567";
+    assert.equal(whatsappNumber(), "+971551234567");
+  });
+
+  await test("the link is Meta's own short link, without the plus, with the opener encoded", () => {
+    clear();
+    process.env.WHATSAPP_NUMBER = "+971551234567";
+    assert.equal(whatsappLink("Hi Belle"), "https://wa.me/971551234567?text=Hi%20Belle");
+    assert.equal(whatsappLink(), "https://wa.me/971551234567");
+  });
+
+  await test("configured means all five, and connecting without them is a skip, never a throw", async () => {
+    clear();
+    process.env.WHATSAPP_NUMBER = "+971551234567";
+    process.env.WHATSAPP_PHONE_NUMBER_ID = "123";
+    process.env.WHATSAPP_ACCESS_TOKEN = "tok";
+    process.env.WHATSAPP_APP_SECRET = "sec";
+    assert.equal(whatsappConfigured(), false);
+    const r = await ensureOwnWhatsAppAccount();
+    assert.equal(r.state, "skipped");
+    assert.match((r as { why: string }).why, /WHATSAPP_VERIFY_TOKEN/);
+    process.env.WHATSAPP_VERIFY_TOKEN = "v";
+    assert.equal(whatsappConfigured(), true);
+  });
+
+  process.env = keep;
+}
+
 console.log(
   failed === 0
     ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n`

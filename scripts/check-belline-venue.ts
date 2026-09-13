@@ -280,10 +280,16 @@ test("the book tool asks for an email here, and does not on a restaurant", () =>
   );
 });
 
-/** The next slot the diary actually offers. */
+/**
+ * The next slot the diary actually offers — from tomorrow.
+ *
+ * Today's first slot is offered by the diary but refused by the booking tool
+ * as "past" once the morning is under way, which made this suite fail after
+ * about nine o'clock Dubai time and pass before it. Tomorrow has no such hour.
+ */
 function nextSlot() {
   const today = todayIn(belline.timezone);
-  for (let i = 0; i < 14; i++) {
+  for (let i = 1; i < 15; i++) {
     const date = new Date(`${today}T12:00:00Z`);
     date.setUTCDate(date.getUTCDate() + i);
     const day = date.toISOString().slice(0, 10);

@@ -54,6 +54,9 @@ export default async function InternalLayout({ children }: { children: React.Rea
 
   const nav = [
     { href: "/sales", label: "Overview" },
+    // The businesses we have, before the ones we would like: every client,
+    // what they pay and use, and where the revenue goes from here.
+    { href: "/sales/clients", label: "Clients & revenue" },
     // Inbound, and above the outbound pipeline on purpose: somebody who asked
     // us for a call ten minutes ago is worth more than a thousand scraped rows.
     { href: "/sales/enquiries", label: "Enquiries" },

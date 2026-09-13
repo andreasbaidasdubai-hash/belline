@@ -290,7 +290,9 @@
       -->
       <p class="channel-note">
         WhatsApp is built and runs on the same engine, but it is not connected
-        yet — Meta's business verification has to clear first. We will not sell
+        yet — Meta's business verification has to clear first. The
+        <em>WhatsApp Belle</em> button on this page will take you straight to
+        her the day it does, and says so plainly until then. We will not sell
         it to you until it answers.
       </p>
     </div>
@@ -580,7 +582,9 @@
           </a>
         </div>
         <p class="fine" style="margin-top:14px">
-          Free, in your browser. Or ring
+          Free, in your browser. Or
+          <a class="dial-inline" href="https://app.belline.ai/whatsapp">WhatsApp Belle</a>,
+          or ring
           <a class="dial-inline" href="tel:+15717785920">+1 571 778 5920</a>
           — an international call from the UAE; your usual charges apply.
         </p>
@@ -645,6 +649,23 @@
   hier nichts zu öffnen (das Gespräch *ist* der eingebettete Rahmen), und ein
   Knopf, der nichts tut, ist schlimmer als keiner. site.js blendet ihn ein.
 -->
+<!--
+  Der dritte Weg herein. Der Knopf zeigt auf eine Seite der App, nicht auf
+  eine Nummer: die App weiß, ob die Nummer schon angeschlossen ist, diese
+  statische Seite nicht. Ist sie es, geht es direkt zu WhatsApp; ist sie es
+  nicht, sagt die Seite das — statt jemanden an eine Nummer zu schicken, an
+  der niemand antwortet.
+-->
+<a class="wa-fab" href="https://app.belline.ai/whatsapp" aria-label="WhatsApp Belle">
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z"
+          stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z"
+          fill="currentColor"/>
+  </svg>
+  <span class="wa-fab-say">WhatsApp Belle</span>
+</a>
+
 <button class="chat-fab" type="button" hidden
         data-chat="https://app.belline.ai/embed/be_belline_site/chat"
         aria-label="Write with Belle">

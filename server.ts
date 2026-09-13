@@ -20,6 +20,7 @@ import { mayStreamTo, watchLiveness, sweepLiveness, type Liveness } from "./src/
 import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voice/session";
+import { ensureOwnWhatsAppAccount } from "./src/lib/whatsapp";
 import { BrowserTransport, TwilioTransport } from "./src/lib/voice/transports";
 
 /**
@@ -47,6 +48,16 @@ const upgradeHandler = app.getUpgradeHandler();
 seedIfEmpty();
 const reconciled = reconcileStaleCalls();
 void warmGreetings();
+// Our own WhatsApp number, connected the moment its credentials exist. Logged
+// either way, because "is Belle on WhatsApp yet?" should be answerable from
+// the boot log without opening Meta's console.
+void ensureOwnWhatsAppAccount().then((r) =>
+  console.log(
+    r.state === "connected"
+      ? `[whatsapp] Belline's own number is connected: ${r.number}`
+      : `[whatsapp] not connected — ${r.why}`,
+  ),
+);
 
 // Built at image time. Absent in a bare dev checkout, where the marketing
 // pages are served by Next out of public/ instead.

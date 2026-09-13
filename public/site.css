@@ -948,6 +948,35 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .chat-fab:hover,
 .chat-fab:focus-visible { transform: translateY(-2px); }
 
+/* --- WhatsApp -----------------------------------------------------------------
+ *
+ * Über der Sprechblase, im selben Ton: Papier, Umriss, Messing. Kein
+ * WhatsApp-Grün — der Knopf gehört zu dieser Seite, nicht zu Meta, und ein
+ * fremdes Grün in der Ecke sähe aus wie ein Plugin. Die Glocke bleibt die
+ * einzige Tinte. */
+.wa-fab {
+  position: fixed;
+  right: 26px;
+  bottom: 158px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 22px 13px 19px;
+  border-radius: 999px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.94rem;
+  font-weight: 500;
+  box-shadow: 0 0 0 4px var(--paper), 0 12px 28px -14px rgba(20, 17, 13, 0.42);
+  transition: transform 0.16s ease;
+}
+.wa-fab svg { width: 23px; height: 23px; display: block; color: var(--brass); }
+.wa-fab:hover,
+.wa-fab:focus-visible { transform: translateY(-2px); }
+
 /* Der Chat braucht Höhe, das Gespräch nicht — ein Anruf ist eine Leiste, ein
    Chat ist ein Fenster. Auf dem Telefon nimmt er den ganzen Schirm: 380 px
    Chat in einem 390-px-Gerät sind kein Panel, sondern ein Versehen. */
@@ -978,7 +1007,8 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
  * "RESTAURANTS" allein in einer zweiten Zeile sah nach einem Fehler aus. */
 @media (max-width: 620px) {
   .bell-fab,
-  .chat-fab {
+  .chat-fab,
+  .wa-fab {
     right: 18px;
     width: 56px;
     height: 56px;
@@ -987,8 +1017,10 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   }
   .bell-fab { bottom: 18px; }
   .chat-fab { bottom: 84px; }
+  .wa-fab { bottom: 150px; }
   .bell-fab-say,
-  .chat-fab-say { display: none; }
+  .chat-fab-say,
+  .wa-fab-say { display: none; }
 
   /* `.call .call-tabs`, nicht `.call-tabs`: die Grundregel weiter unten
      setzt flex-wrap: wrap und stünde bei gleicher Spezifität später. */
@@ -1729,7 +1761,8 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   /* Zwei runde Knöpfe in derselben Ecke sind einer zu viel. Die Glocke tritt
      zurück, sobald die Leiste da ist — die Demo sitzt jetzt in ihr. */
   .buybar-on .bell-fab,
-  .buybar-on .chat-fab { display: none; }
+  .buybar-on .chat-fab,
+  .buybar-on .wa-fab { display: none; }
 
   /* Platz, damit die Leiste den Abschluss nicht überdeckt. */
   body { padding-bottom: 0; }

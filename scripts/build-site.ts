@@ -333,7 +333,18 @@ const BUBBLE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
  * Versteckt im Markup und von site.js eingeblendet: ohne JavaScript gibt es
  * nichts zu öffnen, und ein toter Knopf ist schlimmer als keiner.
  */
-const BELL_FAB = `<button class="chat-fab" type="button" hidden
+/** WhatsApp, drawn in the same hand as the bell and the bubble. */
+const WA = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z" fill="currentColor"/>
+  </svg>`;
+
+const BELL_FAB = `<a class="wa-fab" href="https://app.belline.ai/whatsapp" aria-label="WhatsApp Belle">
+  ${WA}
+  <span class="wa-fab-say">WhatsApp Belle</span>
+</a>
+
+<button class="chat-fab" type="button" hidden
         data-chat="https://app.belline.ai/embed/be_belline_site/chat"
         aria-label="Write with Belle">
   ${BUBBLE}
