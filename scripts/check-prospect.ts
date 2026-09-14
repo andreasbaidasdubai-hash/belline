@@ -10,7 +10,14 @@
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { assertPublicUrl, slugify, buildProspectLocation, type Extracted } from "../src/lib/prospect";
+import {
+  DEMO_WIDGET_LIMITS,
+  appOrigin,
+  assertPublicUrl,
+  slugify,
+  buildProspectLocation,
+  type Extracted,
+} from "../src/lib/prospect";
 
 let passed = 0;
 let failed = 0;
@@ -85,6 +92,18 @@ await test("is a capped demo line, never a live venue", () => {
   assert.equal(loc.demo?.enabled, true);
   assert.ok((loc.demo?.maxCallsPerDay ?? 0) <= 20);
   assert.match(loc.demo!.disclosure, /demonstration/i);
+});
+
+await test("carries its own website widget — chat and voice — capped, and framable only by the app", () => {
+  const loc = buildProspectLocation(found, "https://meridian.example", "meridian-dental");
+  assert.equal(loc.embed?.enabled, true);
+  assert.equal(loc.embed?.mode, "both");
+  assert.match(loc.embed!.key, /^be_/);
+  assert.deepEqual(loc.embed!.allowedOrigins, [appOrigin()]);
+  assert.equal(loc.embed!.maxChatsPerDay, DEMO_WIDGET_LIMITS.chatsPerDay);
+  assert.ok((loc.embed!.maxMessagesPerChat ?? 99) <= 20);
+  // Two demos never share a key: a key names the venue a chat is charged to.
+  assert.notEqual(loc.embed!.key, buildProspectLocation(found, "https://meridian.example", "meridian-dental").embed!.key);
 });
 
 await test("has no phone number, so nothing can dial it by accident", () => {

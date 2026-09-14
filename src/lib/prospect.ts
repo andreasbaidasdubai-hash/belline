@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import net from "node:net";
 import dns from "node:dns/promises";
 import Anthropic from "@anthropic-ai/sdk";
@@ -245,6 +246,46 @@ function weekdayHours(open: number, close: number): WeeklyHours {
   return week;
 }
 
+/** Where the app is served. The demo page frames the widget from here. */
+export function appOrigin(): string {
+  return (process.env.PUBLIC_APP_URL || "https://app.belline.ai").replace(/\/+$/, "");
+}
+
+/**
+ * What one demo may spend in a day, on us.
+ *
+ * A prospect trying it seriously has three or four conversations. Anything
+ * past these numbers is somebody sharing the link around, and they hear a
+ * polite limit rather than running up a bill.
+ */
+export const DEMO_WIDGET_LIMITS = { callsPerDay: 20, chatsPerDay: 30, messagesPerChat: 16 } as const;
+
+/**
+ * Make sure a demo's widget exists and may be framed by the page showing it.
+ *
+ * Demos built before the widget existed have none, and the page can be served
+ * from a preview or local host as well as the app's own. Both are fixed here,
+ * on view, rather than by a migration nobody remembers to run.
+ */
+export function ensureDemoWidget(location: Location, origin: string): Location {
+  if (!location.prospect) return location;
+  const current = location.embed;
+  const origins = new Set([...(current?.allowedOrigins ?? []), appOrigin(), origin.replace(/\/+$/, "")]);
+  const next = {
+    key: current?.key ?? `be_${crypto.randomBytes(9).toString("base64url")}`,
+    appearance: current?.appearance,
+    enabled: true,
+    mode: "both" as const,
+    allowedOrigins: [...origins],
+    maxCallsPerDay: DEMO_WIDGET_LIMITS.callsPerDay,
+    maxCallSeconds: 300,
+    maxChatsPerDay: DEMO_WIDGET_LIMITS.chatsPerDay,
+    maxMessagesPerChat: DEMO_WIDGET_LIMITS.messagesPerChat,
+  };
+  if (current && JSON.stringify(current) === JSON.stringify(next)) return location;
+  return upsertLocation({ ...location, embed: next });
+}
+
 export function buildProspectLocation(found: Extracted, sourceUrl: string, slug: string): Location {
   const isRestaurant = found.vertical === "restaurant";
 
@@ -346,6 +387,19 @@ export function buildProspectLocation(found: Extracted, sourceUrl: string, slug:
       maxCallSeconds: 300,
       clearBookingsDaily: true,
       disclosure: `This is a Belline demonstration built from ${found.name}'s public website. Nothing you book here is real.`,
+    },
+    // The website widget, as a prospect would install it: chat and voice. It
+    // is what the demo page shows, so the prospect tries the product rather
+    // than a recording of it. Capped hard — every conversation is on us.
+    embed: {
+      key: `be_${crypto.randomBytes(9).toString("base64url")}`,
+      enabled: true,
+      mode: "both",
+      allowedOrigins: [appOrigin()],
+      maxCallsPerDay: DEMO_WIDGET_LIMITS.callsPerDay,
+      maxCallSeconds: 300,
+      maxChatsPerDay: DEMO_WIDGET_LIMITS.chatsPerDay,
+      maxMessagesPerChat: DEMO_WIDGET_LIMITS.messagesPerChat,
     },
     prospect: {
       slug,
