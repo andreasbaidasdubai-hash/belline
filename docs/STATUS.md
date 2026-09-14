@@ -201,7 +201,11 @@ Worked phase by phase against `docs/strategy/belline-commercial-strategy-2026-09
 | Belle's knowledge | **Built** | The price and trial FAQs are generated from the catalogue at boot (`billing/speak.ts`, in words). Only live channels are named. |
 | `check:plans` | **Built** | 29 cases, covering doc prices and allowances per market, provisional marking, ladder ordering, annual maths, the managed track hidden, WhatsApp unsold, free-chat limits, selection rules and upgrade rules. Unit costs rebuilt from the rate card land within 7% of §1.3 on both bases. Prints the margin table and enforces 30% (bundle) / 45% (module) at typical use. |
 
-**Margins at typical use, lean basis (enforced):** every module 73–90%, every bundle 62–75%, in every market.
+**Margins at typical use (both enforced):**
+- **Lean basis, every market:** every module 73–90%, every bundle 62–75%.
+- **UAE-line basis, UAE only:** modules 49–81%, bundles 33–37%.
+
+**UAE price change (14 September 2026):** Phone Starter went from AED 149 to **AED 199**, and Phone Business from AED 349 to **AED 399**. At the doc's prices they left 32% and 44% on a UAE line, under the 45% floor; now they leave 49% and 51%. Every other UAE price is the doc's. Other markets are priced but closed; they are planned for 2–3 months after the UAE launch.
 
 **Still needs a figure or a decision from you**
 
@@ -214,12 +218,7 @@ Worked phase by phase against `docs/strategy/belline-commercial-strategy-2026-09
   | Everything S / B / P | £55/109/219 | A$99/199/399 | C$89/179/359 | $65/129/259 | S$89/179/359 | €59/119/239 | NZ$109/219/449 | CHF 249/499/899 |
   | Phone S / B / P | from doc | from doc | from doc | from doc | from doc | from doc | NZ$65/155/359 | from addendum |
 
-- **The UAE-line (conservative) margins fail the floor, and are reported rather than enforced** because they rest on three unverified rates: `TWILIO_INBOUND_AE`, `TWILIO_NUMBER_AE` and `ELEVENLABS_CREDIT_PRO`.
-  - Phone Starter comes out at 29–39% in every market, against the 45% floor (AED 149 is 32%). The $15 UAE number rental alone is most of that.
-  - Phone Business is at 42–44% in AE, AU, CA, US and NZ.
-  - Everything Business and Everything Pro in the US sit at 30% and 29%.
-
-  This basis applies UAE line costs to every market, so outside the UAE it overstates cost. Setting the three `RATE_*` values makes it a hard gate. Then either the UAE line comes in cheap, or Phone Starter needs a higher UAE price. That price is your call; the doc itself shows 33%.
+- **The UAE-line margins still rest on three estimated rates:** `TWILIO_INBOUND_AE`, `TWILIO_NUMBER_AE` and `ELEVENLABS_CREDIT_PRO`. Set the real figures as `RATE_*` in Railway once there is a carrier quote. `check:plans` then re-checks the UAE prices against them. The biggest single cost is the $15 a month UAE number.
 - **Stripe dashboard:**
   - Enter the head-office address and tax registrations before Stripe Tax can run.
   - Turn off plan switching in the customer portal: `customer.subscription.updated` is not mapped, so plan changes have to go through `/checkout`.

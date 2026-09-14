@@ -91,10 +91,11 @@ test("nothing that can be bought or quoted is unlimited", () => {
   }
 });
 
-test("the UAE prices are the strategy doc's (§2.2)", () => {
+test("the UAE prices are the strategy doc's (§2.2), with Phone Starter and Business raised for the UAE line", () => {
   const doc: Partial<Record<ProductId, number>> = {
     chat_free: 0, chat: 49, whatsapp: 99, web_voice: 99,
-    phone_starter: 149, phone_business: 349, phone_pro: 799,
+    // 149 and 349 in the doc; raised 14 Sep 2026 to clear the floor on a UAE line.
+    phone_starter: 199, phone_business: 399, phone_pro: 799,
     everything_starter: 249, everything_business: 499, everything_pro: 999,
   };
   for (const [id, aed] of Object.entries(doc)) {
@@ -118,7 +119,7 @@ test("the allowances are the strategy doc's (§2.2)", () => {
 
 test("each market's phone tiers are §2.4's, and Switzerland's the addendum's", () => {
   const doc: Partial<Record<Market, [number, number, number]>> = {
-    AE: [149, 349, 799], GB: [35, 79, 179], AU: [59, 139, 319], CA: [55, 129, 299],
+    AE: [199, 399, 799], GB: [35, 79, 179], AU: [59, 139, 319], CA: [55, 129, 299],
     US: [39, 95, 219], SG: [55, 129, 299], IE: [39, 89, 199], CH: [149, 349, 699],
   };
   for (const [m, tiers] of Object.entries(doc) as [Market, number[]][]) {
@@ -295,12 +296,14 @@ const floorOf = (kind: string) => (kind === "bundle" ? margin.MARGIN_FLOOR.bundl
 
 for (const basis of margin.BASIS_ORDER) {
   const unverified = margin.unverifiedLines(basis);
-  console.log(`\n  ${margin.BASES[basis].label}${unverified.length ? `  \x1b[33m(provisional: ${unverified.join(", ")} unverified)\x1b[0m` : ""}\n`);
-  console.log(`  ${"".padEnd(30)}${MARKET_CODES.map((m) => m.padStart(9)).join("")}`);
+  const scope = margin.BASES[basis].markets;
+  const markets = scope === "all" ? MARKET_CODES : scope;
+  console.log(`\n  ${margin.BASES[basis].label}${unverified.length ? `  \x1b[33m(estimated: ${unverified.join(", ")})\x1b[0m` : ""}\n`);
+  console.log(`  ${"".padEnd(30)}${markets.map((m) => m.padStart(9)).join("")}`);
 
   const under: string[] = [];
   for (const p of priced) {
-    const cells = MARKET_CODES.map((m) => {
+    const cells = markets.map((m) => {
       const typical = margin.marginOf(p, m, basis, margin.TYPICAL_USE).margin!;
       const full = margin.marginOf(p, m, basis, 1).margin!;
       if (typical < floorOf(p.kind)) under.push(`${p.name} in ${m}: ${Math.round(typical * 100)}% (floor ${floorOf(p.kind) * 100}%)`);
@@ -313,19 +316,12 @@ for (const basis of margin.BASIS_ORDER) {
   console.log(`  ${"Chat Receptionist — Free".padEnd(30)} costs $${margin.marginOf(free, "AE", basis, 1).costUsd.toFixed(2)} a month per account at full use`);
   console.log("");
 
-  if (unverified.length === 0) {
-    test(`${basis}: every bundle clears 30% and every module 45% at typical use, in every market`, () => {
-      assert.deepEqual(under, []);
-    });
-  } else {
-    test(`${basis}: reported, not enforced, while it rests on unverified rates (${under.length} under the floor)`, () => {
-      for (const line of under) console.log(`      \x1b[33m⚠\x1b[0m ${line}`);
-      assert.ok(true);
-    });
-  }
+  test(`${basis}: every bundle clears 30% and every module 45% at typical use, in ${scope === "all" ? "every market" : markets.join(", ")}`, () => {
+    assert.deepEqual(under, []);
+  });
 }
 
-test("a basis becomes a hard gate once its rates are verified", () => {
+test("a real carrier quote replaces an estimated rate without a deploy", () => {
   const lines = margin.unverifiedLines("conservative");
   for (const key of lines) process.env[`RATE_${key}`] = "0.01";
   try {

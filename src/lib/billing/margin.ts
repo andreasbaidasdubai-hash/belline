@@ -12,9 +12,10 @@ import { toUsd, type Market } from "../markets";
  * vendor price change moves the margin table without anybody re-typing it.
  *
  * `scripts/check-plans.ts` fails the build if a bundle's margin at typical use
- * falls under 30% or a module's under 45%. A basis resting on an unverified
- * rate — the UAE line, today — is reported rather than enforced, and becomes a
- * hard gate the moment its rates are verified or set from the environment.
+ * falls under 30% or a module's under 45% — on the lean basis in every
+ * market, and on the conservative basis in the UAE, the launch market, whose
+ * line it describes. Its UAE rates are still estimates; the check prints which,
+ * and setting RATE_<KEY> replaces them.
  */
 
 export type Basis = "lean" | "conservative";
@@ -45,10 +46,20 @@ const TEMPLATE_SHARE: Record<Basis, number> = { lean: 0.4, conservative: 0.7 };
 
 export const BASES: Record<
   Basis,
-  { label: string; inbound: string; number: string; ttsCredit: string; voiceModel: string; textModel: string }
+  {
+    label: string;
+    /** The markets this basis describes. The UAE line is the UAE's cost, and nobody else's. */
+    markets: Market[] | "all";
+    inbound: string;
+    number: string;
+    ttsCredit: string;
+    voiceModel: string;
+    textModel: string;
+  }
 > = {
   lean: {
     label: "Lean — US number, Sonnet voice, Haiku text, ElevenLabs Scale",
+    markets: "all",
     inbound: "TWILIO_INBOUND_US",
     number: "TWILIO_NUMBER_US",
     ttsCredit: "ELEVENLABS_CREDIT_SCALE",
@@ -57,6 +68,7 @@ export const BASES: Record<
   },
   conservative: {
     label: "Conservative — UAE line, Sonnet everywhere, ElevenLabs Pro",
+    markets: ["AE"],
     inbound: "TWILIO_INBOUND_AE",
     number: "TWILIO_NUMBER_AE",
     ttsCredit: "ELEVENLABS_CREDIT_PRO",

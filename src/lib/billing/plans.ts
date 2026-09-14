@@ -302,7 +302,9 @@ export const PRODUCTS: Product[] = [
     summary: "For a single venue that wants the phone answered properly.",
     status: "live",
     allowances: { phone: 200 },
-    prices: price(149, 35, 59, 55, 39, 55, 39, 65, 149),
+    // AED 199, not the doc's 149: on a UAE line with a $15 number, 149 left
+    // 32% at typical use against the 45% floor (decision, 14 Sep 2026).
+    prices: price(199, 35, 59, 55, 39, 55, 39, 65, 149),
     provisional: ["NZ"],
     features: PHONE_BASE,
   },
@@ -313,7 +315,8 @@ export const PRODUCTS: Product[] = [
     summary: "For a venue where the phone is genuinely busy.",
     status: "live",
     allowances: { phone: 600 },
-    prices: price(349, 79, 139, 129, 95, 129, 89, 155, 349),
+    // AED 399, not the doc's 349, for the same reason: 349 left 44%.
+    prices: price(399, 79, 139, 129, 95, 129, 89, 155, 349),
     provisional: ["NZ"],
     features: [...PHONE_BASE, ...PHONE_BUSINESS],
   },

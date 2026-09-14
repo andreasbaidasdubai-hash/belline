@@ -102,7 +102,7 @@ await test("the annual per-month figure is a price, not a minor-unit count, and 
 
 await test("a lookup key names the product, market, cycle and amount — so a new price is a new key", () => {
   assert.equal(lookupKeyFor("phone_starter", "GB", "monthly"), "belline_phone_starter_gb_monthly_3500");
-  assert.equal(lookupKeyFor("phone_starter", "AE", "annual"), "belline_phone_starter_ae_annual_149000");
+  assert.equal(lookupKeyFor("phone_starter", "AE", "annual"), "belline_phone_starter_ae_annual_199000");
 });
 
 const params = checkoutParams(
