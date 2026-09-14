@@ -13,7 +13,7 @@ import {
   saveSession,
   saveUser,
 } from "./store";
-import { DEFAULT_TENANT_ID, userCanSeeLocation } from "./tenancy";
+import { BELLINE_TENANT_ID, DEFAULT_TENANT_ID, userCanSeeLocation } from "./tenancy";
 
 /**
  * Authentication.
@@ -343,6 +343,20 @@ export function canManageUsers(user: User): boolean {
 export function isBellineStaff(user: User): boolean {
   if (user.role !== "owner") return false;
   return getTenant(user.tenantId)?.internal === true;
+}
+
+/**
+ * Whose conversations this person reads.
+ *
+ * Their own tenant's, always. Belline staff also read Belline's own inbox —
+ * WhatsApp and website chat on our number — which is a tenant of its own, so
+ * a staff login on any other internal tenant saw an empty inbox while the
+ * chats sat stored under `tnt_belline`. Nobody else is ever given a second.
+ */
+export function inboxTenants(user: User): string[] {
+  return isBellineStaff(user) && user.tenantId !== BELLINE_TENANT_ID
+    ? [user.tenantId, BELLINE_TENANT_ID]
+    : [user.tenantId];
 }
 
 // ---------------------------------------------------------------------------

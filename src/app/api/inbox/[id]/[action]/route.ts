@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
-import { canSeeLocation } from "@/lib/auth";
+import { canSeeLocation, inboxTenants } from "@/lib/auth";
 import {
   getAccount,
   getConversation,
@@ -41,18 +41,27 @@ export async function POST(
     return NextResponse.json({ error: "Unknown conversation." }, { status: 404 });
   }
 
-  const conversation = await getConversation(user.tenantId, conversationId);
+  // Their own tenant first; Belline staff also answer Belline's own inbox,
+  // which is another tenant. inboxTenants gives nobody else a second one.
+  let tenantId = user.tenantId;
+  let conversation = await getConversation(tenantId, conversationId);
+  for (const other of inboxTenants(user)) {
+    if (conversation) break;
+    tenantId = other;
+    conversation = await getConversation(tenantId, conversationId);
+  }
   if (!conversation) {
     return NextResponse.json({ error: "Unknown conversation." }, { status: 404 });
   }
   // Tenant is already enforced by the lookup; this is the venue-level check,
-  // for a member of staff who can only see one branch.
-  if (conversation.locationId && !canSeeLocation(user, conversation.locationId)) {
+  // for a member of staff who can only see one branch. Belline's own venue is
+  // internal and outside the staff member's tenant, so it is skipped there.
+  if (tenantId === user.tenantId && conversation.locationId && !canSeeLocation(user, conversation.locationId)) {
     return NextResponse.json({ error: "Not your venue." }, { status: 403 });
   }
   switch (action) {
     case "takeover": {
-      const moved = await transition(user.tenantId, conversationId, "HUMAN_ACTIVE", {
+      const moved = await transition(tenantId, conversationId, "HUMAN_ACTIVE", {
         expect: ["AI_ACTIVE", "HANDOFF_REQUESTED"],
         userId: user.id,
       });
@@ -63,14 +72,14 @@ export async function POST(
         );
       }
       await recordMessage({
-        tenantId: user.tenantId,
+        tenantId: tenantId,
         conversationId,
         sender: "system",
         direction: "out",
         body: `${user.name} took over. Belline has stopped answering.`,
       });
       await track({
-        tenantId: user.tenantId,
+        tenantId: tenantId,
         businessId: conversation.businessId,
         channel: conversation.channel,
         conversationId,
@@ -80,21 +89,21 @@ export async function POST(
     }
 
     case "release": {
-      const moved = await transition(user.tenantId, conversationId, "AI_ACTIVE", {
+      const moved = await transition(tenantId, conversationId, "AI_ACTIVE", {
         expect: ["HUMAN_ACTIVE"],
       });
       if (!moved) {
         return NextResponse.json({ error: "It is not yours to hand back." }, { status: 409 });
       }
       await recordMessage({
-        tenantId: user.tenantId,
+        tenantId: tenantId,
         conversationId,
         sender: "system",
         direction: "out",
         body: `${user.name} handed it back to Belline.`,
       });
       await track({
-        tenantId: user.tenantId,
+        tenantId: tenantId,
         businessId: conversation.businessId,
         channel: conversation.channel,
         conversationId,
@@ -104,7 +113,7 @@ export async function POST(
     }
 
     case "close": {
-      await transition(user.tenantId, conversationId, "CLOSED", {
+      await transition(tenantId, conversationId, "CLOSED", {
         expect: ["AI_ACTIVE", "HANDOFF_REQUESTED", "HUMAN_ACTIVE"],
       });
       // The venue's own episode record, finished. A conversation has no moment
@@ -115,7 +124,7 @@ export async function POST(
         closeEpisode(conversation.callId, `Closed by ${user.name}.`);
       }
       await track({
-        tenantId: user.tenantId,
+        tenantId: tenantId,
         businessId: conversation.businessId,
         channel: conversation.channel,
         conversationId,
@@ -140,9 +149,9 @@ export async function POST(
       if (!text) return NextResponse.json({ error: "Nothing to send." }, { status: 422 });
 
       const account = conversation.channelAccountId
-        ? await getAccount(user.tenantId, conversation.channelAccountId)
+        ? await getAccount(tenantId, conversation.channelAccountId)
         : undefined;
-      const customer = await getCustomer(user.tenantId, conversation.customerId);
+      const customer = await getCustomer(tenantId, conversation.customerId);
       if (!account || !customer) {
         return NextResponse.json({ error: "That number is no longer connected." }, { status: 409 });
       }
@@ -151,7 +160,7 @@ export async function POST(
       // a message that went out and was never recorded is invisible to the
       // next person who opens the thread.
       const stored = await recordMessage({
-        tenantId: user.tenantId,
+        tenantId: tenantId,
         conversationId,
         sender: "human",
         direction: "out",
@@ -161,7 +170,7 @@ export async function POST(
       });
 
       const adapter = ADAPTERS[account.provider];
-      const sealed = await accountCredentials(user.tenantId, account.id);
+      const sealed = await accountCredentials(tenantId, account.id);
       const result = await adapter.send(
         account,
         sealed ? openCredentials(sealed) : {},
@@ -172,9 +181,9 @@ export async function POST(
       if (!result.ok) {
         return NextResponse.json({ error: result.detail }, { status: 502 });
       }
-      await markSent(user.tenantId, stored.message.id, result.providerMessageId);
+      await markSent(tenantId, stored.message.id, result.providerMessageId);
       await track({
-        tenantId: user.tenantId,
+        tenantId: tenantId,
         businessId: conversation.businessId,
         channel: conversation.channel,
         conversationId,

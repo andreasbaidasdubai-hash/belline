@@ -1,7 +1,5 @@
 import { requireUser } from "@/lib/auth-server";
-import { isBellineStaff, visibleLocations } from "@/lib/auth";
-import { listLocations } from "@/lib/store";
-import { userCanSeeLocation } from "@/lib/tenancy";
+import { inboxTenants, visibleLocations } from "@/lib/auth";
 import { isConfigured } from "@/lib/db/client";
 import { listConversations, listMessages, getCustomer } from "@/lib/reception/repo";
 import { seedIfEmpty } from "@/lib/seed";
@@ -57,23 +55,36 @@ export default async function InboxPage({
     );
   }
 
-  // Belline's own venue is internal and hidden from every list, so its
-  // WhatsApp and website chats were stored but never shown. Belline staff see
-  // it; nobody else does — the tenant check in userCanSeeLocation still applies.
-  const venues = isBellineStaff(user)
-    ? listLocations({ includeInternal: true }).filter((l) => userCanSeeLocation(user, l))
-    : visibleLocations(user);
-  const mine = venues.map((l) => l.id);
-  const conversations = await listConversations(user.tenantId, { locationIds: mine, limit: 60 });
+  // Belline staff read two inboxes: their own account's, and Belline's own —
+  // WhatsApp and website chat on our number — which lives in a tenant of its
+  // own, on an internal venue hidden from every list. Everyone else reads one.
+  const mine = visibleLocations(user).map((l) => l.id);
+  const tenantOf = new Map<number, string>();
+  const conversations = (
+    await Promise.all(
+      inboxTenants(user).map(async (tenantId) => {
+        const rows = await listConversations(tenantId, {
+          locationIds: tenantId === user.tenantId ? mine : undefined,
+          limit: 60,
+        });
+        for (const c of rows) tenantOf.set(c.id, tenantId);
+        return rows;
+      }),
+    )
+  )
+    .flat()
+    .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
+    .slice(0, 60);
+  const tenantFor = (c: Conversation) => tenantOf.get(c.id) ?? user.tenantId;
 
   const selected: Conversation | undefined =
     conversations.find((c) => String(c.id) === id) ?? conversations[0];
 
   const messages: Message[] = selected
-    ? await listMessages(user.tenantId, selected.id)
+    ? await listMessages(tenantFor(selected), selected.id)
     : [];
   const customer: Customer | undefined = selected
-    ? await getCustomer(user.tenantId, selected.customerId)
+    ? await getCustomer(tenantFor(selected), selected.customerId)
     : undefined;
 
   return (
@@ -89,7 +100,7 @@ export default async function InboxPage({
       names={Object.fromEntries(
         await Promise.all(
           conversations.map(async (c) => {
-            const person = await getCustomer(user.tenantId, c.customerId);
+            const person = await getCustomer(tenantFor(c), c.customerId);
             return [
               c.id,
               person
@@ -102,7 +113,7 @@ export default async function InboxPage({
       previews={Object.fromEntries(
         await Promise.all(
           conversations.map(async (c) => {
-            const last = (await listMessages(user.tenantId, c.id, 400)).at(-1);
+            const last = (await listMessages(tenantFor(c), c.id, 400)).at(-1);
             return [c.id, last?.body?.slice(0, 90) ?? ""] as const;
           }),
         ),

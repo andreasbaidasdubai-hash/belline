@@ -319,6 +319,20 @@ test("Belline staff is a tenant, not a role", async () => {
   assert.equal(isBellineStaff({ ...ours, role: "manager" }), false, "a manager of ours is not staff of the console");
 });
 
+test("only Belline staff read Belline's own inbox as well as their own", async () => {
+  const { inboxTenants } = await import("../src/lib/auth");
+  const { findUserByEmail } = await import("../src/lib/store");
+  const { DEFAULT_TENANT_ID, BELLINE_TENANT_ID } = await import("../src/lib/tenancy");
+
+  const a = findUserByEmail("a@tenant-a.test")!;
+  assert.deepEqual(inboxTenants(a), [a.tenantId], "a customer was given a second inbox");
+
+  const ours = { ...a, tenantId: DEFAULT_TENANT_ID };
+  assert.deepEqual(inboxTenants(ours), [DEFAULT_TENANT_ID, BELLINE_TENANT_ID], "our owner cannot see Belle's WhatsApp");
+  assert.deepEqual(inboxTenants({ ...ours, role: "manager" }), [DEFAULT_TENANT_ID], "a manager of ours read Belline's inbox");
+  assert.deepEqual(inboxTenants({ ...ours, tenantId: BELLINE_TENANT_ID }), [BELLINE_TENANT_ID], "Belline's inbox listed twice");
+});
+
 await queue;
 
 console.log(
