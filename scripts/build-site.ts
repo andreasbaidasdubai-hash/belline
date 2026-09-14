@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { VERTICALS, type Vertical } from "./site-content";
+import { applyPricing, trialSentence } from "./site-pricing";
 
 const SOURCE = "public";
 const OUT = "site";
@@ -242,6 +243,11 @@ for (const page of pages) {
     '<script type="application/json" id="call-scenes"></script>',
     `<script type="application/json" id="call-scenes">${JSON.stringify(LANDING_SCENES)}</script>`,
   );
+
+  // Pricing is generated from src/lib/billing/plans.ts. Re-applied here so a
+  // catalogue change cannot ship with yesterday's prices even if nobody ran
+  // `npm run pricing`; check-billing fails if public/landing.html is stale.
+  if (page === "landing.html") html = applyPricing(html);
 
   html = repoint(fillLegal(html));
 
@@ -571,7 +577,7 @@ ${CALL_PANEL}
         </div>
         <div>
           <h4>14 days free</h4>
-          <p>Thirty minutes of live calls, no card, nothing charged. Standard onboarding is free.</p>
+          <p>${trialSentence()}</p>
         </div>
       </div>
     </div>

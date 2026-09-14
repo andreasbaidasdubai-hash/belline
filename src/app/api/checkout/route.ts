@@ -2,22 +2,25 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { canManageUsers } from "@/lib/auth";
 import { listLocationsFor } from "@/lib/store";
-import { createCheckout, stripeEnabled } from "@/lib/billing/stripe";
-import { PLANS, type BillingCycle, type PlanId } from "@/lib/billing/plans";
+import { activateFree, createCheckout, stripeEnabled } from "@/lib/billing/stripe";
+import { LEGACY_TO_BUNDLE, checkSelection, isFreeSelection, type BillingCycle } from "@/lib/billing/plans";
+import { subscriptionMarket } from "@/lib/billing/usage";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Start a checkout.
+ * Choose a plan.
  *
- * Returns a URL for the browser to follow rather than redirecting, so a failure
- * is a message on the page the customer is already looking at instead of a
- * redirect to a Stripe error they cannot read.
+ * The one place a card is asked for — never at signup (§2.3, confirmed: the
+ * trial stays card-free). Returns a URL for the browser to follow rather than
+ * redirecting, so a failure is a message on the page the customer is already
+ * looking at.
  *
- * The return URLs are built here from the request's own origin and never taken
- * from the request body. A `successUrl` a caller can set is an open redirect,
- * and an open redirect on the page that says "you have paid" is a good day for
- * somebody phishing our customers.
+ * The free chat never reaches Stripe: it is switched on here, directly.
+ *
+ * The return URLs are built from the request's own origin and never taken
+ * from the body. A `successUrl` a caller can set is an open redirect, on the
+ * page that says "you have paid".
  */
 export async function POST(req: Request) {
   const auth = await requireApiUser();
@@ -27,6 +30,41 @@ export async function POST(req: Request) {
   // Money is a manager's concern, the same rule the billing page already uses.
   if (!canManageUsers(user)) {
     return NextResponse.json({ error: "Only an owner can do that." }, { status: 403 });
+  }
+
+  let body: { products?: unknown; bundle?: unknown; planId?: unknown; cycle?: unknown; locationId?: unknown };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    body = {};
+  }
+
+  const venues = listLocationsFor(user.tenantId);
+  const location =
+    typeof body.locationId === "string" ? venues.find((l) => l.id === body.locationId) : venues[0];
+  if (!location) {
+    return NextResponse.json({ error: "No venue to subscribe." }, { status: 404 });
+  }
+
+  // Prices are the venue's market's, never the request's.
+  const market = subscriptionMarket(location.subscription);
+  const raw = Array.isArray(body.products)
+    ? body.products
+    : typeof body.bundle === "string"
+      ? [body.bundle]
+      : typeof body.planId === "string" && body.planId in LEGACY_TO_BUNDLE
+        ? [LEGACY_TO_BUNDLE[body.planId as keyof typeof LEGACY_TO_BUNDLE]]
+        : [];
+  const selection = checkSelection(raw, market);
+  if (!selection.ok) {
+    return NextResponse.json({ error: selection.error }, { status: 400 });
+  }
+  const cycle: BillingCycle = body.cycle === "annual" ? "annual" : "monthly";
+
+  if (isFreeSelection(selection.products)) {
+    const done = activateFree(location, market);
+    if (!done.ok) return NextResponse.json({ error: done.error }, { status: 409 });
+    return NextResponse.json({ ok: true, url: "/billing" });
   }
 
   if (!stripeEnabled()) {
@@ -39,31 +77,13 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { planId?: string; cycle?: string; locationId?: string };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    body = {};
-  }
-
-  const planId = (PLANS.find((p) => p.id === body.planId)?.id ?? PLANS[0].id) as PlanId;
-  const cycle: BillingCycle = body.cycle === "annual" ? "annual" : "monthly";
-
-  const venues = listLocationsFor(user.tenantId);
-  const location = body.locationId
-    ? venues.find((l) => l.id === body.locationId)
-    : venues[0];
-
-  if (!location) {
-    return NextResponse.json({ error: "No venue to subscribe." }, { status: 404 });
-  }
-
   const origin = new URL(req.url).origin;
 
   try {
     const { url } = await createCheckout({
       location,
-      planId,
+      products: selection.products,
+      market,
       cycle,
       email: user.email,
       successUrl: `${origin}/billing?paid=1`,
@@ -72,9 +92,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, url });
   } catch (err) {
     console.error("[checkout]", err);
-    return NextResponse.json(
-      { error: "Could not open checkout. Try again in a moment." },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: "Could not open checkout. Try again in a moment." }, { status: 502 });
   }
 }

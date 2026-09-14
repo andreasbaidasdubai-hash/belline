@@ -12,6 +12,8 @@
  * All money is in fils, like the rest of billing.
  */
 
+import { priceOf } from "../billing/plans";
+
 export interface Assumptions {
   /** How far ahead, in months. */
   months: number;
@@ -118,7 +120,8 @@ export function defaultAssumptions(book: {
     trialGrowth: 0.1,
     trialConversion: 0.35,
     monthlyChurn: 0.03,
-    arpaFils: book.arpaFils ?? 365 * 100,
+    // Until somebody pays: the bundle the website marks as the one most take.
+    arpaFils: book.arpaFils ?? priceOf("everything_business", "AE"),
     minutesPerVenue: book.minutesPerVenue ?? 120,
     vendorCostPerMinuteFils: book.costPerMinuteFils ?? 40,
     fixedCostsFils: 0,

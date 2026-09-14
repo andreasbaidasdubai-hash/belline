@@ -1,0 +1,174 @@
+/**
+ * The countries Belline sells in, and the money it sells in there.
+ *
+ * Deliberately small for now: currency, how a price is written, and whether
+ * the market is open. Phase 5 of the commercial build-out grows this into the
+ * whole per-country definition (speech locale, emergency number, disclosure
+ * rules, outreach compliance). It lives in its own file from the start so
+ * that growth is additions, not a move.
+ *
+ * Pure data and pure functions — the checkout renders in the browser and
+ * imports this.
+ */
+
+export type Market = "AE" | "GB" | "AU" | "CA" | "US" | "SG" | "IE" | "NZ" | "CH";
+
+export interface MarketInfo {
+  code: Market;
+  name: string;
+  currency: "AED" | "GBP" | "AUD" | "CAD" | "USD" | "SGD" | "EUR" | "NZD" | "CHF";
+  /** Written before the number: "AED 249", "£35", "A$59". */
+  prefix: string;
+  /** The currency as Belle says it: "two hundred and forty-nine dirhams". */
+  spoken: { one: string; many: string };
+  /**
+   * `live` — we can take a customer here today: a number, a checkout, support.
+   * `not-yet` — priced and ready in the catalogue, never shown on a public page.
+   */
+  status: "live" | "not-yet";
+  gap?: string;
+  /**
+   * US dollars per one unit of the currency, for internal arithmetic only:
+   * margins, and the client book's totals. Never used to price anything a
+   * customer sees — prices are set per market, not converted.
+   */
+  planningUsdRate: number;
+}
+
+/** When the planning exchange rates below were last looked at. */
+export const PLANNING_RATES_DATE = "2026-09-14";
+
+const NOT_OPEN =
+  "No local numbers bought, no outreach running and no support hours in this timezone yet — " +
+  "Phase 4 (numbers) and Phase 5 (markets) of the commercial build-out open it.";
+
+export const MARKETS: Record<Market, MarketInfo> = {
+  AE: {
+    code: "AE",
+    name: "United Arab Emirates",
+    currency: "AED",
+    prefix: "AED ",
+    spoken: { one: "dirham", many: "dirhams" },
+    status: "live",
+    // Pegged at 3.6725 since 1997, so this one is exact.
+    planningUsdRate: 1 / 3.6725,
+  },
+  GB: {
+    code: "GB",
+    name: "United Kingdom",
+    currency: "GBP",
+    prefix: "£",
+    spoken: { one: "pound", many: "pounds" },
+    status: "not-yet",
+    gap: NOT_OPEN,
+    planningUsdRate: 1.3,
+  },
+  AU: {
+    code: "AU",
+    name: "Australia",
+    currency: "AUD",
+    prefix: "A$",
+    spoken: { one: "Australian dollar", many: "Australian dollars" },
+    status: "not-yet",
+    gap: NOT_OPEN,
+    planningUsdRate: 0.66,
+  },
+  CA: {
+    code: "CA",
+    name: "Canada",
+    currency: "CAD",
+    prefix: "C$",
+    spoken: { one: "Canadian dollar", many: "Canadian dollars" },
+    status: "not-yet",
+    gap: NOT_OPEN,
+    planningUsdRate: 0.73,
+  },
+  US: {
+    code: "US",
+    name: "United States",
+    currency: "USD",
+    prefix: "$",
+    spoken: { one: "dollar", many: "dollars" },
+    status: "not-yet",
+    gap: NOT_OPEN,
+    planningUsdRate: 1,
+  },
+  SG: {
+    code: "SG",
+    name: "Singapore",
+    currency: "SGD",
+    prefix: "S$",
+    spoken: { one: "Singapore dollar", many: "Singapore dollars" },
+    status: "not-yet",
+    gap: NOT_OPEN,
+    planningUsdRate: 0.77,
+  },
+  IE: {
+    code: "IE",
+    name: "Ireland",
+    currency: "EUR",
+    prefix: "€",
+    spoken: { one: "euro", many: "euros" },
+    status: "not-yet",
+    gap: NOT_OPEN,
+    planningUsdRate: 1.12,
+  },
+  NZ: {
+    code: "NZ",
+    name: "New Zealand",
+    currency: "NZD",
+    prefix: "NZ$",
+    spoken: { one: "New Zealand dollar", many: "New Zealand dollars" },
+    status: "not-yet",
+    gap: NOT_OPEN,
+    planningUsdRate: 0.6,
+  },
+  CH: {
+    code: "CH",
+    name: "Switzerland",
+    currency: "CHF",
+    prefix: "CHF ",
+    spoken: { one: "franc", many: "francs" },
+    status: "not-yet",
+    gap:
+      "A founder-network market, not an agent one (addendum §5): no outreach agent, and Swiss " +
+      "German speech recognition is not built.",
+    planningUsdRate: 1.2,
+  },
+};
+
+export const MARKET_CODES = Object.keys(MARKETS) as Market[];
+
+export function isMarket(value: unknown): value is Market {
+  return typeof value === "string" && value in MARKETS;
+}
+
+/** The market a subscription or a query string names, or the UAE. */
+export function marketOf(value: unknown): Market {
+  return isMarket(value) ? value : "AE";
+}
+
+export function liveMarkets(): Market[] {
+  return MARKET_CODES.filter((m) => MARKETS[m].status === "live");
+}
+
+/**
+ * Write an amount in minor units as a price.
+ *
+ * Whole numbers print without decimals, because "AED 249.00" reads like an
+ * invoice line and a pricing page is not one. Anything fractional keeps both
+ * digits.
+ */
+export function formatMoney(minor: number, market: Market): string {
+  const info = MARKETS[market];
+  const major = minor / 100;
+  const digits = Number.isInteger(major)
+    ? major.toLocaleString("en-GB")
+    : major.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${info.prefix}${digits}`;
+}
+
+/** Minor units of a market's currency, in US dollars. Internal arithmetic only. */
+export function toUsd(minor: number, market: Market): number {
+  return (minor / 100) * MARKETS[market].planningUsdRate;
+}

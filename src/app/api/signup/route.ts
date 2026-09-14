@@ -4,6 +4,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import { SESSION_COOKIE, login } from "@/lib/auth";
 import { sessionCookieOptions } from "@/lib/auth-server";
 import type { Vertical } from "@/lib/types";
+import { isMarket } from "@/lib/markets";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,10 @@ export async function POST(req: Request) {
     password: String(body.password ?? ""),
     vertical: String(body.vertical ?? "") as Vertical,
     timezone: body.timezone ? String(body.timezone) : undefined,
+    // What they had picked on the checkout page. Validated against the
+    // catalogue in signUp; anything else falls back to the trial's own bundle.
+    products: Array.isArray(body.products) ? body.products : undefined,
+    market: isMarket(body.market) ? body.market : undefined,
   });
 
   if (!result.ok) {

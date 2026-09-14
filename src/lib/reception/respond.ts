@@ -10,6 +10,8 @@ import { twilioAdapter } from "./channel/twilio";
 import { internalAdapter } from "./channel/internal";
 import { webchatAdapter } from "./channel/webchat";
 import { isPhoneHandle } from "../webchat";
+import { freeTierOf, serviceState } from "../billing/entitlement";
+import { todayIn } from "../time";
 import { openCredentials } from "../db/credentials";
 import {
   agentHistory,
@@ -75,7 +77,8 @@ export type Skipped =
   | "no_venue"
   | "taken_over"
   | "nothing_to_say"
-  | "unsupported_content";
+  | "unsupported_content"
+  | "not_entitled";
 
 export type TurnOutcome =
   | { sent: true; text: string; providerMessageId: string }
@@ -103,6 +106,14 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   const location = conversation.locationId ? getLocation(conversation.locationId) : undefined;
   if (!location) return { sent: false, skipped: "no_venue" };
 
+  // The venue's plan has to include this channel: a venue on the phone alone
+  // does not get its WhatsApp answered because a number is still connected.
+  // Nothing is sent — the message waits in the inbox like any other.
+  const service = serviceState(location, todayIn(location.timezone), {
+    channel: conversation.channel === "webchat" ? "chat" : "whatsapp",
+  });
+  if (!service.answering) return { sent: false, skipped: "not_entitled" };
+
   const customer = await getCustomer(tenantId, conversation.customerId);
 
   // Something Belline cannot read. Said plainly rather than answered around —
@@ -129,7 +140,7 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   const call: Call =
     existingCall(conversation.callId) ?? startEpisode(location, conversation.channel, accepted);
 
-  const session = new AgentSession(location, call, {
+  const session = new AgentSession(agentVenue(location, conversation.channel), call, {
     // Only a real number. A website visitor's handle is not one, and handing it
     // to the agent would have it looking up a guest by a string no booking can
     // ever contain — see webchat.ts.
@@ -386,6 +397,18 @@ async function escalate(
  * clearing it from the attention inbox. Reading it back is cheap; holding a
  * stale copy and saving it over their work is not.
  */
+/**
+ * The venue as the agent sees it for this thread.
+ *
+ * The free chat answers on Haiku whatever model the venue chose (§2.2): at a
+ * hundred conversations a month on somebody else's bill, the model is the
+ * line that decides whether free is affordable.
+ */
+function agentVenue(location: Location, channel: Conversation["channel"]): Location {
+  const free = channel === "webchat" ? freeTierOf(location) : null;
+  return free ? { ...location, agent: { ...location.agent, model: free.model } } : location;
+}
+
 function existingCall(callId: string | undefined): Call | undefined {
   return callId ? getCall(callId) : undefined;
 }

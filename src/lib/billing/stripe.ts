@@ -1,48 +1,60 @@
 import Stripe from "stripe";
 import type { Location, Subscription } from "../types";
 import { getLocation, upsertLocation } from "../store";
-import { PLANS, periodFee, planById, type BillingCycle, type PlanId } from "./plans";
-import { todayIn } from "../time";
-
-/** Every plan is priced in dirhams; see plans.ts for why that is not converted. */
-const CURRENCY = "aed";
+import { MARKETS, marketOf, type Market } from "../markets";
+import {
+  GRANDFATHER_DAYS,
+  checkSelection,
+  isFreeSelection,
+  isProductId,
+  periodFee,
+  productById,
+  type BillingCycle,
+  type LegacyPlanId,
+  type ProductId,
+} from "./plans";
+import { addDays, todayIn } from "../time";
 
 /**
  * Taking money.
  *
- * The last hole in the funnel. Signup creates an account on a fortnight's
- * trial; without this, the fortnight ends and nothing happens — no card, no
- * invoice, no way to become a customer.
- *
  * Three decisions worth stating, because each rules out a worse version.
  *
- * **Stripe's hosted Checkout, not a form of ours.** The brief asks for a
- * checkout page showing a logo, a plan, a price, what is included and a
- * payment field. That is precisely what Stripe Checkout is, and it arrives
- * with PCI scope we do not want, 3D Secure, Apple Pay, Google Pay, local card
- * rules and a dozen languages. Building our own would be a worse page that
- * also made us responsible for card data.
+ * **Stripe's hosted Checkout, not a form of ours.** It arrives with PCI scope
+ * we do not want, 3D Secure, Apple Pay, Google Pay, local card rules and a
+ * dozen languages. Building our own would be a worse page that also made us
+ * responsible for card data.
  *
  * **Prices are created here, from `plans.ts`, not configured in a dashboard.**
- * A price that lives in the Stripe dashboard is a second source of truth for
- * what Belline costs, and the two drift. The pricing page, the invoice and the
- * dashboard all read the same array; Stripe is told about it, rather than
- * asked.
+ * One Stripe price per product, per market, per cycle, found again by a lookup
+ * key that carries the amount — so changing a price in `plans.ts` creates a
+ * new Stripe price and existing subscriptions keep the one they were sold.
+ * A subscription is a set of those prices: a bundle is one line, three modules
+ * are three.
  *
  * **Nothing believes a redirect.** A customer returning to a success URL
  * proves only that their browser followed a link. The subscription becomes
- * real when Stripe's webhook says so, signed — which is also what makes it
- * survive somebody closing the tab on the payment screen.
+ * real when Stripe's webhook says so, signed.
  *
  * `STRIPE_SECRET_KEY` unset is a supported state, exactly like the speech and
  * telephony providers: the button says so rather than failing, and everything
- * else in the product works.
+ * else in the product works — including the free chat, which needs no card.
  */
 
 let client: Stripe | null = null;
 
 export function stripeEnabled(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY);
+}
+
+/**
+ * Stripe Tax on checkout (§2.4: VAT and GST handled by Stripe, not baked into
+ * prices). On by default; `STRIPE_TAX=off` exists only for an account whose
+ * head-office address and tax registrations are not yet entered, where
+ * Stripe refuses to open a session with tax switched on.
+ */
+export function stripeTaxEnabled(): boolean {
+  return process.env.STRIPE_TAX !== "off";
 }
 
 export function stripe(): Stripe {
@@ -62,52 +74,55 @@ export function stripe(): Stripe {
   return client;
 }
 
+/** The lookup key a price is found by. Exported so the check can pin its shape. */
+export function lookupKeyFor(id: ProductId, market: Market, cycle: BillingCycle): string {
+  return `belline_${id}_${market.toLowerCase()}_${cycle}_${periodFee([id], market, cycle)}`;
+}
+
 /**
- * The product and prices, created on first use and reused after.
+ * The product and price, created on first use and reused after.
  *
- * Looked up by a stable lookup key rather than an id we would have to store,
- * so this is idempotent across deploys, environments and a wiped database.
- * Changing a price in `plans.ts` creates a new Stripe price; existing
- * subscriptions keep the one they were sold, which is both what Stripe does
- * and what a customer would expect.
+ * Looked up rather than stored, so this is idempotent across deploys,
+ * environments and a wiped database.
  */
-async function priceFor(planId: PlanId, cycle: BillingCycle): Promise<Stripe.Price> {
-  const plan = planById(planId);
+async function priceFor(id: ProductId, market: Market, cycle: BillingCycle): Promise<Stripe.Price> {
+  const product = productById(id);
   const s = stripe();
 
-  // Fils, not dirhams. Stripe wants the minor unit, and this codebase has
-  // never let a float near an invoice.
-  const amount = periodFee(plan, cycle);
-  const lookupKey = `belline_${planId}_${cycle}_${amount}`;
+  // Minor units. Stripe wants them, and this codebase has never let a float
+  // near an invoice.
+  const amount = periodFee([id], market, cycle);
+  const lookupKey = lookupKeyFor(id, market, cycle);
 
   const existing = await s.prices.list({ lookup_keys: [lookupKey], limit: 1, active: true });
   if (existing.data[0]) return existing.data[0];
 
-  const products = await s.products.search({
-    query: `metadata['belline_plan']:'${planId}'`,
-    limit: 1,
-  });
-  const product =
-    products.data[0] ??
+  const found = await s.products.search({ query: `metadata['belline_product']:'${id}'`, limit: 1 });
+  const stripeProduct =
+    found.data[0] ??
     (await s.products.create({
-      name: `Belline ${plan.name}`,
-      description: plan.summary,
-      metadata: { belline_plan: planId },
+      name: `Belline ${product.name}`,
+      description: product.summary,
+      metadata: { belline_product: id },
     }));
 
   return s.prices.create({
-    product: product.id,
-    currency: CURRENCY,
+    product: stripeProduct.id,
+    currency: MARKETS[market].currency.toLowerCase(),
     unit_amount: amount,
     recurring: { interval: cycle === "annual" ? "year" : "month" },
+    // Prices are shown before tax; Stripe Tax adds what the customer's
+    // country requires.
+    tax_behavior: "exclusive",
     lookup_key: lookupKey,
-    metadata: { belline_plan: planId, belline_cycle: cycle },
+    metadata: { belline_product: id, belline_market: market, belline_cycle: cycle },
   });
 }
 
 export interface CheckoutInput {
   location: Location;
-  planId: PlanId;
+  products: ProductId[];
+  market: Market;
   cycle: BillingCycle;
   email: string;
   /** Absolute, and ours — never taken from a query parameter. */
@@ -115,47 +130,83 @@ export interface CheckoutInput {
   cancelUrl: string;
 }
 
-/**
- * Start a checkout.
- *
- * The venue id rides on the session as metadata *and* as the client reference,
- * because the webhook has to know which diary just got paid for and neither
- * field is guaranteed to survive every event shape Stripe sends.
- */
-export async function createCheckout(input: CheckoutInput): Promise<{ url: string }> {
-  const price = await priceFor(input.planId, input.cycle);
-  const s = stripe();
-
-  const session = await s.checkout.sessions.create({
+/** The session Stripe is asked to open. Pure, so the check can read it without a network. */
+export function checkoutParams(
+  input: CheckoutInput,
+  priceIds: string[],
+): Stripe.Checkout.SessionCreateParams {
+  const meta = {
+    belline_location: input.location.id,
+    belline_tenant: input.location.tenantId,
+    belline_products: input.products.join(","),
+    belline_market: input.market,
+    belline_cycle: input.cycle,
+  };
+  return {
     mode: "subscription",
-    line_items: [{ price: price.id, quantity: 1 }],
+    line_items: priceIds.map((price) => ({ price, quantity: 1 })),
     customer_email: input.email,
     client_reference_id: input.location.id,
-    // Belline is sold per venue: a second branch is a second line, a second
-    // diary and a second set of rules. The metadata is what the webhook uses
-    // to find the right one.
-    metadata: {
-      belline_location: input.location.id,
-      belline_tenant: input.location.tenantId,
-      belline_plan: input.planId,
-      belline_cycle: input.cycle,
-    },
-    subscription_data: {
-      metadata: {
-        belline_location: input.location.id,
-        belline_tenant: input.location.tenantId,
-      },
-    },
+    // The venue id rides as metadata *and* as the client reference, because
+    // neither field is guaranteed to survive every event shape Stripe sends.
+    metadata: meta,
+    subscription_data: { metadata: meta },
     success_url: input.successUrl,
     cancel_url: input.cancelUrl,
     allow_promotion_codes: true,
-    // A UAE business buying in dirhams needs a TRN on the invoice.
+    automatic_tax: { enabled: stripeTaxEnabled() },
+    // A business buying needs its tax number on the invoice, and Stripe Tax
+    // needs an address to know which tax applies.
     tax_id_collection: { enabled: true },
-    billing_address_collection: "auto",
-  });
+    billing_address_collection: "required",
+  };
+}
+
+/** Start a checkout for a selection the catalogue accepts. */
+export async function createCheckout(input: CheckoutInput): Promise<{ url: string }> {
+  const selection = checkSelection(input.products, input.market);
+  if (!selection.ok) throw new Error(selection.error);
+  if (isFreeSelection(selection.products)) {
+    throw new Error("The free chat needs no checkout — activate it directly.");
+  }
+
+  const prices = await Promise.all(
+    selection.products
+      .filter((id) => periodFee([id], input.market, input.cycle) > 0)
+      .map((id) => priceFor(id, input.market, input.cycle)),
+  );
+  const session = await stripe().checkout.sessions.create(
+    checkoutParams({ ...input, products: selection.products }, prices.map((p) => p.id)),
+  );
 
   if (!session.url) throw new Error("Stripe returned a checkout session with no URL.");
   return { url: session.url };
+}
+
+/**
+ * Put a venue on the free chat. No card and no Stripe, by design.
+ *
+ * Refused while a paid subscription is running: that has a Stripe
+ * subscription behind it, and quietly replacing the plan here would leave the
+ * card being charged for something the venue no longer has.
+ */
+export function activateFree(
+  location: Location,
+  market: Market,
+): { ok: true; location: Location } | { ok: false; error: string } {
+  const sub = location.subscription;
+  if (sub?.status === "active" && location.stripe?.subscriptionId) {
+    return { ok: false, error: "Cancel the current plan from Manage billing first." };
+  }
+  const next: Subscription = {
+    products: ["chat_free"],
+    market,
+    cycle: "monthly",
+    startedOn: todayIn(location.timezone),
+    status: "active",
+  };
+  const saved = upsertLocation({ ...location, subscription: next });
+  return { ok: true, location: saved ?? { ...location, subscription: next } };
 }
 
 /** The customer portal, for changing a card or cancelling without emailing us. */
@@ -192,13 +243,13 @@ export function verifyWebhook(raw: string, signature: string | null): Stripe.Eve
   throw last instanceof Error ? last : new Error("Signature did not verify.");
 }
 
+const LEGACY = new Set<string>(["starter", "business", "enterprise"]);
+
 /**
  * What a Stripe event means for a venue's plan.
  *
  * Deliberately small. Belline stores what it needs to decide whether to answer
- * the telephone and what to show on the billing page — not a mirror of
- * Stripe's data model, which would be a second source of truth for something
- * Stripe is already authoritative about.
+ * and what to show on the billing page — not a mirror of Stripe's data model.
  */
 export function applyStripeEvent(event: Stripe.Event): { locationId?: string; applied: string } {
   switch (event.type) {
@@ -210,29 +261,48 @@ export function applyStripeEvent(event: Stripe.Event): { locationId?: string; ap
       }
       const locationId =
         session.metadata?.belline_location ?? session.client_reference_id ?? undefined;
-      const planId = (session.metadata?.belline_plan ?? PLANS[0].id) as PlanId;
-      const cycle = (session.metadata?.belline_cycle ?? "monthly") as BillingCycle;
       if (!locationId) return { applied: "ignored: no venue on the session" };
 
       const location = getLocation(locationId);
       if (!location) return { locationId, applied: "ignored: unknown venue" };
 
-      const next: Subscription = {
-        planId,
-        cycle,
+      const market = marketOf(session.metadata?.belline_market);
+      const cycle: BillingCycle = session.metadata?.belline_cycle === "annual" ? "annual" : "monthly";
+      const today = todayIn(location.timezone);
+      let next: Subscription;
+
+      const legacy = session.metadata?.belline_plan;
+      if (!session.metadata?.belline_products && legacy && LEGACY.has(legacy)) {
+        // A checkout opened on the old ladder before this catalogue shipped
+        // and paid after. They bought that plan, so they get it, grandfathered
+        // like everybody else who did.
+        next = {
+          planId: legacy as LegacyPlanId,
+          cycle,
+          startedOn: today,
+          status: "active",
+          grandfatheredUntil: addDays(today, GRANDFATHER_DAYS),
+        };
+      } else {
+        const ids = (session.metadata?.belline_products ?? "").split(",").filter(isProductId);
+        const selection = checkSelection(ids, market);
+        // Refused rather than guessed: a session whose products do not form a
+        // valid plan was not opened by us.
+        if (!selection.ok) return { locationId, applied: "ignored: no valid products on the session" };
         // The anniversary is today. `periodFor` remembers the anchor day
         // rather than clamping it, so a 31st stays a 31st.
-        startedOn: todayIn(location.timezone),
-        status: "active",
-      };
+        next = { products: selection.products, market, cycle, startedOn: today, status: "active" };
+      }
 
       upsertLocation({
         ...location,
         subscription: next,
+        // Kept when an event omits them: a session with no ids must not erase
+        // the customer the portal and the free-chat guard depend on.
         stripe: {
-          customerId: typeof session.customer === "string" ? session.customer : undefined,
+          customerId: typeof session.customer === "string" ? session.customer : location.stripe?.customerId,
           subscriptionId:
-            typeof session.subscription === "string" ? session.subscription : undefined,
+            typeof session.subscription === "string" ? session.subscription : location.stripe?.subscriptionId,
         },
       });
       return { locationId, applied: "subscription active" };

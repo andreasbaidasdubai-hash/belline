@@ -3,7 +3,9 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { overviewFor, summarise } from "@/lib/overview";
 import { readiness } from "@/lib/onboarding";
-import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
+import { freeTierOf, lapseSentence, serviceState } from "@/lib/billing/entitlement";
+import { allowanceText, money, priceOf, productById } from "@/lib/billing/plans";
+import { subscriptionMarket } from "@/lib/billing/usage";
 import { todayIn } from "@/lib/time";
 import { callDurationSeconds } from "@/lib/calls";
 import { isRestaurant, terms } from "@/lib/verticals";
@@ -87,6 +89,39 @@ export default async function OverviewPage({
               Go live
             </Link>
           </div>
+        </div>
+      )}
+
+      {/* The free chat's one-click way up (§2.2): the badge is the price of
+          free, and this is what it is for. */}
+      {freeTierOf(location) && (
+        <div
+          className="panel"
+          style={{
+            padding: "15px 18px",
+            marginBottom: 14,
+            display: "flex",
+            gap: 14,
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ fontSize: 13.5, lineHeight: 1.5, maxWidth: "62ch" }}>
+            <strong>Add the phone.</strong>{" "}
+            <span className="muted">
+              Belline answers your calls the way it answers your chat —{" "}
+              {allowanceText("phone", productById("phone_starter").allowances.phone as number)} for{" "}
+              {money(
+                priceOf("phone_starter", subscriptionMarket(location.subscription)),
+                subscriptionMarket(location.subscription),
+              )}
+              , and your chat stays free.
+            </span>
+          </div>
+          <Link href="/checkout?products=chat_free,phone_starter" className="btn btn-accent">
+            Add the phone
+          </Link>
         </div>
       )}
 

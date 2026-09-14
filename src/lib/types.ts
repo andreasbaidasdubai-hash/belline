@@ -1,6 +1,7 @@
 import type { BrainVersion } from "./brain";
 import type { GoogleLink } from "./integrations/google";
-import type { BillingCycle, PlanId } from "./billing/plans";
+import type { BillingCycle, LegacyPlanId, ProductId } from "./billing/plans";
+import type { Market } from "./markets";
 
 // Domain model.
 //
@@ -226,7 +227,25 @@ export interface Location {
  * billing/usage.ts, which remembers the anchor day rather than clamping it.
  */
 export interface Subscription {
-  planId: PlanId;
+  /**
+   * What the venue pays for: one bundle, or a set of modules (see
+   * `checkSelection` in billing/plans.ts). Read through `productsOf`, which
+   * also understands the legacy field below.
+   */
+  products?: ProductId[];
+  /**
+   * The single plan a venue bought before the modular catalogue shipped.
+   * Never written any more; kept so a grandfathered venue is read correctly.
+   */
+  planId?: LegacyPlanId;
+  /** Which market's prices apply. Absent means the UAE, which is all there was. */
+  market?: Market;
+  /**
+   * A venue on a legacy plan keeps it, exactly as sold, until this date — 90
+   * days from the day the new catalogue shipped (addendum §3). Stamped once, on
+   * boot, by billing/grandfather.ts.
+   */
+  grandfatheredUntil?: DateStr;
   cycle: BillingCycle;
   /** `YYYY-MM-DD`. The billing anniversary, for as long as the plan lasts. */
   startedOn: DateStr;

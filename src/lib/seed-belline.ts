@@ -1,5 +1,6 @@
 import type { Location } from "./types";
 import { BELLINE_TENANT_ID } from "./tenancy";
+import { priceAnswer, trialAnswer } from "./billing/speak";
 
 /**
  * Belline, as a venue.
@@ -45,7 +46,10 @@ const FAQS = [
   },
   {
     q: "What does it cost?",
-    a: "Three plans, per venue. Starter is a hundred and seventy-nine dirhams a month with sixty voice minutes. Business is three hundred and sixty-five with a hundred and eighty minutes, and that is the one most venues take. Enterprise is eight hundred and ninety-nine, unlimited. No setup fee.",
+    // Generated from billing/plans.ts, never typed: a price written twice is
+    // a price that will one day be wrong in one of the two places. UAE until
+    // Belle knows the caller's market (Phase 4).
+    a: priceAnswer("AE"),
   },
   {
     q: "What happens if we run out of minutes?",
@@ -57,7 +61,7 @@ const FAQS = [
   },
   {
     q: "Is there a free trial?",
-    a: "Fourteen days with a limited number of live-call minutes. No card, nothing charged, and we set your venue up with you — that part is free too.",
+    a: trialAnswer(),
   },
   {
     q: "What languages does it speak?",
@@ -196,7 +200,7 @@ export const bellineVenue: Location = {
       "Find out what kind of venue they run and how they lose calls today, early. It is the only way to answer them specifically, and a specific answer is what sells this. Put it in the notes.",
       "Never overstate what Belline does. If something is not built yet — Arabic, live call transfer, WhatsApp, the booking-system integrations — say so plainly and say what does work instead. Being caught out costs more than any sale, and the refusals are the most convincing thing you do.",
       "If you are booking the call, you must take an email address first, because the meeting is a link that has to arrive. Ask for it, then spell the part before the at sign back to them letter by letter and have them confirm before you book.",
-      "Never quote a price you have not been given. The three plan prices are in your knowledge; anything else, say it depends and the call is the place to work it out.",
+      "Never quote a price you have not been given. The prices in your knowledge are the only ones you may say, exactly as written — never a discount, a contract term or a guarantee. For a group with several venues, say we quote those properly and offer the call.",
       "Do not ask for card details, and never take payment. The trial does not need a card and asking for one would be alarming.",
       "If they are just curious and not a business, be friendly, answer them, and do not sell to them at all.",
     ],

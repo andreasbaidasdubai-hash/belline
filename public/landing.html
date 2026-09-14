@@ -51,9 +51,15 @@
       "operatingSystem": "Web",
       "url": "https://belline.ai/",
       "offers": [
-        { "@type": "Offer", "name": "Starter", "price": "179", "priceCurrency": "AED", "billingIncrement": "P1M" },
-        { "@type": "Offer", "name": "Business", "price": "365", "priceCurrency": "AED", "billingIncrement": "P1M" },
-        { "@type": "Offer", "name": "Enterprise", "price": "899", "priceCurrency": "AED", "billingIncrement": "P1M" }
+        { "@type": "Offer", "name": "Chat Receptionist — Free", "price": "0", "priceCurrency": "AED", "billingIncrement": "P1M" },
+        { "@type": "Offer", "name": "Chat Receptionist", "price": "49", "priceCurrency": "AED", "billingIncrement": "P1M" },
+        { "@type": "Offer", "name": "Website Voice Button", "price": "99", "priceCurrency": "AED", "billingIncrement": "P1M" },
+        { "@type": "Offer", "name": "Phone Receptionist — Starter", "price": "149", "priceCurrency": "AED", "billingIncrement": "P1M" },
+        { "@type": "Offer", "name": "Phone Receptionist — Business", "price": "349", "priceCurrency": "AED", "billingIncrement": "P1M" },
+        { "@type": "Offer", "name": "Phone Receptionist — Pro", "price": "799", "priceCurrency": "AED", "billingIncrement": "P1M" },
+        { "@type": "Offer", "name": "Everything Starter", "price": "249", "priceCurrency": "AED", "billingIncrement": "P1M" },
+        { "@type": "Offer", "name": "Everything Business", "price": "499", "priceCurrency": "AED", "billingIncrement": "P1M" },
+        { "@type": "Offer", "name": "Everything Pro", "price": "999", "priceCurrency": "AED", "billingIncrement": "P1M" }
       ]
     },
     {
@@ -431,15 +437,15 @@
           <label class="f">
             <span>Compare with</span>
             <select name="plan">
-              <option value="179" data-name="Starter">Starter — AED 179 a month</option>
-              <option value="365" data-name="Business" selected>Business — AED 365 a month</option>
-              <option value="899" data-name="Enterprise">Enterprise — AED 899 a month</option>
+              <option value="249" data-name="Everything Starter">Everything Starter — AED 249 a month</option>
+              <option value="499" data-name="Everything Business" selected>Everything Business — AED 499 a month</option>
+              <option value="999" data-name="Everything Pro">Everything Pro — AED 999 a month</option>
             </select>
           </label>
         </div>
       </form>
 
-      <p class="roi-out" id="roi-out" aria-live="polite">About 13 bookings a month, worth roughly AED 3,250. Business is AED 365 a month.</p>
+      <p class="roi-out" id="roi-out" aria-live="polite">About 13 bookings a month, worth roughly AED 3,250. Everything Business is AED 499 a month.</p>
       <p class="roi-fine">
         Only you know the two numbers that matter: how many calls really go
         unanswered, and how many of those people would have booked. Your phone
@@ -461,6 +467,7 @@
         </p>
       </div>
 
+<!-- pricing:start — generated from src/lib/billing/plans.ts by scripts/site-pricing.ts. Change the catalogue, then run npm run pricing; do not edit by hand. -->
       <div class="cycle" role="group" aria-label="Billing period">
         <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monthly</button>
         <button type="button" class="cycle-opt" data-cycle="annual" aria-pressed="false">
@@ -468,91 +475,247 @@
         </button>
       </div>
 
+      <div class="market" data-market="AE">
       <div class="plans">
         <div class="plan">
           <div class="plan-tag" aria-hidden="true"></div>
-          <h3>Starter</h3>
-          <p class="plan-sub">For a single venue that wants the phone answered properly.</p>
+          <h3>Everything Starter</h3>
+          <p class="plan-sub">Every channel, for one venue getting started.</p>
           <div class="plan-price">
-            <span class="amt" data-monthly="AED 179" data-annual="AED 149">AED 179</span>
+            <span class="amt" data-monthly="AED 249" data-annual="AED 207">AED 249</span>
             <span class="per">per month</span>
             <span class="billed" data-monthly="Billed monthly. Cancel anytime."
-                  data-annual="AED 1,790 billed once a year.">Billed monthly. Cancel anytime.</span>
+                  data-annual="AED 2,490 billed once a year.">Billed monthly. Cancel anytime.</span>
           </div>
           <ul>
-            <li>60 voice minutes a month</li>
-            <li>One Belline receptionist, answering 24/7</li>
-            <li>Phone, website chat and the website bell</li>
+            <li>200 phone minutes a month</li>
+            <li>100 minutes a month on your website's voice button</li>
+            <li>150 website chat conversations a month</li>
+            <li>Keep your number — forward it to Belline</li>
             <li>Books and changes appointments against your real availability</li>
             <li>Answers questions from your own hours, prices and policies</li>
             <li>Summary and full transcript of every call</li>
-            <li>Flags anything it should not handle for you to call back</li>
             <li>Puts urgent calls through to your team, live</li>
             <li>A reminder text the day before every booking</li>
+            <li>Your team can take over any conversation from the inbox</li>
+            <li>No Belline badge on your chat</li>
+            <li>Your own words and colours on the buttons</li>
           </ul>
-          <a class="btn line" href="https://app.belline.ai/checkout?plan=starter" data-cta="plan-starter">Get Starter</a>
+          <a class="btn line" href="https://app.belline.ai/checkout?bundle=everything_starter&amp;market=AE" data-cta="plan-everything_starter">Get Everything Starter</a>
         </div>
 
         <div class="plan is-best">
           <div class="plan-tag">Most popular</div>
-          <h3>Business</h3>
-          <p class="plan-sub">For a venue where the phone is genuinely busy.</p>
+          <h3>Everything Business</h3>
+          <p class="plan-sub">Every channel, for a venue that is genuinely busy.</p>
           <div class="plan-price">
-            <span class="amt" data-monthly="AED 365" data-annual="AED 304">AED 365</span>
+            <span class="amt" data-monthly="AED 499" data-annual="AED 415">AED 499</span>
             <span class="per">per month</span>
             <span class="billed" data-monthly="Billed monthly. Cancel anytime."
-                  data-annual="AED 3,650 billed once a year.">Billed monthly. Cancel anytime.</span>
+                  data-annual="AED 4,990 billed once a year.">Billed monthly. Cancel anytime.</span>
           </div>
           <ul>
-            <li>180 voice minutes a month</li>
-            <li>Everything in Starter</li>
+            <li>600 phone minutes a month</li>
+            <li>200 minutes a month on your website's voice button</li>
+            <li>400 website chat conversations a month</li>
+            <li>Keep your number — forward it to Belline</li>
+            <li>Books and changes appointments against your real availability</li>
+            <li>Answers questions from your own hours, prices and policies</li>
+            <li>Summary and full transcript of every call</li>
+            <li>Puts urgent calls through to your team, live</li>
+            <li>A reminder text the day before every booking</li>
             <li>Your own rules about what it may and may not decide</li>
             <li>Every change versioned, with one-click revert</li>
             <li>Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number</li>
-            <li>Priority support</li>
+            <li>Your team can take over any conversation from the inbox</li>
+            <li>No Belline badge on your chat</li>
+            <li>Your own words and colours on the buttons</li>
           </ul>
-          <a class="btn" href="https://app.belline.ai/checkout?plan=business" data-cta="plan-business">Get Business</a>
+          <a class="btn" href="https://app.belline.ai/checkout?bundle=everything_business&amp;market=AE" data-cta="plan-everything_business">Get Everything Business</a>
         </div>
 
         <div class="plan">
           <div class="plan-tag" aria-hidden="true"></div>
-          <h3>Enterprise</h3>
-          <p class="plan-sub">For a venue whose phone never stops, or one that would rather not count.</p>
+          <h3>Everything Pro</h3>
+          <p class="plan-sub">Every channel, for a venue that never stops.</p>
           <div class="plan-price">
-            <span class="amt" data-monthly="AED 899" data-annual="AED 749">AED 899</span>
+            <span class="amt" data-monthly="AED 999" data-annual="AED 832">AED 999</span>
             <span class="per">per month</span>
             <span class="billed" data-monthly="Billed monthly. Cancel anytime."
-                  data-annual="AED 8,990 billed once a year.">Billed monthly. Cancel anytime.</span>
+                  data-annual="AED 9,990 billed once a year.">Billed monthly. Cancel anytime.</span>
           </div>
           <ul>
-            <li>Unlimited voice minutes</li>
-            <li>Everything in Business</li>
-            <li>One venue, no allowance to watch</li>
+            <li>1,500 phone minutes a month</li>
+            <li>300 minutes a month on your website's voice button</li>
+            <li>1,000 website chat conversations a month</li>
+            <li>Keep your number — forward it to Belline</li>
+            <li>Books and changes appointments against your real availability</li>
+            <li>Answers questions from your own hours, prices and policies</li>
+            <li>Summary and full transcript of every call</li>
+            <li>Puts urgent calls through to your team, live</li>
+            <li>A reminder text the day before every booking</li>
+            <li>Your own rules about what it may and may not decide</li>
+            <li>Every change versioned, with one-click revert</li>
+            <li>Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number</li>
             <li>Named contact for onboarding and changes</li>
+            <li>Priority support</li>
+            <li>Your team can take over any conversation from the inbox</li>
+            <li>No Belline badge on your chat</li>
+            <li>Your own words and colours on the buttons</li>
           </ul>
-          <a class="btn line" href="https://app.belline.ai/checkout?plan=enterprise" data-cta="plan-enterprise">Get Enterprise</a>
+          <a class="btn line" href="https://app.belline.ai/checkout?bundle=everything_pro&amp;market=AE" data-cta="plan-everything_pro">Get Everything Pro</a>
         </div>
+      </div>
+
+      <div class="modules">
+        <h3 class="modules-head">Or only the channel you need</h3>
+        <div class="module-groups">
+          <ul class="module-group" aria-label="Phone Receptionist">
+            <li class="module">
+              <div class="module-row">
+                <span class="module-name">Phone Receptionist — Starter</span>
+                <span class="module-price" data-monthly="AED 149 a month" data-annual="AED 124 a month">AED 149 a month</span>
+              </div>
+              <p class="module-what">200 phone minutes a month</p>
+              <details>
+                <summary>What's included</summary>
+                <ul>
+                  <li>Keep your number — forward it to Belline</li>
+                  <li>Books and changes appointments against your real availability</li>
+                  <li>Answers questions from your own hours, prices and policies</li>
+                  <li>Summary and full transcript of every call</li>
+                  <li>Puts urgent calls through to your team, live</li>
+                  <li>A reminder text the day before every booking</li>
+                </ul>
+              </details>
+              <a class="module-cta" href="https://app.belline.ai/checkout?products=phone_starter&amp;market=AE" data-cta="module-phone_starter">Choose Phone Receptionist — Starter</a>
+            </li>
+            <li class="module">
+              <div class="module-row">
+                <span class="module-name">Phone Receptionist — Business</span>
+                <span class="module-price" data-monthly="AED 349 a month" data-annual="AED 290 a month">AED 349 a month</span>
+              </div>
+              <p class="module-what">600 phone minutes a month</p>
+              <details>
+                <summary>What's included</summary>
+                <ul>
+                  <li>Keep your number — forward it to Belline</li>
+                  <li>Books and changes appointments against your real availability</li>
+                  <li>Answers questions from your own hours, prices and policies</li>
+                  <li>Summary and full transcript of every call</li>
+                  <li>Puts urgent calls through to your team, live</li>
+                  <li>A reminder text the day before every booking</li>
+                  <li>Your own rules about what it may and may not decide</li>
+                  <li>Every change versioned, with one-click revert</li>
+                  <li>Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number</li>
+                </ul>
+              </details>
+              <a class="module-cta" href="https://app.belline.ai/checkout?products=phone_business&amp;market=AE" data-cta="module-phone_business">Choose Phone Receptionist — Business</a>
+            </li>
+            <li class="module">
+              <div class="module-row">
+                <span class="module-name">Phone Receptionist — Pro</span>
+                <span class="module-price" data-monthly="AED 799 a month" data-annual="AED 665 a month">AED 799 a month</span>
+              </div>
+              <p class="module-what">1,500 phone minutes a month</p>
+              <details>
+                <summary>What's included</summary>
+                <ul>
+                  <li>Keep your number — forward it to Belline</li>
+                  <li>Books and changes appointments against your real availability</li>
+                  <li>Answers questions from your own hours, prices and policies</li>
+                  <li>Summary and full transcript of every call</li>
+                  <li>Puts urgent calls through to your team, live</li>
+                  <li>A reminder text the day before every booking</li>
+                  <li>Your own rules about what it may and may not decide</li>
+                  <li>Every change versioned, with one-click revert</li>
+                  <li>Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number</li>
+                  <li>Named contact for onboarding and changes</li>
+                  <li>Priority support</li>
+                </ul>
+              </details>
+              <a class="module-cta" href="https://app.belline.ai/checkout?products=phone_pro&amp;market=AE" data-cta="module-phone_pro">Choose Phone Receptionist — Pro</a>
+            </li>
+          </ul>
+          <ul class="module-group" aria-label="Website Voice Button">
+            <li class="module">
+              <div class="module-row">
+                <span class="module-name">Website Voice Button</span>
+                <span class="module-price" data-monthly="AED 99 a month" data-annual="AED 82 a month">AED 99 a month</span>
+              </div>
+              <p class="module-what">150 minutes a month on your website's voice button</p>
+              <details>
+                <summary>What's included</summary>
+                <ul>
+                  <li>Books and changes appointments against your real availability</li>
+                  <li>Answers questions from your own hours, prices and policies</li>
+                  <li>Your own words and colours on the buttons</li>
+                </ul>
+              </details>
+              <a class="module-cta" href="https://app.belline.ai/checkout?products=web_voice&amp;market=AE" data-cta="module-web_voice">Choose Website Voice Button</a>
+            </li>
+          </ul>
+          <ul class="module-group" aria-label="Chat Receptionist">
+            <li class="module">
+              <div class="module-row">
+                <span class="module-name">Chat Receptionist — Free</span>
+                <span class="module-price">Free</span>
+              </div>
+              <p class="module-what">100 website chat conversations a month</p>
+              <details>
+                <summary>What's included</summary>
+                <ul>
+                  <li>Books and changes appointments against your real availability</li>
+                  <li>Answers questions from your own hours, prices and policies</li>
+                  <li>No card, and no end date</li>
+                  <li>“Answered by Belline” shown on your chat</li>
+                </ul>
+              </details>
+              <a class="module-cta" href="https://app.belline.ai/checkout?products=chat_free&amp;market=AE" data-cta="module-chat_free">Start free</a>
+            </li>
+            <li class="module">
+              <div class="module-row">
+                <span class="module-name">Chat Receptionist</span>
+                <span class="module-price" data-monthly="AED 49 a month" data-annual="AED 40 a month">AED 49 a month</span>
+              </div>
+              <p class="module-what">150 website chat conversations a month</p>
+              <details>
+                <summary>What's included</summary>
+                <ul>
+                  <li>Books and changes appointments against your real availability</li>
+                  <li>Answers questions from your own hours, prices and policies</li>
+                  <li>Your team can take over any conversation from the inbox</li>
+                  <li>No Belline badge on your chat</li>
+                </ul>
+              </details>
+              <a class="module-cta" href="https://app.belline.ai/checkout?products=chat&amp;market=AE" data-cta="module-chat">Choose Chat Receptionist</a>
+            </li>
+          </ul>
+        </div>
+      </div>
       </div>
 
       <p class="compare">An answering service takes a message. Belline takes the booking — and answers at three in the morning.</p>
 
-      <div class="terms">
+      <div class="terms terms-4">
         <div>
-          <h4>What counts as a voice minute</h4>
-          <!-- Wörtlich MINUTE_DEFINITION aus src/lib/billing/usage.ts; ein
-               Test vergleicht die beiden. Der Satz über Störungen stimmt:
-               ein Anruf mit Status "failed" zählt null Minuten. -->
-          <p>A voice minute is time Belline spends on a live call with your caller — from the moment it answers to the moment the call ends — rounded up to the next whole minute. Calls you make from your own test console do not count, and neither do calls cut short by a fault on our side.</p>
+          <h4>What counts as a minute</h4>
+          <p>A minute is time Belline spends on a live call with your caller — on your phone line or through the voice button on your website — from the moment it answers to the moment the call ends, rounded up to the next whole minute. Calls you make from your own test console do not count, and neither do calls cut short by a fault on our side.</p>
+        </div>
+        <div>
+          <h4>What counts as a conversation</h4>
+          <p>A conversation is one customer's thread in your website chat in which Belline replies at least once. Everything that customer says in the 24 hours after Belline's first reply is the same conversation. Threads your team answers without Belline do not count.</p>
         </div>
         <div>
           <h4>No surprise invoices</h4>
-          <p>There is no per-minute charge on any plan. The invoice is the plan fee and nothing else — if the allowance runs short, the answer is a bigger plan, not a bigger bill.</p>
+          <p>There is no per-minute or per-conversation charge on any plan. The invoice is the plan fee and nothing else — if an allowance runs short, Belline keeps answering and the answer is a bigger plan, not a bigger bill. Only the free chat pauses at its limit.</p>
         </div>
         <div>
           <h4>14 days free</h4>
-          <p>Thirty minutes of live calls, no card, nothing charged. Standard onboarding is free.</p>
+          <p>60 minutes of live calls, with the phone, the voice button on your website and your website chat all switched on. No card, nothing charged. Standard onboarding is free.</p>
         </div>
       </div>
+<!-- pricing:end -->
     </div>
   </section>
 

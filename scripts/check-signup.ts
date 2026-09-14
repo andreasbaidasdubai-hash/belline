@@ -86,7 +86,7 @@ await test("the venue starts on a capped trial, not on a plan", () => {
   const sub = getLocation(alpha.location.id)?.subscription;
   assert.equal(sub?.status, "trialing");
   assert.ok(sub?.trial, "no trial was written");
-  assert.equal(sub?.trial?.minutes, 30);
+  assert.equal(sub?.trial?.minutes, 60);
   // Fourteen days from today, so an unattended account expires on its own.
   const days =
     (Date.parse(`${sub!.trial!.endsOn}T12:00:00Z`) - Date.parse(`${sub!.startedOn}T12:00:00Z`)) /

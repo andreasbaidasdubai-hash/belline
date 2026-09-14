@@ -73,12 +73,15 @@ export default function Chat({
   venueName,
   agentName,
   voiceHref,
+  badge,
 }: {
   embedKey: string;
   freshToken: string;
   venueName: string;
   agentName: string;
   voiceHref?: string;
+  /** "Answered by Belline" — the free chat's, and nobody else's. */
+  badge?: boolean;
 }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [draft, setDraft] = useState("");
@@ -521,6 +524,27 @@ export default function Chat({
           </button>
         )}
       </form>
+
+      {badge && (
+        // The price of the free chat (§2.2), and the cheapest distribution
+        // Belline will ever buy: every free venue's visitors see where it came from.
+        <a
+          href="https://belline.ai/?ref=chat-badge"
+          target="_blank"
+          rel="noopener"
+          style={{
+            display: "block",
+            textAlign: "center",
+            fontSize: 11,
+            padding: "6px 0 8px",
+            color: "inherit",
+            opacity: 0.6,
+            textDecoration: "none",
+          }}
+        >
+          Answered by Belline
+        </a>
+      )}
     </div>
   );
 }

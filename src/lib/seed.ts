@@ -2,6 +2,7 @@ import type { AgentConfig, Location, StaffMember, WeeklyHours } from "./types";
 import { isEmpty, listLocations, replaceAll, upsertLocation } from "./store";
 import { ensureBaseline } from "./brain";
 import { bellineVenue } from "./seed-belline";
+import { grandfatherLegacyPlans } from "./billing/grandfather";
 import { DEFAULT_TENANT_ID, businessIdForLocation, ensureTenancy } from "./tenancy";
 
 const H = (h: number, m = 0) => h * 60 + m;
@@ -40,7 +41,13 @@ const restaurant: Location = {
   // anniversary is the 1st, which keeps the worked example legible; the
   // period arithmetic is exercised properly against the awkward dates in
   // scripts/check-billing.ts rather than here.
-  subscription: { planId: "business", cycle: "monthly", startedOn: "2026-09-01", status: "active" },
+  subscription: {
+    products: ["everything_business"],
+    market: "AE",
+    cycle: "monthly",
+    startedOn: "2026-09-01",
+    status: "active",
+  },
   hours: everyDay(H(12), H(23, 30)),
   closures: [],
   agent: {
@@ -234,7 +241,7 @@ const salon: Location = {
   // both are states the billing page has to get right, so the demo data
   // exercises them rather than showing three copies of the happy path.
   subscription: {
-    planId: "starter",
+    products: ["everything_starter"],
     cycle: "monthly",
     startedOn: "2026-09-04",
     status: "trialing",
@@ -689,6 +696,9 @@ export function seedIfEmpty(): void {
   }
   addMissingVenues();
   backfillAgentDefaults();
+  // Once per venue, on the first boot of the modular catalogue: pilots keep
+  // the plan they bought for 90 days. See billing/grandfather.ts.
+  grandfatherLegacyPlans();
   refreshOurOwnKnowledge();
   // Before the brains: a baseline is written against a venue, and a venue
   // without an owner is not one we want to write history for.

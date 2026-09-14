@@ -4,7 +4,8 @@ import { createUser } from "../auth";
 import { ensureBaseline } from "../brain";
 import { checkShape } from "../leads/email";
 import { extractBusiness, readSite, type Extracted } from "../prospect";
-import { PLANS } from "../billing/plans";
+import { TRIAL, checkSelection } from "../billing/plans";
+import { marketOf, type Market } from "../markets";
 import { todayIn } from "../time";
 
 /**
@@ -50,28 +51,37 @@ export interface SignupInput {
   vertical: Vertical;
   /** Where they are, so "tomorrow at four" means their four. */
   timezone?: string;
+  /** What they picked on the checkout page, remembered as what the trial is trialling. */
+  products?: unknown[];
+  /** Which market's prices they were shown. */
+  market?: Market;
 }
 
 export type SignupResult =
   | { ok: true; user: User; location: Location }
   | { ok: false; field: "businessName" | "email" | "password" | "vertical"; error: string };
 
-/** Fourteen days, and a cap on minutes so an unattended trial cannot run up a bill. */
-const TRIAL_DAYS = 14;
-const TRIAL_MINUTES = 30;
-
-function trialSubscription(timezone: string): Subscription {
+/**
+ * Fourteen days, every channel on, no card, and a cap on phone minutes so an
+ * unattended trial cannot run up a bill (billing/plans.ts `TRIAL`, §2.3).
+ */
+function trialSubscription(timezone: string, picked?: unknown[], market?: Market): Subscription {
   const today = todayIn(timezone);
   const ends = new Date(`${today}T12:00:00Z`);
-  ends.setUTCDate(ends.getUTCDate() + TRIAL_DAYS);
+  ends.setUTCDate(ends.getUTCDate() + TRIAL.days);
+  const where = marketOf(market);
+  const chosen = picked?.length ? checkSelection(picked, where) : null;
   return {
-    // The plan they are trialling is the one the website leads with. Choosing
-    // a plan is a decision for the end of the trial, not the start of it.
-    planId: PLANS[0].id,
+    // What they picked on the checkout page, or the bundle the trial is built
+    // around. Every channel is on during the trial either way; the choice is
+    // remembered so the end of the trial can offer it back. Choosing is a
+    // decision for the end of the trial, not the start of it.
+    products: chosen?.ok ? chosen.products : [...TRIAL.products],
+    market: where,
     cycle: "monthly",
     startedOn: today,
     status: "trialing",
-    trial: { endsOn: ends.toISOString().slice(0, 10), minutes: TRIAL_MINUTES },
+    trial: { endsOn: ends.toISOString().slice(0, 10), minutes: TRIAL.phoneMinutes },
   };
 }
 
@@ -105,7 +115,7 @@ function blankVenue(input: SignupInput, tenantId: string, businessId: string): L
     currency: timezone.startsWith("Europe") ? "GBP" : "AED",
     hours: everyDay(9 * 60, 18 * 60),
     closures: [],
-    subscription: trialSubscription(timezone),
+    subscription: trialSubscription(timezone, input.products, input.market),
     agent: {
       displayName: "Belline",
       greeting: `Thank you for calling ${name}, this is Belline. How can I help?`,

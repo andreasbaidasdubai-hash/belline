@@ -185,14 +185,11 @@ export interface EmbedGate {
 export function checkEmbedGate(location: Location): EmbedGate {
   const config = location.embed;
   if (!config?.enabled) return { allowed: false, used: 0, limit: 0 };
-  // Past the trial, the website bell stops with the phone. Same rule, same file.
-  if (!serviceState(location, todayIn(location.timezone)).answering) {
-    return {
-      allowed: false,
-      used: 0,
-      limit: 0,
-      message: "Nobody can take a call through the website just now. Please try again a little later.",
-    };
+  // Past the trial, or a plan without the voice button: the bell stops. Same
+  // rule as the phone, same file.
+  const service = serviceState(location, todayIn(location.timezone), { channel: "web_voice" });
+  if (!service.answering) {
+    return { allowed: false, used: 0, limit: 0, message: service.callerMessage };
   }
   // A venue that chose the chat and not the bell. The key is real and the
   // origin is allowed; the spoken channel is simply not one they switched on.
@@ -266,11 +263,18 @@ import { resolveAppearance } from "./embed-look";
  * so it is built from a whitelist. The origins list, the ceilings and the
  * key's owner are not in it and must not be.
  */
-export function widgetConfig(config: EmbedConfig, whatsappLink: string | null) {
+export function widgetConfig(
+  config: EmbedConfig,
+  whatsappLink: string | null,
+  opts: { badge?: boolean } = {},
+) {
   const look = resolveAppearance(config.appearance);
   return {
     mode: modeOf(config) ?? "voice",
     ...look,
     whatsappLink: look.whatsapp ? whatsappLink : null,
+    // "Answered by Belline", on the free chat and nowhere else. The price of
+    // free, and not a setting the venue can switch off (see freeTierOf).
+    badge: Boolean(opts.badge),
   };
 }

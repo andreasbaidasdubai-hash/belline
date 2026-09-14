@@ -1,7 +1,8 @@
 import type { Location, Subscription } from "../types";
 import { getTenant, listBookings, listCalls, listLocations, listUsersFor } from "../store";
-import { annualPerMonth, planById, type BillingCycle, type PlanId } from "../billing/plans";
-import { accountFor } from "../billing/usage";
+import { annualPerMonth, monthlyOf, selectionName, type BillingCycle, type ProductId } from "../billing/plans";
+import { accountFor, productsOf, subscriptionMarket } from "../billing/usage";
+import { MARKETS, type Market } from "../markets";
 import { lapseOf, type Lapse } from "../billing/entitlement";
 import { PLANNING_COST_PER_MINUTE_FILS } from "../billing/cost";
 import { todayIn } from "../time";
@@ -31,8 +32,9 @@ export interface ClientRow {
   owner: { name: string; email: string } | null;
   /** The billing anniversary, or when the tenant was created. YYYY-MM-DD. */
   since: string;
-  planId: PlanId | null;
+  products: ProductId[];
   planName: string;
+  market: Market;
   cycle: BillingCycle | null;
   status: ClientStatus;
   trialEndsOn: string | null;
@@ -73,10 +75,22 @@ export interface BookTotals {
   planMix: Record<string, number>;
 }
 
+/**
+ * Monthly revenue, in fils. Another market's money is converted at the
+ * planning rate in markets.ts — a total on an internal page, never a price.
+ */
 function mrrOf(sub: Subscription | undefined): number {
   if (!sub || sub.status !== "active") return 0;
-  const plan = planById(sub.planId);
-  return sub.cycle === "annual" ? annualPerMonth(plan) : plan.monthly;
+  const products = productsOf(sub);
+  const market = subscriptionMarket(sub);
+  let minor: number;
+  try {
+    minor = sub.cycle === "annual" ? annualPerMonth(products, market) : monthlyOf(products, market);
+  } catch {
+    return 0;
+  }
+  if (market === "AE") return minor;
+  return Math.round((minor * MARKETS[market].planningUsdRate) / MARKETS.AE.planningUsdRate);
 }
 
 export function clientBook(now = new Date()): ClientRow[] {
@@ -93,6 +107,7 @@ export function clientBook(now = new Date()): ClientRow[] {
       const sub = location.subscription;
       const today = todayIn(location.timezone);
       const account = accountFor(location, today);
+      const phone = account?.usage.channels.find((c) => c.channel === "phone");
       const calls = listCalls(location.id);
       const lastCall = calls.reduce<string | null>(
         (latest, c) => (!latest || c.startedAt > latest ? c.startedAt : latest),
@@ -107,8 +122,9 @@ export function clientBook(now = new Date()): ClientRow[] {
         vertical: location.vertical,
         owner: owner ? { name: owner.name, email: owner.email } : null,
         since: sub?.startedOn ?? (tenant?.createdAt ?? "").slice(0, 10),
-        planId: sub?.planId ?? null,
-        planName: sub ? planById(sub.planId).name : "—",
+        products: productsOf(sub),
+        planName: sub ? (sub.status === "trialing" ? "Trial" : selectionName(productsOf(sub))) : "—",
+        market: subscriptionMarket(sub),
         cycle: sub?.cycle ?? null,
         status: sub?.status ?? "none",
         trialEndsOn: sub?.trial?.endsOn ?? null,
@@ -116,8 +132,10 @@ export function clientBook(now = new Date()): ClientRow[] {
         phone: location.phone,
         paymentFailedAt: sub?.paymentFailedAt ?? null,
         mrrFils: mrrOf(sub),
-        minutes: { used: account?.usage.minutes ?? 0, included: account?.usage.included ?? null },
-        callsThisPeriod: account?.usage.calls ?? 0,
+        // Phone minutes: the number a venue's cost moves with. No phone on the
+        // plan reads as nothing included, not as unlimited.
+        minutes: { used: phone?.used ?? 0, included: phone ? phone.included : 0 },
+        callsThisPeriod: phone?.episodes ?? 0,
         bookingsLast30Days: listBookings({ locationId: location.id }).filter(
           (b) => b.createdAt >= cutoff,
         ).length,

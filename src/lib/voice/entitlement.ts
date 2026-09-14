@@ -1,5 +1,6 @@
 import type { Location } from "../types";
 import { voiceAllowed } from "../embed";
+import { channelIncluded } from "../billing/entitlement";
 
 /**
  * May a signed stream token open a call to this venue?
@@ -35,7 +36,11 @@ export function mayStreamTo(location: Location | undefined): boolean {
   // of speech. This clause is the one that decides whether a socket opens, so
   // "the widget is on" was too wide by exactly one mode — as our own venue,
   // which offers the chat and not the bell, demonstrated the moment it existed.
-  if (voiceAllowed(location.embed)) return true;
+  //
+  // And only while the venue's plan includes the voice button: a venue on the
+  // chat alone that once switched the bell on must not have a socket open on
+  // its behalf.
+  if (voiceAllowed(location.embed) && channelIncluded(location, "web_voice")) return true;
 
   const ours = Boolean(location.prospect || location.internal);
   return ours && Boolean(location.demo?.enabled);

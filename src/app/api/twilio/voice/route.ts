@@ -114,12 +114,13 @@ export async function POST(request: Request) {
     );
   }
 
-  // A customer past their trial, checked before any stream opens for the
-  // same reason as the demo cap: a refused call costs one TwiML response.
-  // Only enforced once card payments are on — see billing/entitlement.ts.
-  const service = serviceState(location, todayIn(location.timezone));
+  // A customer past their trial, or on a plan without the phone, checked
+  // before any stream opens for the same reason as the demo cap: a refused
+  // call costs one TwiML response. Lapsing is only enforced once card
+  // payments are on; a missing channel always is — see billing/entitlement.ts.
+  const service = serviceState(location, todayIn(location.timezone), { channel: "phone" });
   if (!service.answering) {
-    console.warn("[twilio] not answering for %s: %s", location.id, service.lapsed);
+    console.warn("[twilio] not answering for %s: %s", location.id, service.refused);
     return xml(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">${escapeXml(service.callerMessage ?? "Nobody is able to take your call just now.")}</Say>

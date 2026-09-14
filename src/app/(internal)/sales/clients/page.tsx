@@ -175,7 +175,7 @@ export default async function ClientsPage() {
                       )}
                     </td>
                     <td style={{ fontSize: 12.5 }}>
-                      {r.planId ? (
+                      {r.products.length ? (
                         <>
                           {r.planName}
                           <span className="muted"> · {r.cycle}</span>
@@ -193,7 +193,7 @@ export default async function ClientsPage() {
                       )}
                       {r.lapsed && (
                         <div style={{ fontSize: 11, marginTop: 3, color: "var(--bad)" }}>
-                          {r.lapsed === "trial_ended" ? "trial over" : r.lapsed === "trial_minutes_used" ? "trial minutes used" : "cancelled, period over"}
+                          {r.lapsed === "trial_ended" ? "trial over" : r.lapsed === "trial_minutes_used" ? "trial minutes used" : r.lapsed === "legacy_plan_ended" ? "grandfathered plan over" : "cancelled, period over"}
                         </div>
                       )}
                     </td>

@@ -551,6 +551,20 @@
   });
 })();
 
+/* --- which country's prices ------------------------------------------------
+   Rendered only when more than one market is open (scripts/site-pricing.ts).
+   Every market's block is already in the markup, generated from the same
+   catalogue; this only chooses which one is visible. */
+(function () {
+  var pick = document.querySelector("[data-market-pick]");
+  if (!pick) return;
+  pick.addEventListener("change", function () {
+    document.querySelectorAll(".market[data-market]").forEach(function (el) {
+      el.hidden = el.getAttribute("data-market") !== pick.value;
+    });
+  });
+})();
+
 /* --- book a call -----------------------------------------------------------
    The email check is the point of this block. A mistyped domain — gmial.com,
    hotmial.com — passes every syntax test ever written, and the reply then

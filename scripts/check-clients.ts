@@ -39,8 +39,9 @@ function row(over: Partial<ClientRow>): ClientRow {
     vertical: "salon",
     owner: { name: "Sara", email: "sara@example.com" },
     since: "2026-09-01",
-    planId: "business",
-    planName: "Business",
+    products: ["everything_business"],
+    planName: "Everything Business",
+    market: "AE",
     cycle: "monthly",
     status: "active",
     trialEndsOn: null,
@@ -120,7 +121,8 @@ await test("a conversion or churn outside 0..1 is clamped, not obeyed", () => {
 
 await test("defaults come from the book where the book has numbers, and from the plan table where not", () => {
   const empty = defaultAssumptions({ paying: 0, trialing: 0, arpaFils: null, minutesPerVenue: null, trialsLast30Days: 0 });
-  assert.equal(empty.arpaFils, 36500);
+  // The bundle the website marks as the one most take, read from the catalogue.
+  assert.equal(empty.arpaFils, 49900);
   assert.equal(empty.minutesPerVenue, 120);
   assert.equal(empty.newTrialsPerMonth, 3, "a floor, so an empty book still projects something");
   const real = defaultAssumptions({ paying: 4, trialing: 2, arpaFils: 20000, minutesPerVenue: 55, trialsLast30Days: 9 });
@@ -135,11 +137,11 @@ await test("totals count what they say they count", () => {
   const t = totalsOf(
     [
       row({ venueId: "a" }),
-      row({ venueId: "b", tenantId: "t2", planId: "starter", planName: "Starter", mrrFils: 17900, minutes: { used: 30, included: 60 } }),
+      row({ venueId: "b", tenantId: "t2", products: ["phone_starter"], planName: "Phone Receptionist — Starter", mrrFils: 17900, minutes: { used: 30, included: 60 } }),
       row({ venueId: "c", tenantId: "t3", status: "trialing", mrrFils: 0, minutes: { used: 10, included: 30 }, trialEndsOn: "2026-09-25", since: "2026-09-10" }),
       row({ venueId: "d", tenantId: "t4", status: "cancelled", mrrFils: 0 }),
       row({ venueId: "e", tenantId: "t5", status: "active", paymentFailedAt: "2026-09-11T00:00:00Z", mrrFils: 36500, minutes: { used: 0, included: 180 } }),
-      row({ venueId: "f", tenantId: "t6", status: "none", planId: null, planName: "—", mrrFils: 0, minutes: { used: 0, included: null } }),
+      row({ venueId: "f", tenantId: "t6", status: "none", products: [], planName: "—", mrrFils: 0, minutes: { used: 0, included: null } }),
     ],
     new Date("2026-09-13T12:00:00Z"),
   );
@@ -156,7 +158,7 @@ await test("totals count what they say they count", () => {
   assert.equal(t.vendorCostFils, 240 * VENDOR_COST_PER_MINUTE_FILS);
   assert.equal(t.arpaFils, Math.round((36500 + 17900 + 36500) / 3));
   assert.equal(t.trialsLast30Days, 1);
-  assert.deepEqual(t.planMix, { Business: 2, Starter: 1 });
+  assert.deepEqual(t.planMix, { "Everything Business": 2, "Phone Receptionist — Starter": 1 });
 });
 
 await test("gross margin is on paying venues' minutes, and null with no revenue", () => {

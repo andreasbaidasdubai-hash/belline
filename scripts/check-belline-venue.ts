@@ -95,8 +95,13 @@ test("it describes live transfer honestly, including when nobody picks up", () =
 
 test("it quotes the real prices and no others", () => {
   const price = belline.agent.faqs.find((f) => /cost/i.test(f.q))!.a;
-  for (const said of ["seventy-nine", "sixty-five", "ninety-nine"]) {
+  // The Everything bundles, from the catalogue: 249, 499 and 999 dirhams.
+  for (const said of ["two hundred and forty-nine", "four hundred and ninety-nine", "nine hundred and ninety-nine"]) {
     assert.ok(price.includes(said), `the price answer is missing "${said}"`);
+  }
+  // And none of the ladder it replaced, or anything that is not sold yet.
+  for (const stale of ["seventy-nine", "three hundred and sixty-five", "unlimited", "WhatsApp"]) {
+    assert.ok(!price.includes(stale), `the price answer still says "${stale}"`);
   }
 });
 

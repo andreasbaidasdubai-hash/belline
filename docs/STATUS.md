@@ -184,6 +184,48 @@ Worked phase by phase against `docs/strategy/belline-commercial-strategy-2026-09
 - **Unverified lines**: Deepgram pre-recorded ($0.0043/min — voice notes run on Deepgram, not Whisper as the prompt assumed), Twilio's WhatsApp fee ($0.005/message — the sandbox runs through Twilio; the doc assumes Meta direct), ElevenLabs Pro credit price, UAE number rental. Each says so on the card.
 - Not metered yet: number rental (Phase 4 buys numbers), the outbound leg Twilio dials on a live transfer, and WhatsApp utility templates (nothing sends them today; the meter supports them). `costs.json` has no retention yet; at a few thousand calls a month it wants moving to Postgres with the rest of the store.
 
+### Phase 2 — products, plans and entitlements per channel (14 September 2026)
+
+| Item | State | Note |
+|---|---|---|
+| Catalogue | **Built** | `src/lib/billing/plans.ts`: 7 modules (`chat_free`, `chat`, `whatsapp`, `web_voice`, `phone_starter/business/pro`) and 3 Everything bundles, prices as `Record<Market, minor units>` for AE, GB, AU, CA, US, SG, IE, NZ, CH. Annual is computed as ten months for twelve. Nothing sellable is unlimited. `src/lib/markets.ts` holds currency, formatting and a `live`/`not-yet` status per market (only AE is live). |
+| Managed track | **Built, not public** | `professional` (AED 999) and `premium` (AED 1,999), plus white-glove setup (AED 750). All `not-yet` because they sell integrations, Arabic, multi-location and outbound calling. Not sellable, not rendered. |
+| Grandfathering | **Built** | The old Starter/Business/Enterprise ladder is kept as `legacy` products. On the first boot of this code, every *active* venue on it is stamped `grandfatheredUntil` = that day + 90 (`billing/grandfather.ts`). It keeps exactly what it bought, including Enterprise's uncounted minutes. Afterwards it lapses as `legacy_plan_ended`, enforced only once Stripe is on. |
+| Usage per channel | **Built** | `billing/usage.ts`: minutes for phone and the voice button (test console, demo lines and calls we broke excluded); conversations for chat and WhatsApp, meaning a thread with at least one Belline reply, 24 hours from that reply. Per-channel usage, projection and a `recommend()` that finds the cheapest move up. It never drops a channel they pay for, never shrinks one, never suggests the free chat, and never points downwards. The invoice is still the plan fee only. `MINUTE_DEFINITION` and `CONVERSATION_DEFINITION` are quoted verbatim on the site and the billing page. |
+| Entitlements | **Built** | `serviceState(location, today, { channel })` gates the phone (Twilio route), the voice button (`checkEmbedGate` and `mayStreamTo`), chat (`chatGate`) and WhatsApp (`respondTo`, which the webhook calls). A missing channel is refused always; lapsing is enforced only with Stripe on; a paid allowance never stops service. |
+| Trial | **Built** | 14 days, 60 phone minutes, every channel on, no card (decision confirmed). Signup no longer goes to Stripe. What was picked on `/checkout` is remembered on the trial. |
+| Free chat | **Built** | 100 conversations then a hard pause until the next period. Haiku whatever the venue's model, 20 messages a chat. "Answered by Belline" on the chat panel (and `badge` in the widget config). Staff cannot take over a chat Belline is still handling, but can pick up one Belline handed off. "Add the phone" one-click upsell on the dashboard home. Switched on without Stripe. |
+| Stripe | **Built** | One price per product × market × cycle, found by a lookup key carrying the amount; a subscription is one line per product. Stripe Tax on (`STRIPE_TAX=off` for an account without tax settings); prices are tax-exclusive. The webhook maps `belline_products` back through `checkSelection` and ignores anything that is not a sellable plan; an old-ladder session paid after the switch is honoured and grandfathered. |
+| Checkout and billing | **Built** | `/checkout`: bundles first, modules as one-per-channel toggles, a live total in the venue's currency, and the selection mirrored into the URL. `/billing`: one usage bar per channel, the products and prices, both definitions, and a change-plan link. |
+| Website pricing | **Built** | `scripts/site-pricing.ts` renders the pricing section, the ROI plan list and the structured-data offers from `plans.ts` between markers in `public/landing.html` (`npm run pricing`; `npm run site` re-applies it). Every market renders and is pinned by `check:billing`; only live markets are published. A second live market gets a picker automatically. Terms updated for the new trial and allowances. |
+| Belle's knowledge | **Built** | The price and trial FAQs are generated from the catalogue at boot (`billing/speak.ts`, in words). Only live channels are named. |
+| `check:plans` | **Built** | 29 cases, covering doc prices and allowances per market, provisional marking, ladder ordering, annual maths, the managed track hidden, WhatsApp unsold, free-chat limits, selection rules and upgrade rules. Unit costs rebuilt from the rate card land within 7% of §1.3 on both bases. Prints the margin table and enforces 30% (bundle) / 45% (module) at typical use. |
+
+**Margins at typical use, lean basis (enforced):** every module 73–90%, every bundle 62–75%, in every market.
+
+**Still needs a figure or a decision from you**
+
+- **Provisional prices** (derived from the doc's USD anchors, marked `provisional` in `plans.ts`, not public while those markets are closed):
+
+  | | GB | AU | CA | US | SG | IE | NZ | CH |
+  |---|---|---|---|---|---|---|---|---|
+  | Chat | £9 | A$19 | C$17 | $13 | S$17 | €12 | NZ$21 | CHF 49 |
+  | WhatsApp / Voice button | £21 | A$39 | C$37 | $27 | S$37 | €25 | NZ$45 | CHF 99 |
+  | Everything S / B / P | £55/109/219 | A$99/199/399 | C$89/179/359 | $65/129/259 | S$89/179/359 | €59/119/239 | NZ$109/219/449 | CHF 249/499/899 |
+  | Phone S / B / P | from doc | from doc | from doc | from doc | from doc | from doc | NZ$65/155/359 | from addendum |
+
+- **The UAE-line (conservative) margins fail the floor, and are reported rather than enforced** because they rest on three unverified rates: `TWILIO_INBOUND_AE`, `TWILIO_NUMBER_AE` and `ELEVENLABS_CREDIT_PRO`.
+  - Phone Starter comes out at 29–39% in every market, against the 45% floor (AED 149 is 32%). The $15 UAE number rental alone is most of that.
+  - Phone Business is at 42–44% in AE, AU, CA, US and NZ.
+  - Everything Business and Everything Pro in the US sit at 30% and 29%.
+
+  This basis applies UAE line costs to every market, so outside the UAE it overstates cost. Setting the three `RATE_*` values makes it a hard gate. Then either the UAE line comes in cheap, or Phone Starter needs a higher UAE price. That price is your call; the doc itself shows 33%.
+- **Stripe dashboard:**
+  - Enter the head-office address and tax registrations before Stripe Tax can run.
+  - Turn off plan switching in the customer portal: `customer.subscription.updated` is not mapped, so plan changes have to go through `/checkout`.
+- **WhatsApp module** stays `not-yet` until the Meta account exists (the gap is recorded in `plans.ts`).
+- **Belle quotes UAE prices** until Phase 4 gives her the caller's market.
+
 ---
 
 ## Two things only you can do

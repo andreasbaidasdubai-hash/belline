@@ -14,6 +14,8 @@ import { openCredentials } from "@/lib/db/credentials";
 import { ADAPTERS, closeEpisode } from "@/lib/reception/respond";
 import { track } from "@/lib/reception/events";
 import { seedIfEmpty } from "@/lib/seed";
+import { getLocation } from "@/lib/store";
+import { freeTierOf } from "@/lib/billing/entitlement";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +51,24 @@ export async function POST(
   // for a member of staff who can only see one branch.
   if (conversation.locationId && !canSeeLocation(user, conversation.locationId)) {
     return NextResponse.json({ error: "Not your venue." }, { status: 403 });
+  }
+
+  // The free chat is answered by Belline alone (§2.2: no inbox takeover). A
+  // conversation Belline itself handed to the team can still be picked up —
+  // a customer who was told a person is coming must get one.
+  if (
+    action === "takeover" &&
+    conversation.channel === "webchat" &&
+    conversation.status === "AI_ACTIVE" &&
+    conversation.locationId
+  ) {
+    const venue = getLocation(conversation.locationId);
+    if (venue && freeTierOf(venue)) {
+      return NextResponse.json(
+        { error: "Taking over a chat is part of the paid Chat Receptionist. On the free chat, Belline answers." },
+        { status: 403 },
+      );
+    }
   }
 
   switch (action) {

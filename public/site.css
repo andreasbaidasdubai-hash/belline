@@ -723,6 +723,57 @@ section { padding: 110px 0; }
 }
 .plan .btn { margin-top: auto; align-self: start; }
 
+/* Die Module unter den drei Paketen: dieselben Haarlinien, kleiner gesetzt.
+   Ein Kanal pro Spalte, damit man "nur den Chat" findet, ohne die Pakete
+   noch einmal lesen zu muessen. */
+.market[hidden] { display: none; }
+.market-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 36px 16px 0 0;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+.market-pick select {
+  font: inherit;
+  padding: 8px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+}
+.modules { margin-top: 56px; padding-top: 34px; border-top: 1px solid var(--rule); }
+.modules-head {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.4rem;
+  letter-spacing: -0.015em;
+  margin: 0 0 22px;
+}
+.module-groups {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 32px;
+}
+.module-group { list-style: none; margin: 0; padding: 0; }
+.module { padding: 16px 0 18px; border-top: 1px solid var(--rule-soft); }
+.module-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.module-name { font-size: 0.95rem; font-weight: 600; color: var(--ink); }
+.module-price { font-family: var(--serif); font-size: 1.15rem; white-space: nowrap; color: var(--ink); }
+.module-what { font-size: 0.86rem; color: var(--ink-2); margin: 6px 0 0; }
+.module details { margin-top: 8px; font-size: 0.82rem; color: var(--ink-3); }
+.module summary { cursor: pointer; color: var(--ink-2); }
+.module details ul { margin: 8px 0 0; padding-left: 16px; display: grid; gap: 5px; }
+.module-cta {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.84rem;
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+.module-cta:hover { color: var(--brass); }
+
 .compare {
   margin: 52px 0 0;
   max-width: none;
@@ -733,6 +784,7 @@ section { padding: 110px 0; }
   color: var(--ink);
 }
 
+.terms.terms-4 { grid-template-columns: repeat(4, 1fr); }
 .terms {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1154,7 +1206,9 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   .plans { grid-template-columns: 1fr; }
   .plan { padding: 30px 0; border-right: 0; border-bottom: 1px solid var(--rule-soft); }
   .plan.is-best { margin-top: 0; }
-  .terms { grid-template-columns: 1fr; gap: 24px; }
+  .terms,
+  .terms.terms-4 { grid-template-columns: 1fr; gap: 24px; }
+  .module-groups { grid-template-columns: 1fr; }
   .plates { grid-template-columns: 1fr; gap: 40px; }
 }
 

@@ -22,7 +22,10 @@ const { seedIfEmpty } = await import("../src/lib/seed");
 const { signUp } = await import("../src/lib/onboarding");
 const { getLocation, upsertLocation, saveCall, listLocations } = await import("../src/lib/store");
 const { startCall } = await import("../src/lib/calls");
-const { lapseOf, serviceState } = await import("../src/lib/billing/entitlement");
+const { freeTierOf, lapseOf, serviceState } = await import("../src/lib/billing/entitlement");
+const { checkEmbedGate } = await import("../src/lib/embed");
+const { chatGate, messageCeiling } = await import("../src/lib/webchat");
+const { mayStreamTo } = await import("../src/lib/voice/entitlement");
 const { todayIn } = await import("../src/lib/time");
 
 let passed = 0;
@@ -90,10 +93,16 @@ test("test-console calls do not use up the trial", () => {
   assert.equal(lapseOf(fresh(), today), null);
 });
 
-test("thirty live minutes use up the trial", () => {
+test("a trial answers on every channel", () => {
+  for (const channel of ["phone", "web_voice", "chat", "whatsapp"] as const) {
+    assert.equal(serviceState(fresh(), today, { enforce: true, channel }).answering, true, channel);
+  }
+});
+
+test("sixty live minutes use up the trial", () => {
   const call = startCall(fresh(), "phone", "+971501234567");
   call.status = "completed";
-  call.startedAt = new Date(Date.now() - 30 * 60_000).toISOString();
+  call.startedAt = new Date(Date.now() - 60 * 60_000).toISOString();
   call.endedAt = new Date().toISOString();
   saveCall(call);
   assert.equal(lapseOf(fresh(), today), "trial_minutes_used");
@@ -129,6 +138,103 @@ test("a cancelled plan answers to the end of the paid period, then stops", () =>
   });
   assert.equal(lapseOf(fresh(), today), null);
   assert.equal(lapseOf(fresh(), addDays(today, 40)), "cancelled");
+});
+
+console.log("\n\x1b[1mA channel the plan does not include\x1b[0m\n");
+
+/** A fresh paying venue on exactly these products. */
+async function payingOn(name: string, products: string[], extra: Record<string, unknown> = {}) {
+  const made = await signUp({
+    businessName: name,
+    email: `owner@${name.toLowerCase().replace(/\W+/g, "")}.test`,
+    password: "Correct-Horse-Battery-9",
+    vertical: "salon",
+    timezone: "Asia/Dubai",
+  });
+  assert.ok(made.ok);
+  const loc = getLocation(made.ok ? made.location.id : "")!;
+  upsertLocation({
+    ...loc,
+    phone: "+97145550199",
+    embed: { enabled: true, key: `k_${loc.id}`, mode: "both", allowedOrigins: ["https://example.test"], maxCallsPerDay: 20 },
+    subscription: { products, market: "AE", cycle: "monthly", startedOn: addDays(today, -3), status: "active", ...extra },
+  } as never);
+  return () => getLocation(loc.id)!;
+}
+
+const chatOnly = await payingOn("Chat Only Cafe", ["chat"]);
+
+test("a venue on the chat alone is not answered on the phone — even with card payments off", () => {
+  const state = serviceState(chatOnly(), today, { channel: "phone" });
+  assert.equal(state.answering, false);
+  assert.equal(state.refused, "not_in_plan");
+  assert.doesNotMatch(state.callerMessage ?? "", /trial|plan|pay|subscri/i);
+  assert.equal(serviceState(chatOnly(), today, { channel: "chat" }).answering, true);
+});
+
+test("nor through the website's voice button: the gate refuses and no socket may open", () => {
+  assert.equal(serviceState(chatOnly(), today, { channel: "web_voice" }).answering, false);
+  assert.equal(checkEmbedGate(chatOnly()).allowed, false);
+  assert.equal(mayStreamTo(chatOnly()), false, "a stream token could open a call nobody pays for");
+});
+
+test("nor on WhatsApp", () => {
+  assert.equal(serviceState(chatOnly(), today, { channel: "whatsapp" }).refused, "not_in_plan");
+});
+
+const phoneOnly = await payingOn("Phone Only Dental", ["phone_starter"]);
+
+test("a phone-only venue far past its minutes is still answered on the phone", () => {
+  for (let i = 0; i < 5; i++) {
+    const call = startCall(phoneOnly(), "phone", "+971501234567");
+    call.status = "completed";
+    call.startedAt = new Date(Date.now() - 60 * 60_000).toISOString();
+    call.endedAt = new Date().toISOString();
+    saveCall(call);
+  }
+  assert.equal(serviceState(phoneOnly(), today, { enforce: true, channel: "phone" }).answering, true);
+  assert.equal(mayStreamTo(phoneOnly()), false);
+});
+
+console.log("\n\x1b[1mThe free chat\x1b[0m\n");
+
+const freeChat = await payingOn("Free Chat Florist", ["chat_free"]);
+
+test("the free chat answers on Haiku, twenty messages to a chat, with the badge", () => {
+  assert.deepEqual(freeTierOf(freeChat()), { model: "claude-haiku-4-5", maxMessagesPerChat: 20, badge: true, inboxTakeover: false });
+  assert.equal(messageCeiling(freeChat()), 20);
+  assert.equal(freeTierOf(chatOnly()), null, "a paid chat was given the free tier's limits");
+  assert.equal(freeTierOf(fresh()), null);
+});
+
+test("and pauses at its hundredth conversation, where a paid chat would keep going", () => {
+  for (let i = 0; i < 100; i++) {
+    const thread = startCall(freeChat(), "webchat", "Website");
+    thread.transcript = [{ role: "agent", text: "Hello", at: new Date().toISOString() }];
+    saveCall(thread);
+  }
+  const state = serviceState(freeChat(), today, { channel: "chat" });
+  assert.equal(state.answering, false);
+  assert.equal(state.refused, "free_limit");
+  assert.equal(chatGate(freeChat()).allowed, false);
+});
+
+console.log("\n\x1b[1mGrandfathered plans\x1b[0m\n");
+
+const pilot = await payingOn("Pilot Clinic", [], { planId: "business", grandfatheredUntil: addDays(today, 30) });
+
+test("a pilot on the old ladder keeps the phone, the voice button and the chat until its date", () => {
+  for (const channel of ["phone", "web_voice", "chat"] as const) {
+    assert.equal(serviceState(pilot(), today, { enforce: true, channel }).answering, true, channel);
+  }
+  assert.equal(lapseOf(pilot(), today), null);
+});
+
+test("after its date it has lapsed — enforced only once card payments are on", () => {
+  const after = addDays(today, 31);
+  assert.equal(lapseOf(pilot(), after), "legacy_plan_ended");
+  assert.equal(serviceState(pilot(), after, { channel: "phone" }).answering, true);
+  assert.equal(serviceState(pilot(), after, { enforce: true, channel: "phone" }).answering, false);
 });
 
 test("demo lines and our own venues are never lapsed", () => {
