@@ -224,6 +224,63 @@ export function logout(sessionId: string | undefined): void {
   if (sessionId) deleteSessions({ sessionId });
 }
 
+/** A session for a person already proven to be who they are — by a sign-in link. */
+export function startSession(user: User, userAgent?: string): Session {
+  pruneSessions();
+  const now = new Date();
+  const session: Session = {
+    id: crypto.randomBytes(32).toString("base64url"),
+    userId: user.id,
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + SESSION_DAYS * 86_400_000).toISOString(),
+    userAgent: userAgent?.slice(0, 200),
+  };
+  saveSession(session);
+  saveUser({ ...user, lastSeenAt: now.toISOString() });
+  return session;
+}
+
+// --- sign-in links ---------------------------------------------------------
+
+const LOGIN_LINK_HOURS = 24;
+
+/**
+ * A link that signs one person in, once, within a day.
+ *
+ * Sent by email only — never shown in a chat or read out on a call, because
+ * whoever holds it is signed in. Single use by a nonce stored on the user:
+ * using it clears the nonce, and sending a new link replaces it, so only the
+ * latest link ever works.
+ */
+export function signLoginToken(user: User, now = Date.now()): string {
+  const nonce = crypto.randomBytes(12).toString("base64url");
+  saveUser({ ...user, loginNonce: nonce });
+  const expires = now + LOGIN_LINK_HOURS * 3_600_000;
+  const payload = `${user.id}.${expires}.${nonce}`;
+  const mac = crypto.createHmac("sha256", streamSecret()).update(`login:${payload}`).digest("base64url");
+  return `${payload}.${mac}`;
+}
+
+/** The person a sign-in link names, if it is genuine, unexpired and unused. Uses it up. */
+export function consumeLoginToken(token: string | undefined, now = Date.now()): User | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 4) return null;
+  const [userId, expires, nonce, mac] = parts;
+  const expected = crypto
+    .createHmac("sha256", streamSecret())
+    .update(`login:${userId}.${expires}.${nonce}`)
+    .digest("base64url");
+  const a = Buffer.from(mac);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  if (Number(expires) < now) return null;
+  const user = getUser(userId);
+  if (!user || user.disabled || !user.loginNonce || user.loginNonce !== nonce) return null;
+  saveUser({ ...user, loginNonce: undefined });
+  return user;
+}
+
 /** Pull the session cookie out of a raw `Cookie:` header, for the WS bridge. */
 export function sessionIdFromCookieHeader(header: string | undefined): string | undefined {
   if (!header) return undefined;

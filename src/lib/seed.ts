@@ -721,13 +721,21 @@ export function seedIfEmpty(): void {
 function refreshOurOwnKnowledge(): void {
   const stored = listLocations({ includeInternal: true }).find((l) => l.id === bellineVenue.id);
   if (!stored) return;
+  // The persona too, since she became a salesperson: how she sells is sales
+  // copy reviewed in the same commit as the tools she sells with.
   const same =
     JSON.stringify(stored.agent.faqs) === JSON.stringify(bellineVenue.agent.faqs) &&
-    JSON.stringify(stored.agent.policies) === JSON.stringify(bellineVenue.agent.policies);
+    JSON.stringify(stored.agent.policies) === JSON.stringify(bellineVenue.agent.policies) &&
+    stored.agent.persona === bellineVenue.agent.persona;
   if (same) return;
   upsertLocation({
     ...stored,
-    agent: { ...stored.agent, faqs: bellineVenue.agent.faqs, policies: bellineVenue.agent.policies },
+    agent: {
+      ...stored.agent,
+      faqs: bellineVenue.agent.faqs,
+      policies: bellineVenue.agent.policies,
+      persona: bellineVenue.agent.persona,
+    },
   });
 }
 

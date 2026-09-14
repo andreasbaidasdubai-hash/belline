@@ -27,6 +27,7 @@ import {
   todayIn,
 } from "../time";
 import type { AgentChannel } from "./prompt";
+import { executeSalesTool, salesTools } from "./sales";
 
 /**
  * The agent's hands.
@@ -299,6 +300,8 @@ export function toolsFor(
             },
           },
         ] satisfies Anthropic.Tool[])),
+    // Belline's own venue sells Belline. See agent/sales.ts.
+    ...(location.internal ? salesTools() : []),
   ];
 }
 
@@ -825,8 +828,10 @@ export async function executeTool(
       };
     }
 
-    default:
-      return { result: { error: `No such tool: ${name}` } };
+    default: {
+      const sales = await executeSalesTool(name, input, ctx);
+      return sales ?? { result: { error: `No such tool: ${name}` } };
+    }
   }
 }
 

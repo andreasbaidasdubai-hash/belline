@@ -1104,6 +1104,12 @@ export interface User {
   createdAt: string;
   lastSeenAt?: string;
   disabled?: boolean;
+  /**
+   * The one sign-in link currently outstanding for this person, by nonce.
+   * Cleared when used, so a link works once; replaced when a new one is sent,
+   * so only the latest works. See `signLoginToken` in auth.ts.
+   */
+  loginNonce?: string;
 }
 
 export interface Session {
