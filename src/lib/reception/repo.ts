@@ -427,6 +427,29 @@ export async function openConversationFor(
   return row && toConversation(row);
 }
 
+/**
+ * Move an open thread onto the number the customer has just written to.
+ *
+ * A customer who tried Belle on the Twilio sandbox and then messaged the Meta
+ * number landed in the same open conversation, still pinned to the sandbox —
+ * so every reply went out through a sandbox they had long since left, and
+ * nothing arrived. The reply belongs on the line the message came in on.
+ */
+export async function setConversationAccount(
+  tenantId: string,
+  id: number,
+  account: { id: number; locationId?: string },
+): Promise<Conversation | undefined> {
+  const row = await one<ConversationRow>(
+    `update conversation
+        set channel_account_id = $3, location_id = coalesce($4, location_id), updated_at = now()
+      where tenant_id = $1 and id = $2
+      returning *`,
+    [tenantId, id, account.id, account.locationId ?? null],
+  );
+  return row && toConversation(row);
+}
+
 export async function createConversation(input: {
   tenantId: string;
   businessId: string;

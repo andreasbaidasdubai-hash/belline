@@ -5,6 +5,7 @@ import {
   markDelivery,
   openConversationFor,
   recordMessage,
+  setConversationAccount,
   upsertCustomer,
 } from "./repo";
 import { track } from "./events";
@@ -88,7 +89,11 @@ export async function acceptInbound(
     firstName: inbound.profileName?.trim() || undefined,
   });
 
-  const existing = await openConversationFor(account.tenantId, customer.id, inbound.channel);
+  let existing = await openConversationFor(account.tenantId, customer.id, inbound.channel);
+  if (existing && existing.channelAccountId !== account.id) {
+    // Same customer, different number of ours: answer on the one they used.
+    existing = (await setConversationAccount(account.tenantId, existing.id, account)) ?? existing;
+  }
   const conversation =
     existing ??
     (await createConversation({
