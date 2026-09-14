@@ -270,14 +270,10 @@ test("a socket that stops answering is dropped", () => {
   assert.equal(ws.terminated, true);
 });
 
-console.log("\nBooking a demo\n");
+console.log("\nThe diary underneath (not offered to Belle, who books nothing)\n");
 
-const tools = toolsFor(belline);
-const bookTool = tools.find((t) => t.name === "book")!;
-
-test("the book tool asks for an email here, and does not on a restaurant", () => {
-  const required = (bookTool.input_schema as { required: string[] }).required;
-  assert.ok(required.includes("guest_email"), "email is not required on Belline's own line");
+test("Belle is offered no book tool, and a restaurant's does not ask for an email", () => {
+  assert.equal(toolsFor(belline).find((t) => t.name === "book"), undefined, "Belle can book again");
 
   const restaurant = getLocation("loc_azure")!;
   const theirs = toolsFor(restaurant).find((t) => t.name === "book")!;

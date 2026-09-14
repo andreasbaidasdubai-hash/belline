@@ -154,7 +154,29 @@ When their business is done, do not sign off. A message that says "Is there anyt
 export function staticPrompt(location: Location, channel: AgentChannel = "voice"): string {
   const a = location.agent;
   const t = terms(location);
-  const facts = isRestaurant(location) ? restaurantFacts(location) : diaryFacts(location);
+  // Belline's own line sells Belline and books nothing: no diary, no booking
+  // rules, no "offer times first" habit, and not the demonstration-line block,
+  // which told her to take a booking properly.
+  const selling = Boolean(location.internal);
+  const facts = selling ? "" : isRestaurant(location) ? restaurantFacts(location) : diaryFacts(location);
+  const medium = selling
+    ? MEDIUM[channel]
+        .split("\n")
+        .filter((line) => !/check_availability|times to choose from|booking reference|a root colour|a single time has been offered/.test(line))
+        .join("\n")
+    : MEDIUM[channel];
+  const bookingRules = selling
+    ? ""
+    : `# Booking rules
+- Never state availability from memory or assumption. Call check_availability first, every time, including when the caller proposes a time that sounds obvious.
+- Get the guest's name and a contact number before calling book. Read the number back to confirm it.
+- After booking, read back the day, the time${isRestaurant(location) ? ", and the party size" : `, the ${t.service}, and the price`}, then give the reference.
+- To change or cancel, find the booking first with lookup_booking — by reference if they have it, otherwise by the number they are calling from.
+- If a tool reports the time is unavailable, offer the alternatives it returned. Do not apologise more than once.
+- If a day comes back closed or full, call check_availability again for the next day that is open before you reply. A day you have not checked has no times in it, so naming one is inventing it — and "nothing tomorrow" with no second suggestion is where a booking is lost.
+- Never invent a price, a dish, a product, or a policy. If you do not know, say you will have a colleague confirm and take a message.
+
+`;
 
   return `You are ${a.displayName}, ${
     channel === "voice" ? "answering the telephone for" : "answering messages for"
@@ -164,18 +186,9 @@ Call the people who get in touch "${t.guests}", never "customers" or "users". Th
 
 ${a.persona}
 
-${MEDIUM[channel]}
+${medium}
 
-# Booking rules
-- Never state availability from memory or assumption. Call check_availability first, every time, including when the caller proposes a time that sounds obvious.
-- Get the guest's name and a contact number before calling book. Read the number back to confirm it.
-- After booking, read back the day, the time${isRestaurant(location) ? ", and the party size" : `, the ${t.service}, and the price`}, then give the reference.
-- To change or cancel, find the booking first with lookup_booking — by reference if they have it, otherwise by the number they are calling from.
-- If a tool reports the time is unavailable, offer the alternatives it returned. Do not apologise more than once.
-- If a day comes back closed or full, call check_availability again for the next day that is open before you reply. A day you have not checked has no times in it, so naming one is inventing it — and "nothing tomorrow" with no second suggestion is where a booking is lost.
-- Never invent a price, a dish, a product, or a policy. If you do not know, say you will have a colleague confirm and take a message.
-
-# House rules you must follow
+${bookingRules}# House rules you must follow
 ${a.policies.map((p) => `- ${p}`).join("\n")}
 
 # ${location.name}
@@ -189,7 +202,7 @@ ${facts}
 ${a.faqs.map((f) => `Q: ${f.q}\nA: ${f.a}`).join("\n\n")}
 
 ${CLOSING[channel](Boolean(location.agent.transferNumber))}${
-    location.demo?.enabled
+    location.demo?.enabled && !selling
       ? `
 
 # This is a demonstration line
@@ -217,9 +230,7 @@ export function callContext(
 
 When you call a tool, always pass dates as YYYY-MM-DD. Today is ${today}. Work out what "tomorrow", "Friday" or "next week" means yourself before calling the tool; do not pass those words through.
 
-You may book up to ${location.agent.bookingHorizonDays} days ahead.
-
-${
+${location.internal ? "" : `You may book up to ${location.agent.bookingHorizonDays} days ahead.\n\n`}${
   opts.callerNumber
     ? `The ${who} is ${
         opts.channel === "voice" ? "dialling" : "messaging"

@@ -175,11 +175,36 @@ await test("a lead is saved once per prospect, marked as coming from Belle", asy
 
 console.log("\n\x1b[1mHow she sells\x1b[0m\n");
 
-await test("her policies put the demo first, then the trial, then checkout, and the call last", () => {
-  const policies = bellineVenue.agent.policies.join(" ");
-  const order = ["build_demo", "start_trial", "send_checkout", "call with our team"].map((s) => policies.indexOf(s));
+await test("her path is the demo, then the trial, then checkout, and a person last", () => {
+  const path = bellineVenue.agent.policies.find((p) => p.startsWith("Your path"))!;
+  assert.ok(path, "no path policy");
+  const order = ["build_demo", "start_trial", "send_checkout", "wants_person"].map((s) => path.indexOf(s));
   assert.ok(order.every((i) => i >= 0), `missing a step: ${order}`);
   assert.deepEqual([...order].sort((a, b) => a - b), order, "the steps are out of order");
+});
+
+await test("she books nothing: no booking tools on Belline's line, and a rule against naming times", () => {
+  const names = toolsFor(belline, "text").map((t) => t.name);
+  for (const tool of ["check_availability", "book", "lookup_booking", "change_booking", "cancel_booking", "join_waitlist"]) {
+    assert.ok(!names.includes(tool), `${tool} is still offered to Belle`);
+  }
+  assert.ok(toolsFor(customer, "text").some((t) => t.name === "book"), "a customer's receptionist lost its booking tools");
+  assert.match(bellineVenue.agent.policies.join(" "), /never offer, suggest or name a time/);
+});
+
+await test("her prompt carries no booking rules and no demonstration-line block", async () => {
+  const { staticPrompt } = await import("../src/lib/agent/prompt");
+  const prompt = staticPrompt(belline, "text");
+  assert.doesNotMatch(prompt, /# Booking rules/);
+  assert.doesNotMatch(prompt, /This is a demonstration line/);
+  assert.doesNotMatch(prompt, /check_availability/);
+  assert.match(staticPrompt(customer, "text"), /# Booking rules/);
+});
+
+await test("she sells with psychology but never fakes proof or urgency", () => {
+  const policies = bellineVenue.agent.policies.join(" ");
+  assert.match(policies, /Never fake urgency or scarcity/);
+  assert.match(policies, /own numbers, never invented ones/);
 });
 
 await test("she discloses being an AI, sells with specifics, and names nothing that is not live", () => {

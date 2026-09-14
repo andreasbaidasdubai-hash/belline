@@ -1,5 +1,7 @@
 import { requireUser } from "@/lib/auth-server";
-import { visibleLocations } from "@/lib/auth";
+import { isBellineStaff, visibleLocations } from "@/lib/auth";
+import { listLocations } from "@/lib/store";
+import { userCanSeeLocation } from "@/lib/tenancy";
 import { isConfigured } from "@/lib/db/client";
 import { listConversations, listMessages, getCustomer } from "@/lib/reception/repo";
 import { seedIfEmpty } from "@/lib/seed";
@@ -55,7 +57,13 @@ export default async function InboxPage({
     );
   }
 
-  const mine = visibleLocations(user).map((l) => l.id);
+  // Belline's own venue is internal and hidden from every list, so its
+  // WhatsApp and website chats were stored but never shown. Belline staff see
+  // it; nobody else does — the tenant check in userCanSeeLocation still applies.
+  const venues = isBellineStaff(user)
+    ? listLocations({ includeInternal: true }).filter((l) => userCanSeeLocation(user, l))
+    : visibleLocations(user);
+  const mine = venues.map((l) => l.id);
   const conversations = await listConversations(user.tenantId, { locationIds: mine, limit: 60 });
 
   const selected: Conversation | undefined =

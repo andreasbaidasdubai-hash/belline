@@ -84,7 +84,7 @@ export function toolsFor(
         },
       };
 
-  return [
+  const all: Anthropic.Tool[] = [
     {
       name: "check_availability",
       description:
@@ -303,7 +303,20 @@ export function toolsFor(
     // Belline's own venue sells Belline. See agent/sales.ts.
     ...(location.internal ? salesTools() : []),
   ];
+  // And books nothing. With a diary in reach she proposed demo slots to people
+  // who had only said hello, and the honesty guard turned that into "I haven't
+  // got anything free there".
+  return location.internal ? all.filter((t) => !BOOKING_TOOL_NAMES.has(t.name)) : all;
 }
+
+const BOOKING_TOOL_NAMES = new Set([
+  "check_availability",
+  "book",
+  "lookup_booking",
+  "change_booking",
+  "cancel_booking",
+  "join_waitlist",
+]);
 
 // ---------------------------------------------------------------------------
 
