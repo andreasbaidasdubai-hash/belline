@@ -712,6 +712,19 @@ export function coerceRestaurant(input: unknown, current: RestaurantConfig): Res
           combinesWith: "combinesWith" in t ? ids(t.combinesWith) : undefined,
           online: flag(t, "online"),
           priority: num(t.priority),
+          // The floor plan position. Kept through every save of the room, so
+          // editing a table's seats does not scatter an arranged floor.
+          layout: (() => {
+            const l = asRaw(t.layout);
+            const x = l ? num(l.x) : undefined;
+            const y = l ? num(l.y) : undefined;
+            if (!l || x === undefined || y === undefined) return undefined;
+            return {
+              x: Math.max(0, Math.min(1000, x)),
+              y: Math.max(0, Math.min(4000, y)),
+              shape: l.shape === "round" ? ("round" as const) : l.shape === "square" ? ("square" as const) : undefined,
+            };
+          })(),
         }),
       )
       .filter((t) => t.id && t.name),

@@ -39,10 +39,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       return n + overdue + due;
     }, 0);
 
+  // Floor for businesses that book tables, rota for ones that book people.
+  const visible = listLocations().filter((l) => canSeeLocation(user, l.id));
+  const hasTables = visible.some((l) => l.restaurant);
+  const hasPeople = visible.some((l) => l.salon);
+
   const nav = [
     { href: "/attention", label: "Needs you", badge: outstanding || undefined },
     { href: "/", label: "Overview" },
     { href: "/calendar", label: "Calendar" },
+    ...(hasTables ? [{ href: "/floor", label: "Floor" }] : []),
     { href: "/calls", label: "Calls" },
     { href: "/inbox", label: "Messages" },
     { href: "/bookings", label: "Bookings" },
@@ -59,6 +65,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           { href: "/agents", label: "Agent" },
           { href: "/venue", label: "How it works" },
           { href: "/locations", label: "Locations" },
+          ...(hasPeople ? [{ href: "/rota", label: "Rota" }] : []),
+          { href: "/reports", label: "Reports" },
           // Beside the other places Belline answers from, not under
           // integrations: this is a channel the venue switches on, not a
           // third party it connects to.

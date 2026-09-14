@@ -457,6 +457,12 @@ export interface Table {
   online?: boolean;
   /** Preference between tables that fit equally well. Higher goes first. */
   priority?: number;
+  /**
+   * Where the table sits on the floor plan, in plan units (the plan is 1000
+   * wide). Absent tables are laid out in a grid by section until somebody
+   * arranges the room — see floor.ts.
+   */
+  layout?: { x: number; y: number; shape?: "round" | "square" };
 }
 
 /**

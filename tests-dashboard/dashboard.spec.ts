@@ -85,6 +85,39 @@ test("customers page loads with search", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("floor plan shows tables and opens arrange mode", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto("/floor?loc=loc_azure");
+  await expect(page.locator(".floor-table").first()).toBeVisible();
+  await page.getByRole("button", { name: "Arrange tables" }).click();
+  await expect(page.getByRole("button", { name: "Save layout" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  expect(errors).toEqual([]);
+});
+
+test("reports load and the bookings CSV downloads", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto("/reports");
+  await expect(page.getByRole("heading", { name: "Reports" })).toBeVisible();
+  const href = await page.getByRole("link", { name: "Bookings CSV" }).getAttribute("href");
+  const res = await page.request.get(href!);
+  expect(res.ok()).toBeTruthy();
+  expect(res.headers()["content-type"]).toContain("text/csv");
+  expect(errors).toEqual([]);
+});
+
+test("rota opens a day to edit", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto("/rota");
+  const cell = page.locator(".rota-cell").first();
+  if (await cell.count()) {
+    await cell.click();
+    await expect(page.getByRole("button", { name: "Day off" })).toBeVisible();
+    await page.keyboard.press("Escape");
+  }
+  expect(errors).toEqual([]);
+});
+
 test("Ctrl+K search finds a page and goes there", async ({ page }) => {
   const errors = watchErrors(page);
   await page.goto("/");

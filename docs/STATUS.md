@@ -243,7 +243,11 @@ Built from `docs/strategy/belline-next-prompt.md` phases A–C, plus the dashboa
 | Live updates | **Built** | The dashboard checks every 10 seconds (while the tab is visible) whether bookings or calls changed and re-renders in place. A booking Belle took shows a notice with an Open link. |
 | Dashboard browser tests | **Built** | `npm run test:dashboard` starts the app against a throwaway data folder with no database, model or email keys, creates the owner through first-run setup, and clicks through overview, the booking form, the week view, locations, customers and Ctrl+K search, failing on any console error. 6 tests. `check:dashboard` (10) covers search permissions, profiles and live updates. |
 
-**Still open on the dashboard:** restaurant floor plan and table-status view, reports and CSV export, a staff rota editor on the calendar, and Arabic / right-to-left support.
+| Restaurant floor plan | **Built** | `/floor` (restaurants only): every table on a plan, coloured by what is happening now — free, booked soon, due, running late, arrived, seated, blocked. Click a table for the party, notes and next booking, and mark arrived / seat / left / no-show in one tap; a Walk-in button opens the booking form. "Arrange tables" lets managers drag tables into place and save (positions live on `Table.layout`, kept through every save of the room). `src/lib/floor.ts`, `/api/floor/layout`. |
+| Reports and CSV export | **Built** | `/reports` (managers and owners): any date range with 7/30/90-day shortcuts. Bookings split Belle vs desk, covers or booked value, no-show rate, calls and chats with minutes and how they ended, new vs returning customers, busiest days and hours, services and team. Bookings, calls and customers download as CSV (spreadsheet-formula cells neutralised). `src/lib/reports.ts`, `/api/reports/export`. |
+| Staff rota | **Built** | `/rota` (salons and clinics): people × the week, showing what each actually works. Click a day to set different hours, a day off, back to usual, or add/remove time off. The booking engine uses it immediately; bookings a change leaves outside someone's hours are listed with links to move them — nothing is moved automatically. `src/lib/rota.ts`, `/api/rota`. `check:ops` (13) covers all three; the dashboard browser tests now include floor, reports and rota (9). |
+
+**Still open on the dashboard:** Arabic / right-to-left support.
 
 ---
 
