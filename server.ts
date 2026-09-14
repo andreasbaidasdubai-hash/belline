@@ -19,6 +19,7 @@ import { checkEmbedGate } from "./src/lib/embed";
 import { mayStreamTo, watchLiveness, sweepLiveness, type Liveness } from "./src/lib/voice/entitlement";
 import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
+import { meterTts } from "./src/lib/billing/cost";
 import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voice/session";
 import { ensureOwnWhatsAppAccount, ensureTwilioSandboxAccount } from "./src/lib/whatsapp";
 import { BrowserTransport, TwilioTransport } from "./src/lib/voice/transports";
@@ -397,15 +398,23 @@ async function warmGreetings(): Promise<void> {
     // and the logs cheerfully reported a warm cache either way.
     for (const format of ["ulaw_8000", "pcm_16000"] as const) {
       try {
+        // Warming spends real characters. They belong to the venue, and to the
+        // channel the format serves: μ-law is the phone, PCM the website.
+        const onBilled = (chars: number, model: string) =>
+          meterTts(
+            { venueId: location.id, channel: format === "ulaw_8000" ? "phone" : "embed_voice" },
+            chars,
+            model,
+          );
         const { text, ...voice } = greetingClip(location, greetingFor(location), format);
-        await speakClip(text, voice);
+        await speakClip(text, { ...voice, onBilled });
         // And the "sure" / "okay" said while an answer is being worked out.
         // Cold, the first one arrives too late to be worth saying and is
         // dropped — which is safe, and is also silence on the first turn of
         // the first call after a deploy, the one turn this is all for.
         for (const clip of acknowledgementClips(location, format)) {
           const { text: line, ...params } = clip;
-          await speakClip(line, params);
+          await speakClip(line, { ...params, onBilled });
         }
       } catch {
         // Left cold on purpose; the first real call will fill it.

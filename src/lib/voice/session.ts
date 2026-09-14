@@ -3,6 +3,7 @@ import { AgentSession } from "../agent/runtime";
 import { createSttStream, type SttStream } from "../providers/stt";
 import { speak, speakClip, ttsEnabled, type TtsFormat } from "../providers/tts";
 import { saveCall } from "../store";
+import { costChannelOf, meterCallTime, meterTts } from "../billing/cost";
 import { maxCallSeconds } from "../demo";
 import { speechKeyterms } from "../verticals";
 import { assessAuthority, type Assessment } from "../agent/authority";
@@ -255,6 +256,13 @@ export class VoiceSession {
   private bargeInTimer: NodeJS.Timeout | null = null;
   private closed = false;
   private timeout: NodeJS.Timeout | null = null;
+  /** Reports what ElevenLabs charged for each fragment of this call. */
+  private readonly billed = (chars: number, model: string): void =>
+    meterTts(
+      { venueId: this.location.id, callId: this.call.id, channel: costChannelOf(this.call) },
+      chars,
+      model,
+    );
   /** Fires if the turn has produced no audio soon enough — see ACKNOWLEDGEMENTS. */
   private ackTimer: NodeJS.Timeout | null = null;
   /** The acknowledgement said this turn, if one was, for the transcript. */
@@ -478,6 +486,7 @@ export class VoiceSession {
             speed: spoken.speed * ((this.location.agent.voiceSpeed ?? 1.05) / 1.05),
             format: this.transport.output,
             signal: abort.signal,
+            onBilled: this.billed,
           })) {
             chunks.push(chunk);
           }
@@ -905,6 +914,7 @@ export class VoiceSession {
       ...voiceParams(this.location, spoken, this.transport.output),
       signal: controller.signal,
       previousText: this.spokenThisTurn || undefined,
+      onBilled: this.billed,
     };
 
     try {
@@ -991,7 +1001,10 @@ export class VoiceSession {
     const spoken = toSpoken(line);
     let audio: Buffer;
     try {
-      audio = await speakClip(spoken.text, voiceParams(this.location, spoken, this.transport.output));
+      audio = await speakClip(spoken.text, {
+        ...voiceParams(this.location, spoken, this.transport.output),
+        onBilled: this.billed,
+      });
     } catch {
       // A missing acknowledgement is silence, which is what there was before.
       return;
@@ -1024,6 +1037,16 @@ export class VoiceSession {
     this.call.outcome = this.call.outcome ?? outcome;
     if (summary) this.call.summary = summary;
     saveCall(this.call);
+
+    // What the line, Media Streams and the transcription cost, now that the
+    // length is known. The leg Twilio dials on a live transfer is not ours to
+    // meter here; it appears on the Twilio invoice as an outbound call.
+    meterCallTime(
+      this.call,
+      this.location,
+      (Date.parse(this.call.endedAt) - Date.parse(this.call.startedAt)) / 1000,
+      { stt: Boolean(this.stt?.enabled) },
+    );
 
     this.transport.sendEvent({ type: "ended", outcome: this.call.outcome, summary: this.call.summary });
 

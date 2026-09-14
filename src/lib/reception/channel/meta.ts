@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { InboundMessage, StatusUpdate, DeliveryStatus } from "../types";
+import { meterMessage } from "../../billing/cost";
 import {
   toE164,
   type AdapterCredentials,
@@ -246,6 +247,14 @@ export const metaAdapter: ChannelAdapter = {
         // Accepted with no id. Treated as failure and *not* retried: we cannot
         // tell whether it was delivered, and a retry risks sending it twice.
         return { ok: false, detail: "Meta accepted the message without an id.", retryable: false };
+      }
+      // Free-form text only goes out inside the 24-hour window, so this is a
+      // free service reply — recorded so the conversation count is right.
+      if (account.locationId) {
+        meterMessage(
+          { venueId: account.locationId, conversationId: message.conversationId, channel: "whatsapp" },
+          "meta",
+        );
       }
       return { ok: true, providerMessageId: id };
     } catch (err) {

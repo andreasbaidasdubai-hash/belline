@@ -3,6 +3,7 @@ import { cleanClientId, resolveVisitor, visitorTurn } from "@/lib/webchat-turn";
 import { VOICE_NOTE_MAX_BYTES, VOICE_NOTE_MAX_SECONDS, voiceNoteToText } from "@/lib/webchat-voice";
 import { speechKeyterms } from "@/lib/verticals";
 import { transcribeClip } from "@/lib/providers/stt";
+import { meterClip } from "@/lib/billing/cost";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
     // voice note about "the terrace" is not written down as something else.
     transcribeClip(audio, type, { keyterms: speechKeyterms(visitor.location) }),
   );
+
+  // Deepgram charges for the audio it received, words or not. A note refused
+  // before it was sent (too big, not audio) and a vendor failure cost nothing.
+  if (heard.ok || heard.reason === "empty") {
+    meterClip({ venueId: visitor.location.id, channel: "webchat" }, seconds, "deepgram");
+  }
 
   if (!heard.ok) {
     const status = heard.reason === "too-big" ? 413 : heard.reason === "unsupported" ? 415 : 200;

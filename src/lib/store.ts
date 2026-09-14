@@ -12,6 +12,7 @@ import type {
   WaitlistEntry,
 } from "./types";
 import type { Lead } from "./leads";
+import type { CostEvent } from "./billing/cost";
 
 /**
  * File-backed store.
@@ -42,6 +43,8 @@ interface Db {
   users: User[];
   sessions: Session[];
   leads: Lead[];
+  /** What each call and conversation cost to run. See billing/cost.ts. */
+  costs: CostEvent[];
 }
 
 const EMPTY: Db = {
@@ -54,6 +57,7 @@ const EMPTY: Db = {
   users: [],
   sessions: [],
   leads: [],
+  costs: [],
 };
 
 // Next's dev server re-evaluates modules on edit; the custom server holds the
@@ -390,6 +394,32 @@ export function saveCall(call: Call): Call {
   else db.calls[idx] = call;
   persist("calls");
   return call;
+}
+
+// --- costs -----------------------------------------------------------------
+
+/** Append a batch of cost events. One write for the batch; see billing/cost.ts. */
+export function appendCosts(events: CostEvent[]): void {
+  if (!events.length) return;
+  const db = load();
+  db.costs.push(...events);
+  persist("costs");
+}
+
+export function listCosts(filter?: {
+  venueId?: string;
+  callId?: string;
+  conversationId?: string;
+  /** ISO timestamp; events at or after it. */
+  since?: string;
+}): CostEvent[] {
+  return load().costs.filter((e) => {
+    if (filter?.venueId && e.venueId !== filter.venueId) return false;
+    if (filter?.callId && e.callId !== filter.callId) return false;
+    if (filter?.conversationId && e.conversationId !== filter.conversationId) return false;
+    if (filter?.since && e.at < filter.since) return false;
+    return true;
+  });
 }
 
 // --- leads -----------------------------------------------------------------

@@ -104,6 +104,13 @@ export function defaultAssumptions(book: {
   arpaFils: number | null;
   minutesPerVenue: number | null;
   trialsLast30Days: number;
+  /**
+   * The phone minute measured from vendor usage, in fils, once there are
+   * enough calls to trust it. Null or absent keeps the 40-fils planning
+   * figure (billing/cost.ts, not imported here: this module runs in the
+   * browser).
+   */
+  costPerMinuteFils?: number | null;
 }): Assumptions {
   return {
     months: 12,
@@ -113,7 +120,7 @@ export function defaultAssumptions(book: {
     monthlyChurn: 0.03,
     arpaFils: book.arpaFils ?? 365 * 100,
     minutesPerVenue: book.minutesPerVenue ?? 120,
-    vendorCostPerMinuteFils: 40,
+    vendorCostPerMinuteFils: book.costPerMinuteFils ?? 40,
     fixedCostsFils: 0,
   };
 }

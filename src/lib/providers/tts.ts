@@ -121,6 +121,15 @@ export interface SpeakOptions {
    * it, and the seam stops being audible.
    */
   previousText?: string;
+  /**
+   * Told how many characters ElevenLabs billed, once it accepts the request.
+   *
+   * A callback rather than an import of the cost meter: this module is also
+   * read by the dashboard's agent editor for its list of voices, and the meter
+   * writes to the store, which a browser bundle cannot load. The character
+   * count is the billed figure — `previous_text` is context and not charged.
+   */
+  onBilled?: (chars: number, model: string) => void;
 }
 
 export function ttsEnabled(): boolean {
@@ -189,6 +198,10 @@ export async function* speak(
     const detail = await response.text().catch(() => "");
     throw new Error(`ElevenLabs ${response.status}: ${detail.slice(0, 200)}`);
   }
+
+  // Accepted means charged, even if the caller interrupts before the audio
+  // arrives — so it is counted here, not after the stream finishes.
+  opts.onBilled?.(text.length, model);
 
   const reader = response.body.getReader();
   try {

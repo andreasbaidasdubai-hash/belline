@@ -12,7 +12,8 @@
 import assert from "node:assert/strict";
 
 const { project, defaultAssumptions } = await import("../src/lib/sales/projection");
-const { totalsOf, bookAsCsv, VENDOR_COST_PER_MINUTE_FILS } = await import("../src/lib/sales/clients");
+const { totalsOf, bookAsCsv } = await import("../src/lib/sales/clients");
+const { PLANNING_COST_PER_MINUTE_FILS: VENDOR_COST_PER_MINUTE_FILS } = await import("../src/lib/billing/cost");
 type ClientRow = import("../src/lib/sales/clients").ClientRow;
 
 let passed = 0;
@@ -163,6 +164,24 @@ await test("gross margin is on paying venues' minutes, and null with no revenue"
   // 365 AED of revenue, 100 minutes at 0.40 = 40 AED of cost → 89%.
   assert.equal(t.grossMarginPct, 89);
   assert.equal(totalsOf([row({ status: "trialing", mrrFils: 0 })]).grossMarginPct, null);
+});
+
+await test("a measured minute replaces the planning figure in the totals", () => {
+  const rows = [row({ minutes: { used: 100, included: 180 } })];
+  const planning = totalsOf(rows);
+  assert.equal(planning.costPerMinuteFils, 40);
+  const measured = totalsOf(rows, new Date(), 23);
+  assert.equal(measured.costPerMinuteFils, 23);
+  assert.equal(measured.vendorCostFils, 100 * 23);
+  // 365 AED of revenue, 100 minutes at 0.23 = 23 AED → 94%.
+  assert.equal(measured.grossMarginPct, 94);
+});
+
+await test("the projection takes a measured minute when one is given, and 40 fils when not", () => {
+  const book = { paying: 1, trialing: 0, arpaFils: 36500, minutesPerVenue: 100, trialsLast30Days: 0 };
+  assert.equal(defaultAssumptions(book).vendorCostPerMinuteFils, 40);
+  assert.equal(defaultAssumptions({ ...book, costPerMinuteFils: null }).vendorCostPerMinuteFils, 40);
+  assert.equal(defaultAssumptions({ ...book, costPerMinuteFils: 23 }).vendorCostPerMinuteFils, 23);
 });
 
 await test("the CSV has a header, a line per venue, and survives a comma in a name", () => {

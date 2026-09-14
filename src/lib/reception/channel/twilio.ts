@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { DeliveryStatus, InboundMessage, StatusUpdate } from "../types";
+import { meterMessage } from "../../billing/cost";
 import {
   toE164,
   type AdapterCredentials,
@@ -175,6 +176,13 @@ export const twilioAdapter: ChannelAdapter = {
           detail: body.message ?? `Twilio returned ${res.status}`,
           retryable: res.status >= 500 || res.status === 429,
         };
+      }
+      // Twilio's fee per message, plus Meta's (free inside the service window).
+      if (account.locationId) {
+        meterMessage(
+          { venueId: account.locationId, conversationId: message.conversationId, channel: "whatsapp" },
+          "twilio",
+        );
       }
       return { ok: true, providerMessageId: body.sid };
     } catch (err) {

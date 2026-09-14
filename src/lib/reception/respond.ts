@@ -136,6 +136,8 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
     callerNumber: isPhoneHandle(customer?.phoneE164) ? customer?.phoneE164 : undefined,
     channel: "text",
     history,
+    // So what the model spends on this thread can be summed per conversation.
+    conversationId: String(conversationId),
   });
 
   let reply = "";
@@ -272,7 +274,12 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
     return { sent: false, skipped: "nothing_to_say" };
   }
 
-  const result = await deliver(account, customer?.phoneE164 ?? accepted.message.fromE164, reply);
+  const result = await deliver(
+    account,
+    customer?.phoneE164 ?? accepted.message.fromE164,
+    reply,
+    String(conversationId),
+  );
 
   if (!result.ok) {
     await markDelivery(tenantId, `pending:${committed.messageId}`, "failed", result.detail);
@@ -309,6 +316,7 @@ async function deliver(
   account: Awaited<ReturnType<typeof getAccount>> & object,
   to: string,
   text: string,
+  conversationId?: string,
 ) {
   const adapter = ADAPTERS[account.provider];
   if (!adapter) {
@@ -318,7 +326,7 @@ async function deliver(
   // Unsealed here and nowhere else. An adapter never reads the database and
   // never touches the key.
   const credentials = sealed ? openCredentials(sealed) : {};
-  return adapter.send(account, credentials, to, { type: "text", text });
+  return adapter.send(account, credentials, to, { type: "text", text, conversationId });
 }
 
 /**
@@ -341,7 +349,7 @@ async function sendAndRecord(
   });
   if (!committed?.messageId) return { sent: false, skipped: "taken_over" };
 
-  const result = await deliver(account, accepted.message.fromE164, text);
+  const result = await deliver(account, accepted.message.fromE164, text, String(accepted.conversationId));
   if (!result.ok) {
     console.error(`[reception ${traceId}] send failed: ${result.detail}`);
     return { sent: false, failed: result.detail };

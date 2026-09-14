@@ -28,6 +28,8 @@ import type {
 export interface OutboundText {
   type: "text";
   text: string;
+  /** The thread it belongs to, so the adapter can report what sending it cost. */
+  conversationId?: string;
 }
 
 export type SendResult =

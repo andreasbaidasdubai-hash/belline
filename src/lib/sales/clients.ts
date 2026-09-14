@@ -3,6 +3,7 @@ import { getTenant, listBookings, listCalls, listLocations, listUsersFor } from 
 import { annualPerMonth, planById, type BillingCycle, type PlanId } from "../billing/plans";
 import { accountFor } from "../billing/usage";
 import { lapseOf, type Lapse } from "../billing/entitlement";
+import { PLANNING_COST_PER_MINUTE_FILS } from "../billing/cost";
 import { todayIn } from "../time";
 
 /**
@@ -60,6 +61,8 @@ export interface BookTotals {
   mrrFils: number;
   arrFils: number;
   minutesThisPeriod: number;
+  /** The phone minute this was costed at: measured once there are enough calls, 40 fils until then. */
+  costPerMinuteFils: number;
   vendorCostFils: number;
   /** MRR less vendor cost, as a share of MRR. Null with no revenue. */
   grossMarginPct: number | null;
@@ -69,9 +72,6 @@ export interface BookTotals {
   trialsLast30Days: number;
   planMix: Record<string, number>;
 }
-
-/** Our cost per billable minute across speech-to-text, the voice and the model. */
-export const VENDOR_COST_PER_MINUTE_FILS = 40;
 
 function mrrOf(sub: Subscription | undefined): number {
   if (!sub || sub.status !== "active") return 0;
@@ -128,14 +128,23 @@ export function clientBook(now = new Date()): ClientRow[] {
     .sort((a, b) => b.mrrFils - a.mrrFils || a.since.localeCompare(b.since));
 }
 
-/** Pure, so the arithmetic can be tested on rows that never touched a store. */
-export function totalsOf(rows: ClientRow[], now = new Date()): BookTotals {
+/**
+ * Pure, so the arithmetic can be tested on rows that never touched a store.
+ *
+ * The cost of a minute is passed in rather than read: the page measures it
+ * (billing/cost.ts `phoneCostPerMinuteFils`) and a test chooses it.
+ */
+export function totalsOf(
+  rows: ClientRow[],
+  now = new Date(),
+  costPerMinuteFils = PLANNING_COST_PER_MINUTE_FILS,
+): BookTotals {
   const cutoff = new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
   const paying = rows.filter((r) => r.status === "active");
   const mrr = paying.reduce((n, r) => n + r.mrrFils, 0);
   const minutes = rows.reduce((n, r) => n + r.minutes.used, 0);
   const payingMinutes = paying.reduce((n, r) => n + r.minutes.used, 0);
-  const vendor = minutes * VENDOR_COST_PER_MINUTE_FILS;
+  const vendor = minutes * costPerMinuteFils;
   const planMix: Record<string, number> = {};
   for (const r of paying) planMix[r.planName] = (planMix[r.planName] ?? 0) + 1;
 
@@ -150,8 +159,9 @@ export function totalsOf(rows: ClientRow[], now = new Date()): BookTotals {
     mrrFils: mrr,
     arrFils: mrr * 12,
     minutesThisPeriod: minutes,
+    costPerMinuteFils,
     vendorCostFils: vendor,
-    grossMarginPct: mrr > 0 ? Math.round(((mrr - payingMinutes * VENDOR_COST_PER_MINUTE_FILS) / mrr) * 100) : null,
+    grossMarginPct: mrr > 0 ? Math.round(((mrr - payingMinutes * costPerMinuteFils) / mrr) * 100) : null,
     arpaFils: paying.length ? Math.round(mrr / paying.length) : null,
     minutesPerPayingVenue: paying.length ? Math.round(payingMinutes / paying.length) : null,
     trialsLast30Days: rows.filter((r) => r.status === "trialing" && r.since >= cutoff).length,

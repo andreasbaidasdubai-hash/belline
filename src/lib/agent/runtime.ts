@@ -7,6 +7,7 @@ import { findAvailability } from "../booking";
 import { guestBriefing, recallGuest } from "../guests";
 import { usesStaffDiary } from "../verticals";
 import { minutesToSpoken, parseClock, todayIn } from "../time";
+import { costChannelOf, meterModel } from "../billing/cost";
 
 /**
  * The turn engine.
@@ -250,6 +251,11 @@ export interface AgentSessionOptions {
    * "transferred" there would end the conversation on a promise.
    */
   liveTransfer?: boolean;
+  /**
+   * The message thread this turn belongs to, on chat and WhatsApp — so what
+   * the model spends can be summed per conversation, not only per episode.
+   */
+  conversationId?: string;
 }
 
 export class AgentSession {
@@ -258,6 +264,7 @@ export class AgentSession {
   readonly channel: AgentChannel;
   private readonly callerNumber?: string;
   private readonly liveTransfer: boolean;
+  private readonly conversationId?: string;
   private messages: Anthropic.MessageParam[] = [];
   private readonly tools: Anthropic.Tool[];
   private ended = false;
@@ -277,6 +284,7 @@ export class AgentSession {
     this.call = call;
     this.callerNumber = opts.callerNumber;
     this.liveTransfer = Boolean(opts.liveTransfer);
+    this.conversationId = opts.conversationId;
     this.channel = opts.channel ?? "voice";
     this.messages = opts.history ? [...opts.history] : [];
     this.tools = toolsFor(location, this.channel);
@@ -349,6 +357,8 @@ export class AgentSession {
         }
 
         const message = await stream.finalMessage();
+        // A guess is real spend, used or not.
+        this.meterUsage(message);
         if (message.stop_reason === "refusal") return;
 
         messages.push({ role: "assistant", content: message.content });
@@ -432,6 +442,23 @@ export class AgentSession {
     if (spoken.trim()) this.messages.push({ role: "assistant", content: spoken.trim() });
   }
 
+
+  /**
+   * What one response cost, from the usage block Anthropic sends with it —
+   * input, output, and the cache read and write that keep a long call flat.
+   */
+  private meterUsage(message: Anthropic.Message): void {
+    meterModel(
+      {
+        venueId: this.location.id,
+        callId: this.call.id,
+        conversationId: this.conversationId,
+        channel: costChannelOf(this.call),
+      },
+      this.location.agent.model,
+      message.usage,
+    );
+  }
 
   /**
    * One request to the model, streamed.
@@ -733,6 +760,7 @@ ${
         }
 
         const message = await stream.finalMessage();
+        this.meterUsage(message);
 
         if (message.stop_reason === "refusal") {
           yield {

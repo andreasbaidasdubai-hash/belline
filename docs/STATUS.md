@@ -163,6 +163,29 @@ analytics (75) · website analytics (76) · SEO (77)
 
 ---
 
+## Commercial build-out — `docs/strategy/belline-claude-code-prompt.md`
+
+Worked phase by phase against `docs/strategy/belline-commercial-strategy-2026-09-14.md`. Committed per phase, not deployed.
+
+### Phase 1 — cost metering per channel (14 September 2026)
+
+| Item | State | Note |
+|---|---|---|
+| Rate card | **Built** | `src/lib/billing/cost.ts`, dated 2026-09-14, one line per vendor rate with its source. Every line overridable as `RATE_<KEY>` in the environment. 5 of 34 lines are marked unverified (see below). |
+| Cost events | **Built** | Reported where the money is spent: the voice session at call end (Twilio line + Media Streams on phone, Deepgram on every voice call), the speech provider per synthesised request (characters × credits × plan), the model loop after every Anthropic response including speculative guesses (input, output, cache read, cache write), both WhatsApp adapters per message sent, the web-chat voice-note route (Deepgram pre-recorded), and the boot-time greeting warm-up. Batched for one second and written to `data/costs.json` through `store.ts` (`appendCosts` / `listCosts`). |
+| Roll-ups | **Built** | `costOfCall`, `costOfConversation`, `costPerVenuePeriod`, and `unitCosts()` — USD per phone minute, per web-voice minute, per chat conversation, per WhatsApp conversation, each with its sample size. |
+| Client book and projection | **Built** | `VENDOR_COST_PER_MINUTE_FILS` is gone. `/sales/clients` costs the book at the measured phone minute once there are 50 calls and at the 40-fils planning figure until then, says which, and shows a "What a unit costs us" table with measured figure, samples and fallback state per channel. The projection's cost-per-minute default follows the same rule. |
+| `check:cost` | **Built** | 17 cases. A synthetic 3-minute US phone call meters at $0.0626/min against the strategy doc's lean $0.063; an 8-turn Haiku chat at $0.0148 against $0.015. Also: UAE rate and env override, Twilio minute rounding, model not on the card, ElevenLabs model and plan, WhatsApp via Meta vs Twilio, the 50-sample switch-over, persistence. |
+
+**Still needs a figure or a decision from you**
+
+- **UAE line rate.** `TWILIO_INBOUND_AE` is the strategy doc's unverified $0.03–0.06 midpoint ($0.045). Set `RATE_TWILIO_INBOUND_AE` from the carrier's quote — it is the number that decides UAE phone margins.
+- **ElevenLabs plan.** Priced as Scale unless `ELEVENLABS_PLAN` is set (`creator`, `pro`, `scale`, `business`). Set it to the plan you are actually on.
+- **Unverified lines**: Deepgram pre-recorded ($0.0043/min — voice notes run on Deepgram, not Whisper as the prompt assumed), Twilio's WhatsApp fee ($0.005/message — the sandbox runs through Twilio; the doc assumes Meta direct), ElevenLabs Pro credit price, UAE number rental. Each says so on the card.
+- Not metered yet: number rental (Phase 4 buys numbers), the outbound leg Twilio dials on a live transfer, and WhatsApp utility templates (nothing sends them today; the meter supports them). `costs.json` has no retention yet; at a few thousand calls a month it wants moving to Postgres with the rest of the store.
+
+---
+
 ## Two things only you can do
 
 **1. Google Calendar credentials.** The integration is written and tested; it
