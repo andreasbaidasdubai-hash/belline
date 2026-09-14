@@ -6,7 +6,8 @@ import { addDays, dateToSpoken, minutesToClock, todayIn } from "@/lib/time";
 import { isRestaurant } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import Grid from "./Grid";
-import DateJump from "./DateJump";
+import WeekGrid from "./WeekGrid";
+import CalendarControls from "./CalendarControls";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +19,11 @@ function article(name: string): string {
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ loc?: string; date?: string; axis?: string }>;
+  searchParams: Promise<{ loc?: string; date?: string; axis?: string; view?: string; staff?: string; open?: string }>;
 }) {
   seedIfEmpty();
   const user = await requireUser();
-  const { loc, date, axis } = await searchParams;
+  const { loc, date, axis, view: mode, staff, open } = await searchParams;
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
 
@@ -34,11 +35,48 @@ export default async function CalendarPage({
   // drawn by person cannot answer. Same grid, other axis.
   const rooms = (location.salon?.resources ?? []).length > 0;
   const byRoom = rooms && axis === "rooms";
-  const view = byRoom ? resourceView(location, on) : dayView(location, on);
+  const full = byRoom ? resourceView(location, on) : dayView(location, on);
   const week = weekView(location, weekStart(on));
+  const weekMode = mode === "week";
 
-  const link = (d: string) =>
-    `/calendar?loc=${location.id}&date=${d}${byRoom ? "&axis=rooms" : ""}`;
+  // One person's diary, when asked. Filtered here so every panel below —
+  // the grid, the gaps, the counts — describes the same person.
+  const people = (location.salon?.staff ?? []).map((s) => ({ id: s.id, name: s.name }));
+  const staffFilter = !isRestaurant(location) && !byRoom && staff && people.some((p) => p.id === staff) ? staff : undefined;
+  const view = staffFilter
+    ? {
+        ...full,
+        columns: full.columns.filter((c) => c.id === staffFilter),
+        blocks: full.blocks.filter((b) => b.columnId === staffFilter),
+        gaps: full.gaps.filter((g) => g.columnId === staffFilter),
+      }
+    : full;
+
+  const weekDays = weekMode
+    ? Array.from({ length: 7 }, (_, i) => addDays(weekStart(on), i)).map((d) => {
+        const v = dayView(location, d);
+        const info = week.find((w) => w.date === d);
+        return {
+          date: d,
+          closed: info?.closed ?? false,
+          openMin: v.openMin,
+          closeMin: v.closeMin,
+          blocks: v.blocks
+            .filter((b) => !staffFilter || b.columnId === staffFilter)
+            .map((b) => ({ booking: b.booking, columnId: b.columnId, startMin: b.startMin, endMin: b.endMin, title: b.title, detail: b.detail, arrived: b.arrived })),
+        };
+      })
+    : [];
+
+  const extra = `${byRoom ? "&axis=rooms" : ""}${weekMode ? "&view=week" : ""}${staffFilter ? `&staff=${staffFilter}` : ""}`;
+  const link = (d: string) => `/calendar?loc=${location.id}&date=${d}${extra}`;
+  const step = weekMode ? 7 : 1;
+  const serviceOptions = (location.salon?.services ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    durationMin: s.durationMin,
+    price: s.price,
+  }));
   const axisLink = (a: string) => `/calendar?loc=${location.id}&date=${on}&axis=${a}`;
   const busiest = [...view.pacing].sort((a, b) => b.covers - a.covers)[0];
   const sellable = view.gaps.slice(0, 6);
@@ -67,16 +105,23 @@ export default async function CalendarPage({
                 </Link>
               </div>
             )}
-            <Link className="btn" href={link(addDays(on, -1))} aria-label="Previous day">
+            <Link className="btn" href={link(addDays(on, -step))} aria-label={weekMode ? "Previous week" : "Previous day"}>
               ←
             </Link>
             <Link className="btn" href={link(today)}>
               Today
             </Link>
-            <Link className="btn" href={link(addDays(on, 1))} aria-label="Next day">
+            <Link className="btn" href={link(addDays(on, step))} aria-label={weekMode ? "Next week" : "Next day"}>
               →
             </Link>
-            <DateJump locationId={location.id} date={on} axis={byRoom ? "rooms" : undefined} />
+            <CalendarControls
+              locationId={location.id}
+              date={on}
+              mode={weekMode ? "week" : "day"}
+              axis={byRoom ? "rooms" : undefined}
+              staff={staffFilter}
+              people={isRestaurant(location) || byRoom ? [] : people}
+            />
           </div>
         }
       />
@@ -172,6 +217,17 @@ export default async function CalendarPage({
             .
           </p>
         </div>
+      ) : weekMode ? (
+        <WeekGrid
+          days={weekDays}
+          locationId={location.id}
+          isRestaurant={isRestaurant(location)}
+          currency={location.currency}
+          columns={(staffFilter ? people.filter((p) => p.id === staffFilter) : full.columns).map((c) => ({ id: c.id, name: c.name }))}
+          services={serviceOptions}
+          overbookAllowed={(location.restaurant?.overbookPerSlot ?? 0) > 0}
+          dayHref={Object.fromEntries(weekDays.map((d) => [d.date, `/calendar?loc=${location.id}&date=${d.date}${byRoom ? "&axis=rooms" : ""}${staffFilter ? `&staff=${staffFilter}` : ""}`]))}
+        />
       ) : (
         <Grid
           view={view}
@@ -180,19 +236,15 @@ export default async function CalendarPage({
           bookable={!byRoom}
           overbookAllowed={(location.restaurant?.overbookPerSlot ?? 0) > 0}
           currency={location.currency}
-          services={(location.salon?.services ?? []).map((s) => ({
-            id: s.id,
-            name: s.name,
-            durationMin: s.durationMin,
-            price: s.price,
-          }))}
+          services={serviceOptions}
+          openBookingId={open}
         />
       )}
 
       {/* The thing a calendar normally leaves for somebody to notice. A hole
           long enough to sell is a call worth making, and until it is counted
           and priced nobody ever makes it. */}
-      {sellable.length > 0 && (
+      {!weekMode && sellable.length > 0 && (
         <div className="panel" style={{ marginTop: 16, padding: "14px 18px" }}>
           <div
             style={{
@@ -234,7 +286,7 @@ export default async function CalendarPage({
         </div>
       )}
 
-      {view.unplaced.length > 0 && (
+      {!weekMode && view.unplaced.length > 0 && (
         <div className="panel" style={{ marginTop: 16, padding: "14px 18px" }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
             Not on the grid ({view.unplaced.length})

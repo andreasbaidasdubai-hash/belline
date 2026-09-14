@@ -139,6 +139,7 @@ export default function Grid({
    */
   bookable = true,
   currency,
+  openBookingId,
 }: {
   view: DayView;
   locationId: string;
@@ -147,6 +148,8 @@ export default function Grid({
   services: ServiceOption[];
   bookable?: boolean;
   currency: string;
+  /** Open this booking's panel on arrival — from search, a profile or a notice. */
+  openBookingId?: string;
 }) {
   const router = useRouter();
   const [drag, setDrag] = useState<Dragging | null>(null);
@@ -154,7 +157,7 @@ export default function Grid({
   const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null);
   const [booking, setBooking] = useState<{ startMin: number; columnId?: string } | null>(null);
   /** The booking open in the side panel, by id. */
-  const [opened, setOpened] = useState<string | null>(null);
+  const [opened, setOpened] = useState<string | null>(openBookingId ?? null);
   const openedBlock = opened ? view.blocks.find((b) => b.booking.id === opened) : undefined;
   const lanes = useRef<Map<string, HTMLDivElement>>(new Map());
 

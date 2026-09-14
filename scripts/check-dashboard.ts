@@ -1,0 +1,155 @@
+/**
+ * The dashboard's finding-and-knowing parts: search, customer profiles and
+ * live updates.
+ *
+ *   npm run check:dashboard
+ */
+
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-dash-"));
+
+const { seedIfEmpty } = await import("../src/lib/seed");
+const { signUp } = await import("../src/lib/onboarding");
+const { createUser } = await import("../src/lib/auth");
+const { getBooking, getLocation, listBookings, saveBooking } = await import("../src/lib/store");
+const { searchEverything } = await import("../src/lib/search");
+const { guestKey, guestProfile, searchGuests, updateGuest } = await import("../src/lib/guest-profile");
+const { liveStamp } = await import("../src/lib/live");
+const { createFromDesk } = await import("../src/lib/booking/desk");
+const { findAvailability } = await import("../src/lib/booking");
+const { addDays, todayIn } = await import("../src/lib/time");
+
+let passed = 0;
+let failed = 0;
+async function test(name: string, fn: () => void | Promise<void>) {
+  try {
+    await fn();
+    console.log(`  \x1b[32m✓\x1b[0m ${name}`);
+    passed++;
+  } catch (err) {
+    console.log(`  \x1b[31m✗\x1b[0m ${name}`);
+    console.log(`      ${err instanceof Error ? err.message : String(err)}`);
+    failed++;
+  }
+}
+
+seedIfEmpty();
+
+const made = await signUp({ businessName: "Glow Studio Dubai", email: "owner@glowstudio.test", password: "Correct-Horse-Battery-9", vertical: "salon", timezone: "Asia/Dubai" });
+assert.ok(made.ok);
+const owner = made.ok ? made.user : null!;
+const venueId = made.ok ? made.location.id : "";
+
+// Give the venue a service, a person and hours, so bookings can be taken.
+const base = getLocation(venueId)!;
+const hours = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [d, [{ start: 540, end: 1260 }]]));
+const { upsertLocation } = await import("../src/lib/store");
+upsertLocation({
+  ...base,
+  hours,
+  salon: {
+    ...base.salon!,
+    services: [{ id: "svc_cut", name: "Cut", durationMin: 45, bufferMin: 10, price: 180 }],
+    staff: [{ id: "stf_layla", name: "Layla", serviceIds: ["svc_cut"], hours, timeOff: [] }],
+  },
+});
+const venue = () => getLocation(venueId)!;
+
+function book(name: string, phone: string, email?: string) {
+  const today = todayIn("Asia/Dubai");
+  for (let d = 1; d < 10; d++) {
+    const date = addDays(today, d);
+    const slot = findAvailability(venue(), { locationId: venueId, date, serviceIds: ["svc_cut"], staffOverride: true })[0];
+    if (!slot) continue;
+    const out = createFromDesk(venue(), { date, startMin: slot.startMin, serviceIds: ["svc_cut"], guestName: name, guestPhone: phone, guestEmail: email });
+    if (out.ok) return out.booking;
+  }
+  throw new Error("could not book");
+}
+
+const noor = book("Noor Haddad", "+971 50 111 2233", "noor@example.com");
+book("Noor Haddad", "050 111 2233");
+const sam = book("Sam Rivers", "+971 55 999 8877");
+
+console.log("\n\x1b[1mSearch (Ctrl+K)\x1b[0m\n");
+
+await test("finds a booking by its reference, first", () => {
+  const hits = searchEverything(owner, noor.ref);
+  assert.equal(hits[0]?.kind, "booking");
+  assert.match(hits[0].href, new RegExp(`open=${noor.id}`));
+});
+
+await test("finds a customer by part of their name or number", () => {
+  assert.ok(searchEverything(owner, "haddad").some((h) => h.kind === "customer" && h.title === "Noor Haddad"));
+  assert.ok(searchEverything(owner, "9998877").some((h) => h.kind === "customer" && h.title === "Sam Rivers"));
+});
+
+await test("finds pages, but only the ones this person may open", () => {
+  assert.ok(searchEverything(owner, "locat").some((h) => h.kind === "page" && h.href === "/locations"));
+  const staff = createUser({ email: "floor@glowstudio.test", name: "Floor", password: "Correct-Horse-Battery-9", role: "staff", tenantId: owner.tenantId });
+  assert.ok(staff.ok);
+  const theirs = searchEverything(staff.ok ? staff.user : null!, "locat");
+  assert.ok(!theirs.some((h) => h.href === "/locations"), "floor staff were offered Locations");
+  assert.ok(!searchEverything(staff.ok ? staff.user : null!, "plan").some((h) => h.href === "/billing"));
+});
+
+await test("never finds another business's bookings or customers", async () => {
+  const other = await signUp({ businessName: "Other Place", email: "owner@otherplace.test", password: "Correct-Horse-Battery-9", vertical: "salon", timezone: "Asia/Dubai" });
+  assert.ok(other.ok);
+  const hits = searchEverything(other.ok ? other.user : null!, "haddad");
+  assert.equal(hits.filter((h) => h.kind !== "page").length, 0);
+});
+
+console.log("\n\x1b[1mCustomer profiles\x1b[0m\n");
+
+await test("one person across differently written numbers is one profile, with every booking", () => {
+  const profile = guestProfile(venue(), guestKey("+971501112233"))!;
+  assert.ok(profile, "no profile");
+  assert.equal(profile.bookings.length, 2);
+  assert.equal(profile.email, "noor@example.com");
+});
+
+await test("customers can be searched by email too", () => {
+  assert.ok(searchGuests(venue(), "noor@exam").some((g) => g.name === "Noor Haddad"));
+});
+
+await test("a corrected name and email reach every booking under that number", () => {
+  const out = updateGuest(venue(), guestKey("0501112233"), { name: "Noor Al Haddad", email: "noor.h@example.com" });
+  assert.ok(out.ok && out.updated === 2, JSON.stringify(out));
+  const mine = listBookings({ locationId: venueId }).filter((b) => guestKey(b.guestPhone) === guestKey("0501112233"));
+  assert.ok(mine.every((b) => b.guestName === "Noor Al Haddad" && b.guestEmail === "noor.h@example.com"));
+  assert.equal(getBooking(sam.id)!.guestName, "Sam Rivers", "someone else was renamed");
+});
+
+await test("a bad email or empty name is refused", () => {
+  assert.equal(updateGuest(venue(), guestKey("0501112233"), { email: "noor@" }).ok, false);
+  assert.equal(updateGuest(venue(), guestKey("0501112233"), { name: "  " }).ok, false);
+});
+
+console.log("\n\x1b[1mLive updates\x1b[0m\n");
+
+await test("the stamp is stable until something changes, then moves", () => {
+  const first = liveStamp([venue()]);
+  assert.equal(liveStamp([venue()]).stamp, first.stamp);
+  book("Walk In", "+971 52 000 1111");
+  assert.notEqual(liveStamp([venue()]).stamp, first.stamp);
+});
+
+await test("a booking Belle took is reported; one taken at the desk is not", () => {
+  const before = liveStamp([venue()]).latestFromBelle;
+  assert.equal(before, null, "a desk booking was reported as Belle's");
+  const desk = book("Phone Guest", "+971 52 000 2222");
+  saveBooking({ ...desk, source: "phone" as never, createdAt: new Date(Date.now() + 1000).toISOString() });
+  assert.equal(liveStamp([venue()]).latestFromBelle?.id, desk.id);
+});
+
+fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
+
+console.log(
+  failed === 0 ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n` : `\n\x1b[31m✗ ${passed} passed, ${failed} failed\x1b[0m\n`,
+);
+if (failed > 0) process.exitCode = 1;

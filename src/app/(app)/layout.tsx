@@ -7,6 +7,8 @@ import { attentionFor } from "@/lib/attention";
 import { recallSummary } from "@/lib/booking/recall";
 import SignOutButton from "@/components/SignOutButton";
 import MobileNav from "@/components/MobileNav";
+import CommandPalette from "@/components/CommandPalette";
+import LiveRefresh from "@/components/LiveRefresh";
 
 /**
  * The signed-in shell.
@@ -48,7 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ...(dueBack > 0
       ? [{ href: "/recall", label: "Recall", badge: dueBack, quiet: true }]
       : []),
-    { href: "/guests", label: "Guests" },
+    { href: "/guests", label: "Customers" },
     { href: "/test", label: "Test console" },
     { href: "/golive", label: "Go live" },
     // Floor staff read the book; they do not rewrite the agent's rules.
@@ -90,6 +92,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* On a phone the list below is replaced by a menu button. The
             scrolling strip it used to become was swipeable and looked like
             two links; a menu that cannot be seen is not a menu. */}
+        <CommandPalette />
+
         <MobileNav items={nav} />
 
         <nav className="nav">
@@ -206,6 +210,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
 
       <main className="content">{children}</main>
+      <LiveRefresh />
     </div>
   );
 }

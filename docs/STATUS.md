@@ -237,7 +237,13 @@ Built from `docs/strategy/belline-next-prompt.md` phases A–C, plus the dashboa
 | Locations | **Built** | `/locations`: owners add a location (own trial, baseline version), managers edit name, address, phone, timezone, currency, opening hours and closure dates; owners archive (kept, hidden everywhere, restorable; never the last active one) and delete only an archived location with no bookings or calls, after typing its name. |
 | Calendar | **Upgraded** | Click a booking to open a side panel: details, arrived / undo, no-show, edit (date, time, person, several services, guest name/phone/email, notes) and cancel with an in-panel confirmation. "+ New booking" from anywhere, and a date picker. The booking form: returning guests suggested as you type (with their usual and notes), several services with total length and price, email, "Anyone free", and free times as buttons when a slot is taken. `check:backend` (14). |
 
-**Still to do on the dashboard** (from the audit): a week grid and a staff filter on the calendar, customer profiles with search and editing, global search (Ctrl+K), live updates when Belle books, and browser tests for the signed-in dashboard.
+| Week view and staff filter | **Built** | Calendar Day / Week switch, "Everyone" or one person's diary, and a date picker, all in the address so a view can be bookmarked. The week grid shows every booking at its real time, coloured by person; click one to open it, click empty time to book, click a day to open it. |
+| Customer profiles | **Built** | "Guests" is now Customers: search by name, number or email; each customer opens a profile with visits, last visit, spend, cancellations, no-shows, upcoming and past bookings, calls and chats from their number, and notes. Name and email can be corrected, and the change reaches every booking under that number. |
+| Search (Ctrl+K) | **Built** | One box for bookings (by reference, name or number), customers, locations and pages, limited to the venues and pages that person may open. Enter opens the booking straight into its calendar panel. |
+| Live updates | **Built** | The dashboard checks every 10 seconds (while the tab is visible) whether bookings or calls changed and re-renders in place. A booking Belle took shows a notice with an Open link. |
+| Dashboard browser tests | **Built** | `npm run test:dashboard` starts the app against a throwaway data folder with no database, model or email keys, creates the owner through first-run setup, and clicks through overview, the booking form, the week view, locations, customers and Ctrl+K search, failing on any console error. 6 tests. `check:dashboard` (10) covers search permissions, profiles and live updates. |
+
+**Still open on the dashboard:** restaurant floor plan and table-status view, reports and CSV export, a staff rota editor on the calendar, and Arabic / right-to-left support.
 
 ---
 
