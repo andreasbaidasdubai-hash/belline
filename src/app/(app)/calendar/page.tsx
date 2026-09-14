@@ -6,6 +6,7 @@ import { addDays, dateToSpoken, minutesToClock, todayIn } from "@/lib/time";
 import { isRestaurant } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import Grid from "./Grid";
+import DateJump from "./DateJump";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,7 @@ export default async function CalendarPage({
             <Link className="btn" href={link(addDays(on, 1))} aria-label="Next day">
               →
             </Link>
+            <DateJump locationId={location.id} date={on} axis={byRoom ? "rooms" : undefined} />
           </div>
         }
       />
@@ -177,10 +179,12 @@ export default async function CalendarPage({
           isRestaurant={isRestaurant(location)}
           bookable={!byRoom}
           overbookAllowed={(location.restaurant?.overbookPerSlot ?? 0) > 0}
+          currency={location.currency}
           services={(location.salon?.services ?? []).map((s) => ({
             id: s.id,
             name: s.name,
             durationMin: s.durationMin,
+            price: s.price,
           }))}
         />
       )}

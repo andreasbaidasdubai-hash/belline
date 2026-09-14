@@ -773,6 +773,100 @@ tbody tr:hover {
   max-width: 420px;
 }
 
+/* --- side drawer ----------------------------------------------------------
+   Bookings and locations open to the right, over the page rather than instead
+   of it, so the day or the list stays in view while one thing is worked on. */
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(20, 17, 13, 0.32);
+  display: flex;
+  justify-content: flex-end;
+}
+.drawer {
+  width: min(460px, 100%);
+  height: 100%;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  box-shadow: -18px 0 40px -24px rgba(20, 17, 13, 0.45);
+  display: flex;
+  flex-direction: column;
+  animation: drawer-in 160ms ease-out;
+}
+@keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
+.drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.drawer-body {
+  padding: 16px 18px 24px;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.drawer-body label { display: grid; gap: 5px; }
+.drawer-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.drawer-fieldset { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px 12px; margin: 0; }
+.drawer-fieldset legend { font-size: 12px; font-weight: 600; padding: 0 4px; }
+.facts { display: grid; grid-template-columns: 90px 1fr; gap: 8px 12px; margin: 0; font-size: 13.5px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.chip.on .muted { color: inherit; opacity: 0.75; }
+.suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+  margin-top: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px -14px rgba(20, 17, 13, 0.4);
+  overflow: hidden;
+}
+.suggest button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.suggest button:hover, .suggest button:focus { background: var(--panel-2); }
+.suggest-note { display: block; font-size: 11.5px; color: var(--warn); margin-top: 2px; }
+.hours-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 4px 0; }
+.hours-toggle { display: flex !important; grid-template-columns: none; align-items: center; gap: 8px; font-size: 13px; }
+.hours-toggle input { width: auto; }
+.hours-times { display: flex; align-items: center; gap: 6px; }
+.hours-times input { width: 110px; }
+.loc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+@media (max-width: 560px) { .drawer-row { grid-template-columns: 1fr; } }
+
 .cal-now {
   position: absolute;
   left: 0;

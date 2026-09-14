@@ -222,6 +222,23 @@ Worked phase by phase against `docs/strategy/belline-commercial-strategy-2026-09
 - **WhatsApp module** stays `not-yet` until the Meta account exists (the gap is recorded in `plans.ts`).
 - **Belle quotes UAE prices** until Phase 4 gives her the caller's market.
 
+### Demo link, sales Belle, AI onboarding, dashboard upgrade (14 September 2026)
+
+Built from `docs/strategy/belline-next-prompt.md` phases A–C, plus the dashboard gaps found in an audit. Not deployed.
+
+| Item | State | Note |
+|---|---|---|
+| Demo link (test) | **Built** | Every prospect demo now carries its own website widget (chat + voice, capped: 30 chats, 16 messages, 20 calls a day, on us). `/demo/<slug>` shows the chat beside the call, with "Start 14 days free" and "Talk to a person". Old demos get the widget on first view. Outreach still sends the recorded demo; switching the email CTA to this link is the next step. |
+| Belle sells | **Built** | On Belline's own venue only: `record_lead` (into /sales/enquiries, source `belle:<channel>`), `quote` (plans from the catalogue; discounts, contracts and guarantees refused in code and flagged), `build_demo` (their own demo from their website, 2 per conversation), `start_trial` (address must be read back; one-time 24h sign-in link sent by email only, hello@ notified), `send_checkout` (link by email). New sales persona: demo → trial → checkout → call; discloses AI; sells on specifics, never names competitors; not-yet list generated from the catalogue. `check:belle-sales` (15). |
+| Sign-in links | **Built** | `signLoginToken` / `consumeLoginToken`: single use, latest only, 24 hours; `/api/auth/magic`. |
+| Setup with Belle | **Built** | `/setup/assistant`: the owner answers in their own words; tools set hours, add/remove services, add staff, address, transfer number, FAQs, rules — each through `validateVenue`, published as a version "Set up with Belle: …", warnings asked back. Linked from setup, the dashboard home and Go live. Needs `ANTHROPIC_API_KEY` (says so without it). |
+| Forwarding (UAE) | **Built** | Go live shows du and e& mobile codes with the venue's number, landline instructions (du 155, e& 101) and a PBX note, from `src/lib/telephony/forwarding.ts`. |
+| Widget install | **Built** | "Check my site" on Your website: detects Squarespace, Wix, WordPress, Shopify, Webflow, GoDaddy or custom from the page, shows that builder's steps, and confirms the venue's own key is live. `check:onboarding` (19). |
+| Locations | **Built** | `/locations`: owners add a location (own trial, baseline version), managers edit name, address, phone, timezone, currency, opening hours and closure dates; owners archive (kept, hidden everywhere, restorable; never the last active one) and delete only an archived location with no bookings or calls, after typing its name. |
+| Calendar | **Upgraded** | Click a booking to open a side panel: details, arrived / undo, no-show, edit (date, time, person, several services, guest name/phone/email, notes) and cancel with an in-panel confirmation. "+ New booking" from anywhere, and a date picker. The booking form: returning guests suggested as you type (with their usual and notes), several services with total length and price, email, "Anyone free", and free times as buttons when a slot is taken. `check:backend` (14). |
+
+**Still to do on the dashboard** (from the audit): a week grid and a staff filter on the calendar, customer profiles with search and editing, global search (Ctrl+K), live updates when Belle books, and browser tests for the signed-in dashboard.
+
 ---
 
 ## Two things only you can do

@@ -6,6 +6,7 @@ import { readiness } from "@/lib/onboarding";
 import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
+import { PBX_NOTE, forwardingCodes, uaeCarriers } from "@/lib/telephony/forwarding";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +82,10 @@ export default async function GoLivePage({
           <p style={{ margin: 0 }}>Services, people and common questions are in. You can change any of it later.</p>
         ) : (
           <>
-            <p style={{ margin: "0 0 8px" }}>Without these it answers, but it cannot book or answer properly:</p>
+            <p style={{ margin: "0 0 8px" }}>
+              Without these it answers, but it cannot book or answer properly. Quickest:{" "}
+              <Link href={`/setup/assistant?loc=${location.id}`}>set it up by talking to Belle</Link>.
+            </p>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {setup.missing.map((m) => (
                 <li key={m.label}>
@@ -122,8 +126,8 @@ export default async function GoLivePage({
 
       <Step n={3} title="Forward the calls nobody picks up" done={phoneCalls.length > 0}>
         <p style={{ margin: "0 0 12px" }}>
-          On most mobile lines, dial each code from the phone whose calls you want covered and press call.
           Your team still gets first refusal: Belline only hears a call that rang out or found the line busy.
+          On a <strong>du</strong> or <strong>e&amp;</strong> mobile, dial each code from the phone whose calls you want covered and press call.
         </p>
         <div className="table-wrap" tabIndex={0}>
           <table>
@@ -134,17 +138,24 @@ export default async function GoLivePage({
               </tr>
             </thead>
             <tbody>
-              <tr><td>Nobody answers</td><td className="mono">**61*{target}#</td></tr>
-              <tr><td>The line is busy</td><td className="mono">**67*{target}#</td></tr>
-              <tr><td>The phone is off or out of signal</td><td className="mono">**62*{target}#</td></tr>
-              <tr><td>Switch all of it off again</td><td className="mono">##004#</td></tr>
+              {forwardingCodes(target).map((code) => (
+                <tr key={code.when}>
+                  <td>{code.when}</td>
+                  <td className="mono">{code.dial}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        <p className="muted" style={{ margin: "12px 0 0", fontSize: 12.5 }}>
-          A landline or an office phone system sets this up differently. Ask your provider, or whoever
-          looks after the system, for conditional forwarding on <em>no answer</em> and <em>busy</em> to the number above.
-        </p>
+        <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+          {uaeCarriers(target).map((carrier) => (
+            <p key={carrier.id} style={{ margin: 0, fontSize: 13 }}>
+              <strong>{carrier.name} landline or business line.</strong>{" "}
+              <span className="muted">{carrier.landline}</span>
+            </p>
+          ))}
+          <p className="muted" style={{ margin: 0, fontSize: 12.5 }}>{PBX_NOTE}</p>
+        </div>
       </Step>
 
       <Step n={4} title="Ring it yourself" done={phoneCalls.length > 0}>

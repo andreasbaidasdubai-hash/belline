@@ -140,7 +140,12 @@ export default function SetupWizard({
         )}
 
         <div style={{ display: "flex", gap: 12, marginTop: 30, flexWrap: "wrap" }}>
-          <a className="btn btn-accent" href="/test" style={{ padding: "12px 20px" }}>
+          {missing.length > 0 && (
+            <a className="btn btn-accent" href="/setup/assistant" style={{ padding: "12px 20px" }}>
+              Finish with Belle
+            </a>
+          )}
+          <a className={missing.length > 0 ? "btn" : "btn btn-accent"} href="/test" style={{ padding: "12px 20px" }}>
             Talk to {venueName}
           </a>
           <a className="btn" href="/golive" style={{ padding: "12px 20px" }}>

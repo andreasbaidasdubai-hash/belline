@@ -98,6 +98,11 @@ export default async function OverviewPage({
             : `Belline can't answer for ${location.name} yet — a few things to finish first.`}
         </p>
         {!setup.ready && (
+          <Link href={`/setup/assistant?loc=${location.id}`} className="btn btn-accent" style={{ marginTop: 14, display: "inline-block" }}>
+            Set it up with Belle
+          </Link>
+        )}
+        {!setup.ready && (
           <ul style={{ margin: "14px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
             {setup.missing.map((m) => (
               <li key={m.label} style={{ fontSize: 13.5 }}>

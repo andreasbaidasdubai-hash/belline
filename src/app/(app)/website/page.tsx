@@ -7,6 +7,7 @@ import { EMBED_DEFAULTS, embedSnippet } from "@/lib/embed";
 import { venueWhatsApp } from "@/lib/whatsapp";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import WidgetEditor from "./WidgetEditor";
+import InstallCheck from "./InstallCheck";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,7 @@ export default async function WebsitePage({
         appearance={embed?.appearance ?? {}}
         whatsappNumber={whatsapp?.phoneE164 ?? null}
       />
+      {embed?.enabled && <InstallCheck locationId={location.id} />}
     </>
   );
 }

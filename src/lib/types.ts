@@ -213,6 +213,12 @@ export interface Location {
    * than an empty rectangle.
    */
   logoUrl?: string;
+  /**
+   * Set when an owner archived this location. It keeps every booking, call
+   * and version, and leaves every list, switcher and call route until
+   * restored — see locations.ts.
+   */
+  archivedAt?: string;
 }
 
 /**

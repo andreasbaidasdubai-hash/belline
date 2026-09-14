@@ -250,7 +250,7 @@ export function saveBusiness(business: Business): Business {
 /** The venues of one tenant. Internal venues are excluded as everywhere else. */
 export function listLocationsFor(
   tenantId: string,
-  opts?: { includeInternal?: boolean },
+  opts?: { includeInternal?: boolean; includeArchived?: boolean },
 ): Location[] {
   return listLocations(opts).filter((l) => l.tenantId === tenantId);
 }
@@ -279,9 +279,24 @@ export function getLocationFor(tenantId: string, locationId: string): Location |
  * bookings. Pass `includeInternal` where you genuinely mean all of them:
  * seeding, and the call page itself.
  */
-export function listLocations(opts?: { includeInternal?: boolean }): Location[] {
+export function listLocations(opts?: { includeInternal?: boolean; includeArchived?: boolean }): Location[] {
   const all = load().locations;
-  return opts?.includeInternal ? all : all.filter((l) => !l.internal);
+  // Archived venues keep their history and leave every list, switcher and
+  // call route — see locations.ts. Only the Locations page asks for them.
+  return all.filter((l) => (opts?.includeInternal || !l.internal) && (opts?.includeArchived || !l.archivedAt));
+}
+
+/**
+ * Remove a venue row outright.
+ *
+ * Only ever reached through `deleteLocation` in locations.ts, which refuses a
+ * venue that still has bookings or calls — history is archived, never erased
+ * by accident.
+ */
+export function removeLocation(locationId: string): void {
+  const db = load();
+  db.locations = db.locations.filter((l) => l.id !== locationId);
+  persist("locations");
 }
 
 /** By id, internal or not — a caller naming a venue has already chosen it. */

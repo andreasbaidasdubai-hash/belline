@@ -98,7 +98,7 @@ function everyDay(start: number, end: number): WeeklyHours {
  * obviously blank diary is a prompt to finish setting up; a confidently wrong
  * one is a support ticket.
  */
-function blankVenue(input: SignupInput, tenantId: string, businessId: string): Location {
+export function blankVenue(input: SignupInput, tenantId: string, businessId: string): Location {
   const timezone = input.timezone || "Asia/Dubai";
   const name = input.businessName.trim();
   const isRestaurant = input.vertical === "restaurant";

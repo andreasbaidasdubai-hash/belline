@@ -4,7 +4,8 @@ import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DayView } from "@/lib/calendar";
 import { minutesToClock } from "@/lib/time";
-import QuickBook from "./QuickBook";
+import BookingForm, { type ServiceOption } from "./BookingForm";
+import BookingDrawer from "./BookingDrawer";
 
 /**
  * The day, drawn and worked in.
@@ -137,19 +138,24 @@ export default function Grid({
    * itself would be worse than one that does not offer it.
    */
   bookable = true,
+  currency,
 }: {
   view: DayView;
   locationId: string;
   isRestaurant: boolean;
   overbookAllowed: boolean;
-  services: { id: string; name: string; durationMin: number }[];
+  services: ServiceOption[];
   bookable?: boolean;
+  currency: string;
 }) {
   const router = useRouter();
   const [drag, setDrag] = useState<Dragging | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null);
-  const [booking, setBooking] = useState<{ startMin: number; columnId: string } | null>(null);
+  const [booking, setBooking] = useState<{ startMin: number; columnId?: string } | null>(null);
+  /** The booking open in the side panel, by id. */
+  const [opened, setOpened] = useState<string | null>(null);
+  const openedBlock = opened ? view.blocks.find((b) => b.booking.id === opened) : undefined;
   const lanes = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const height = (view.closeMin - view.openMin) * SCALE;
@@ -239,11 +245,26 @@ export default function Grid({
       !moved || moved.startMin !== drag.startMin || moved.columnId !== drag.columnId;
     const { bookingId, startMin, columnId } = drag;
     setDrag(null);
+    // A press that did not move is a click: open the booking.
     if (changed) void commitMove(bookingId, startMin, columnId);
+    else setOpened(bookingId);
   }
+
+  // "New booking" starts at the next quarter hour today, or at opening time.
+  const nextQuarter =
+    view.nowMin !== null && view.nowMin >= view.openMin && view.nowMin < view.closeMin
+      ? Math.ceil(view.nowMin / 15) * 15
+      : view.openMin;
 
   return (
     <div onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={() => setDrag(null)}>
+      {bookable && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+          <button className="btn btn-accent" onClick={() => setBooking({ startMin: nextQuarter })}>
+            + New booking
+          </button>
+        </div>
+      )}
       {message && (
         <div className={`cal-toast${message.bad ? " bad" : ""}`} role="status">
           {message.text}
@@ -438,7 +459,7 @@ export default function Grid({
       <p className="muted" style={{ fontSize: 11.5, marginTop: 10 }}>
         {bookable ? (
           <>
-            Drag a booking to move it. Click an empty slot to take one.
+            Click a booking to open it. Drag it to move it. Click an empty slot to take one.
             {isRestaurant &&
               " The table is chosen by the engine — dragging sideways moves the time only."}
           </>
@@ -448,18 +469,36 @@ export default function Grid({
       </p>
 
       {booking && (
-        <QuickBook
+        <BookingForm
           locationId={locationId}
+          isRestaurant={isRestaurant}
+          currency={currency}
           date={view.date}
           startMin={booking.startMin}
           columnId={booking.columnId}
-          columnName={view.columns.find((c) => c.id === booking.columnId)?.name ?? ""}
-          isRestaurant={isRestaurant}
-          overbookAllowed={overbookAllowed}
+          columns={view.columns.map((c) => ({ id: c.id, name: c.name }))}
           services={services}
+          overbookAllowed={overbookAllowed}
           onClose={() => setBooking(null)}
           onDone={(text) => {
             setBooking(null);
+            say(text);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {openedBlock && (
+        <BookingDrawer
+          booking={openedBlock.booking}
+          locationId={locationId}
+          isRestaurant={isRestaurant}
+          currency={currency}
+          columns={view.columns.map((c) => ({ id: c.id, name: c.name }))}
+          services={services}
+          onClose={() => setOpened(null)}
+          onDone={(text) => {
+            setOpened(null);
             say(text);
             router.refresh();
           }}
