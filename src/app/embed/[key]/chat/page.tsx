@@ -6,7 +6,6 @@ import { seedIfEmpty } from "@/lib/seed";
 import { listLocations } from "@/lib/store";
 import { originAllowed } from "@/lib/embed";
 import { chatAllowed, chatGate, newVisitorId, voiceAllowed } from "@/lib/webchat";
-import { freeTierOf } from "@/lib/billing/entitlement";
 import Chat from "./Chat";
 
 export const dynamic = "force-dynamic";
@@ -78,9 +77,7 @@ export default async function ChatPage({
       venueName={location.name}
       agentName={location.agent.displayName}
       /** The 2-in-1: offered only where the venue has the bell on as well. */
-      voiceHref={voiceAllowed(location.embed) ? voiceUrl(key, o) : undefined}
-      badge={Boolean(freeTierOf(location))}
-    />
+      voiceHref={voiceAllowed(location.embed) ? voiceUrl(key, o) : undefined}    />
   );
 }
 

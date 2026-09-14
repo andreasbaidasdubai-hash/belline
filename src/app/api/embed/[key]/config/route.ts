@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { seedIfEmpty } from "@/lib/seed";
 import { listLocations } from "@/lib/store";
 import { widgetConfig } from "@/lib/embed";
-import { freeTierOf } from "@/lib/billing/entitlement";
 import { venueWhatsApp, whatsappLink } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +32,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   const account = await venueWhatsApp(location).catch(() => null);
   const link = account?.phoneE164 ? `https://wa.me/${account.phoneE164.slice(1)}` : whatsappLinkFor(location.id);
 
-  return NextResponse.json(widgetConfig(location.embed, link, { badge: Boolean(freeTierOf(location)) }), {
+  return NextResponse.json(widgetConfig(location.embed, link), {
     headers: { ...cors(), "cache-control": "public, max-age=60" },
   });
 }

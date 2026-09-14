@@ -12,23 +12,21 @@
  *
  *   Every feature carries whether it actually works. `status: "not-yet"` never
  *   reaches a public page; the test suite fails the build if it does. The same
- *   rule applies one level up — a whole product, a whole channel or a whole
- *   market can be `not-yet` — because the temptation to list a roadmap item on
- *   a pricing card is strongest precisely when someone is deciding whether to
- *   pay.
+ *   rule applies one level up — a whole product, channel or market can be
+ *   `not-yet` — because the temptation to list a roadmap item on a pricing
+ *   card is strongest precisely when someone is deciding whether to pay.
  *
  *   There is no per-minute or per-conversation overage anywhere. An allowance
  *   that runs out is a prompt to move up, never a second number on a bill.
- *   Nothing here is unlimited either: the only accounts that would use
- *   "unlimited" are the ones on the line where our own cost is highest.
+ *   Nothing here is unlimited either, and nothing is free: the trial is the
+ *   only way to use Belline without paying.
  *
- * The shape (strategy doc §2.2): four channels sold as **modules**, so a
- * restaurant that only wants the chat can start small, and three **bundles**
- * — a set of allowances at one price, not a discount on the modules — for the
- * venue that wants everything. Priced per market in local money and never
- * converted at runtime (§2.4). Beside that self-serve ladder sits a
- * **managed** track (addendum), built into the catalogue now and hidden until
- * the things it promises exist.
+ * The shape (decided 14 September 2026, simplifying the strategy doc's
+ * modules): three plans, every channel in every plan, differing only in how
+ * much they include. One decision for a buyer, not a build-your-own form.
+ * Priced per market in local money and never converted at runtime. Beside
+ * them sits a **managed** track (addendum), built into the catalogue and
+ * hidden until the things it promises exist.
  */
 
 import { MARKETS, MARKET_CODES, formatMoney, type Market } from "../markets";
@@ -54,7 +52,6 @@ export const CHANNEL_ORDER: Channel[] = ["phone", "web_voice", "chat", "whatsapp
 
 export interface ChannelInfo {
   channel: Channel;
-  /** The module's name on a pricing card. */
   name: string;
   unit: Unit;
   status: "live" | "not-yet";
@@ -62,12 +59,12 @@ export interface ChannelInfo {
 }
 
 export const CHANNELS: Record<Channel, ChannelInfo> = {
-  phone: { channel: "phone", name: "Phone Receptionist", unit: "minutes", status: "live" },
-  web_voice: { channel: "web_voice", name: "Website Voice Button", unit: "minutes", status: "live" },
-  chat: { channel: "chat", name: "Chat Receptionist", unit: "conversations", status: "live" },
+  phone: { channel: "phone", name: "Phone", unit: "minutes", status: "live" },
+  web_voice: { channel: "web_voice", name: "Website voice button", unit: "minutes", status: "live" },
+  chat: { channel: "chat", name: "Website chat", unit: "conversations", status: "live" },
   whatsapp: {
     channel: "whatsapp",
-    name: "WhatsApp Receptionist",
+    name: "WhatsApp",
     unit: "conversations",
     status: "not-yet",
     gap:
@@ -81,8 +78,8 @@ export const CHANNELS: Record<Channel, ChannelInfo> = {
 /**
  * One allowance, in the words the website and the checkout both use.
  *
- * Generated rather than typed into each product, so "600 phone minutes" and
- * the number the engine counts against cannot disagree.
+ * Generated rather than typed into each plan, so "600 phone minutes" and the
+ * number the engine counts against cannot disagree.
  */
 export function allowanceText(channel: Channel, amount: number): string {
   const n = amount.toLocaleString("en-GB");
@@ -102,19 +99,11 @@ export function allowanceText(channel: Channel, amount: number): string {
 // Products
 // ---------------------------------------------------------------------------
 
-export type ModuleId =
-  | "chat_free"
-  | "chat"
-  | "whatsapp"
-  | "web_voice"
-  | "phone_starter"
-  | "phone_business"
-  | "phone_pro";
-export type BundleId = "everything_starter" | "everything_business" | "everything_pro";
+export type PlanId = "everything_starter" | "everything_business" | "everything_pro";
 export type ManagedId = "professional" | "premium";
 /** The single-plan ladder sold until September 2026. Kept for grandfathered venues only. */
 export type LegacyPlanId = "starter" | "business" | "enterprise";
-export type ProductId = ModuleId | BundleId | ManagedId | LegacyPlanId;
+export type ProductId = PlanId | ManagedId | LegacyPlanId;
 
 export interface Feature {
   text: string;
@@ -130,11 +119,11 @@ export interface Feature {
 export interface Product {
   id: ProductId;
   /**
-   * `module` and `bundle` are the self-serve ladder. `managed` is quoted and
-   * sold by a person. `legacy` is never sold — it exists so a venue that bought
-   * the old ladder is still billed and answered correctly while grandfathered.
+   * `plan` is what the website sells. `managed` is quoted and sold by a
+   * person. `legacy` is never sold — it exists so a venue that bought the old
+   * ladder is billed and answered correctly while grandfathered.
    */
-  kind: "module" | "bundle" | "managed" | "legacy";
+  kind: "plan" | "managed" | "legacy";
   name: string;
   summary: string;
   /** A whole product can be not-yet: then it is neither shown nor sold. */
@@ -148,19 +137,10 @@ export interface Product {
   allowances: Partial<Record<Channel, number | null>>;
   /** Monthly, in the market's minor unit. Absent: not sold in that market. */
   prices: Partial<Record<Market, number>>;
-  /**
-   * Markets whose price was derived here rather than set in the strategy doc
-   * (§2.2, §2.4, addendum). Listed in STATUS.md so they are decided, not
-   * forgotten.
-   */
+  /** Markets whose price is a planning figure, not a decision. Listed in STATUS.md. */
   provisional?: Market[];
   features: Feature[];
   recommended?: boolean;
-  /**
-   * The free chat tier's limits. The badge is the price of free; the model and
-   * the ceiling are what keep 500 free accounts affordable (§2.2).
-   */
-  free?: { model: string; maxMessagesPerChat: number; badge: true; inboxTakeover: false };
 }
 
 /** Major units in, minor units out, in the MARKETS order. */
@@ -188,21 +168,20 @@ const INTEGRATIONS: Feature = {
     "partner-gated and issue no credentials without a signed agreement.",
 };
 
-const ANSWERS: Feature[] = [
+const STARTER_FEATURES: Feature[] = [
+  { text: "Keep your number — forward it to Belline", status: "live" },
   { text: "Books and changes appointments against your real availability", status: "live" },
   { text: "Answers questions from your own hours, prices and policies", status: "live" },
-];
-
-const PHONE_BASE: Feature[] = [
-  { text: "Keep your number — forward it to Belline", status: "live" },
-  ...ANSWERS,
-  { text: "Summary and full transcript of every call", status: "live" },
+  { text: "Summary and full transcript of every call and chat", status: "live" },
   { text: "Puts urgent calls through to your team, live", status: "live" },
   { text: "A reminder text the day before every booking", status: "live" },
+  { text: "Your team can take over any chat from the inbox", status: "live" },
+  { text: "Your own words and colours on the website buttons", status: "live" },
   DEPOSITS,
 ];
 
-const PHONE_BUSINESS: Feature[] = [
+const BUSINESS_FEATURES: Feature[] = [
+  ...STARTER_FEATURES,
   { text: "Your own rules about what it may and may not decide", status: "live" },
   { text: "Every change versioned, with one-click revert", status: "live" },
   // Not "it offers a slot": Belline does not ring the guest. It matches the
@@ -214,158 +193,52 @@ const PHONE_BUSINESS: Feature[] = [
   },
 ];
 
-const PHONE_PRO: Feature[] = [
+const PRO_FEATURES: Feature[] = [
+  ...BUSINESS_FEATURES,
   { text: "Named contact for onboarding and changes", status: "live" },
   { text: "Priority support", status: "live" },
   INTEGRATIONS,
 ];
 
-const CHAT_PAID: Feature[] = [
-  { text: "Your team can take over any conversation from the inbox", status: "live" },
-  { text: "No Belline badge on your chat", status: "live" },
-];
-
-const WEB_VOICE: Feature[] = [
-  { text: "Your own words and colours on the buttons", status: "live" },
-];
-
-const WHATSAPP: Feature[] = [
-  {
-    text: "Connect your WhatsApp number yourself, in minutes",
-    status: "not-yet",
-    gap: CHANNELS.whatsapp.gap,
-  },
-  {
-    text: "Booking confirmations on WhatsApp",
-    status: "not-yet",
-    gap:
-      "A confirmation sent outside the 24-hour service window has to be an approved Meta utility " +
-      "template. Metering for templates exists (billing/cost.ts); sending and template approval do not.",
-  },
-];
-
 export const PRODUCTS: Product[] = [
-  // --- modules ---------------------------------------------------------------
-  {
-    id: "chat_free",
-    kind: "module",
-    name: "Chat Receptionist — Free",
-    summary: "Belline on your website's chat, free for as long as you like.",
-    status: "live",
-    allowances: { chat: 100 },
-    prices: price(0, 0, 0, 0, 0, 0, 0, 0, 0),
-    features: [
-      ...ANSWERS,
-      { text: "No card, and no end date", status: "live" },
-      { text: "“Answered by Belline” shown on your chat", status: "live" },
-    ],
-    free: { model: "claude-haiku-4-5", maxMessagesPerChat: 20, badge: true, inboxTakeover: false },
-  },
-  {
-    id: "chat",
-    kind: "module",
-    name: "Chat Receptionist",
-    summary: "The chat on your website, answered and booking.",
-    status: "live",
-    allowances: { chat: 150 },
-    prices: price(49, 9, 19, 17, 13, 17, 12, 21, 49),
-    provisional: EXCEPT_AE,
-    features: [...ANSWERS, ...CHAT_PAID],
-  },
-  {
-    id: "whatsapp",
-    kind: "module",
-    name: "WhatsApp Receptionist",
-    summary: "Your WhatsApp, answered and booking.",
-    status: "not-yet",
-    gap: CHANNELS.whatsapp.gap,
-    allowances: { whatsapp: 300 },
-    prices: price(99, 21, 39, 37, 27, 37, 25, 45, 99),
-    provisional: EXCEPT_AE,
-    features: [...ANSWERS, ...WHATSAPP],
-  },
-  {
-    id: "web_voice",
-    kind: "module",
-    name: "Website Voice Button",
-    summary: "A button on your website that visitors talk to.",
-    status: "live",
-    allowances: { web_voice: 150 },
-    prices: price(99, 21, 39, 37, 27, 37, 25, 45, 99),
-    provisional: EXCEPT_AE,
-    features: [...ANSWERS, ...WEB_VOICE],
-  },
-  {
-    id: "phone_starter",
-    kind: "module",
-    name: "Phone Receptionist — Starter",
-    summary: "For a single venue that wants the phone answered properly.",
-    status: "live",
-    allowances: { phone: 200 },
-    // AED 199, not the doc's 149: on a UAE line with a $15 number, 149 left
-    // 32% at typical use against the 45% floor (decision, 14 Sep 2026).
-    prices: price(199, 35, 59, 55, 39, 55, 39, 65, 149),
-    provisional: ["NZ"],
-    features: PHONE_BASE,
-  },
-  {
-    id: "phone_business",
-    kind: "module",
-    name: "Phone Receptionist — Business",
-    summary: "For a venue where the phone is genuinely busy.",
-    status: "live",
-    allowances: { phone: 600 },
-    // AED 399, not the doc's 349, for the same reason: 349 left 44%.
-    prices: price(399, 79, 139, 129, 95, 129, 89, 155, 349),
-    provisional: ["NZ"],
-    features: [...PHONE_BASE, ...PHONE_BUSINESS],
-  },
-  {
-    id: "phone_pro",
-    kind: "module",
-    name: "Phone Receptionist — Pro",
-    summary: "For a venue whose phone never stops.",
-    status: "live",
-    allowances: { phone: 1500 },
-    prices: price(799, 179, 319, 299, 219, 299, 199, 359, 699),
-    provisional: ["NZ"],
-    features: [...PHONE_BASE, ...PHONE_BUSINESS, ...PHONE_PRO],
-  },
-
-  // --- bundles ---------------------------------------------------------------
+  // --- the three plans -------------------------------------------------------
+  //
+  // UAE prices decided 14 September 2026: every plan clears a 44% margin at
+  // typical use even on the pessimistic UAE-line costs (check:plans). The
+  // other markets are planning figures for a launch 2–3 months after the UAE.
   {
     id: "everything_starter",
-    kind: "bundle",
-    name: "Everything Starter",
-    summary: "Every channel, for one venue getting started.",
+    kind: "plan",
+    name: "Starter",
+    summary: "For a venue that wants every call and message answered properly.",
     status: "live",
     allowances: { phone: 200, web_voice: 100, chat: 150, whatsapp: 300 },
-    prices: price(249, 55, 99, 89, 65, 89, 59, 109, 249),
+    prices: price(299, 65, 119, 109, 79, 109, 69, 129, 299),
     provisional: EXCEPT_AE,
-    features: [...PHONE_BASE, ...CHAT_PAID, ...WEB_VOICE],
+    features: STARTER_FEATURES,
   },
   {
     id: "everything_business",
-    kind: "bundle",
-    name: "Everything Business",
-    summary: "Every channel, for a venue that is genuinely busy.",
+    kind: "plan",
+    name: "Business",
+    summary: "For a venue where the phone is genuinely busy.",
     status: "live",
     recommended: true,
     allowances: { phone: 600, web_voice: 200, chat: 400, whatsapp: 800 },
-    prices: price(499, 109, 199, 179, 129, 179, 119, 219, 499),
+    prices: price(599, 129, 239, 219, 155, 219, 139, 269, 599),
     provisional: EXCEPT_AE,
-    features: [...PHONE_BASE, ...PHONE_BUSINESS, ...CHAT_PAID, ...WEB_VOICE],
+    features: BUSINESS_FEATURES,
   },
   {
     id: "everything_pro",
-    kind: "bundle",
-    name: "Everything Pro",
-    summary: "Every channel, for a venue that never stops.",
+    kind: "plan",
+    name: "Pro",
+    summary: "For a venue whose phone never stops.",
     status: "live",
     allowances: { phone: 1500, web_voice: 300, chat: 1000, whatsapp: 1500 },
-    prices: price(999, 219, 399, 359, 259, 359, 239, 449, 899),
+    prices: price(1199, 259, 479, 429, 309, 429, 289, 539, 1099),
     provisional: EXCEPT_AE,
-    features: [...PHONE_BASE, ...PHONE_BUSINESS, ...PHONE_PRO, ...CHAT_PAID, ...WEB_VOICE],
+    features: PRO_FEATURES,
   },
 
   // --- managed track (addendum §2) -------------------------------------------
@@ -483,8 +356,8 @@ export const SERVICES: Service[] = [
   },
 ];
 
-/** What each legacy plan maps to on the new ladder, for links that still carry `?plan=`. */
-export const LEGACY_TO_BUNDLE: Record<LegacyPlanId, BundleId> = {
+/** What each legacy plan maps to today, for links that still carry `?plan=`. */
+export const LEGACY_TO_BUNDLE: Record<LegacyPlanId, PlanId> = {
   starter: "everything_starter",
   business: "everything_business",
   enterprise: "everything_pro",
@@ -532,11 +405,7 @@ export function priceOf(id: ProductId, market: Market): number {
 
 /** Sellable on the website and at checkout, in this market. */
 export function isSellable(product: Product, market: Market): boolean {
-  return (
-    (product.kind === "module" || product.kind === "bundle") &&
-    product.status === "live" &&
-    product.prices[market] !== undefined
-  );
+  return product.kind === "plan" && product.status === "live" && product.prices[market] !== undefined;
 }
 
 export function sellable(market: Market): Product[] {
@@ -544,14 +413,16 @@ export function sellable(market: Market): Product[] {
 }
 
 // ---------------------------------------------------------------------------
-// A selection: what a subscription is made of
+// A subscription's products
 // ---------------------------------------------------------------------------
 
 /**
  * Allowances across a set of products, per channel.
  *
- * `undefined` for a channel none of them includes; `null` if any of them
- * leaves it uncounted (legacy only); otherwise the sum.
+ * A subscription is one plan today; the set is kept because a grandfathered
+ * venue and a future add-on both fit it without another migration.
+ * `undefined` for a channel none of them includes; `null` if any leaves it
+ * uncounted (legacy only); otherwise the sum.
  */
 export function allowancesOf(ids: readonly ProductId[]): Partial<Record<Channel, number | null>> {
   const out: Partial<Record<Channel, number | null>> = {};
@@ -575,7 +446,7 @@ export function monthlyOf(ids: readonly ProductId[], market: Market): number {
 }
 
 /**
- * What one billing period of a selection costs, minor units.
+ * What one billing period costs, minor units.
  *
  * Annual is ten months' money for twelve months, computed rather than stored,
  * so it cannot drift from the monthly figure.
@@ -594,7 +465,6 @@ export function annualPerMonth(ids: readonly ProductId[], market: Market): numbe
   return Math.floor(periodFee(ids, market, "annual") / 12 / 100) * 100;
 }
 
-/** "Everything Business", or "Phone Receptionist — Starter + Chat Receptionist". */
 export function selectionName(ids: readonly ProductId[]): string {
   if (ids.length === 0) return "No plan";
   return ids.map((id) => productById(id).name).join(" + ");
@@ -607,50 +477,21 @@ export type Selection =
 /**
  * Is this something a customer may buy?
  *
- * One bundle on its own, or modules with at most one per channel — two phone
- * tiers, or the free chat and the paid one together, is a mistake rather than
- * a purchase. Only live products sold in the market. Order is normalised so
- * the same choice always produces the same Stripe line items.
+ * Exactly one live plan sold in the market. The checkout, the API and the
+ * Stripe webhook all ask this, so none of them can accept what another would
+ * refuse.
  */
 export function checkSelection(raw: readonly unknown[], market: Market): Selection {
   const ids = [...new Set(raw)];
   if (ids.length === 0) return { ok: false, error: "Choose a plan." };
-
-  const products: Product[] = [];
-  for (const id of ids) {
-    if (!isProductId(id)) return { ok: false, error: "That plan does not exist." };
-    const product = productById(id);
-    if (!isSellable(product, market)) {
-      return { ok: false, error: `${product.name} is not available in ${MARKETS[market].name}.` };
-    }
-    products.push(product);
+  if (ids.length > 1) return { ok: false, error: "Choose one plan." };
+  const [id] = ids;
+  if (!isProductId(id)) return { ok: false, error: "That plan does not exist." };
+  const product = productById(id);
+  if (!isSellable(product, market)) {
+    return { ok: false, error: `${product.name} is not available in ${MARKETS[market].name}.` };
   }
-
-  const bundles = products.filter((p) => p.kind === "bundle");
-  if (bundles.length > 0 && products.length > 1) {
-    return { ok: false, error: "A bundle already includes every channel — choose it on its own." };
-  }
-
-  const seen = new Set<Channel>();
-  for (const product of products) {
-    for (const channel of Object.keys(product.allowances) as Channel[]) {
-      if (product.kind === "module" && seen.has(channel)) {
-        return { ok: false, error: `Choose one ${CHANNELS[channel].name} option.` };
-      }
-      seen.add(channel);
-    }
-  }
-
-  const order = PRODUCTS.map((p) => p.id);
-  return {
-    ok: true,
-    products: products.map((p) => p.id).sort((a, b) => order.indexOf(a) - order.indexOf(b)),
-  };
-}
-
-/** True when a selection is only the free chat: no card, no Stripe. */
-export function isFreeSelection(ids: readonly ProductId[]): boolean {
-  return ids.length > 0 && ids.every((id) => Boolean(productById(id).free));
+  return { ok: true, products: [id] };
 }
 
 // ---------------------------------------------------------------------------
@@ -664,14 +505,11 @@ export interface Recommendation {
 }
 
 /**
- * The cheapest selection that would carry this usage, if it is a move up.
+ * The cheapest plan that would carry this usage, if it is a move up.
  *
- * Used to say "you want Everything Business" rather than "you are over" — the
- * second is a complaint, the first is an answer. Every channel the venue
- * already pays for stays in the answer, even one that was quiet this period:
- * recommending somebody drop the phone because it had a slow month is not a
- * recommendation anybody asked for. And never downwards off the back of one
- * quiet month.
+ * Used to say "you want Business" rather than "you are over" — the second is
+ * a complaint, the first is an answer. It never shrinks a channel the venue
+ * already has, and never points downwards off the back of one quiet month.
  */
 export function recommend(
   usage: Partial<Record<Channel, number>>,
@@ -686,11 +524,9 @@ export function recommend(
     const allowances = allowancesOf(ids);
     for (const channel of CHANNEL_ORDER) {
       const amount = allowances[channel];
-      const wanted = keep.has(channel) || need(channel) > 0;
-      if (!wanted) continue;
+      if (!keep.has(channel) && need(channel) === 0) continue;
       if (amount === undefined) return false;
       if (amount !== null && need(channel) > amount) return false;
-      // A move up never shrinks a channel they already have.
       const before = had[channel];
       if (candidate && amount !== null && typeof before === "number" && amount < before) return false;
     }
@@ -699,38 +535,17 @@ export function recommend(
 
   if (current.length > 0 && fits(current, false)) return null;
 
-  // The free chat is somebody's choice, never our recommendation: it carries
-  // the badge, and suggesting it to a paying venue is suggesting a downgrade.
-  const live = sellable(market).filter((p) => !p.free);
-  const options = (channel: Channel) => [
-    null,
-    ...live.filter((p) => p.kind === "module" && channel in p.allowances).map((p) => p.id),
-  ];
-
-  const candidates: ProductId[][] = live.filter((p) => p.kind === "bundle").map((p) => [p.id]);
-  for (const phone of options("phone"))
-    for (const voice of options("web_voice"))
-      for (const chat of options("chat"))
-        for (const whatsapp of options("whatsapp")) {
-          const ids = [phone, voice, chat, whatsapp].filter((x): x is ProductId => x !== null);
-          // In the catalogue's order, the same order checkSelection returns,
-          // so a recommendation can be handed straight to the checkout.
-          const order = PRODUCTS.map((p) => p.id);
-          if (ids.length) candidates.push(ids.sort((a, b) => order.indexOf(a) - order.indexOf(b)));
-        }
-
   let best: Recommendation | null = null;
-  for (const ids of candidates) {
+  for (const plan of sellable(market)) {
+    const ids = [plan.id];
     if (!fits(ids, true)) continue;
     const monthly = monthlyOf(ids, market);
-    if (!best || monthly < best.monthly || (monthly === best.monthly && ids.length < best.products.length)) {
-      best = { products: ids, name: selectionName(ids), monthly };
-    }
+    if (!best || monthly < best.monthly) best = { products: ids, name: plan.name, monthly };
   }
   if (!best) return null;
 
-  const paying = current.filter((id) => productById(id).prices[market] !== undefined);
-  const now = paying.length === current.length ? monthlyOf(current, market) : 0;
+  const priced = current.every((id) => productById(id).prices[market] !== undefined);
+  const now = priced && current.length ? monthlyOf(current, market) : 0;
   return best.monthly > now ? best : null;
 }
 
@@ -759,13 +574,13 @@ export function publicLines(product: Product): string[] {
  *
  * The pricing page is generated against `live` only; this is the other half
  * of that list, so what we are choosing not to say is written down somewhere
- * rather than just absent. Belle reads it too.
+ * rather than just absent.
  */
 export function notYetLive(): { where: string; feature: string; gap: string }[] {
   const out: { where: string; feature: string; gap: string }[] = [];
   const seen = new Set<string>();
   const add = (where: string, feature: string, gap: string | undefined) => {
-    const key = `${where} ${feature}`;
+    const key = `${where} ${feature}`;
     if (seen.has(key)) return;
     seen.add(key);
     out.push({ where, feature, gap: gap ?? "No reason recorded." });

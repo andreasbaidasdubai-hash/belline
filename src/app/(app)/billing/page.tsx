@@ -12,7 +12,6 @@ import {
 } from "@/lib/billing/usage";
 import { CHANNELS, annualPerMonth, money, productById, type Channel } from "@/lib/billing/plans";
 import { MARKETS } from "@/lib/markets";
-import { freeTierOf } from "@/lib/billing/entitlement";
 import { listCalls } from "@/lib/store";
 import { addDays, dateToSpoken, todayIn } from "@/lib/time";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -41,7 +40,7 @@ const UNIT_WORDS: Record<Channel, string> = {
   whatsapp: "WhatsApp conversations",
 };
 
-function Bar({ usage, paused }: { usage: ChannelUsage; paused: boolean }) {
+function Bar({ usage }: { usage: ChannelUsage }) {
   const { used, included } = usage;
   const words = UNIT_WORDS[usage.channel];
 
@@ -79,18 +78,16 @@ function Bar({ usage, paused }: { usage: ChannelUsage; paused: boolean }) {
         role="img"
         aria-label={`${used} of ${included} ${words} used`}
       >
-        <div style={{ width: `${fill * 100}%`, background: paused ? "var(--bad)" : over ? "var(--warn)" : "var(--ok)" }} />
+        <div style={{ width: `${fill * 100}%`, background: over ? "var(--warn)" : "var(--ok)" }} />
         {spill > 0 && <div style={{ width: `${spill * 100}%`, background: "var(--bad)" }} />}
       </div>
       <div className="muted" style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginTop: 5 }}>
         <span>
-          {paused
-            ? "Paused until the next period — the free chat's limit"
-            : usage.overBy > 0
-              ? `${usage.overBy} past the allowance — not charged`
-              : usage.projected > used && usage.projected > included
-                ? `On this pace, about ${usage.projected} by period end`
-                : " "}
+          {usage.overBy > 0
+            ? `${usage.overBy} past the allowance — not charged`
+            : usage.projected > used && usage.projected > included
+              ? `On this pace, about ${usage.projected} by period end`
+              : " "}
         </span>
         <span>{Math.round(share * 100)}%</span>
       </div>
@@ -142,8 +139,7 @@ export default async function BillingPage({
           <p style={{ margin: 0, fontSize: 14.5 }}>This venue is not on a plan yet.</p>
           <p className="muted" style={{ fontSize: 13, marginTop: 10, lineHeight: 1.6, maxWidth: "60ch" }}>
             Calls are still answered and everything is recorded — nothing is being charged and no
-            allowance is being counted against. Choose a bundle, or only the channels you need,
-            whenever you are ready.
+            allowance is being counted against. Choose a plan whenever you are ready.
           </p>
           <Link href="/checkout" className="btn btn-accent" style={{ marginTop: 16, display: "inline-block" }}>
             Choose a plan
@@ -155,7 +151,6 @@ export default async function BillingPage({
 
   const { market, products, name, subscription, usage, bill, notes } = account;
   const trialing = subscription.status === "trialing";
-  const free = Boolean(freeTierOf(location));
   const period = usage.period;
 
   // The episodes behind the numbers, so a figure someone disputes can be
@@ -236,11 +231,7 @@ export default async function BillingPage({
             </div>
             <div style={{ padding: "4px 18px 20px" }}>
               {usage.channels.map((c) => (
-                <Bar
-                  key={c.channel}
-                  usage={c}
-                  paused={free && c.channel === "chat" && c.included !== null && c.used >= c.included}
-                />
+                <Bar key={c.channel} usage={c} />
               ))}
             </div>
           </div>
@@ -320,7 +311,7 @@ export default async function BillingPage({
                 className="btn"
                 style={{ marginTop: 14, display: "inline-block" }}
               >
-                {trialing ? "Choose a plan" : free ? "Add the phone or more chat" : "Change plan"}
+                {trialing ? "Choose a plan" : "Change plan"}
               </Link>
               {location.stripe?.customerId && (
                 // Stripe's own portal: change the card, download invoices, cancel.

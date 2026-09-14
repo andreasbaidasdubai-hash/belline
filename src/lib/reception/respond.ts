@@ -10,7 +10,7 @@ import { twilioAdapter } from "./channel/twilio";
 import { internalAdapter } from "./channel/internal";
 import { webchatAdapter } from "./channel/webchat";
 import { isPhoneHandle } from "../webchat";
-import { freeTierOf, serviceState } from "../billing/entitlement";
+import { serviceState } from "../billing/entitlement";
 import { todayIn } from "../time";
 import { openCredentials } from "../db/credentials";
 import {
@@ -140,7 +140,7 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   const call: Call =
     existingCall(conversation.callId) ?? startEpisode(location, conversation.channel, accepted);
 
-  const session = new AgentSession(agentVenue(location, conversation.channel), call, {
+  const session = new AgentSession(location, call, {
     // Only a real number. A website visitor's handle is not one, and handing it
     // to the agent would have it looking up a guest by a string no booking can
     // ever contain — see webchat.ts.
@@ -397,18 +397,6 @@ async function escalate(
  * clearing it from the attention inbox. Reading it back is cheap; holding a
  * stale copy and saving it over their work is not.
  */
-/**
- * The venue as the agent sees it for this thread.
- *
- * The free chat answers on Haiku whatever model the venue chose (§2.2): at a
- * hundred conversations a month on somebody else's bill, the model is the
- * line that decides whether free is affordable.
- */
-function agentVenue(location: Location, channel: Conversation["channel"]): Location {
-  const free = channel === "webchat" ? freeTierOf(location) : null;
-  return free ? { ...location, agent: { ...location.agent, model: free.model } } : location;
-}
-
 function existingCall(callId: string | undefined): Call | undefined {
   return callId ? getCall(callId) : undefined;
 }

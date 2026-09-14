@@ -7,8 +7,7 @@ import type { BillingCycle, ProductId } from "@/lib/billing/plans";
  * One button, and it says what it does.
  *
  * "Pay" rather than "Continue" or "Proceed": the next screen asks for a card,
- * and a button that hides that is a button people press and then resent. The
- * free chat is the exception — no card, no Stripe — and says so.
+ * and a button that hides that is a button people press and then resent.
  *
  * When Stripe is not configured the button says so instead of failing. That is
  * the same contract every other provider in this codebase follows.
@@ -18,13 +17,11 @@ export default function PayButton({
   cycle,
   enabled,
   venueName,
-  free,
 }: {
   products: ProductId[];
   cycle: BillingCycle;
   enabled: boolean;
   venueName: string;
-  free: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +34,7 @@ export default function PayButton({
     );
   }
 
-  if (!enabled && !free) {
+  if (!enabled) {
     return (
       <div>
         <button className="btn" disabled style={{ width: "100%", padding: "14px 16px" }}>
@@ -82,7 +79,7 @@ export default function PayButton({
         disabled={busy}
         style={{ width: "100%", padding: "14px 16px", fontSize: 14.5 }}
       >
-        {busy ? (free ? "Switching…" : "Opening checkout…") : free ? "Use the free chat — no card" : "Pay and go live"}
+        {busy ? "Opening checkout…" : "Pay and go live"}
       </button>
       {error && (
         <p role="alert" style={{ fontSize: 12.5, color: "var(--bad)", margin: "12px 0 0" }}>

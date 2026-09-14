@@ -18,7 +18,7 @@ export const metadata = {
 /**
  * The checkout. Where "Get Belline" lands.
  *
- * One page: the order on the left — a bundle or modules, the price, what is
+ * One page: the order on the left — the plan, the price, what is
  * included, what is due — and the four fields it takes to own it on the
  * right. No navigation, no footer, no second offer: a page whose only job is
  * to be agreed with should not contain a way to wander off.

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type { EmbedConfig, EmbedMode, Location } from "./types";
 import { listCalls } from "./store";
 import { todayIn } from "./time";
-import { freeTierOf, serviceState } from "./billing/entitlement";
+import { serviceState } from "./billing/entitlement";
 import type { ChannelAccount } from "./reception/types";
 import { listAccounts, saveAccount } from "./reception/repo";
 
@@ -163,7 +163,7 @@ export interface ChatGate {
 export function chatGate(location: Location): ChatGate {
   const config = location.embed;
   if (!chatAllowed(config)) return { allowed: false, used: 0, limit: 0 };
-  // Past the trial, a plan without the chat, or the free chat's month used up.
+  // Past the trial, or a plan without the chat.
   const service = serviceState(location, todayIn(location.timezone), { channel: "chat" });
   if (!service.answering) {
     return { allowed: false, used: 0, limit: 0, message: service.callerMessage };
@@ -235,10 +235,7 @@ export function clearTurnSlots(): void {
 }
 
 export function messageCeiling(location: Location): number {
-  const configured = location.embed?.maxMessagesPerChat ?? WEBCHAT_DEFAULTS.maxMessagesPerChat;
-  // The free chat's own ceiling, whatever the venue configured (§2.2).
-  const free = freeTierOf(location);
-  return free ? Math.min(configured, free.maxMessagesPerChat) : configured;
+  return location.embed?.maxMessagesPerChat ?? WEBCHAT_DEFAULTS.maxMessagesPerChat;
 }
 
 /**

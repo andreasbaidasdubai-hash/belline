@@ -234,19 +234,19 @@ test("money is whole minor units, so an invoice can never print a float artefact
 test("going past the allowance costs nothing — it recommends the next tier", () => {
   // The promise the pricing page makes is that the invoice is the plan fee and
   // nothing else. This is the test that keeps it honest.
-  const loc = subscribe({ products: ["phone_starter"], startedOn: "2026-06-01" });
+  const loc = subscribe({ products: ["everything_starter"], startedOn: "2026-06-01" });
   for (let i = 0; i < 250; i++) call(30, "2026-06-05");
   const account = accountFor(getLocation(loc.id)!, "2026-06-15")!;
   const phone = channelOf(account, "phone");
   assert.equal(phone.used, 250);
   assert.equal(phone.overBy, 50);
-  assert.equal(account.bill.dueNow, priceOf("phone_starter", "AE"), "a metered charge appeared on the bill");
-  assert.deepEqual(account.usage.upgrade?.products, ["phone_business"]);
+  assert.equal(account.bill.dueNow, priceOf("everything_starter", "AE"), "a metered charge appeared on the bill");
+  assert.deepEqual(account.usage.upgrade?.products, ["everything_business"]);
   assert.match(account.notes.join(" "), /still being answered and nothing extra/);
 });
 
 test("nobody is ever told a paid channel stops because of an allowance", () => {
-  const account = accountFor(subscribe({ products: ["phone_starter"], startedOn: "2026-06-01" }), "2026-06-15")!;
+  const account = accountFor(subscribe({ products: ["everything_starter"], startedOn: "2026-06-01" }), "2026-06-15")!;
   assert.doesNotMatch(account.notes.join(" "), /stop answering|calls will stop|suspend|paused/i);
 });
 
@@ -279,23 +279,12 @@ test("calls from another period are not on this invoice", () => {
 });
 
 test("website chat conversations are counted against the chat allowance", () => {
-  const loc = subscribe({ products: ["chat"], startedOn: "2026-10-01" });
+  const loc = subscribe({ products: ["everything_starter"], startedOn: "2026-10-01" });
   thread("2026-10-02", [0, 30]);
   thread("2026-10-03", [0]);
   const chat = channelOf(accountFor(getLocation(loc.id)!, "2026-10-10")!, "chat");
   assert.equal(chat.used, 3);
   assert.equal(chat.included, 150);
-});
-
-test("the free chat is the one allowance that pauses, and the dashboard says so", () => {
-  const loc = subscribe({ products: ["chat_free"], startedOn: "2026-11-01" });
-  for (let i = 0; i < 100; i++) thread("2026-11-02", [0]);
-  // Late in the period, so the pace is the usage rather than a projection of it.
-  const account = accountFor(getLocation(loc.id)!, "2026-11-29")!;
-  assert.equal(channelOf(account, "chat").used, 100);
-  assert.equal(account.bill.dueNow, 0);
-  assert.match(account.notes.join(" "), /paused until/);
-  assert.deepEqual(account.usage.upgrade?.products, ["chat"]);
 });
 
 test("the annual cycle is prepaid, so nothing is invoiced during the year", () => {
@@ -324,7 +313,7 @@ test("a venue with no subscription has no account rather than a zeroed one", () 
 });
 
 test("somebody heading past the allowance is told early, not at the end", () => {
-  const loc = subscribe({ products: ["phone_starter"], startedOn: "2026-07-01" });
+  const loc = subscribe({ products: ["everything_starter"], startedOn: "2026-07-01" });
   for (let i = 0; i < 150; i++) call(60, "2026-07-01");
   const phone = channelOf(accountFor(getLocation(loc.id)!, "2026-07-01")!, "phone");
   assert.equal(phone.overBy, 0, "already over — this tests the warning, not the state");
@@ -350,7 +339,7 @@ test("every market's page carries every sellable product's price, allowances and
   for (const market of MARKET_CODES) {
     const html = renderMarket(market);
     for (const product of sellable(market)) {
-      if (!product.free) assert.ok(html.includes(formatMoney(priceOf(product.id, market), market)), `${product.id} ${market} price`);
+      assert.ok(html.includes(formatMoney(priceOf(product.id, market), market)), `${product.id} ${market} price`);
       for (const line of publicLines(product)) {
         assert.ok(html.includes(line.replace(/&/g, "&amp;")), `${market} ${product.id}: "${line}" is live but missing`);
       }
@@ -360,7 +349,7 @@ test("every market's page carries every sellable product's price, allowances and
 
 test("the open markets' prices are on the landing page, and the closed markets' are not", () => {
   for (const market of liveMarkets()) {
-    for (const product of sellable(market).filter((p) => !p.free)) {
+    for (const product of sellable(market)) {
       assert.ok(landing.includes(formatMoney(priceOf(product.id, market), market)), `${product.name} ${market}`);
     }
   }
@@ -373,7 +362,7 @@ test("a second open market renders with a picker and its own hidden block", () =
   const html = renderPricing(["AE", "GB"]);
   assert.match(html, /data-market-pick/);
   assert.match(html, /data-market="GB" hidden/);
-  assert.ok(html.includes("£35"));
+  assert.ok(html.includes(formatMoney(priceOf("everything_starter", "GB"), "GB")));
 });
 
 test("nothing that is not yet live appears anywhere public", () => {
@@ -383,7 +372,7 @@ test("nothing that is not yet live appears anywhere public", () => {
     for (const gap of hidden) {
       assert.ok(!html.includes(gap.feature), `${file} advertises "${gap.feature}", which does not work yet`);
     }
-    for (const product of PRODUCTS.filter((p) => p.kind === "bundle")) {
+    for (const product of PRODUCTS.filter((p) => p.kind === "plan")) {
       const whatsapp = allowanceText("whatsapp", product.allowances.whatsapp as number);
       assert.ok(!html.includes(whatsapp), `${file} sells "${whatsapp}"`);
     }
@@ -391,7 +380,7 @@ test("nothing that is not yet live appears anywhere public", () => {
 });
 
 test("the old ladder is gone from the page", () => {
-  for (const old of ["AED 179", "AED 365", "AED 899", "Enterprise", "Unlimited voice minutes", "checkout?plan="]) {
+  for (const old of ["AED 179", "AED 365", "AED 899", "Enterprise", "Unlimited voice minutes", "checkout?plan=", "Answered by Belline", "Chat Receptionist", "Start free<"]) {
     assert.ok(!landing.includes(old), `landing.html still says "${old}"`);
   }
 });

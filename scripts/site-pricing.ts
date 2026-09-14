@@ -1,16 +1,14 @@
 /**
  * The website's pricing, generated from the catalogue.
  *
- * The pricing section of public/landing.html used to be typed by hand, and
- * check-billing compared it with plans.ts after the fact. Now plans.ts is the
- * only place a price or an allowance is written: this renders the section,
- * the ROI calculator's plan list and the structured-data offers, and writes
- * them between markers in public/landing.html.
+ * `plans.ts` is the only place a price or an allowance is written: this
+ * renders the pricing section, the ROI calculator's plan list and the
+ * structured-data offers, and writes them between markers in
+ * public/landing.html.
  *
- * One block per market. Only markets whose `status` is `live` are published —
- * a price derived for a country we cannot yet serve is not a price anybody
- * should read — but every market renders, and check-billing pins every one of
- * them to the engine, so the day a market opens its page is already right.
+ * One block per market. Only markets whose `status` is `live` are published,
+ * but every market renders, and check-billing pins every one of them to the
+ * engine, so the day a market opens its page is already right.
  *
  *   npm run pricing          rewrite public/landing.html
  */
@@ -19,14 +17,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  CHANNELS,
-  CHANNEL_ORDER,
   TRIAL,
-  allowanceText,
+  allowanceFeatures,
   annualPerMonth,
   periodFee,
   priceOf,
-  publicLines,
   sellable,
   type Product,
 } from "../src/lib/billing/plans";
@@ -48,11 +43,27 @@ export function trialSentence(): string {
   );
 }
 
-function bundleCard(product: Product, market: Market): string {
+/**
+ * The lines one plan's card shows.
+ *
+ * Its allowances, then — for every plan above the first — "Everything in
+ * Starter" and only what it adds. A card that repeats the tier below it line
+ * for line is a card nobody reads to the end.
+ */
+function cardLines(product: Product, below: Product | undefined): string[] {
+  const live = (list: { text: string; status: string }[]) => list.filter((f) => f.status === "live").map((f) => f.text);
+  const allowances = live(allowanceFeatures(product));
+  const features = live(product.features);
+  if (!below) return [...allowances, ...features];
+  const inherited = new Set(live(below.features));
+  return [...allowances, `Everything in ${below.name}`, ...features.filter((f) => !inherited.has(f))];
+}
+
+function planCard(product: Product, below: Product | undefined, market: Market): string {
   const money = (minor: number) => formatMoney(minor, market);
   const monthly = priceOf(product.id, market);
   const best = Boolean(product.recommended);
-  const lines = publicLines(product)
+  const lines = cardLines(product, below)
     .map((line) => `            <li>${esc(line)}</li>`)
     .join("\n");
   return `        <div class="plan${best ? " is-best" : ""}">
@@ -68,64 +79,16 @@ function bundleCard(product: Product, market: Market): string {
           <ul>
 ${lines}
           </ul>
-          <a class="btn${best ? "" : " line"}" href="${APP}/checkout?bundle=${product.id}&amp;market=${market}" data-cta="plan-${product.id}">Get ${esc(product.name)}</a>
+          <a class="btn${best ? "" : " line"}" href="${APP}/checkout?products=${product.id}&amp;market=${market}" data-cta="plan-${product.id}">Start free with ${esc(product.name)}</a>
         </div>`;
-}
-
-function moduleRow(product: Product, market: Market): string {
-  const money = (minor: number) => formatMoney(minor, market);
-  const channel = CHANNEL_ORDER.find((c) => c in product.allowances)!;
-  const monthly = priceOf(product.id, market);
-  const allowance = allowanceText(channel, product.allowances[channel] as number);
-  // Allowance first, then what else the module does. The allowance is already
-  // in the row's own words, so it is not repeated in the list.
-  const extras = publicLines(product).filter((line) => line !== allowance);
-  const price = product.free
-    ? `<span class="module-price">Free</span>`
-    : `<span class="module-price" data-monthly="${money(monthly)} a month" data-annual="${money(annualPerMonth([product.id], market))} a month">${money(monthly)} a month</span>`;
-  return `            <li class="module">
-              <div class="module-row">
-                <span class="module-name">${esc(product.name)}</span>
-                ${price}
-              </div>
-              <p class="module-what">${esc(allowance)}</p>
-              <details>
-                <summary>What's included</summary>
-                <ul>
-${extras.map((line) => `                  <li>${esc(line)}</li>`).join("\n")}
-                </ul>
-              </details>
-              <a class="module-cta" href="${APP}/checkout?products=${product.id}&amp;market=${market}" data-cta="module-${product.id}">${product.free ? "Start free" : `Choose ${esc(product.name)}`}</a>
-            </li>`;
 }
 
 /** Everything one market's visitor sees. */
 export function renderMarket(market: Market, hidden = false): string {
-  const products = sellable(market);
-  const bundles = products.filter((p) => p.kind === "bundle");
-  const groups = CHANNEL_ORDER.filter((c) => CHANNELS[c].status === "live")
-    .map((channel) => ({
-      channel,
-      modules: products.filter((p) => p.kind === "module" && channel in p.allowances),
-    }))
-    .filter((g) => g.modules.length > 0);
-
+  const plans = sellable(market);
   return `      <div class="market" data-market="${market}"${hidden ? " hidden" : ""}>
       <div class="plans">
-${bundles.map((b) => bundleCard(b, market)).join("\n\n")}
-      </div>
-
-      <div class="modules">
-        <h3 class="modules-head">Or only the channel you need</h3>
-        <div class="module-groups">
-${groups
-  .map(
-    (g) => `          <ul class="module-group" aria-label="${esc(CHANNELS[g.channel].name)}">
-${g.modules.map((m) => moduleRow(m, market)).join("\n")}
-          </ul>`,
-  )
-  .join("\n")}
-        </div>
+${plans.map((p, i) => planCard(p, plans[i - 1], market)).join("\n\n")}
       </div>
       </div>`;
 }
@@ -166,7 +129,7 @@ ${markets.map((m, i) => renderMarket(m, i > 0)).join("\n\n")}
         </div>
         <div>
           <h4>No surprise invoices</h4>
-          <p>There is no per-minute or per-conversation charge on any plan. The invoice is the plan fee and nothing else — if an allowance runs short, Belline keeps answering and the answer is a bigger plan, not a bigger bill. Only the free chat pauses at its limit.</p>
+          <p>There is no per-minute or per-conversation charge on any plan. The invoice is the plan fee and nothing else — if an allowance runs short, Belline keeps answering and the answer is a bigger plan, not a bigger bill.</p>
         </div>
         <div>
           <h4>${TRIAL.days} days free</h4>
@@ -178,9 +141,9 @@ ${markets.map((m, i) => renderMarket(m, i > 0)).join("\n\n")}
 
 /** The ROI calculator's "Compare with" list, and the sentence it shows before any typing. */
 function renderRoi(market: Market): { options: string; sentence: string } {
-  const bundles = sellable(market).filter((p) => p.kind === "bundle");
-  const chosen = bundles.find((b) => b.recommended) ?? bundles[0];
-  const options = bundles
+  const plans = sellable(market);
+  const chosen = plans.find((b) => b.recommended) ?? plans[0];
+  const options = plans
     .map((b) => {
       const major = priceOf(b.id, market) / 100;
       return `              <option value="${major}" data-name="${esc(b.name)}"${b === chosen ? " selected" : ""}>${esc(b.name)} — ${formatMoney(priceOf(b.id, market), market)} a month</option>`;
@@ -198,7 +161,7 @@ function renderOffers(market: Market): string {
   return sellable(market)
     .map(
       (p) =>
-        `        { "@type": "Offer", "name": ${JSON.stringify(p.name)}, "price": "${priceOf(p.id, market) / 100}", "priceCurrency": "${currency}", "billingIncrement": "P1M" }`,
+        `        { "@type": "Offer", "name": ${JSON.stringify(`Belline ${p.name}`)}, "price": "${priceOf(p.id, market) / 100}", "priceCurrency": "${currency}", "billingIncrement": "P1M" }`,
     )
     .join(",\n");
 }

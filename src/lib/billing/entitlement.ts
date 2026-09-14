@@ -1,7 +1,7 @@
 import type { Location } from "../types";
 import { getTenant } from "../store";
 import { accountFor, isLegacy, periodFor, productsOf } from "./usage";
-import { channelsOf, productById, type Channel, type Product } from "./plans";
+import { channelsOf, type Channel } from "./plans";
 import { stripeEnabled } from "./stripe";
 
 /**
@@ -15,11 +15,10 @@ import { stripeEnabled } from "./stripe";
  * when the checkout cannot take their card would punish them for our gap.
  * `lapsed` is still reported, so the client book can show who needs a call.
  *
- * **Channels** — a venue that bought the chat and not the phone. That is
- * enforced always, because it is not a gap on our side but the venue's own
- * choice, and answering a phone nobody pays for spends real money with three
- * vendors. The free chat's cap is enforced the same way: free is capped, or
- * it is not free.
+ * **Channels** — a plan that does not include this channel (today only a
+ * grandfathered plan, which was never sold WhatsApp). That is enforced always:
+ * it is not a gap on our side, and answering a channel nobody pays for spends
+ * real money.
  *
  * And the softness that never changes: a paying venue past its allowance is
  * never stopped, and neither is one whose card failed while Stripe retries.
@@ -28,7 +27,7 @@ import { stripeEnabled } from "./stripe";
  */
 
 export type Lapse = "trial_ended" | "trial_minutes_used" | "cancelled" | "legacy_plan_ended";
-export type Refusal = Lapse | "not_in_plan" | "free_limit";
+export type Refusal = Lapse | "not_in_plan";
 
 export interface ServiceState {
   /** Whether this venue — on this channel, if one was asked about — should be answered right now. */
@@ -82,30 +81,6 @@ export function channelIncluded(location: Location, channel: Channel): boolean {
   return channelsOf(productsOf(sub)).includes(channel);
 }
 
-/**
- * The free chat tier's limits, when that is the venue's chat.
- *
- * Null for anybody with a paid chat, a trial, or no plan: the badge, the
- * cheaper model and the shorter conversation are the price of free and of
- * nothing else.
- */
-export function freeTierOf(location: Location): NonNullable<Product["free"]> | null {
-  if (exempt(location)) return null;
-  const sub = location.subscription!;
-  if (sub.status === "trialing") return null;
-  const products = productsOf(sub).map(productById);
-  const paidChat = products.some((p) => !p.free && "chat" in p.allowances);
-  if (paidChat) return null;
-  return products.find((p) => p.free)?.free ?? null;
-}
-
-/** Has the free chat used its conversations for this period? */
-export function freeChatExhausted(location: Location, today: string): boolean {
-  if (!freeTierOf(location)) return false;
-  const chat = accountFor(location, today)?.usage.channels.find((c) => c.channel === "chat");
-  return Boolean(chat && chat.included !== null && chat.used >= chat.included);
-}
-
 function messageFor(location: Location, channel: Channel | undefined): string {
   switch (channel) {
     case "web_voice":
@@ -135,11 +110,7 @@ export function serviceState(
   });
 
   if (lapsed && enforce) return refuse(lapsed);
-
-  if (opts.channel) {
-    if (!channelIncluded(location, opts.channel)) return refuse("not_in_plan");
-    if (opts.channel === "chat" && freeChatExhausted(location, today)) return refuse("free_limit");
-  }
+  if (opts.channel && !channelIncluded(location, opts.channel)) return refuse("not_in_plan");
 
   return { answering: true, lapsed };
 }

@@ -5,7 +5,6 @@ import { MARKETS, marketOf, type Market } from "../markets";
 import {
   GRANDFATHER_DAYS,
   checkSelection,
-  isFreeSelection,
   isProductId,
   periodFee,
   productById,
@@ -29,8 +28,7 @@ import { addDays, todayIn } from "../time";
  * One Stripe price per product, per market, per cycle, found again by a lookup
  * key that carries the amount — so changing a price in `plans.ts` creates a
  * new Stripe price and existing subscriptions keep the one they were sold.
- * A subscription is a set of those prices: a bundle is one line, three modules
- * are three.
+ * A subscription is one of those prices.
  *
  * **Nothing believes a redirect.** A customer returning to a success URL
  * proves only that their browser followed a link. The subscription becomes
@@ -38,7 +36,7 @@ import { addDays, todayIn } from "../time";
  *
  * `STRIPE_SECRET_KEY` unset is a supported state, exactly like the speech and
  * telephony providers: the button says so rather than failing, and everything
- * else in the product works — including the free chat, which needs no card.
+ * else in the product works.
  */
 
 let client: Stripe | null = null;
@@ -166,47 +164,13 @@ export function checkoutParams(
 export async function createCheckout(input: CheckoutInput): Promise<{ url: string }> {
   const selection = checkSelection(input.products, input.market);
   if (!selection.ok) throw new Error(selection.error);
-  if (isFreeSelection(selection.products)) {
-    throw new Error("The free chat needs no checkout — activate it directly.");
-  }
-
-  const prices = await Promise.all(
-    selection.products
-      .filter((id) => periodFee([id], input.market, input.cycle) > 0)
-      .map((id) => priceFor(id, input.market, input.cycle)),
-  );
+  const prices = await Promise.all(selection.products.map((id) => priceFor(id, input.market, input.cycle)));
   const session = await stripe().checkout.sessions.create(
     checkoutParams({ ...input, products: selection.products }, prices.map((p) => p.id)),
   );
 
   if (!session.url) throw new Error("Stripe returned a checkout session with no URL.");
   return { url: session.url };
-}
-
-/**
- * Put a venue on the free chat. No card and no Stripe, by design.
- *
- * Refused while a paid subscription is running: that has a Stripe
- * subscription behind it, and quietly replacing the plan here would leave the
- * card being charged for something the venue no longer has.
- */
-export function activateFree(
-  location: Location,
-  market: Market,
-): { ok: true; location: Location } | { ok: false; error: string } {
-  const sub = location.subscription;
-  if (sub?.status === "active" && location.stripe?.subscriptionId) {
-    return { ok: false, error: "Cancel the current plan from Manage billing first." };
-  }
-  const next: Subscription = {
-    products: ["chat_free"],
-    market,
-    cycle: "monthly",
-    startedOn: todayIn(location.timezone),
-    status: "active",
-  };
-  const saved = upsertLocation({ ...location, subscription: next });
-  return { ok: true, location: saved ?? { ...location, subscription: next } };
 }
 
 /** The customer portal, for changing a card or cancelling without emailing us. */

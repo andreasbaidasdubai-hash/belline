@@ -188,35 +188,32 @@ Worked phase by phase against `docs/strategy/belline-commercial-strategy-2026-09
 
 | Item | State | Note |
 |---|---|---|
-| Catalogue | **Built** | `src/lib/billing/plans.ts`: 7 modules (`chat_free`, `chat`, `whatsapp`, `web_voice`, `phone_starter/business/pro`) and 3 Everything bundles, prices as `Record<Market, minor units>` for AE, GB, AU, CA, US, SG, IE, NZ, CH. Annual is computed as ten months for twelve. Nothing sellable is unlimited. `src/lib/markets.ts` holds currency, formatting and a `live`/`not-yet` status per market (only AE is live). |
+| Catalogue | **Built, then simplified** | `src/lib/billing/plans.ts`: three plans — **Starter AED 299, Business AED 599, Pro AED 1,199** — each with every live channel (phone, website voice button, website chat; WhatsApp when it works), differing only in allowances. Prices as `Record<Market, minor units>` for AE, GB, AU, CA, US, SG, IE, NZ, CH. Annual is ten months for twelve. Nothing sellable is unlimited, and nothing is free. The strategy doc's single-channel modules and free chat were built first and removed the same day at your call ("too complicated"; "we can't have a free chat receptionist"). `src/lib/markets.ts` holds currency, formatting and a `live`/`not-yet` status per market (only AE is live). |
 | Managed track | **Built, not public** | `professional` (AED 999) and `premium` (AED 1,999), plus white-glove setup (AED 750). All `not-yet` because they sell integrations, Arabic, multi-location and outbound calling. Not sellable, not rendered. |
 | Grandfathering | **Built** | The old Starter/Business/Enterprise ladder is kept as `legacy` products. On the first boot of this code, every *active* venue on it is stamped `grandfatheredUntil` = that day + 90 (`billing/grandfather.ts`). It keeps exactly what it bought, including Enterprise's uncounted minutes. Afterwards it lapses as `legacy_plan_ended`, enforced only once Stripe is on. |
 | Usage per channel | **Built** | `billing/usage.ts`: minutes for phone and the voice button (test console, demo lines and calls we broke excluded); conversations for chat and WhatsApp, meaning a thread with at least one Belline reply, 24 hours from that reply. Per-channel usage, projection and a `recommend()` that finds the cheapest move up. It never drops a channel they pay for, never shrinks one, never suggests the free chat, and never points downwards. The invoice is still the plan fee only. `MINUTE_DEFINITION` and `CONVERSATION_DEFINITION` are quoted verbatim on the site and the billing page. |
 | Entitlements | **Built** | `serviceState(location, today, { channel })` gates the phone (Twilio route), the voice button (`checkEmbedGate` and `mayStreamTo`), chat (`chatGate`) and WhatsApp (`respondTo`, which the webhook calls). A missing channel is refused always; lapsing is enforced only with Stripe on; a paid allowance never stops service. |
 | Trial | **Built** | 14 days, 60 phone minutes, every channel on, no card (decision confirmed). Signup no longer goes to Stripe. What was picked on `/checkout` is remembered on the trial. |
-| Free chat | **Built** | 100 conversations then a hard pause until the next period. Haiku whatever the venue's model, 20 messages a chat. "Answered by Belline" on the chat panel (and `badge` in the widget config). Staff cannot take over a chat Belline is still handling, but can pick up one Belline handed off. "Add the phone" one-click upsell on the dashboard home. Switched on without Stripe. |
+| Free chat | **Removed** | Built, then removed at your call: no free tier, no badge, no upsell. The 14-day card-free trial is the only way to use Belline without paying. |
 | Stripe | **Built** | One price per product × market × cycle, found by a lookup key carrying the amount; a subscription is one line per product. Stripe Tax on (`STRIPE_TAX=off` for an account without tax settings); prices are tax-exclusive. The webhook maps `belline_products` back through `checkSelection` and ignores anything that is not a sellable plan; an old-ladder session paid after the switch is honoured and grandfathered. |
-| Checkout and billing | **Built** | `/checkout`: bundles first, modules as one-per-channel toggles, a live total in the venue's currency, and the selection mirrored into the URL. `/billing`: one usage bar per channel, the products and prices, both definitions, and a change-plan link. |
+| Checkout and billing | **Built** | `/checkout`: the three plans as one choice, what the chosen plan includes, a live total in the venue's currency, and the choice mirrored into the URL. `/billing`: one usage bar per channel, the plan and price, both definitions, and a change-plan link. The website cards show each plan's allowances and "Everything in Starter" plus what it adds. |
 | Website pricing | **Built** | `scripts/site-pricing.ts` renders the pricing section, the ROI plan list and the structured-data offers from `plans.ts` between markers in `public/landing.html` (`npm run pricing`; `npm run site` re-applies it). Every market renders and is pinned by `check:billing`; only live markets are published. A second live market gets a picker automatically. Terms updated for the new trial and allowances. |
 | Belle's knowledge | **Built** | The price and trial FAQs are generated from the catalogue at boot (`billing/speak.ts`, in words). Only live channels are named. |
 | `check:plans` | **Built** | 29 cases, covering doc prices and allowances per market, provisional marking, ladder ordering, annual maths, the managed track hidden, WhatsApp unsold, free-chat limits, selection rules and upgrade rules. Unit costs rebuilt from the rate card land within 7% of §1.3 on both bases. Prints the margin table and enforces 30% (bundle) / 45% (module) at typical use. |
 
 **Margins at typical use (both enforced):**
-- **Lean basis, every market:** every module 73–90%, every bundle 62–75%.
-- **UAE-line basis, UAE only:** modules 49–81%, bundles 33–37%.
+- **Lean basis, every market:** see the table `npm run check:plans` prints; every plan clears 30%.
+- **UAE-line basis, UAE only:** Starter, Business and Pro all land around 44–48%, against a 30% floor.
 
-**UAE price change (14 September 2026):** Phone Starter went from AED 149 to **AED 199**, and Phone Business from AED 349 to **AED 399**. At the doc's prices they left 32% and 44% on a UAE line, under the 45% floor; now they leave 49% and 51%. Every other UAE price is the doc's. Other markets are priced but closed; they are planned for 2–3 months after the UAE launch.
+**UAE pricing decision (14 September 2026):** three all-in plans at AED 299 / 599 / 1,199. This replaced the modules and the free chat. The UAE-line margin leaves room for a launch offer or the annual discount. Other markets are priced but closed; they are planned for 2–3 months after the UAE launch.
 
 **Still needs a figure or a decision from you**
 
-- **Provisional prices** (derived from the doc's USD anchors, marked `provisional` in `plans.ts`, not public while those markets are closed):
+- **Provisional prices for the later markets** (marked `provisional` in `plans.ts`, not public while those markets are closed). To be decided before each market opens:
 
   | | GB | AU | CA | US | SG | IE | NZ | CH |
   |---|---|---|---|---|---|---|---|---|
-  | Chat | £9 | A$19 | C$17 | $13 | S$17 | €12 | NZ$21 | CHF 49 |
-  | WhatsApp / Voice button | £21 | A$39 | C$37 | $27 | S$37 | €25 | NZ$45 | CHF 99 |
-  | Everything S / B / P | £55/109/219 | A$99/199/399 | C$89/179/359 | $65/129/259 | S$89/179/359 | €59/119/239 | NZ$109/219/449 | CHF 249/499/899 |
-  | Phone S / B / P | from doc | from doc | from doc | from doc | from doc | from doc | NZ$65/155/359 | from addendum |
+  | Starter / Business / Pro | £65/129/259 | A$119/239/479 | C$109/219/429 | $79/155/309 | S$109/219/429 | €69/139/289 | NZ$129/269/539 | CHF 299/599/1,099 |
 
 - **The UAE-line margins still rest on three estimated rates:** `TWILIO_INBOUND_AE`, `TWILIO_NUMBER_AE` and `ELEVENLABS_CREDIT_PRO`. Set the real figures as `RATE_*` in Railway once there is a carrier quote. `check:plans` then re-checks the UAE prices against them. The biggest single cost is the $15 a month UAE number.
 - **Stripe dashboard:**

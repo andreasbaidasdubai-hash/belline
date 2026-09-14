@@ -263,18 +263,11 @@ import { resolveAppearance } from "./embed-look";
  * so it is built from a whitelist. The origins list, the ceilings and the
  * key's owner are not in it and must not be.
  */
-export function widgetConfig(
-  config: EmbedConfig,
-  whatsappLink: string | null,
-  opts: { badge?: boolean } = {},
-) {
+export function widgetConfig(config: EmbedConfig, whatsappLink: string | null) {
   const look = resolveAppearance(config.appearance);
   return {
     mode: modeOf(config) ?? "voice",
     ...look,
     whatsappLink: look.whatsapp ? whatsappLink : null,
-    // "Answered by Belline", on the free chat and nowhere else. The price of
-    // free, and not a setting the venue can switch off (see freeTierOf).
-    badge: Boolean(opts.badge),
   };
 }

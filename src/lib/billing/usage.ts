@@ -496,17 +496,10 @@ function notesFor(
     );
   }
 
-  const free = products.some((id) => productById(id).free);
   for (const c of usage.channels) {
     if (c.included === null) continue;
     const what = unitWord(c.channel);
-    if (free && c.channel === "chat" && c.used >= c.included) {
-      // The one allowance that does stop: free is capped, or it is not free.
-      notes.push(
-        `The free chat has answered its ${c.included} conversations for this period, so it is paused ` +
-          `until ${spokenDate(usage.period.end)}. Nothing has been charged.`,
-      );
-    } else if (c.overBy > 0) {
+    if (c.overBy > 0) {
       // Deliberately not an apology and not a threat. A receptionist that
       // stops answering because of an invoice is not a receptionist, and the
       // answer is a bigger plan, not a bigger bill.

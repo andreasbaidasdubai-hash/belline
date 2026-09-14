@@ -1,16 +1,13 @@
 /**
  * The catalogue, and whether it makes money.
  *
- * Three things are pinned here. The prices are the strategy doc's (§2.2,
- * §2.4, addendum), and anything derived rather than decided says so. What a
+ * Three things are pinned here. The UAE prices are the ones decided on
+ * 14 September 2026, and every other market's are marked provisional. What a
  * customer may buy is exactly what the checkout, the API and the Stripe
- * webhook agree on. And every module and bundle clears its margin floor at
- * typical use — 30% for a bundle, 45% for a module — computed from the same
- * rate card the meter uses (Phase 1), not from a spreadsheet.
- *
- * A margin basis that rests on an unverified rate (the UAE line, today) is
- * printed and reported, not enforced; it becomes a hard gate the moment its
- * rates are verified or set with RATE_<KEY>.
+ * webhook agree on: one of three plans. And every plan clears a 30% margin at
+ * typical use, computed from the same rate card the meter uses (Phase 1) —
+ * on the lean basis in every market, and on the pessimistic UAE-line basis in
+ * the UAE.
  *
  *   npm run check:plans
  */
@@ -44,6 +41,7 @@ const {
   productById,
   publicLines,
   recommend,
+  sellable,
 } = plans;
 type Market = (typeof MARKET_CODES)[number];
 type ProductId = Parameters<typeof productById>[0];
@@ -63,7 +61,7 @@ function test(name: string, fn: () => void) {
   }
 }
 
-const selfServe = PRODUCTS.filter((p) => p.kind === "module" || p.kind === "bundle");
+const LADDER: ProductId[] = ["everything_starter", "everything_business", "everything_pro"];
 const major = (id: ProductId, m: Market) => priceOf(id, m) / 100;
 
 console.log("\n\x1b[1mThe catalogue\x1b[0m\n");
@@ -71,19 +69,36 @@ console.log("\n\x1b[1mThe catalogue\x1b[0m\n");
 test("every price is whole minor units and a whole unit of currency", () => {
   for (const p of [...PRODUCTS, ...SERVICES]) {
     for (const [m, v] of Object.entries(p.prices)) {
-      assert.ok(Number.isInteger(v) && (v as number) >= 0, `${p.id} ${m}: ${v}`);
+      assert.ok(Number.isInteger(v) && (v as number) > 0, `${p.id} ${m}: ${v}`);
       assert.equal((v as number) % 100, 0, `${p.id} ${m} is not a whole ${MARKETS[m as Market].currency}`);
     }
   }
 });
 
-test("the self-serve ladder is priced in every market", () => {
-  for (const p of selfServe) {
-    for (const m of MARKET_CODES) assert.ok(p.prices[m] !== undefined, `${p.id} has no ${m} price`);
+test("exactly three plans are sold, in every market, and nothing is free", () => {
+  for (const m of MARKET_CODES) {
+    assert.deepEqual(sellable(m).map((p) => p.id), LADDER, m);
+    for (const id of LADDER) assert.ok(priceOf(id, m) > 0, `${id} is free in ${m}`);
   }
 });
 
-test("nothing that can be bought or quoted is unlimited", () => {
+test("the UAE prices are the ones decided: AED 299 / 599 / 1,199, not provisional", () => {
+  assert.deepEqual(LADDER.map((id) => major(id, "AE")), [299, 599, 1199]);
+  for (const id of LADDER) assert.ok(!productById(id).provisional?.includes("AE"));
+});
+
+test("every other market's price is marked provisional", () => {
+  for (const id of LADDER) {
+    for (const m of MARKET_CODES.filter((m) => m !== "AE")) {
+      assert.ok(productById(id).provisional?.includes(m), `${id} in ${m} is not marked provisional`);
+    }
+  }
+});
+
+test("every plan includes every channel, and nothing that can be bought or quoted is unlimited", () => {
+  for (const id of LADDER) {
+    assert.deepEqual(Object.keys(productById(id).allowances).sort(), ["chat", "phone", "web_voice", "whatsapp"]);
+  }
   for (const p of PRODUCTS.filter((p) => p.kind !== "legacy")) {
     for (const [channel, v] of Object.entries(p.allowances)) {
       assert.equal(typeof v, "number", `${p.id} leaves ${channel} uncounted`);
@@ -91,84 +106,29 @@ test("nothing that can be bought or quoted is unlimited", () => {
   }
 });
 
-test("the UAE prices are the strategy doc's (§2.2), with Phone Starter and Business raised for the UAE line", () => {
-  const doc: Partial<Record<ProductId, number>> = {
-    chat_free: 0, chat: 49, whatsapp: 99, web_voice: 99,
-    // 149 and 349 in the doc; raised 14 Sep 2026 to clear the floor on a UAE line.
-    phone_starter: 199, phone_business: 399, phone_pro: 799,
-    everything_starter: 249, everything_business: 499, everything_pro: 999,
-  };
-  for (const [id, aed] of Object.entries(doc)) {
-    assert.equal(major(id as ProductId, "AE"), aed, id);
-    assert.ok(!productById(id as ProductId).provisional?.includes("AE"), `${id} AE is from the doc, not provisional`);
-  }
-});
-
 test("the allowances are the strategy doc's (§2.2)", () => {
-  const doc: Record<string, Record<string, number>> = {
-    chat_free: { chat: 100 }, chat: { chat: 150 }, whatsapp: { whatsapp: 300 }, web_voice: { web_voice: 150 },
-    phone_starter: { phone: 200 }, phone_business: { phone: 600 }, phone_pro: { phone: 1500 },
-    everything_starter: { phone: 200, web_voice: 100, chat: 150, whatsapp: 300 },
-    everything_business: { phone: 600, web_voice: 200, chat: 400, whatsapp: 800 },
-    everything_pro: { phone: 1500, web_voice: 300, chat: 1000, whatsapp: 1500 },
-  };
-  for (const [id, allowances] of Object.entries(doc)) {
-    assert.deepEqual(productById(id as ProductId).allowances, allowances, id);
-  }
+  assert.deepEqual(productById("everything_starter").allowances, { phone: 200, web_voice: 100, chat: 150, whatsapp: 300 });
+  assert.deepEqual(productById("everything_business").allowances, { phone: 600, web_voice: 200, chat: 400, whatsapp: 800 });
+  assert.deepEqual(productById("everything_pro").allowances, { phone: 1500, web_voice: 300, chat: 1000, whatsapp: 1500 });
 });
 
-test("each market's phone tiers are §2.4's, and Switzerland's the addendum's", () => {
-  const doc: Partial<Record<Market, [number, number, number]>> = {
-    AE: [199, 399, 799], GB: [35, 79, 179], AU: [59, 139, 319], CA: [55, 129, 299],
-    US: [39, 95, 219], SG: [55, 129, 299], IE: [39, 89, 199], CH: [149, 349, 699],
-  };
-  for (const [m, tiers] of Object.entries(doc) as [Market, number[]][]) {
-    (["phone_starter", "phone_business", "phone_pro"] as const).forEach((id, i) => {
-      assert.equal(major(id, m), tiers[i], `${id} in ${m}`);
-      assert.ok(!productById(id).provisional?.includes(m), `${id} ${m} is from the doc, not provisional`);
-    });
-  }
-});
-
-test("every price the doc did not set is marked provisional", () => {
-  const phone = new Set<ProductId>(["phone_starter", "phone_business", "phone_pro"]);
-  for (const p of selfServe) {
-    for (const m of MARKET_CODES) {
-      const decided = p.id === "chat_free" || m === "AE" || (phone.has(p.id) && m !== "NZ");
-      if (!decided) assert.ok(p.provisional?.includes(m), `${p.id} in ${m} is derived but not marked provisional`);
-    }
-  }
-});
-
-test("in every market the tiers climb in price and allowance, and a bundle costs more than its phone tier", () => {
-  const ladders: ProductId[][] = [
-    ["phone_starter", "phone_business", "phone_pro"],
-    ["everything_starter", "everything_business", "everything_pro"],
-  ];
+test("in every market each plan costs more and includes more than the one below", () => {
   for (const m of MARKET_CODES) {
-    for (const ladder of ladders) {
-      for (let i = 1; i < ladder.length; i++) {
-        assert.ok(priceOf(ladder[i], m) > priceOf(ladder[i - 1], m), `${ladder[i]} is not dearer than ${ladder[i - 1]} in ${m}`);
-        assert.ok(
-          (productById(ladder[i]).allowances.phone ?? 0) > (productById(ladder[i - 1]).allowances.phone ?? 0),
-          `${ladder[i]} does not include more than ${ladder[i - 1]}`,
-        );
+    for (let i = 1; i < LADDER.length; i++) {
+      assert.ok(priceOf(LADDER[i], m) > priceOf(LADDER[i - 1], m), `${LADDER[i]} is not dearer in ${m}`);
+      for (const [channel, amount] of Object.entries(productById(LADDER[i]).allowances)) {
+        const below = productById(LADDER[i - 1]).allowances[channel as keyof typeof CHANNELS];
+        assert.ok((amount as number) > (below as number), `${LADDER[i]} does not include more ${channel}`);
       }
     }
-    (["starter", "business", "pro"] as const).forEach((tier) => {
-      assert.ok(
-        priceOf(`everything_${tier}`, m) > priceOf(`phone_${tier}`, m),
-        `Everything ${tier} is not dearer than Phone ${tier} in ${m}`,
-      );
-    });
   }
 });
 
 test("annual is ten months for twelve, and the monthly equivalent never overstates it", () => {
-  for (const p of selfServe) {
+  for (const id of LADDER) {
     for (const m of MARKET_CODES) {
-      assert.equal(periodFee([p.id], m, "annual"), priceOf(p.id, m) * 10, `${p.id} ${m}`);
-      assert.ok(annualPerMonth([p.id], m) * 12 <= periodFee([p.id], m, "annual"), `${p.id} ${m} overstates`);
+      assert.equal(periodFee([id], m, "annual"), priceOf(id, m) * 10, `${id} ${m}`);
+      assert.ok(annualPerMonth([id], m) * 12 <= periodFee([id], m, "annual"), `${id} ${m} overstates`);
     }
   }
 });
@@ -187,57 +147,40 @@ test("the managed track is in the catalogue, and can be neither bought nor seen 
   assert.equal(glove.status, "not-yet");
 });
 
-test("WhatsApp is not sold, or shown on a bundle, until it works", () => {
+test("WhatsApp is not shown on any plan until it works", () => {
   assert.equal(CHANNELS.whatsapp.status, "not-yet");
-  for (const m of MARKET_CODES) assert.equal(isSellable(productById("whatsapp"), m), false);
-  for (const p of selfServe.filter((p) => p.kind === "bundle")) {
+  for (const id of LADDER) {
+    const p = productById(id);
     const line = allowanceText("whatsapp", p.allowances.whatsapp as number);
     assert.ok(!publicLines(p).includes(line), `${p.name} shows "${line}"`);
   }
 });
 
-test("the free chat is capped: 100 conversations, Haiku, 20 messages, the badge", () => {
-  const free = productById("chat_free");
-  assert.equal(free.allowances.chat, 100);
-  assert.deepEqual(free.free, { model: "claude-haiku-4-5", maxMessagesPerChat: 20, badge: true, inboxTakeover: false });
-  for (const m of MARKET_CODES) assert.equal(priceOf("chat_free", m), 0);
-});
-
-test("the trial is fourteen days and sixty phone minutes (§2.3)", () => {
+test("the trial is fourteen days and sixty phone minutes", () => {
   assert.equal(TRIAL.days, 14);
   assert.equal(TRIAL.phoneMinutes, 60);
 });
 
-test("no per-minute or per-conversation charge is described anywhere in the catalogue", () => {
-  assert.doesNotMatch(JSON.stringify(PRODUCTS), /overage|per minute|per conversation|extra minutes/i);
+test("no per-minute or per-conversation charge, and no free tier, is described anywhere in the catalogue", () => {
+  assert.doesNotMatch(JSON.stringify(PRODUCTS), /overage|per minute|per conversation|extra minutes|free chat|badge/i);
 });
 
 console.log("\n\x1b[1mWhat a customer may buy\x1b[0m\n");
 
-test("a bundle on its own", () => {
-  const s = checkSelection(["everything_business"], "AE");
-  assert.ok(s.ok && s.products.join() === "everything_business");
+test("one plan", () => {
+  for (const id of LADDER) {
+    const s = checkSelection([id], "AE");
+    assert.ok(s.ok && s.products.join() === id, id);
+  }
 });
 
-test("modules, one per channel, in a fixed order whatever order they were picked in", () => {
-  const s = checkSelection(["chat", "phone_starter", "web_voice"], "AE");
-  assert.ok(s.ok, s.ok ? "" : s.error);
-  assert.deepEqual(s.products, ["chat", "web_voice", "phone_starter"]);
-});
-
-test("the free chat with a phone — the dashboard's one-click upsell", () => {
-  assert.ok(checkSelection(["chat_free", "phone_starter"], "AE").ok);
-});
-
-test("refused: a bundle with a module, two phone tiers, free and paid chat, WhatsApp, a managed plan, nonsense, nothing", () => {
+test("refused: two plans, a managed plan, the old ladder, nonsense, nothing", () => {
   for (const bad of [
-    ["everything_starter", "chat"],
-    ["phone_starter", "phone_business"],
-    ["chat_free", "chat"],
-    ["whatsapp"],
+    ["everything_starter", "everything_pro"],
     ["professional"],
     ["starter"],
-    ["everything"],
+    ["chat_free"],
+    ["phone_starter"],
     [],
   ]) {
     assert.equal(checkSelection(bad, "AE").ok, false, `accepted ${JSON.stringify(bad)}`);
@@ -246,29 +189,21 @@ test("refused: a bundle with a module, two phone tiers, free and paid chat, What
 
 console.log("\n\x1b[1mMoving up\x1b[0m\n");
 
-test("a busy free chat is pointed at the paid chat", () => {
-  assert.deepEqual(recommend({ chat: 130 }, ["chat_free"], "AE")?.products, ["chat"]);
+test("a busy Starter moves to Business, not Pro", () => {
+  assert.deepEqual(recommend({ phone: 450 }, ["everything_starter"], "AE")?.products, ["everything_business"]);
 });
 
-test("a busy phone moves one tier, not two", () => {
-  assert.deepEqual(recommend({ phone: 450 }, ["phone_starter"], "AE")?.products, ["phone_business"]);
-});
-
-test("a channel they pay for stays in the answer, even after a quiet month", () => {
-  const r = recommend({ phone: 700, chat: 0 }, ["phone_starter", "chat"], "AE");
-  assert.ok(r?.products.includes("chat"), `dropped the chat: ${r?.products}`);
-  assert.deepEqual(r?.products, ["chat", "phone_pro"]);
-});
-
-test("a bundle wins when it is cheaper than the modules", () => {
-  assert.deepEqual(recommend({ phone: 150, web_voice: 60, chat: 100 }, ["phone_starter"], "AE")?.products, [
-    "everything_starter",
-  ]);
+test("any channel past its allowance counts, not only the phone", () => {
+  assert.deepEqual(recommend({ phone: 100, chat: 500 }, ["everything_business"], "AE")?.products, ["everything_pro"]);
 });
 
 test("a plan that fits recommends nothing, and nothing is ever recommended downwards", () => {
-  assert.equal(recommend({ phone: 100 }, ["phone_starter"], "AE"), null);
+  assert.equal(recommend({ phone: 100 }, ["everything_starter"], "AE"), null);
   assert.equal(recommend({ phone: 5 }, ["everything_pro"], "AE"), null);
+});
+
+test("a grandfathered venue past its minutes is pointed at the cheapest plan that keeps its channels", () => {
+  assert.deepEqual(recommend({ phone: 150, chat: 40 }, ["starter"], "AE")?.products, ["everything_starter"]);
 });
 
 console.log("\n\x1b[1mUnit costs agree with the strategy doc (§1.3)\x1b[0m\n");
@@ -291,32 +226,28 @@ for (const basis of margin.BASIS_ORDER) {
 
 console.log("\n\x1b[1mMargins — typical use (60%) / full allowance\x1b[0m");
 
-const priced = selfServe.filter((p) => !p.free);
-const floorOf = (kind: string) => (kind === "bundle" ? margin.MARGIN_FLOOR.bundle : margin.MARGIN_FLOOR.module);
-
 for (const basis of margin.BASIS_ORDER) {
   const unverified = margin.unverifiedLines(basis);
   const scope = margin.BASES[basis].markets;
   const markets = scope === "all" ? MARKET_CODES : scope;
   console.log(`\n  ${margin.BASES[basis].label}${unverified.length ? `  \x1b[33m(estimated: ${unverified.join(", ")})\x1b[0m` : ""}\n`);
-  console.log(`  ${"".padEnd(30)}${markets.map((m) => m.padStart(9)).join("")}`);
+  console.log(`  ${"".padEnd(12)}${markets.map((m) => m.padStart(9)).join("")}`);
 
   const under: string[] = [];
-  for (const p of priced) {
+  for (const id of LADDER) {
+    const p = productById(id);
     const cells = markets.map((m) => {
       const typical = margin.marginOf(p, m, basis, margin.TYPICAL_USE).margin!;
       const full = margin.marginOf(p, m, basis, 1).margin!;
-      if (typical < floorOf(p.kind)) under.push(`${p.name} in ${m}: ${Math.round(typical * 100)}% (floor ${floorOf(p.kind) * 100}%)`);
+      if (typical < margin.MARGIN_FLOOR.bundle) under.push(`${p.name} in ${m}: ${Math.round(typical * 100)}%`);
       const cell = `${Math.round(typical * 100)}/${Math.round(full * 100)}`;
-      return (typical < floorOf(p.kind) ? `\x1b[31m${cell.padStart(9)}\x1b[0m` : cell.padStart(9));
+      return typical < margin.MARGIN_FLOOR.bundle ? `\x1b[31m${cell.padStart(9)}\x1b[0m` : cell.padStart(9);
     });
-    console.log(`  ${p.name.padEnd(30)}${cells.join("")}`);
+    console.log(`  ${p.name.padEnd(12)}${cells.join("")}`);
   }
-  const free = productById("chat_free");
-  console.log(`  ${"Chat Receptionist — Free".padEnd(30)} costs $${margin.marginOf(free, "AE", basis, 1).costUsd.toFixed(2)} a month per account at full use`);
   console.log("");
 
-  test(`${basis}: every bundle clears 30% and every module 45% at typical use, in ${scope === "all" ? "every market" : markets.join(", ")}`, () => {
+  test(`${basis}: every plan clears 30% at typical use, in ${scope === "all" ? "every market" : markets.join(", ")}`, () => {
     assert.deepEqual(under, []);
   });
 }
@@ -329,12 +260,6 @@ test("a real carrier quote replaces an estimated rate without a deploy", () => {
   } finally {
     for (const key of lines) delete process.env[`RATE_${key}`];
   }
-});
-
-test("the free chat costs about what §2.2 says — $1.50 a month lean, $3 conservative", () => {
-  const free = productById("chat_free");
-  assert.ok(margin.marginOf(free, "AE", "lean", 1).costUsd <= 1.6);
-  assert.ok(margin.marginOf(free, "AE", "conservative", 1).costUsd <= 3.1);
 });
 
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
