@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Belline">
-  <!-- The bell button: white bell on an indigo badge. Primary mark. -->
-  <circle cx="24" cy="24" r="24" fill="#4F46E5"/>
+  <!-- The bell button: white bell on a blue badge. Primary mark. -->
+  <circle cx="24" cy="24" r="24" fill="#2667FF"/>
   <g fill="#FFFFFF" transform="matrix(0.6 0 0 0.6 9.6 9.81)">
     <circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/>
   </g>

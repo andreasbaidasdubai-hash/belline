@@ -370,11 +370,11 @@ const MARK = `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
   </svg>`;
 
 /**
- * The bell button, for the header and footer lockups: a white bell on an
- * indigo badge (Ink + Indigo). Logo colours are fixed, so hex rather than
- * currentColor. The geometry is public/brand/belline-mark.svg.
+ * The bell button, for the header and footer lockups: a white bell on a
+ * blue (#2667FF) badge (Navy + Electric Blue). Logo colours are fixed, so hex
+ * rather than currentColor. The geometry is public/brand/belline-mark.svg.
  */
-const BADGE = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" fill="#4F46E5"/><g fill="#FFFFFF" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>`;
+const BADGE = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" fill="#2667FF"/><g fill="#FFFFFF" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>`;
 
 /** Die Glocke im Sprechblasen-Umriss. Dasselbe Zeichen, getippt statt gesprochen. */
 const BUBBLE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">

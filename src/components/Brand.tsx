@@ -1,11 +1,11 @@
 /**
  * Die Marke, an einer Stelle.
  *
- * "The Bell Button", recoloured Ink + Indigo (15.09.2026): the bell sits in a
- * solid indigo badge, white on indigo, and the name is set in Bricolage
- * Grotesque 700. The badge is the logo, the app icon, the avatar and the shape
- * of the primary button, so it looks the same here as on belline.ai and in
- * public/brand/.
+ * "The Bell Button" in Navy + Electric Blue (15.09.2026): the bell sits in a
+ * solid blue (#2667FF) badge, white on blue, and the name is set in Plus
+ * Jakarta Sans 700. The badge is the logo, the app icon, the avatar and the
+ * shape of the primary button, so it looks the same here as on belline.ai and
+ * in public/brand/.
  *
  * The wordmark inherits the text colour of the page, so the same markup reads
  * on light and dark grounds.
@@ -20,9 +20,9 @@ export default function Brand({
   size?: number;
   /** false: the badge alone, where the name already stands beside it. */
   words?: boolean;
-  /** Badge colour. Unset: indigo. */
+  /** Badge colour. Unset: blue. */
   tone?: string;
-  /** Bell colour. Unset: white, which reads on indigo at 6.29:1. */
+  /** Bell colour. Unset: white, which reads on blue at 4.70:1. */
   bell?: string;
 }) {
   const badge = Math.round(size * 1.15);
@@ -45,7 +45,7 @@ export default function Brand({
         aria-label={words ? undefined : "Belline"}
         style={{ display: "block", flexShrink: 0 }}
       >
-        <circle cx="24" cy="24" r="24" fill={tone ?? "var(--bl-indigo, #4F46E5)"} />
+        <circle cx="24" cy="24" r="24" fill={tone ?? "var(--bl-blue, #2667FF)"} />
         <g fill={bell ?? "#FFFFFF"} transform="matrix(0.6 0 0 0.6 9.6 9.81)">
           <circle cx="24" cy="10" r="4.2" />
           <path d="M8.5 32a15.5 15.5 0 0 1 31 0Z" />
@@ -58,7 +58,7 @@ export default function Brand({
             fontFamily: "var(--bl-font-display)",
             fontSize: Math.round(size * 0.9),
             fontWeight: 700,
-            letterSpacing: "-0.04em",
+            letterSpacing: "-0.025em",
             lineHeight: 1,
             whiteSpace: "nowrap",
           }}
