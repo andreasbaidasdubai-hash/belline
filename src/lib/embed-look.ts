@@ -14,13 +14,14 @@ import type { EmbedAppearance } from "./types";
  * The palette a venue may pick the filled button from, by name.
  *
  * Six, not a colour wheel: each pairs with white or ink text at 4.5:1.
- * Indigo is Belline's own and the default; "brass" stays a valid name because
- * venues saved it before the recolour. A venue with a brand colour outside these
- * can give a hex, and the contrast rule below decides whether it is allowed.
+ * Blue is Belline's own and the default. It keeps the key "indigo" because
+ * venues saved that name before the blue recolour, and "brass" stays valid for
+ * the same reason. A venue with a brand colour outside these can give a hex, and
+ * the contrast rule below decides whether it is allowed.
  */
 export const EMBED_PALETTE: Record<string, string> = {
-  indigo: "#4F46E5",
-  ink: "#111827",
+  indigo: "#2667FF",
+  ink: "#1B2735",
   brass: "#7E5E28",
   forest: "#2F4A3A",
   navy: "#1F2E4A",
@@ -28,7 +29,7 @@ export const EMBED_PALETTE: Record<string, string> = {
 };
 
 const PAPER = "#FFFFFF";
-const INK = "#111827";
+const INK = "#1B2735";
 
 /** Guidelines, in numbers. */
 export const APPEARANCE_RULES = {

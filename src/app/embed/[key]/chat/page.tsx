@@ -113,7 +113,7 @@ function Refused({ reason }: { reason: string }) {
         textAlign: "center",
         background: "var(--bl-ground)",
         color: "var(--bl-ink-900)",
-        fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif',
+        fontFamily: "var(--bl-font-text)",
       }}
     >
       <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, maxWidth: "34ch", opacity: 0.9 }}>

@@ -82,7 +82,7 @@ export default function WidgetEditor({
   const accent = accentHex(look.accent) ?? EMBED_PALETTE.indigo;
   const accentText = textOn(accent);
   const accentMark = accentText;
-  const contrast = Math.max(contrastRatio(accent, "#FFFFFF"), contrastRatio(accent, "#111827"));
+  const contrast = Math.max(contrastRatio(accent, "#FFFFFF"), contrastRatio(accent, "#1B2735"));
   const tooPale = contrast < APPEARANCE_RULES.minContrast;
 
   function setLabel(field: "voiceLabel" | "chatLabel" | "whatsappLabel", value: string) {
@@ -506,8 +506,8 @@ function PreviewFab({
   accent?: { bg: string; fg: string; mark: string };
 }) {
   const bg = quiet || !accent ? "#FFFFFF" : accent.bg;
-  const fg = quiet || !accent ? "#111827" : accent.fg;
-  const markColor = quiet || !accent ? "#4F46E5" : accent.mark;
+  const fg = quiet || !accent ? "#1B2735" : accent.fg;
+  const markColor = quiet || !accent ? "#2667FF" : accent.mark;
   return (
     <span
       style={{
