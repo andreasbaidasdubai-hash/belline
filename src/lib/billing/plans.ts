@@ -83,10 +83,8 @@ export const CHANNELS: Record<Channel, ChannelInfo> = {
     unit: "conversations",
     status: "not-yet",
     gap:
-      "Answering a customer's own WhatsApp number needs Belline's Meta WhatsApp Business account " +
-      "(WHATSAPP_BUSINESS_ACCOUNT_ID, a verified business, and the app secret in Railway). The " +
-      "founder's Meta profile is suspended pending appeal; today only Belline's own Twilio sandbox " +
-      "number answers.",
+      "Answering a customer's own WhatsApp number needs Meta business verification and Tech " +
+      "Provider onboarding for Belline. Today only Belline's own WhatsApp number answers.",
   },
 };
 
