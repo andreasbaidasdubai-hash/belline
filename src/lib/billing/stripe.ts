@@ -4,6 +4,7 @@ import { getLocation, upsertLocation } from "../store";
 import { MARKETS, marketOf, type Market } from "../markets";
 import {
   GRANDFATHER_DAYS,
+  checkPurchased,
   checkSelection,
   isProductId,
   periodFee,
@@ -72,9 +73,20 @@ export function stripe(): Stripe {
   return client;
 }
 
-/** The lookup key a price is found by. Exported so the check can pin its shape. */
+/**
+ * The lookup key a price is found by. Exported so the check can pin its shape.
+ *
+ * Never change this shape: every price already in Stripe was created under
+ * it. A new catalogue gets new product ids, and so new keys, rather than a
+ * new shape that could find — or miss — an old price.
+ */
 export function lookupKeyFor(id: ProductId, market: Market, cycle: BillingCycle): string {
   return `belline_${id}_${market.toLowerCase()}_${cycle}_${periodFee([id], market, cycle)}`;
+}
+
+/** The catalogue version(s) a selection belongs to, for Stripe metadata. */
+export function catalogueOf(ids: readonly ProductId[]): string {
+  return [...new Set(ids.map((id) => productById(id).version))].join(",");
 }
 
 /**
@@ -101,7 +113,7 @@ async function priceFor(id: ProductId, market: Market, cycle: BillingCycle): Pro
     (await s.products.create({
       name: `Belline ${product.name}`,
       description: product.summary,
-      metadata: { belline_product: id },
+      metadata: { belline_product: id, belline_catalogue: product.version },
     }));
 
   return s.prices.create({
@@ -113,7 +125,7 @@ async function priceFor(id: ProductId, market: Market, cycle: BillingCycle): Pro
     // country requires.
     tax_behavior: "exclusive",
     lookup_key: lookupKey,
-    metadata: { belline_product: id, belline_market: market, belline_cycle: cycle },
+    metadata: { belline_product: id, belline_market: market, belline_cycle: cycle, belline_catalogue: product.version },
   });
 }
 
@@ -139,6 +151,10 @@ export function checkoutParams(
     belline_products: input.products.join(","),
     belline_market: input.market,
     belline_cycle: input.cycle,
+    // What the period was sold at, and under which catalogue. The webhook
+    // stamps both on the subscription, so the fee shown later is this one.
+    belline_amount: String(periodFee(input.products, input.market, input.cycle)),
+    belline_catalogue: catalogueOf(input.products),
   };
   return {
     mode: "subscription",
@@ -246,16 +262,33 @@ export function applyStripeEvent(event: Stripe.Event): { locationId?: string; ap
           startedOn: today,
           status: "active",
           grandfatheredUntil: addDays(today, GRANDFATHER_DAYS),
+          priceMinor: periodFee([legacy as LegacyPlanId], "AE", cycle),
+          catalogueVersion: productById(legacy as LegacyPlanId).version,
         };
       } else {
-        const ids = (session.metadata?.belline_products ?? "").split(",").filter(isProductId);
-        const selection = checkSelection(ids, market);
-        // Refused rather than guessed: a session whose products do not form a
-        // valid plan was not opened by us.
+        const raw = (session.metadata?.belline_products ?? "").split(",");
+        const ids = raw.filter(isProductId);
+        // Something we sell now, or a September 2026 bundle whose checkout was
+        // opened before 2026-10 shipped and paid after: they bought it, so
+        // they get it, as sold. Refused rather than guessed otherwise — a
+        // session whose products do not form a valid purchase was not opened
+        // by us.
+        const selection = ids.length === raw.length ? checkPurchased(ids, market) : checkSelection([], market);
         if (!selection.ok) return { locationId, applied: "ignored: no valid products on the session" };
+        const stated = Number(session.metadata?.belline_amount);
+        const priceMinor =
+          Number.isInteger(stated) && stated > 0 ? stated : periodFee(selection.products, market, cycle);
         // The anniversary is today. `periodFor` remembers the anchor day
         // rather than clamping it, so a 31st stays a 31st.
-        next = { products: selection.products, market, cycle, startedOn: today, status: "active" };
+        next = {
+          products: selection.products,
+          market,
+          cycle,
+          startedOn: today,
+          status: "active",
+          priceMinor,
+          catalogueVersion: session.metadata?.belline_catalogue || catalogueOf(selection.products),
+        };
       }
 
       upsertLocation({

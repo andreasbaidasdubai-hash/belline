@@ -4,7 +4,7 @@ import Brand from "@/components/Brand";
 import { notFound } from "next/navigation";
 import { ensureDemoWidget, findProspect } from "@/lib/prospect";
 import { signStreamToken } from "@/lib/auth";
-import { TRIAL } from "@/lib/billing/plans";
+import { TRIAL, recommendedPlan } from "@/lib/billing/plans";
 import Console from "../../(app)/test/Console";
 import { findRecordedDemo, RecordedDemoPage } from "./Recorded";
 
@@ -61,7 +61,7 @@ export default async function ProspectDemoPage({
   const token = signStreamToken(location.id, 60 * 60);
   const expires = new Date(location.prospect!.expiresAt);
   const chatSrc = `/embed/${encodeURIComponent(location.embed!.key)}/chat?o=${encodeURIComponent(origin)}`;
-  const trialHref = `/checkout?products=everything_business`;
+  const trialHref = `/checkout?products=${recommendedPlan("AE").id}`;
 
   return (
     <div className="prospect prospect-wide">

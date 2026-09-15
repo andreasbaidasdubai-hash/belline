@@ -5,6 +5,7 @@ import {
   CHANNELS,
   CHANNEL_ORDER,
   TRIAL,
+  annualMonthsSaved,
   annualPerMonth,
   periodFee,
   productById,
@@ -28,8 +29,15 @@ import PayButton from "./PayButton";
 
 const serif = { fontFamily: '"Fraunces", Georgia, serif', fontWeight: 500 } as const;
 
-/** "600 phone min · 200 voice-button min · 400 chats", live channels only. */
+/** "250 voice min · 600 text conversations", or an older product's per-channel list, live channels only. */
 function shortAllowances(product: Product): string {
+  if (product.pools) {
+    const parts: string[] = [];
+    if (product.pools.minutes) parts.push(`${product.pools.minutes.toLocaleString("en-GB")} voice min`);
+    if (product.pools.conversations) parts.push(`${product.pools.conversations.toLocaleString("en-GB")} text conversations`);
+    if (product.users) parts.push(`${product.users} users`);
+    return parts.join(" · ");
+  }
   return CHANNEL_ORDER.filter((c) => typeof product.allowances[c] === "number" && CHANNELS[c].status === "live")
     .map((c) => {
       const n = (product.allowances[c] as number).toLocaleString("en-GB");
@@ -76,6 +84,9 @@ export default function Order({
   const money = (minor: number) => formatMoney(minor, market);
   const fee = periodFee(ids, market, cycle);
   const plan = productById(selected);
+  // From the stored annual prices, never a figure typed here.
+  const saved = Math.min(...plans.map((p) => annualMonthsSaved([p.id], market)));
+  const savedText = saved > 0 ? `${saved} month${saved === 1 ? "" : "s"} free` : "";
 
   // The choice lives in the URL too, so an order can be sent to somebody.
   useEffect(() => {
@@ -116,14 +127,14 @@ export default function Order({
                 color: cycle === c ? "var(--bg)" : "var(--text-2)",
               }}
             >
-              {c === "monthly" ? "Monthly" : "Annual · 2 months free"}
+              {c === "monthly" ? "Monthly" : savedText ? `Annual · ${savedText}` : "Annual"}
             </button>
           ))}
         </div>
 
         <h1 style={{ ...serif, fontSize: 25, letterSpacing: "-0.02em", margin: "0 0 4px" }}>Choose your plan</h1>
         <p className="muted" style={{ fontSize: 13, margin: "0 0 14px", lineHeight: 1.55 }}>
-          Phone, website voice button and website chat in every plan. Pick how much.
+          Phone, website voice button and website chat in every plan, per location. Pick how much.
         </p>
         <div style={{ display: "grid", gap: 8, marginBottom: 24 }} role="radiogroup" aria-label="Plan">
           {plans.map((p) => {
@@ -169,10 +180,10 @@ export default function Order({
               ? `${TRIAL.days} days free, no card. Then ${money(fee)} ${cycle === "annual" ? "a year" : "a month"}, if you choose it.`
               : cycle === "annual"
                 ? `${money(fee)} a year — ${money(annualPerMonth(ids, market))} a month. Plus VAT where it applies.`
-                : `Or ${money(annualPerMonth(ids, market))} a month paid annually — two months free. Plus VAT where it applies.`}
+                : `Or ${money(periodFee(ids, market, "annual"))} billed yearly (${money(annualPerMonth(ids, market))} a month)${savedText ? ` — ${savedText}` : ""}. Plus VAT where it applies.`}
           </p>
           <p className="muted" style={{ fontSize: 11.5, margin: "6px 0 0", lineHeight: 1.6 }}>
-            No setup fee, no per-minute charges. If an allowance runs short, Belline keeps answering and suggests a bigger plan.
+            Priced per location. Setting up is free.
           </p>
         </div>
       </section>

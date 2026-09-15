@@ -1,5 +1,15 @@
 import { RATE_CARD, rate } from "./cost";
-import { CHANNEL_ORDER, priceOf, type Channel, type Product } from "./plans";
+import {
+  CHANNEL_ORDER,
+  POOL_CHANNELS,
+  POOL_ORDER,
+  periodFee,
+  type BillingCycle,
+  type Channel,
+  type Pack,
+  type Pool,
+  type Product,
+} from "./plans";
 import { toUsd, type Market } from "../markets";
 
 /**
@@ -106,9 +116,25 @@ export function unitCostUsd(channel: Channel, basis: Basis): number {
   }
 }
 
+/**
+ * US dollars per unit of a pool, at its dearest channel.
+ *
+ * A pooled allowance can be spent entirely on its most expensive channel —
+ * every voice minute on a UAE phone line, every conversation on WhatsApp — so
+ * that is what it is costed at. The real mix can only improve on it.
+ */
+export function poolCostUsd(pool: Pool, basis: Basis): number {
+  return Math.max(...POOL_CHANNELS[pool].map((channel) => unitCostUsd(channel, basis)));
+}
+
 /** A number's monthly rental, charged once for any plan that includes the phone. */
 export function numberRentalUsd(basis: Basis): number {
   return rate(BASES[basis].number);
+}
+
+/** Stripe's fee on one charge of this many US dollars. */
+export function cardFeeUsd(chargeUsd: number): number {
+  return chargeUsd > 0 ? chargeUsd * rate("STRIPE_CARD_SHARE_AE") + rate("STRIPE_CARD_FIXED_AE") : 0;
 }
 
 /** Every rate-card line a basis reads. */
@@ -123,6 +149,8 @@ export function linesOf(basis: Basis): string[] {
       "TWILIO_MEDIA_STREAMS",
       "DEEPGRAM_STREAMING",
       "META_UTILITY_TEMPLATE_AE",
+      "STRIPE_CARD_SHARE_AE",
+      "STRIPE_CARD_FIXED_AE",
       ...model(b.voiceModel),
       ...model(b.textModel),
     ]),
@@ -150,14 +178,44 @@ export interface Margin {
   margin: number | null;
 }
 
-/** Gross margin on one product in one market, at a share of its allowances. */
-export function marginOf(product: Product, market: Market, basis: Basis, share: number): Margin {
-  const revenueUsd = toUsd(priceOf(product.id, market), market);
+/**
+ * Gross margin on one product in one market, for one month, at a share of its
+ * allowances.
+ *
+ * Revenue is the month's money: the monthly price, or a twelfth of the annual
+ * one. Cost is the allowances used (pools at their dearest channel), the
+ * phone number's rental, and Stripe's fee on the charge — spread over twelve
+ * months on the annual cycle, which is charged once.
+ */
+export function marginOf(
+  product: Product,
+  market: Market,
+  basis: Basis,
+  share: number,
+  cycle: BillingCycle = "monthly",
+): Margin {
+  const chargeUsd = toUsd(periodFee([product.id], market, cycle), market);
+  const months = cycle === "annual" ? 12 : 1;
+  const revenueUsd = chargeUsd / months;
   let costUsd = 0;
   for (const channel of CHANNEL_ORDER) {
     const allowance = product.allowances[channel];
     if (typeof allowance === "number") costUsd += allowance * share * unitCostUsd(channel, basis);
   }
-  if ("phone" in product.allowances) costUsd += numberRentalUsd(basis);
+  for (const pool of POOL_ORDER) {
+    const allowance = product.pools?.[pool];
+    if (typeof allowance === "number") costUsd += allowance * share * poolCostUsd(pool, basis);
+  }
+  if ("phone" in product.allowances || product.pools?.minutes !== undefined) costUsd += numberRentalUsd(basis);
+  costUsd += cardFeeUsd(chargeUsd) / months;
+  return { revenueUsd, costUsd, margin: revenueUsd > 0 ? (revenueUsd - costUsd) / revenueUsd : null };
+}
+
+/** Gross margin on one pack, at a share of its units used (a pack is paid for whole). */
+export function packMarginOf(pack: Pack, market: Market, basis: Basis, share = 1): Margin {
+  const amount = pack.prices[market];
+  if (amount === undefined) throw new Error(`${pack.id} is not sold in ${market}`);
+  const revenueUsd = toUsd(amount, market);
+  const costUsd = pack.units * share * poolCostUsd(pack.pool, basis) + cardFeeUsd(revenueUsd);
   return { revenueUsd, costUsd, margin: revenueUsd > 0 ? (revenueUsd - costUsd) / revenueUsd : null };
 }

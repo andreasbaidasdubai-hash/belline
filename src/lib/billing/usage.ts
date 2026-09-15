@@ -3,18 +3,25 @@ import { listCalls } from "../store";
 import { callDurationSeconds } from "../calls";
 import { marketOf, type Market } from "../markets";
 import {
-  ANNUAL_MONTHS_FREE,
   CHANNELS,
   CHANNEL_ORDER,
-  TRIAL,
+  LEGACY_TRIAL_PRODUCTS,
+  POOL_CHANNELS,
+  POOL_NAMES,
+  POOL_ORDER,
   allowancesOf,
-  annualPerMonth,
   channelsOf,
+  grandfatherOf,
+  grandfatherExpires,
+  isPooled,
   money,
+  poolOf,
+  poolsOf,
   productById,
   recommend,
   selectionName,
   type Channel,
+  type Pool,
   type ProductId,
   type Recommendation,
   type Unit,
@@ -23,20 +30,18 @@ import {
 /**
  * Minutes, conversations, allowances, and what the invoice will say.
  *
- * The promise on the pricing page is "no surprise invoices", and a promise
- * like that is kept in this file or not at all. Three decisions carry it:
+ * Three decisions carry it:
  *
  *   What counts — a minute, a conversation — is defined once, here, and the
  *   website quotes these definitions rather than paraphrasing them.
  *
- *   The invoice is the plan fee and nothing else. There is no metered charge
- *   anywhere in this product: an allowance that runs out is a prompt to move
- *   up, never a second number on a bill. The moment anything else can appear
- *   in `dueNow`, the promise stops being true.
+ *   The invoice is the plan fee, read from what the customer was sold. The
+ *   only other thing that can ever appear on it is a pack the owner chose
+ *   under their usage policy (billing/usage-policy.ts) — never a metered
+ *   charge nobody agreed to.
  *
  *   Where the rule is genuinely ambiguous, the customer wins. Calls we broke
- *   are not counted; the projection rounds toward telling somebody sooner;
- *   and going past a paid allowance never stops anybody being answered.
+ *   are not counted, and the projection rounds toward telling somebody sooner.
  */
 
 // ---------------------------------------------------------------------------
@@ -54,9 +59,14 @@ export function subscriptionMarket(sub: Subscription | undefined): Market {
   return marketOf(sub?.market);
 }
 
-/** True for a venue still on the ladder sold before the modular catalogue. */
+/** True for a venue on a product from an earlier catalogue. */
 export function isLegacy(sub: Subscription | undefined): boolean {
   return productsOf(sub).some((id) => productById(id).kind === "legacy");
+}
+
+/** True for a trial begun under catalogue 2026-10: both units capped, pooled. */
+export function isPooledTrial(sub: Subscription | undefined): boolean {
+  return sub?.status === "trialing" && typeof sub.trial?.conversations === "number";
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +117,7 @@ export function billableVoiceMinutes(call: Call): number {
   return Math.ceil(seconds / 60);
 }
 
-/** Phone minutes only — what the trial caps and the call list on the billing page shows. */
+/** Phone minutes only — what an older trial caps and the call list on the billing page shows. */
 export function billableMinutes(call: Call): number {
   return channelOfCall(call) === "phone" ? billableVoiceMinutes(call) : 0;
 }
@@ -229,19 +239,26 @@ export function periodFor(sub: Pick<Subscription, "startedOn">, onDate: string):
 // Usage and the bill
 // ---------------------------------------------------------------------------
 
-export interface ChannelUsage {
-  channel: Channel;
+/**
+ * One allowance being counted down: a pool (catalogue 2026-10 plans and
+ * trials) or a single channel (older products).
+ */
+export interface Meter {
+  id: Pool | Channel;
+  kind: "pool" | "channel";
+  name: string;
   unit: Unit;
+  /** The channels drawing on it, in display order. */
+  channels: Channel[];
   /** Episodes this period that counted anything at all. */
   episodes: number;
   used: number;
   /**
-   * What this period includes: the plan's allowance, or the trial's.
-   * `null` only on a grandfathered legacy plan, which was sold uncounted —
-   * not a very large number, because a very large number renders as a bar.
+   * What this period includes. `null` only on the original ladder's
+   * uncounted channels — not a very large number, because a very large
+   * number renders as a bar.
    */
   included: number | null;
-  /** Past the allowance. Nothing is charged for it; see `Usage.upgrade`. */
   overBy: number;
   /** Share of the allowance used. 0 when uncounted. */
   fraction: number;
@@ -254,9 +271,25 @@ export interface ChannelUsage {
   projected: number;
 }
 
+export interface ChannelUsage {
+  channel: Channel;
+  unit: Unit;
+  /** The meter this channel draws on: its pool, or itself. */
+  meter: Pool | Channel;
+  episodes: number;
+  used: number;
+  /** The meter's figures, repeated so a caller holding a channel need not look the meter up. */
+  included: number | null;
+  overBy: number;
+  fraction: number;
+  projected: number;
+}
+
 export interface Usage {
   period: Period;
-  /** The channels this venue has, in display order. */
+  /** The allowances being counted, in display order. */
+  meters: Meter[];
+  /** The channels this venue has, with their own counts. */
   channels: ChannelUsage[];
   /** The selection they should be on, when this one no longer fits. */
   upgrade: Recommendation | null;
@@ -267,13 +300,7 @@ export interface Bill {
   planFee: number;
   /** True on the annual cycle: the plan fee was paid up front for the year. */
   prepaid: boolean;
-  /**
-   * What will actually be invoiced at the end of this period.
-   *
-   * This is the plan fee and nothing else, ever. There is no metered charge
-   * in this product — going past an allowance is a prompt to move up, not a
-   * line on a bill. It is the whole of what "no surprise invoices" means.
-   */
+  /** What will be invoiced for the plan at the end of this period. */
   dueNow: number;
   state: Subscription["status"];
 }
@@ -281,7 +308,6 @@ export interface Bill {
 export interface Account {
   market: Market;
   products: ProductId[];
-  /** "Everything Business", or the modules joined. */
   name: string;
   subscription: Subscription;
   usage: Usage;
@@ -345,10 +371,85 @@ export function usedInPeriod(
   return out;
 }
 
-/** What a trial includes: every channel, the trial's own phone cap, the trialled bundle's other allowances. */
-function trialAllowances(sub: Subscription): Partial<Record<Channel, number | null>> {
-  const trialled = allowancesOf(TRIAL.products);
-  return { ...trialled, phone: sub.trial?.minutes ?? TRIAL.phoneMinutes };
+/** An older trial's phone cap when none was stored. */
+const LEGACY_TRIAL_PHONE_MINUTES = 60;
+
+/** What is being counted for this subscription: pools, or channels. */
+function limitsFor(
+  sub: Subscription,
+  products: readonly ProductId[],
+): { pools: Partial<Record<Pool, number>> | null; channels: Partial<Record<Channel, number | null>>; open: Channel[] } {
+  if (sub.status === "trialing") {
+    if (isPooledTrial(sub)) {
+      return { pools: { minutes: sub.trial!.minutes, conversations: sub.trial!.conversations! }, channels: {}, open: CHANNEL_ORDER };
+    }
+    // A trial from before 2026-10: every channel on, the old bundle's
+    // allowances, and the phone cap it was given.
+    return {
+      pools: null,
+      channels: { ...allowancesOf(LEGACY_TRIAL_PRODUCTS), phone: sub.trial?.minutes ?? LEGACY_TRIAL_PHONE_MINUTES },
+      open: CHANNEL_ORDER,
+    };
+  }
+  if (isPooled(products)) return { pools: poolsOf(products), channels: {}, open: channelsOf(products) };
+  return { pools: null, channels: allowancesOf(products), open: channelsOf(products) };
+}
+
+const METER_WORDS: Record<Pool | Channel, string> = {
+  minutes: "voice minutes",
+  conversations: "text conversations",
+  phone: "phone minutes",
+  web_voice: "voice-button minutes",
+  chat: "chat conversations",
+  whatsapp: "WhatsApp conversations",
+};
+
+export function meterWords(id: Pool | Channel): string {
+  return METER_WORDS[id];
+}
+
+function meter(
+  id: Pool | Channel,
+  channels: Channel[],
+  included: number | null,
+  used: Record<Channel, { used: number; episodes: number }>,
+  share: number,
+): Meter {
+  const n = channels.reduce((sum, c) => sum + used[c].used, 0);
+  const episodes = channels.reduce((sum, c) => sum + used[c].episodes, 0);
+  const pool = (POOL_ORDER as string[]).includes(id);
+  return {
+    id,
+    kind: pool ? "pool" : "channel",
+    name: pool ? POOL_NAMES[id as Pool] : CHANNELS[id as Channel].name,
+    unit: pool ? (id as Pool) : CHANNELS[id as Channel].unit,
+    channels,
+    episodes,
+    used: n,
+    included,
+    overBy: included === null ? 0 : Math.max(0, n - included),
+    fraction: included ? n / included : 0,
+    projected: Math.round(n / share),
+  };
+}
+
+/** The monthly fee, from what was sold when that is recorded, else from the catalogue. */
+function feeOf(sub: Subscription, products: readonly ProductId[], market: Market): number {
+  const annual = sub.cycle === "annual";
+  if (typeof sub.priceMinor === "number" && sub.priceMinor >= 0) {
+    return annual ? Math.floor(sub.priceMinor / 12 / 100) * 100 : sub.priceMinor;
+  }
+  try {
+    const monthly = products.reduce((sum, id) => sum + (productById(id).prices[market] ?? 0), 0);
+    if (!annual) return monthly;
+    const yearly = products.reduce((sum, id) => {
+      const p = productById(id);
+      return sum + (p.annualPrices?.[market] ?? (p.prices[market] ?? 0) * 10);
+    }, 0);
+    return Math.floor(yearly / 12 / 100) * 100;
+  } catch {
+    return 0;
+  }
 }
 
 export function accountFor(location: Location, today: string): Account | null {
@@ -360,32 +461,37 @@ export function accountFor(location: Location, today: string): Account | null {
   const period = periodFor(sub, today);
   const trialing = sub.status === "trialing";
 
-  const allowances = trialing ? trialAllowances(sub) : allowancesOf(products);
-  const channels = trialing ? CHANNEL_ORDER : channelsOf(products);
+  const limits = limitsFor(sub, products);
   const used = usedInPeriod(location, period);
   const share = elapsed(period, today);
 
-  const usage: Usage = {
-    period,
-    channels: channels.map((channel) => {
-      // `null` is uncounted (a grandfathered plan) and must survive as null;
-      // only a channel with no allowance at all reads as nothing included.
-      const raw = allowances[channel];
-      const included = raw === undefined ? 0 : raw;
-      const { used: n, episodes } = used[channel];
-      return {
-        channel,
-        unit: CHANNELS[channel].unit,
-        episodes,
-        used: n,
-        included,
-        overBy: included === null ? 0 : Math.max(0, n - included),
-        fraction: included ? n / included : 0,
-        projected: Math.round(n / share),
-      };
-    }),
-    upgrade: null,
-  };
+  const meters: Meter[] = limits.pools
+    ? POOL_ORDER.filter((pool) => limits.pools![pool] !== undefined).map((pool) =>
+        meter(pool, POOL_CHANNELS[pool].filter((c) => limits.open.includes(c)), limits.pools![pool]!, used, share),
+      )
+    : limits.open.map((channel) => {
+        // `null` is uncounted (the original ladder) and must survive as null;
+        // only a channel with no allowance at all reads as nothing included.
+        const raw = limits.channels[channel];
+        return meter(channel, [channel], raw === undefined ? 0 : raw, used, share);
+      });
+
+  const channels: ChannelUsage[] = limits.open.map((channel) => {
+    const m = meters.find((x) => x.channels.includes(channel))!;
+    return {
+      channel,
+      unit: CHANNELS[channel].unit,
+      meter: m.id,
+      episodes: used[channel].episodes,
+      used: used[channel].used,
+      included: m.included,
+      overBy: m.overBy,
+      fraction: m.fraction,
+      projected: Math.round(used[channel].used / share),
+    };
+  });
+
+  const usage: Usage = { period, meters, channels, upgrade: null };
 
   // Recommended off the projection, not off today's total: telling somebody
   // to move up on the last day of the period is telling them too late. Never
@@ -393,19 +499,12 @@ export function accountFor(location: Location, today: string): Account | null {
   // wrong conversation.
   if (!trialing) {
     const pace = Object.fromEntries(
-      usage.channels.map((c) => [c.channel, Math.max(c.used, c.projected)]),
+      channels.map((c) => [c.channel, Math.max(c.used, c.projected)]),
     ) as Partial<Record<Channel, number>>;
     usage.upgrade = recommend(pace, products, market);
   }
 
-  const fee = (() => {
-    try {
-      return sub.cycle === "annual" ? annualPerMonth(products, market) : monthlyOfSafe(products, market);
-    } catch {
-      return 0;
-    }
-  })();
-
+  const fee = feeOf(sub, products, market);
   const prepaid = !trialing && sub.cycle === "annual";
   const bill: Bill = {
     planFee: trialing ? 0 : fee,
@@ -427,21 +526,9 @@ export function accountFor(location: Location, today: string): Account | null {
   };
 }
 
-function monthlyOfSafe(products: readonly ProductId[], market: Market): number {
-  return products.reduce((sum, id) => sum + (productById(id).prices[market] ?? 0), 0);
-}
-
-function unitWord(channel: Channel): string {
-  switch (channel) {
-    case "phone":
-      return "phone minutes";
-    case "web_voice":
-      return "voice-button minutes";
-    case "chat":
-      return "chat conversations";
-    case "whatsapp":
-      return "WhatsApp conversations";
-  }
+/** The meter a channel draws on, in an account. */
+export function meterFor(account: Account, channel: Channel): Meter | undefined {
+  return account.usage.meters.find((m) => m.channels.includes(channel));
 }
 
 function spokenDate(date: string): string {
@@ -465,55 +552,52 @@ function notesFor(
   const notes: string[] = [];
 
   if (sub.status === "trialing") {
-    const phone = usage.channels.find((c) => c.channel === "phone");
-    const allowance = phone?.included ?? 0;
-    const left = Math.max(0, allowance - (phone?.used ?? 0));
+    const parts = usage.meters
+      .filter((m) => m.included !== null && m.included > 0 && (m.kind === "pool" || m.id === "phone"))
+      .map((m) => ({ m, left: Math.max(0, (m.included as number) - m.used) }));
+    const spent = parts.filter((p) => p.left === 0);
     notes.push(
-      left > 0
-        ? `Trial: ${left} of ${allowance} phone minutes left, and every channel is switched on. Nothing is charged during the trial.`
-        : `Trial: all ${allowance} phone minutes used. Nothing has been charged — pick a plan to keep going.`,
+      spent.length === 0
+        ? `Trial: ${parts.map((p) => `${p.left} of ${p.m.included} ${meterWords(p.m.id)}`).join(" and ")} left. Nothing is charged during the trial.`
+        : `Trial: all ${spent.map((p) => `${p.m.included} ${meterWords(p.m.id)}`).join(" and ")} used. Nothing has been charged — choose a plan to keep going.`,
     );
     return notes;
   }
 
   if (sub.status === "cancelled") {
-    notes.push("Cancelled. Belline keeps answering until the end of this period, then stops.");
+    notes.push("Cancelled. Belline answers until the end of this period, then stops.");
   }
 
   if (sub.paymentFailedAt) {
     // First, above everything else about the period: it is the one line on
     // this screen that needs something done today.
     notes.unshift(
-      "The last payment did not go through. Belline is still answering — update the card " +
-        "and we will try again; nothing stops before the retries run out.",
+      "The last payment did not go through. Belline is still answering while Stripe retries — " +
+        "update the card and we will try again.",
     );
   }
 
-  if (sub.grandfatheredUntil && isLegacy(sub)) {
+  if (sub.grandfatheredUntil && grandfatherExpires(products)) {
     notes.push(
       `You are on the original ${name} plan, kept exactly as it was until ${spokenDate(sub.grandfatheredUntil)}. ` +
         "Choose a plan from the new range before then.",
     );
+  } else if (products.some((id) => grandfatherOf(productById(id)) === "indefinite")) {
+    notes.push(`You are on ${name}, kept exactly as you bought it. It is no longer sold, and you can keep it.`);
   }
 
-  for (const c of usage.channels) {
-    if (c.included === null) continue;
-    const what = unitWord(c.channel);
-    if (c.overBy > 0) {
-      // Deliberately not an apology and not a threat. A receptionist that
-      // stops answering because of an invoice is not a receptionist, and the
-      // answer is a bigger plan, not a bigger bill.
+  for (const m of usage.meters) {
+    if (m.included === null) continue;
+    const what = meterWords(m.id);
+    if (m.overBy > 0) {
+      notes.push(`${m.overBy} ${what} past the ${m.included} your plan includes this period.`);
+    } else if (m.projected > m.included) {
       notes.push(
-        `${c.overBy} ${what} past the ${c.included} your plan includes. ` +
-          "Everyone is still being answered and nothing extra has been charged.",
+        `On this pace you will finish the period around ${m.projected} ${what}, past the ` +
+          `${m.included} your plan includes. Told now rather than at the end.`,
       );
-    } else if (c.projected > c.included) {
-      notes.push(
-        `On this pace you will finish the period around ${c.projected} ${what}, past the ` +
-          `${c.included} your plan includes. Told now rather than at the end.`,
-      );
-    } else if (c.fraction >= 0.8) {
-      notes.push(`${Math.round(c.fraction * 100)}% of your ${what} used.`);
+    } else if (m.fraction >= 0.8) {
+      notes.push(`${Math.round(m.fraction * 100)}% of your ${what} used.`);
     }
   }
 
@@ -522,11 +606,10 @@ function notesFor(
   }
 
   if (bill.prepaid) {
-    notes.push(
-      `Paid up front for the year — ${ANNUAL_MONTHS_FREE} months free — so there is ` +
-        "nothing to invoice this period.",
-    );
+    notes.push("Paid up front for the year, so there is nothing to invoice this period.");
   }
 
   return notes;
 }
+
+export { poolOf };

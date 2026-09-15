@@ -271,8 +271,24 @@ export interface Subscription {
   /** Trialing only. Nothing is charged, and the allowance is its own. */
   trial?: {
     endsOn: DateStr;
+    /**
+     * Voice minutes, pooled across the phone and the voice button. A trial
+     * without `conversations` began before catalogue 2026-10, and this is a
+     * phone-only cap, kept as it was given.
+     */
     minutes: number;
+    /** Text conversations (catalogue 2026-10 onwards). */
+    conversations?: number;
   };
+  /**
+   * What one billing period was sold at, in the market's minor unit — the
+   * monthly fee, or the annual one. Stamped by the webhook from the checkout.
+   * When present, the invoice is this and never the catalogue's current
+   * figure, so a customer's fee cannot move because a catalogue did.
+   */
+  priceMinor?: number;
+  /** The catalogue version the subscription was bought under (billing/plans.ts `CATALOGUE_VERSION`). */
+  catalogueVersion?: string;
 }
 
 /**

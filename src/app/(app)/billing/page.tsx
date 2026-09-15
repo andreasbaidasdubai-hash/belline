@@ -8,9 +8,10 @@ import {
   billableVoiceMinutes,
   channelOfCall,
   conversationStarts,
-  type ChannelUsage,
+  meterWords,
+  type Meter,
 } from "@/lib/billing/usage";
-import { CHANNELS, annualPerMonth, money, productById, type Channel } from "@/lib/billing/plans";
+import { CHANNELS, money, productById } from "@/lib/billing/plans";
 import { MARKETS } from "@/lib/markets";
 import { listCalls } from "@/lib/store";
 import { addDays, dateToSpoken, todayIn } from "@/lib/time";
@@ -21,35 +22,29 @@ import ManageBilling from "./ManageBilling";
 export const dynamic = "force-dynamic";
 
 /**
- * Plan, usage per channel, and what the next invoice will say.
+ * Plan, usage per allowance, and what the next invoice will say.
  *
- * The pricing page promises "no surprise invoices". This is where that promise
- * is either kept or exposed as marketing, so the page leads with the number a
- * venue is actually worried about — what this is going to cost — and then one
- * bar per channel they have, each against its own allowance.
+ * The page leads with the number a venue is actually worried about — what
+ * this is going to cost — and then one bar per allowance: the two pools on a
+ * 2026-10 plan (voice minutes, text conversations), or one per channel on an
+ * older product.
  *
  * Every figure here comes from billing/usage.ts, which is the same module the
  * invoice would be generated from. There is no second calculation on this page
  * to drift away from the first.
  */
 
-const UNIT_WORDS: Record<Channel, string> = {
-  phone: "phone minutes",
-  web_voice: "voice-button minutes",
-  chat: "chat conversations",
-  whatsapp: "WhatsApp conversations",
-};
-
-function Bar({ usage }: { usage: ChannelUsage }) {
+function Bar({ usage }: { usage: Meter }) {
   const { used, included } = usage;
-  const words = UNIT_WORDS[usage.channel];
+  const words = meterWords(usage.id);
+  const across = usage.kind === "pool" ? usage.channels.map((c) => CHANNELS[c].name).join(" · ") : null;
 
   if (included === null) {
     // Uncounted on a grandfathered plan. No bar: a bar needs an end, and
     // drawing one against an invented ceiling would invent a limit.
     return (
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{CHANNELS[usage.channel].name}</div>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{usage.name}</div>
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
           {used} {words} this period · not counted on your original plan
         </div>
@@ -68,11 +63,16 @@ function Bar({ usage }: { usage: ChannelUsage }) {
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13, marginBottom: 6 }}>
-        <strong>{CHANNELS[usage.channel].name}</strong>
+        <strong>{usage.name}</strong>
         <span className="muted" style={{ fontVariantNumeric: "tabular-nums" }}>
           {used} of {included} {words}
         </span>
       </div>
+      {across && (
+        <div className="muted" style={{ fontSize: 11.5, margin: "-2px 0 6px" }}>
+          Shared across {across}
+        </div>
+      )}
       <div
         style={{ display: "flex", height: 10, borderRadius: 999, background: "var(--border-soft)", overflow: "hidden" }}
         role="img"
@@ -84,7 +84,7 @@ function Bar({ usage }: { usage: ChannelUsage }) {
       <div className="muted" style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginTop: 5 }}>
         <span>
           {usage.overBy > 0
-            ? `${usage.overBy} past the allowance — not charged`
+            ? `${usage.overBy} past the allowance`
             : usage.projected > used && usage.projected > included
               ? `On this pace, about ${usage.projected} by period end`
               : " "}
@@ -180,7 +180,7 @@ export default async function BillingPage({
     .slice(0, 8);
 
   const ends = new Date(`${period.end}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
-  const units = new Set(usage.channels.map((c) => CHANNELS[c.channel].unit));
+  const units = new Set(usage.meters.map((m) => m.unit));
   const billedIn = MARKETS[market].currency;
 
   return (
@@ -230,8 +230,8 @@ export default async function BillingPage({
               </span>
             </div>
             <div style={{ padding: "4px 18px 20px" }}>
-              {usage.channels.map((c) => (
-                <Bar key={c.channel} usage={c} />
+              {usage.meters.map((m) => (
+                <Bar key={m.id} usage={m} />
               ))}
             </div>
           </div>
@@ -273,20 +273,12 @@ export default async function BillingPage({
               {trialing ? (
                 <Row label="Free trial" value="Nothing charged" />
               ) : (
-                products.map((id) => {
-                  const monthly = productById(id).prices[market] ?? 0;
-                  return (
-                    <Row
-                      key={id}
-                      label={productById(id).name}
-                      value={
-                        monthly === 0
-                          ? "Free"
-                          : `${money(subscription.cycle === "annual" ? annualPerMonth([id], market) : monthly, market)} / mo`
-                      }
-                    />
-                  );
-                })
+                // What they were sold: the fee usage.ts computed from the
+                // subscription, never a price looked up again from the catalogue.
+                <Row
+                  label={products.map((id) => productById(id).name).join(" + ")}
+                  value={bill.planFee === 0 ? "Free" : `${money(bill.planFee, market)} / mo`}
+                />
               )}
               {bill.prepaid && (
                 <p className="muted" style={{ fontSize: 11.5, margin: "2px 0 8px", lineHeight: 1.5 }}>
@@ -303,8 +295,7 @@ export default async function BillingPage({
               )}
               <Row label="Invoiced now" value={money(bill.dueNow, market)} strong />
               <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0", lineHeight: 1.5 }}>
-                The plan fee and nothing else. There is no per-minute or per-conversation charge on
-                any plan — if an allowance runs short, the answer is a bigger plan, not a bigger bill.
+                The plan fee for this period.
               </p>
               <Link
                 href={trialing || !products.length ? "/checkout" : `/checkout?products=${products.join(",")}`}

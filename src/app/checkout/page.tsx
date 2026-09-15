@@ -2,7 +2,7 @@ import Brand from "@/components/Brand";
 import { currentUser } from "@/lib/auth-server";
 import { listLocationsFor } from "@/lib/store";
 import { seedIfEmpty } from "@/lib/seed";
-import { LEGACY_TO_BUNDLE, checkSelection, sellable, type BillingCycle } from "@/lib/billing/plans";
+import { LEGACY_TO_BUNDLE, checkSelection, recommendedPlan, type BillingCycle } from "@/lib/billing/plans";
 import { productsOf, subscriptionMarket } from "@/lib/billing/usage";
 import { MARKETS, marketOf } from "@/lib/markets";
 import { stripeEnabled } from "@/lib/billing/stripe";
@@ -56,12 +56,14 @@ export default async function CheckoutPage({
       ? asked
       : "AE";
 
-  // Old links still say ?plan=starter. They land on the bundle that replaced it.
-  const legacy = params.plan && params.plan in LEGACY_TO_BUNDLE ? LEGACY_TO_BUNDLE[params.plan as keyof typeof LEGACY_TO_BUNDLE] : null;
-  const raw = params.products?.split(",") ?? (params.bundle ? [params.bundle] : legacy ? [legacy] : []);
+  // Old links still say ?plan=starter or ?products=everything_business. They
+  // land on the 2026-10 plan that replaced it.
+  const upgradeId = (id: string) => (id in LEGACY_TO_BUNDLE ? LEGACY_TO_BUNDLE[id as keyof typeof LEGACY_TO_BUNDLE] : id);
+  const legacy = params.plan ? upgradeId(params.plan) : null;
+  const raw = (params.products?.split(",") ?? (params.bundle ? [params.bundle] : legacy ? [legacy] : [])).map(upgradeId);
   const picked = checkSelection(raw, market);
   const current = checkSelection(productsOf(venue?.subscription), market);
-  const recommended = sellable(market).find((p) => p.recommended)?.id ?? "everything_business";
+  const recommended = recommendedPlan(market).id;
   const initial = picked.ok ? picked.products : current.ok ? current.products : [recommended];
 
   const cycle: BillingCycle = params.cycle === "annual" ? "annual" : "monthly";

@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import {
   TRIAL,
   allowanceFeatures,
+  annualMonthsSaved,
   annualPerMonth,
   periodFee,
   priceOf,
@@ -27,20 +28,15 @@ import {
 } from "../src/lib/billing/plans";
 import { MARKETS, formatMoney, liveMarkets, type Market } from "../src/lib/markets";
 import { CONVERSATION_DEFINITION, MINUTE_DEFINITION } from "../src/lib/billing/usage";
-import { liveChannelsPhrase } from "../src/lib/billing/speak";
+import { trialSentence } from "../src/lib/billing/speak";
+
+/** Re-exported for scripts/build-site.ts: the sentence itself lives with the catalogue's other sentences. */
+export { trialSentence };
 
 const APP = "https://app.belline.ai";
 
 function esc(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-/** The trial, in one sentence, for every page that mentions it. */
-export function trialSentence(): string {
-  return (
-    `${TRIAL.phoneMinutes} minutes of live calls, with ${liveChannelsPhrase()} all switched on. ` +
-    "No card, nothing charged. Standard onboarding is free."
-  );
 }
 
 /**
@@ -72,7 +68,7 @@ function planCard(product: Product, below: Product | undefined, market: Market):
           <p class="plan-sub">${esc(product.summary)}</p>
           <div class="plan-price">
             <span class="amt" data-monthly="${money(monthly)}" data-annual="${money(annualPerMonth([product.id], market))}">${money(monthly)}</span>
-            <span class="per">per month</span>
+            <span class="per">per location, per month</span>
             <span class="billed" data-monthly="Billed monthly. Cancel anytime."
                   data-annual="${money(periodFee([product.id], market, "annual"))} billed once a year.">Billed monthly. Cancel anytime.</span>
           </div>
@@ -106,11 +102,17 @@ ${markets.map((m, i) => `          <option value="${m}"${i === 0 ? " selected" :
 `
       : "";
 
+  // What the stored annual prices actually save, never a number typed here:
+  // the smallest saving across the plans, so no card is promised more.
+  const home = markets[0] ?? "AE";
+  const saved = Math.min(...sellable(home).map((p) => annualMonthsSaved([p.id], home)));
+  const save = saved > 0 ? ` <span class="cycle-save">${saved} month${saved === 1 ? "" : "s"} free</span>` : "";
+
   return `<!-- pricing:start — generated from src/lib/billing/plans.ts by scripts/site-pricing.ts. Change the catalogue, then run npm run pricing; do not edit by hand. -->
 ${picker}      <div class="cycle" role="group" aria-label="Billing period">
         <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monthly</button>
         <button type="button" class="cycle-opt" data-cycle="annual" aria-pressed="false">
-          Annual <span class="cycle-save">2 months free</span>
+          Annual${save}
         </button>
       </div>
 
@@ -128,8 +130,8 @@ ${markets.map((m, i) => renderMarket(m, i > 0)).join("\n\n")}
           <p>${esc(CONVERSATION_DEFINITION)}</p>
         </div>
         <div>
-          <h4>No surprise invoices</h4>
-          <p>There is no per-minute or per-conversation charge on any plan. The invoice is the plan fee and nothing else — if an allowance runs short, Belline keeps answering and the answer is a bigger plan, not a bigger bill.</p>
+          <h4>Your allowance, in plain sight</h4>
+          <p>Your billing page counts every voice minute and text conversation as it is used, and names the plan that would carry a busier month.</p>
         </div>
         <div>
           <h4>${TRIAL.days} days free</h4>

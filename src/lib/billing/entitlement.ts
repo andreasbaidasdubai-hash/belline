@@ -1,33 +1,35 @@
 import type { Location } from "../types";
 import { getTenant } from "../store";
-import { accountFor, isLegacy, periodFor, productsOf } from "./usage";
-import { channelsOf, type Channel } from "./plans";
+import { accountFor, isPooledTrial, meterFor, periodFor, productsOf } from "./usage";
+import { channelsOf, grandfatherExpires, poolOf, type Channel } from "./plans";
 import { stripeEnabled } from "./stripe";
 
 /**
  * Is this venue entitled to be answered — at all, and on this channel?
  *
- * Two different questions with two different answers about strictness.
+ * Three questions, with different answers about strictness.
  *
- * **Lapsing** — a trial that ended, a cancelled period that ran out, a
- * grandfathered plan past its date. Nothing here is enforced while card
- * payments are switched off: stopping a trial customer's phone on day fifteen
- * when the checkout cannot take their card would punish them for our gap.
- * `lapsed` is still reported, so the client book can show who needs a call.
+ * **Lapsing** — a trial that ended or used its voice minutes, a cancelled
+ * period that ran out, an original-ladder plan past its grandfathered date.
+ * Nothing here is enforced while card payments are switched off: stopping a
+ * trial customer's phone when the checkout cannot take their card would
+ * punish them for our gap. `lapsed` is still reported, so the client book can
+ * show who needs a call. A September 2026 bundle never lapses.
  *
- * **Channels** — a plan that does not include this channel (today only a
- * grandfathered plan, which was never sold WhatsApp). That is enforced always:
+ * **Units** — a trial's text conversations used up stops its chat (and only
+ * its chat), under the same card-payments guard. Paid allowances are decided
+ * by the owner's usage policy (billing/usage-policy.ts).
+ *
+ * **Channels** — a plan that does not include this channel (today only the
+ * original ladder, which was never sold WhatsApp). That is enforced always:
  * it is not a gap on our side, and answering a channel nobody pays for spends
  * real money.
  *
- * And the softness that never changes: a paying venue past its allowance is
- * never stopped, and neither is one whose card failed while Stripe retries.
- * The pricing page promises both, and this file is where that promise could
- * quietly break.
+ * A failed card never stops anybody while Stripe retries.
  */
 
 export type Lapse = "trial_ended" | "trial_minutes_used" | "cancelled" | "legacy_plan_ended";
-export type Refusal = Lapse | "not_in_plan";
+export type Refusal = Lapse | "not_in_plan" | "trial_conversations_used";
 
 export interface ServiceState {
   /** Whether this venue — on this channel, if one was asked about — should be answered right now. */
@@ -53,9 +55,11 @@ export function lapseOf(location: Location, today: string): Lapse | null {
 
   if (sub.status === "trialing") {
     if (sub.trial && today > sub.trial.endsOn) return "trial_ended";
-    const phone = accountFor(location, today)?.usage.channels.find((c) => c.channel === "phone");
+    const account = accountFor(location, today);
+    // A 2026-10 trial caps pooled voice minutes; an older one, phone minutes.
+    const voice = account?.usage.meters.find((m) => m.id === (isPooledTrial(sub) ? "minutes" : "phone"));
     const allowance = sub.trial?.minutes ?? 0;
-    if (phone && allowance > 0 && phone.used >= allowance) return "trial_minutes_used";
+    if (voice && allowance > 0 && voice.used >= allowance) return "trial_minutes_used";
     return null;
   }
 
@@ -66,7 +70,9 @@ export function lapseOf(location: Location, today: string): Lapse | null {
     return today >= end ? "cancelled" : null;
   }
 
-  if (isLegacy(sub) && sub.grandfatheredUntil && today > sub.grandfatheredUntil) {
+  // Only a grandfathering that runs out can end. A September bundle carrying
+  // a stray date is kept regardless.
+  if (grandfatherExpires(productsOf(sub)) && sub.grandfatheredUntil && today > sub.grandfatheredUntil) {
     return "legacy_plan_ended";
   }
 
@@ -79,6 +85,18 @@ export function channelIncluded(location: Location, channel: Channel): boolean {
   const sub = location.subscription!;
   if (sub.status === "trialing") return true;
   return channelsOf(productsOf(sub)).includes(channel);
+}
+
+/** A unit used up on this channel, independent of whether that is enforced. */
+export function unitRefusal(location: Location, today: string, channel: Channel): Refusal | null {
+  if (exempt(location)) return null;
+  const sub = location.subscription!;
+  if (isPooledTrial(sub) && poolOf(channel) === "conversations") {
+    const account = accountFor(location, today);
+    const m = account && meterFor(account, channel);
+    if (m && m.included !== null && m.used >= m.included) return "trial_conversations_used";
+  }
+  return null;
 }
 
 function messageFor(location: Location, channel: Channel | undefined): string {
@@ -111,6 +129,10 @@ export function serviceState(
 
   if (lapsed && enforce) return refuse(lapsed);
   if (opts.channel && !channelIncluded(location, opts.channel)) return refuse("not_in_plan");
+  if (opts.channel && enforce) {
+    const unit = unitRefusal(location, today, opts.channel);
+    if (unit) return refuse(unit);
+  }
 
   return { answering: true, lapsed };
 }
@@ -121,7 +143,7 @@ export function lapseSentence(lapsed: Lapse, enforced: boolean): string {
     lapsed === "trial_ended"
       ? "Your free trial has ended."
       : lapsed === "trial_minutes_used"
-        ? "Your trial's live-call minutes are used up."
+        ? "Your trial's voice minutes are used up."
         : lapsed === "legacy_plan_ended"
           ? "Your original plan's grandfathered period is over."
           : "Your plan was cancelled and the paid period is over.";
