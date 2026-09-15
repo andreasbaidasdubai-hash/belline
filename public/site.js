@@ -861,6 +861,10 @@
     return "AED " + Math.round(n).toLocaleString("en-AE");
   }
 
+  // The line under the big number: bookings, and the comparison with the
+  // chosen plan. Same words as renderRoi() in scripts/site-pricing.ts.
+  var detail = form.querySelector('[data-gen="roi-detail"]');
+
   function render() {
     var missed = num("missed");
     var share = Math.min(num("share"), 100) / 100;
@@ -869,14 +873,20 @@
     var price = parseFloat(plan.value) || 0;
     var planName = plan.options[plan.selectedIndex].getAttribute("data-name");
     if (!missed || !share || !value) {
-      out.textContent = "Fill in all three to see what they add up to.";
+      out.textContent = "Fill in all three numbers";
+      if (detail) detail.textContent = "";
       return;
     }
     // 52 weeks over 12 months, not four weeks a month.
     var bookings = (missed * share * 52) / 12;
-    out.textContent =
-      "About " + Math.round(bookings) + " bookings a month, worth roughly " +
-      aed(bookings * value) + ". " + planName + " is " + aed(price) + " a month.";
+    var worth = Math.round(bookings * value);
+    var n = Math.round(bookings);
+    out.textContent = "About " + aed(worth) + " a month";
+    if (detail) {
+      detail.textContent =
+        "That’s about " + n + " booking" + (n === 1 ? "" : "s") + " a month, " +
+        (worth >= price ? "more" : "less") + " than " + planName + " costs.";
+    }
   }
 
   form.addEventListener("input", render);

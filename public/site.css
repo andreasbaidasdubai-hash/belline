@@ -2228,6 +2228,156 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   .channels-4 > li:nth-child(2n + 1) { padding: 26px 0 28px; border-right: 0; }
 }
 
+/* --- Works with how you already work -------------------------------------- */
+.works-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 48px;
+  margin-top: 52px;
+  border-top: 1px solid var(--rule);
+}
+.works-grid > div { padding-top: 26px; }
+.works-grid p { margin: 0; font-size: 0.98rem; }
+.works .routes-h {
+  margin: 64px 0 0;
+  font-family: inherit;
+  letter-spacing: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.routes { margin: 16px 0 0; border-top: 1px solid var(--rule); }
+.routes > div {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 8px 48px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.routes dt {
+  font-family: var(--bl-font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.routes dd { margin: 0; font-size: 0.96rem; color: var(--ink-2); max-width: 62ch; }
+
+/* --- It knows when to stop ------------------------------------------------- */
+.stop-rows { margin-top: 52px; border-top: 1px solid var(--rule); }
+.stop-rows > div {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 8px 48px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.stop-rows h3 { margin: 0; }
+.stop-rows p { margin: 0; font-size: 0.98rem; }
+.stop-small { margin: 20px 0 0; font-size: 0.86rem; color: var(--ink-3); }
+.cta-aside { align-self: center; font-size: 0.92rem; color: var(--ink-3); }
+
+/* --- Three steps: a real sequence, so real numbers ------------------------- */
+.steps-home { list-style: none; padding: 0; margin-top: 52px; }
+.steps-home .num {
+  font-family: var(--bl-font-display);
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+}
+.steps-home h3 {
+  font-family: var(--bl-font-display);
+  font-size: 1.3rem;
+  font-weight: 650;
+  letter-spacing: var(--bl-track-h2);
+  line-height: 1.2;
+}
+.steps-home p { font-size: 0.98rem; }
+#how .cta-row { margin-top: 44px; }
+
+/* --- The calculator as one sentence --------------------------------------- */
+.roi.roi-sentence-form {
+  max-width: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 32px 64px;
+  align-items: end;
+  margin-top: 52px;
+  padding-top: 40px;
+  border-top: 1px solid var(--rule);
+}
+.roi-sentence {
+  margin: 0;
+  max-width: 26ch;
+  font-family: var(--bl-font-display);
+  font-size: clamp(1.55rem, 1rem + 1.9vw, 2.4rem);
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.roi-field { display: inline-block; }
+.roi-field input {
+  width: calc(3ch + 0.7em);
+  min-height: 44px;
+  padding: 0 0.3em;
+  font: inherit;
+  font-size: max(1em, 16px);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--ink);
+  background: var(--bl-white);
+  border: 1px solid var(--bl-rule-strong);
+  border-radius: var(--bl-radius-input);
+  line-height: 1.2;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.roi-field-wide input { width: calc(4ch + 0.7em); }
+.roi-field input::-webkit-outer-spin-button,
+.roi-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.roi-field input:focus-visible,
+.roi-pick select:focus-visible {
+  outline: var(--bl-focus);
+  outline-offset: var(--bl-focus-offset);
+  border-color: var(--bl-lagoon);
+}
+.roi-result { min-width: 0; }
+.roi-sentence-form .roi-out {
+  margin: 0 0 14px;
+  max-width: none;
+  font-family: var(--bl-font-display);
+  font-size: clamp(2.4rem, 1.3rem + 3.6vw, 4.6rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: var(--bl-track-h1);
+  color: var(--ink);
+}
+.roi-detail { margin: 0 0 18px; font-size: 1rem; color: var(--ink-2); }
+.roi-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 0.95rem; color: var(--ink-2); }
+.roi-pick select {
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: var(--bl-white);
+  border: 1px solid var(--bl-rule-strong);
+  border-radius: var(--bl-radius-input);
+}
+#worth .roi-fine { margin-top: 28px; }
+
+@media (max-width: 900px) {
+  .works-grid { grid-template-columns: 1fr; margin-top: 40px; }
+  .works-grid > div { padding: 22px 0; border-bottom: 1px solid var(--rule-soft); }
+  .routes > div,
+  .stop-rows > div { grid-template-columns: 1fr; }
+  .roi.roi-sentence-form { grid-template-columns: 1fr; }
+  .roi-sentence { max-width: 30ch; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .demo-card,
   .chat-thread .msg,

@@ -141,8 +141,13 @@ ${markets.map((m, i) => renderMarket(m, i > 0)).join("\n\n")}
 <!-- pricing:end -->`;
 }
 
-/** The ROI calculator's "Compare with" list, and the sentence it shows before any typing. */
-function renderRoi(market: Market): { options: string; sentence: string } {
+/**
+ * The ROI calculator's "Compared with" list, and what it shows before any
+ * typing: the monthly worth in large type (`sentence`), and the bookings and
+ * plan comparison under it (`detail`). public/site.js writes the same two
+ * lines in the same words when the visitor changes a number.
+ */
+export function renderRoi(market: Market): { options: string; sentence: string; detail: string } {
   const plans = sellable(market);
   const chosen = plans.find((b) => b.recommended) ?? plans[0];
   const options = plans
@@ -153,9 +158,12 @@ function renderRoi(market: Market): { options: string; sentence: string } {
     .join("\n");
   // The markup's own example numbers: 10 missed a week, 30%, 250 a booking.
   const bookings = (10 * 0.3 * 52) / 12;
-  const worth = Math.round(bookings * 250).toLocaleString("en-AE");
-  const sentence = `About ${Math.round(bookings)} bookings a month, worth roughly AED ${worth}. ${chosen.name} is ${formatMoney(priceOf(chosen.id, market), market)} a month.`;
-  return { options, sentence };
+  const worthMinor = Math.round(bookings * 250) * 100;
+  const sentence = `About ${formatMoney(worthMinor, market)} a month`;
+  const n = Math.round(bookings);
+  const side = worthMinor >= priceOf(chosen.id, market) ? "more" : "less";
+  const detail = `That’s about ${n} booking${n === 1 ? "" : "s"} a month, ${side} than ${chosen.name} costs.`;
+  return { options, sentence, detail };
 }
 
 function renderOffers(market: Market): string {
@@ -174,9 +182,10 @@ function renderOffers(market: Market): string {
  * `<span class="gen" data-gen="KEY">…</span>` (or a `<p>`), and its text is
  * rewritten from the catalogue on every build, so nobody types it.
  */
-export function generatedPhrases(): Record<string, string> {
+export function generatedPhrases(market: Market = liveMarkets()[0] ?? "AE"): Record<string, string> {
   return {
     "trial-short": `${TRIAL.days} days free, no card.`,
+    "roi-detail": renderRoi(market).detail,
   };
 }
 
