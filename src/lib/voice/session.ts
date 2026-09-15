@@ -936,10 +936,11 @@ export class VoiceSession {
       }
     } catch (err) {
       if ((err as Error)?.name !== "AbortError") {
-        this.transport.sendEvent({
-          type: "tts_error",
-          message: err instanceof Error ? err.message : String(err),
-        });
+        const message = err instanceof Error ? err.message : String(err);
+        // Into the server log as well: a voice vendor out of credits used to
+        // fail every call in silence, visible only to the caller.
+        console.error("[voice] text-to-speech failed:", message);
+        this.transport.sendEvent({ type: "tts_error", message });
       }
     } finally {
       if (this.abort === controller) this.abort = null;

@@ -437,10 +437,21 @@ export default function Console({
         case "error":
         case "stt_error":
         case "tts_error":
-          setError(`${msg.type}: ${msg.message}`);
+          // A visitor on the public call gets a sentence, never a vendor's
+          // error text; the operator's own console keeps the full detail.
+          setError(demoToken ? publicCallError(msg.type) : `${msg.type}: ${msg.message}`);
           break;
       }
     };
+
+    /** What a stranger on belline.ai is told when part of the call fails. */
+    function publicCallError(type: string): string {
+      if (type === "tts_error") {
+        return "Belline's voice isn't available right now. Please try again later, or write to Belle on the website.";
+      }
+      if (type === "stt_error") return "Belline can't hear you right now. Please try again in a moment.";
+      return "Something went wrong on our side. Please try again in a moment.";
+    }
 
     ws.onclose = () => {
       setConnected(false);

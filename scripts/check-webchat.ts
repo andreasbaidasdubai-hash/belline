@@ -419,6 +419,20 @@ await test("the widget's close button says what it closes and takes focus on ope
   assert.match(after.slice(0, 300), /shut\.focus\(\)/, "opening the widget leaves focus on the page behind it");
 });
 
+await test("a visitor on the public call never sees a vendor's raw error, and the server logs it", () => {
+  // Found live: the voice vendor ran out of credits and "Speak to Belline"
+  // showed "tts_error: ElevenLabs 401 … quota_exceeded" to a stranger, while
+  // the production log stayed silent.
+  const consoleSrc = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "test", "Console.tsx"), "utf8");
+  assert.match(consoleSrc, /function publicCallError\(/, "no plain-language message for a failure on the public call");
+  const raw = consoleSrc.indexOf("`${msg.type}: ${msg.message}`");
+  assert.ok(raw > 0, "the operator console should still show the full error");
+  const before = consoleSrc.slice(Math.max(0, raw - 240), raw);
+  assert.match(before, /demoToken/, "the raw vendor error is shown without checking whether this is the public call");
+  const session = fs.readFileSync(path.join(process.cwd(), "src", "lib", "voice", "session.ts"), "utf8");
+  assert.match(session, /console\.error\(\s*"\[voice\] text-to-speech failed/, "a text-to-speech failure never reaches the server log");
+});
+
 // ---------------------------------------------------------------------------
 head("Voice notes");
 
