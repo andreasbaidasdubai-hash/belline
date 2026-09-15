@@ -260,6 +260,7 @@ export function Row({
 }) {
   return (
     <div
+      className="field-row"
       style={{
         border: "1px solid var(--border-soft)",
         borderRadius: 10,

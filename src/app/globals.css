@@ -2094,6 +2094,10 @@ body:has(.callbar) {
   input, select, textarea { font-size: 16px; }
 }
 
+/* Venue rows sit on --panel-2, where --muted measures 4.34:1. */
+.field-row label,
+.field-row .muted { color: var(--text-2); }
+
 /* A name for a control that only a screen reader needs to hear. */
 .sr-only {
   position: absolute;

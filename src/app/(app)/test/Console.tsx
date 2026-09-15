@@ -832,7 +832,8 @@ export default function Console({
           <span
             className="pill"
             style={{
-              color: connected ? "var(--ok)" : "var(--muted)",
+              // --text-2, not --muted: grey on --panel-2 measured 4.34:1.
+              color: connected ? "var(--ok)" : "var(--text-2)",
               borderColor: connected ? "var(--ok)" : "var(--border)",
               background: connected ? "var(--ok-soft)" : "var(--panel-2)",
             }}

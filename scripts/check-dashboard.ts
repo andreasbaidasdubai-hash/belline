@@ -248,6 +248,16 @@ await test("the console's number box and the change note have names", () => {
   assert.match(read("src", "app", "(app)", "venue", "VenueEditor.tsx"), /aria-label="Change note"/);
 });
 
+await test("labels and quiet text inside a venue row are readable on its tint", () => {
+  // Rows sit on --panel-2, where --muted measures 4.34:1 — 81 failures on /venue.
+  assert.match(read("src", "app", "(app)", "venue", "fields.tsx"), /className="field-row"/, "Row has no class to hang the colour on");
+  assert.match(ruleBody(".field-row label,\n.field-row .muted"), /color:\s*var\(--text-2\)/);
+});
+
+await test("the console's status pill is not grey on its tint", () => {
+  assert.doesNotMatch(read("src", "app", "(app)", "test", "Console.tsx"), /color:\s*connected \? "var\(--ok\)" : "var\(--muted\)"/, "status pill is --muted on --panel-2");
+});
+
 console.log("\n\x1b[1mWhen the database cannot be reached\x1b[0m\n");
 
 // Inbox and Integrations used to throw straight out of the page on a
