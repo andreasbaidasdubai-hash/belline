@@ -319,7 +319,7 @@ footer .brand span { font-size: 1.55rem; }
 
 section { padding: 110px 0; }
 /* Die Kopfzeile klebt; ein Sprungziel landet sonst darunter. */
-:target, #what, #for, #price, #faq, #book { scroll-margin-top: 92px; }
+:target, #channels, #how, #for, #price, #faq, #book { scroll-margin-top: 92px; }
 .rule { border-top: 1px solid var(--rule); }
 
 /* Die Nummerierung ist echt: das sind drei Schritte in einer Reihenfolge.
@@ -912,8 +912,13 @@ section { padding: 110px 0; }
 /* --- Fuß ------------------------------------------------------------------- */
 
 footer { border-top: 1px solid var(--rule); padding: 44px 0 60px; }
-.foot-in { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; }
-footer p { font-size: 0.86rem; color: var(--ink-3); margin: 0; line-height: 1.7; }
+/* The text sits beside the brand, not against the right edge: the floating
+   buttons live bottom right, and at the end of the page they covered the
+   footer's last words and the sign-in link. On narrower screens the buttons
+   cover the full width, so the footer leaves room below instead. */
+.foot-in { display: flex; gap: 28px 96px; flex-wrap: wrap; align-items: flex-start; justify-content: flex-start; }
+footer p { font-size: 0.86rem; color: var(--ink-3); margin: 0; line-height: 1.7; max-width: 62ch; }
+@media (max-width: 1100px) { footer { padding-bottom: 220px; } }
 footer a { color: var(--ink-2); text-underline-offset: 3px; }
 
 /* --- Floating buttons wait for the hero ------------------------------------

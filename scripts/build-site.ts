@@ -325,7 +325,7 @@ function navFor(active: string): string {
     .map((v) => `<a href="/${v.slug}">${esc(v.name)}</a>`)
     .join("\n      ");
   return `${links}
-      <a href="/#what">What it does</a>
+      <a href="/#how">How it works</a>
       <a href="/#price">Pricing</a>
       <a class="nav-cta" href="https://app.belline.ai/checkout">Connect your business</a>
       <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Sign in</a>`;
@@ -621,7 +621,7 @@ ${CALL_PANEL}
       <span>Belline</span>
     </a>
     <p>
-      AI reception for businesses across the UAE that take bookings — clinics, dental practices, salons, restaurants and more.<br>
+      AI voice and chat reception for UAE businesses that take calls, messages or bookings.<br>
       <a href="tel:+15717785920">+1 571 778 5920</a> (an international call from the UAE) ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
       <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a><br>

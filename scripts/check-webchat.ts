@@ -635,6 +635,16 @@ await test("the channels section still shows all four channels as Available, so 
   assert.equal((section.match(/state-available">Available</g) ?? []).length, 4, "not every channel is marked Available");
 });
 
+await test("trade pages link only to homepage sections that exist, and their footer speaks to any business", () => {
+  const build = fs.readFileSync(path.join(process.cwd(), "scripts", "build-site.ts"), "utf8");
+  const ids = new Set([...visibleHtml("landing.html").matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+  const anchors = [...build.matchAll(/href="\/#([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(anchors.length > 0, "the trade-page template no longer links to any homepage section");
+  for (const id of anchors) assert.ok(ids.has(id), `a trade page links to /#${id}, which the homepage does not have`);
+  assert.match(build, /AI voice and chat reception for UAE businesses that take calls, messages or bookings\./);
+  assert.doesNotMatch(build, /clinics, dental practices, salons, restaurants/, "the trade-page footer still names four trades");
+});
+
 await test("the homepage speaks to any business, promotes no trade page, and keeps clinics to appointment requests", () => {
   const html = visibleHtml("landing.html");
   assert.doesNotMatch(html, /id="trade"|trade-cards/, "the old trade section is back");
