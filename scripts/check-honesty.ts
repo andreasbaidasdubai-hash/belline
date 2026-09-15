@@ -231,7 +231,7 @@ console.log("\n\x1b[1mRepairing rather than replacing\x1b[0m\n");
 test("the answer stays and only the unchecked times go", () => {
   // From the WhatsApp test that found this.
   const reply =
-    "Belline is an AI receptionist that answers your phone and books appointments into your diary. " +
+    "Belline is an AI receptionist that answers your phone and your website from your own information. " +
     "You keep your own number and just forward calls to us. " +
     "Which time tomorrow suits you — 10:00 AM, 2:30 PM or 4:00 PM?";
   const v = checkTimes(reply, [], HOURS);

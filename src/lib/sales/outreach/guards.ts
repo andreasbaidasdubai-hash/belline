@@ -92,13 +92,47 @@ const TECH_TALK = [
  *
  * Mirrors the `not-yet` features in billing/plans.ts and the FAQ on the
  * website. Remove a line here the day the thing works, not before.
+ *
+ * Live transfer is not on this list: it works wherever the business sets a
+ * team number (agent/tools.ts transfer_call), so saying it is true.
  */
 const NOT_LIVE: { pattern: RegExp; why: string }[] = [
   { pattern: /\b(?:arabic|bilingual|multilingual|multiple languages|any language|in (?:their|your) (?:own )?language)\b/i, why: "English only" },
-  { pattern: /\b(?:puts? (?:them|you|the (?:patient|caller|client|guest)s?) through|transfers? (?:the |a )?(?:call|caller|patient)s?|live transfer|patch(?:es)? (?:them|it|the call) through)\b/i, why: "no live transfer" },
   { pattern: /\bwhats\s?app\b/i, why: "WhatsApp not connected" },
   { pattern: /\b(?:fresha|sevenrooms|opentable|treatwell|dentally|dentrix|zenoti|phorest|booksy|eat app)\b/i, why: "no booking-system integrations" },
   { pattern: /\b(?:reminders?|sms|texts? (?:them|you|patients?|clients?|guests?|callers?))\b/i, why: "no reminders or texts" },
+  { pattern: /\b(?:google calendar|google cal|outlook|microsoft 365|office 365|ical)\b/i, why: "no calendar integration live" },
+  {
+    // The strategy's pattern, widened for "the same diary" and "their own
+    // system", plus "books the patient in": the same claim in fewer words.
+    pattern:
+      /\b(?:(?:books?|booking|booked|syncs?|synced|writes?) (?:straight |directly )?(?:into|in|to|with) (?:your |the |their )?(?:same |own |existing )?(?:calendar|diary|booking system|system)|books? (?:the |a |your |their )?(?:patient|client|guest|customer|caller)s? in)\b/i,
+    why: "no booking into external systems",
+  },
+  { pattern: /\b(?:no (?:migration|second calendar|double entry)|keep your (?:calendar|booking system))\b/i, why: "platform-route claim, integration not live" },
+  { pattern: /\b(?:integrat(?:es?|ion)s? with|connects? (?:to|with) (?:your )?(?:booking|calendar))/i, why: "no integrations live" },
+  { pattern: /\b(?:confirmation (?:texts?|emails?|messages?)|confirms? by (?:text|email|sms))\b/i, why: "no confirmations sent" },
+  { pattern: /\b(?:deposits?|payment links?|pay(?:s|ing)? online)\b/i, why: "deposits not live" },
+  { pattern: /\bvoice notes?\b/i, why: "voice notes refused on WhatsApp" },
+];
+
+/**
+ * Claims nobody can check or keep: clichés used as headlines, setup times
+ * nobody has measured, "sounds human", "unlimited" and "no extra charges" on
+ * a product with allowances and packs. Checked everywhere, subject included.
+ */
+const HYPE: RegExp[] = [
+  /\b24\s?\/\s?7\b/i,
+  /\blive in (?:minutes|\d+ ?(?:min|hours?|days?))\b/i,
+  /\b(?:set ?up|up and running|ready) in (?:minutes|\d+ ?(?:min|minutes|hours?))\b/i,
+  /\b(?:30|thirty)[- ]minute setup\b/i,
+  /\bhuman[- ]like\b/i,
+  /\bsounds? (?:just )?like a (?:real )?(?:person|human)\b/i,
+  /#1\b|\bnumber one\b/i,
+  /\bunlimited\b/i,
+  /\b(?:no|never any) (?:extra|additional|surprise) (?:charges?|costs?|fees?)\b/i,
+  /\bno per[- ](?:minute|conversation)\b/i,
+  /\bmilliseconds?\b|\blatency\b/i,
 ];
 
 const MONEY =
@@ -185,6 +219,10 @@ export function checkDraft(parts: DraftParts, ctx: GuardContext): GuardResult {
   for (const pattern of TECH_TALK) {
     const hit = all.match(pattern);
     if (hit) problems.push(`sells the technology, not the outcome: "${hit[0]}"`);
+  }
+  for (const pattern of HYPE) {
+    const hit = all.match(pattern);
+    if (hit) problems.push(`uses hype or a claim nobody can check: "${hit[0]}"`);
   }
   const bangs = (all.match(/!/g) ?? []).length;
   if (bangs > 1) problems.push(`${bangs} exclamation marks`);

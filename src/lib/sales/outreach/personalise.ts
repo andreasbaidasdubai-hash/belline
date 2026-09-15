@@ -65,7 +65,7 @@ const INPUT_SCHEMA = {
   additionalProperties: false,
 };
 
-const SYSTEM = `You write one short email to the owner of a service business, on behalf of Belline — an assistant that answers a business's phone when nobody else can.
+const SYSTEM = `You write one short email to the owner of a service business, on behalf of Belline — an assistant that answers a business's phone when nobody else can, and makes sure the team knows what to do next.
 
 The email's job is to earn one click on a demo recording. It is not a pitch and it is not a sales letter. It should read like a note from someone who spent two minutes looking at their website and thought it was worth telling them something.
 
@@ -83,6 +83,12 @@ What fails immediately:
 - Promising they will "never miss a call".
 - Flattery, or telling them their business is impressive.
 - Asking for a meeting, a call, or fifteen minutes.
+
+Never say Belline books into any calendar or booking system, and never say how long setup takes.
+
+Say only what Belline does today, whatever they book with:
+- If the research shows they take bookings online through a booking platform, say Belline answers the calls that still come in, takes the details and request, and hands the team a summary to book as usual. Never name the platform, and never say it connects to it.
+- Otherwise, say Belline answers the calls nobody can reach from the business's own information, takes the details and request, and makes sure the team knows what to do next.
 
 You are writing to someone who gets twenty of these a week and deletes them all. The only thing that makes this one different is that it clearly is about them.`;
 
