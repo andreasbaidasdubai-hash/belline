@@ -2,10 +2,11 @@
  * Belline answering its own phone.
  *
  * The bell on the website opens a real call to this venue, so a fault here is
- * a fault on the front page. Two things are tested hardest: that a demo call
- * can actually be booked, and that an email address taken by ear is checked
- * rather than trusted — an address misheard on a phone line never bounces, it
- * just means the person never hears from us.
+ * a fault on the front page. Belle books nothing, so what is tested hardest is
+ * what she says: every answer about price, usage, the trial and volume comes
+ * from the catalogue, and none of the promises Belline cannot keep today —
+ * a setup time, "no per-minute charges", booking into somebody's calendar —
+ * comes back.
  *
  *   npm run check:belline
  */
@@ -19,7 +20,7 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-venue-"));
 
 const { seedIfEmpty } = await import("../src/lib/seed");
 const { getLocation, listBookings } = await import("../src/lib/store");
-const { BELLINE_LOCATION_ID } = await import("../src/lib/seed-belline");
+const { BELLINE_LOCATION_ID, bellineVenue } = await import("../src/lib/seed-belline");
 const { startCall } = await import("../src/lib/calls");
 const { executeTool, toolsFor } = await import("../src/lib/agent/tools");
 const { findAvailability } = await import("../src/lib/booking");
@@ -30,6 +31,7 @@ const { toSpoken } = await import("../src/lib/voice/spoken");
 const { greetingFor } = await import("../src/lib/agent/runtime");
 const { listLocations } = await import("../src/lib/store");
 const { todayIn } = await import("../src/lib/time");
+const { usageAnswer, volumeAnswer, trialAnswer } = await import("../src/lib/billing/speak");
 
 let passed = 0;
 let failed = 0;
@@ -40,10 +42,10 @@ function test(name: string, fn: () => void | Promise<void>) {
   queue = queue.then(async () => {
     try {
       await fn();
-      console.log(`  [32m✓[0m ${name}`);
+      console.log(`  [32m✓[0m ${name}`);
       passed++;
     } catch (err) {
-      console.log(`  [31m✗[0m ${name}`);
+      console.log(`  [31m✗[0m ${name}`);
       console.log(`      ${err instanceof Error ? err.message : String(err)}`);
       failed++;
     }
@@ -55,20 +57,23 @@ const belline = getLocation(BELLINE_LOCATION_ID)!;
 
 console.log("\nThe venue exists and is callable\n");
 
-test("Belline is seeded as a venue of its own", () => {
+test("Belline is seeded as a venue of its own, and asks nobody for an email to book", () => {
   assert.ok(belline, "no Belline venue — the bell would open a dead call");
-  assert.equal(belline.requiresEmail, true);
+  // requiresEmail existed for the demo-call diary. start_trial reads back its
+  // own address; nothing on this line books, so nothing needs it.
+  assert.notEqual(belline.requiresEmail, true);
 });
 
-test("it sells exactly one thing: a demo call", () => {
-  const services = belline.salon!.services;
-  assert.equal(services.length, 1, "more than one service muddies a 20-minute demo");
-  assert.equal(services[0].durationMin, 20);
-  assert.equal(services[0].price, 0, "the demo call is not for sale");
+test("Belle's venue has no bookable services", () => {
+  const diary = belline.salon;
+  assert.equal(diary?.services.length ?? 0, 0, "a bookable service is back on Belle's line");
+  assert.equal(diary?.staff.length ?? 0, 0, "somebody is rostered on a line that books nothing");
+  assert.equal(diary?.resources.length ?? 0, 0, "a room (the old Zoom line) is back");
 });
 
-test("there is one Zoom line, so two demos cannot share a slot", () => {
-  assert.equal(belline.salon!.resources.length, 1);
+test("nothing of the demo-call diary survives in what she says", () => {
+  const said = JSON.stringify([belline.agent.faqs, belline.agent.policies, belline.agent.persona]);
+  assert.doesNotMatch(said, /demo call|sales director|zoom/i);
 });
 
 test("it answers wider than office hours, because prospects are everywhere", () => {
@@ -78,23 +83,27 @@ test("it answers wider than office hours, because prospects are everywhere", () 
 
 console.log("\nWhat it says about us\n");
 
+const faq = (q: RegExp) => {
+  const found = belline.agent.faqs.find((f) => q.test(f.q));
+  assert.ok(found, `no answer prepared for ${q}`);
+  return found!.a;
+};
+
 test("it says plainly that it answers in English", () => {
-  const languages = belline.agent.faqs.find((f) => /language/i.test(f.q))!;
-  assert.ok(languages, "no answer prepared for the language question");
-  assert.match(languages.a, /English/, `got: ${languages.a}`);
+  const languages = faq(/language/i);
+  assert.match(languages, /English/, `got: ${languages}`);
   assert.ok(!belline.agent.faqs.some((f) => /arabic/i.test(f.a)), "an answer mentions Arabic");
 });
 
 test("it describes live transfer honestly, including when nobody picks up", () => {
-  const transfer = belline.agent.faqs.find((f) => /transfer/i.test(f.q))!;
-  assert.ok(transfer, "no answer prepared for the transfer question");
-  assert.match(transfer.a, /live/i, `got: ${transfer.a}`);
+  const transfer = faq(/transfer/i);
+  assert.match(transfer, /live/i, `got: ${transfer}`);
   // The half that keeps it true: a transfer nobody answers becomes a callback.
-  assert.match(transfer.a, /nobody picks up|ring back/i, `got: ${transfer.a}`);
+  assert.match(transfer, /nobody picks up|ring back/i, `got: ${transfer}`);
 });
 
 test("it quotes the real prices and no others", () => {
-  const price = belline.agent.faqs.find((f) => /cost/i.test(f.q))!.a;
+  const price = faq(/cost/i);
   // The three plans, from the catalogue (2026-10): 199, 399 and 799 dirhams.
   for (const said of ["one hundred and ninety-nine", "three hundred and ninety-nine", "seven hundred and ninety-nine"]) {
     assert.ok(price.includes(said), `the price answer is missing "${said}"`);
@@ -105,10 +114,64 @@ test("it quotes the real prices and no others", () => {
   }
 });
 
+test("the price answer invents no statistic about other businesses", () => {
+  const price = faq(/cost/i);
+  assert.doesNotMatch(price, /most (?:venues|businesses) take/i);
+  assert.match(price, /nothing is added to your bill unless you choose it/);
+});
+
+test("setup is never given a time", () => {
+  const setup = faq(/set up/i);
+  assert.doesNotMatch(setup, /\bminutes?\b|\bhours?\b|about a minute|in no time/i, `got: ${setup}`);
+  // And it is honest about what setup reads: a website, uploaded documents, or both.
+  assert.match(setup, /website/i);
+  assert.match(setup, /price lists?|brochures?/i);
+});
+
+test("no answer promises 'no per-minute' charges or booking into a diary or calendar", () => {
+  for (const { q, a } of belline.agent.faqs) {
+    assert.doesNotMatch(a, /no per[- ]minute/i, `${q}: ${a}`);
+    assert.doesNotMatch(a, /books? (?:straight |directly )?into (?:your|the|their) (?:real )?(?:diary|calendar)/i, `${q}: ${a}`);
+    assert.doesNotMatch(a, /keeps answering|not charged a penny|text the day before/i, `${q}: ${a}`);
+  }
+});
+
+test("reminders and booking systems are 'not yet', said plainly", () => {
+  assert.match(faq(/reminder/i), /^Not yet\./);
+  assert.match(faq(/booking system/i), /^Not yet\./);
+});
+
+test("the allowance answer is the owner's choice, generated from the catalogue", () => {
+  const usage = faq(/allowance/i);
+  assert.equal(usage, usageAnswer("AE"));
+  assert.match(usage, /choose in advance/);
+  assert.match(usage, /pack/);
+  assert.match(usage, /move up/);
+  assert.match(usage, /stop/);
+});
+
+test("the trial and volume answers are generated from the catalogue", () => {
+  assert.equal(faq(/trial/i), trialAnswer());
+  assert.doesNotMatch(trialAnswer(), /we set your business up with you/);
+  assert.equal(faq(/several locations/i), volumeAnswer());
+  assert.match(volumeAnswer(), /five to nineteen locations get ten per cent off/i);
+});
+
+test("WhatsApp: Belle's own number today, a business's own number coming soon", () => {
+  const whatsapp = faq(/whatsapp/i);
+  assert.match(whatsapp, /message me on WhatsApp/);
+  assert.match(whatsapp, /coming soon/);
+});
+
+test("there are fifteen prepared answers", () => {
+  assert.equal(bellineVenue.agent.faqs.length, 15);
+});
+
 test("its policies forbid overstating the product", () => {
   const policies = belline.agent.policies.join(" ");
   assert.match(policies, /Never overstate/i);
   assert.match(policies, /card details|payment/i, "nothing stops it asking for a card");
+  assert.match(policies, /Never say how long setup takes/);
 });
 
 console.log("\nThe greeting is actually warm\n");
@@ -177,9 +240,10 @@ test("an uncapped venue is refused, however much it is ours", () => {
   assert.equal(mayStreamTo(uncapped as never), false, "an uncapped line was dialable");
 });
 
-test("Belline's own bookings are not wiped nightly like a demo line's", () => {
+test("Belline's own line is never wiped nightly like a demo line's", () => {
   // Every other demo venue clears its bookings daily so the diary stays
-  // legible. Here a booking is a sales lead with somebody's email on it.
+  // legible. Belle books nothing, and anything left from the demo-call days
+  // was a sales lead with somebody's email on it.
   assert.equal(getLocation(BELLINE_LOCATION_ID)!.demo!.clearBookingsDaily, false);
 });
 
@@ -270,7 +334,7 @@ test("a socket that stops answering is dropped", () => {
   assert.equal(ws.terminated, true);
 });
 
-console.log("\nThe diary underneath (not offered to Belle, who books nothing)\n");
+console.log("\nAn email taken by ear, on a venue that needs one (Belle books nothing)\n");
 
 test("Belle is offered no book tool, and a restaurant's does not ask for an email", () => {
   assert.equal(toolsFor(belline).find((t) => t.name === "book"), undefined, "Belle can book again");
@@ -285,22 +349,33 @@ test("Belle is offered no book tool, and a restaurant's does not ask for an emai
 });
 
 /**
+ * The email checks used to run on Belline's demo-call diary, the one venue
+ * that set `requiresEmail`. That diary is gone, and the check still guards any
+ * venue that sets it — so it runs on a copy of the seeded clinic that does.
+ * An address misheard on a phone line never bounces; it just means the person
+ * never hears from anyone.
+ */
+const emailClinic = { ...getLocation("loc_meridian")!, requiresEmail: true };
+const EMAIL_SERVICE = emailClinic.salon!.services[0].id;
+
+/**
  * The next slot the diary actually offers — from tomorrow.
  *
  * Today's first slot is offered by the diary but refused by the booking tool
- * as "past" once the morning is under way, which made this suite fail after
- * about nine o'clock Dubai time and pass before it. Tomorrow has no such hour.
+ * as "past" (or inside the notice period) once the morning is under way,
+ * which would make this suite pass or fail by the hour. Tomorrow has no such
+ * hour.
  */
 function nextSlot() {
-  const today = todayIn(belline.timezone);
+  const today = todayIn(emailClinic.timezone);
   for (let i = 1; i < 15; i++) {
     const date = new Date(`${today}T12:00:00Z`);
     date.setUTCDate(date.getUTCDate() + i);
     const day = date.toISOString().slice(0, 10);
-    const slots = findAvailability(belline, {
-      locationId: belline.id,
+    const slots = findAvailability(emailClinic, {
+      locationId: emailClinic.id,
       date: day,
-      serviceIds: ["demo_call"],
+      serviceIds: [EMAIL_SERVICE],
     });
     if (slots.length > 0) return { date: day, startMin: slots[0].startMin };
   }
@@ -310,7 +385,7 @@ function nextSlot() {
 const slot = nextSlot();
 
 function book(over: Record<string, unknown> = {}) {
-  const call = startCall(belline, "browser", "browser-console");
+  const call = startCall(emailClinic, "browser", "browser-console");
   return executeTool(
     "book",
     {
@@ -319,21 +394,26 @@ function book(over: Record<string, unknown> = {}) {
       guest_name: "Andreas",
       guest_phone: "+971501234567",
       guest_email: "andreas@gmail.com",
-      service_ids: ["demo_call"],
+      service_ids: [EMAIL_SERVICE],
       ...over,
     },
-    { location: belline, call, callerNumber: "+971501234567" } as never,
+    { location: emailClinic, call, callerNumber: "+971501234567" } as never,
   );
 }
 
-test("a demo call can actually be booked", async () => {
+test("a venue that needs an email asks for one in the book tool", () => {
+  const tool = toolsFor(emailClinic).find((t) => t.name === "book")!;
+  assert.ok((tool.input_schema as { required: string[] }).required.includes("guest_email"));
+});
+
+test("an appointment with an email can actually be booked", async () => {
   const out = (await book()) as { result: Record<string, unknown> };
   assert.equal(out.result.booked, true, JSON.stringify(out.result));
 });
 
 test("the email is stored on the booking", () => {
-  const booked = listBookings({ locationId: belline.id }).find((b) => b.guestEmail);
-  assert.ok(booked, "the booking kept no email — there is nowhere to send the link");
+  const booked = listBookings({ locationId: emailClinic.id }).find((b) => b.guestEmail);
+  assert.ok(booked, "the booking kept no email — there is nowhere to send anything");
   assert.equal(booked!.guestEmail, "andreas@gmail.com");
 });
 

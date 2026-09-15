@@ -1,5 +1,5 @@
 import { MARKETS, formatMoney, type Market } from "../markets";
-import { ALERT_THRESHOLDS, CHANNELS, CHANNEL_ORDER, TRIAL, VOLUME, packFor, priceOf, sellable, type Channel } from "./plans";
+import { ALERT_THRESHOLDS, CHANNELS, CHANNEL_ORDER, PACKS, SERVICES, TRIAL, VOLUME, packFor, priceOf, sellable, type Channel } from "./plans";
 
 /**
  * What Belle and the website say about price, generated from the catalogue.
@@ -61,7 +61,13 @@ export function liveChannelsPhrase(): string {
   return list(CHANNEL_ORDER.filter((c) => CHANNELS[c].status === "live").map((c) => CHANNEL_PHRASE[c]));
 }
 
-/** "What does it cost?", for a caller in this market. */
+/**
+ * "What does it cost?", for a caller in this market.
+ *
+ * Growth carries `recommended`, and with no customers yet that is a
+ * suggestion, not a fact about what other businesses buy — so it is said as
+ * one. There is no "most venues take it" here and there must never be.
+ */
 export function priceAnswer(market: Market): string {
   const plans = sellable(market);
   const popular = plans.find((p) => p.recommended);
@@ -74,21 +80,69 @@ export function priceAnswer(market: Market): string {
   });
 
   return (
-    `${capitalise(numberWords(plans.length))} plans, per location, per month, and every one ` +
-    `covers ${liveChannelsPhrase()}. ${list(ladder)}.` +
-    (popular ? ` ${popular.name} is the one most businesses take.` : "") +
-    " Setting up is free. If an allowance runs out, you choose what happens: extra minutes or conversations " +
-    "added automatically, a move to the next plan, or a stop — and nothing is added to your bill unless you chose it."
+    `${capitalise(numberWords(plans.length))} plans, per location, per month. ${list(ladder)}.` +
+    (popular ? ` ${popular.name} is the one we suggest for most businesses.` : "") +
+    " Setting it up yourself is free, and nothing is added to your bill unless you choose it."
   );
+}
+
+/**
+ * Assisted setup, spoken — or null while it cannot actually be bought.
+ *
+ * The catalogue prices it, but until the checkout can sell a one-off fee it is
+ * `not-yet`, and Belle offering something a person would have to invoice by
+ * hand is exactly the overstatement she is built not to make.
+ */
+export function assistedSetupSpoken(market: Market = "AE"): string | null {
+  const service = SERVICES.find((s) => s.id === "assisted_setup");
+  const price = service?.prices[market];
+  if (!service || service.status !== "live" || price === undefined) return null;
+  return `${spokenAmount(price, market)}, once`;
 }
 
 /** "Is there a free trial?" */
 export function trialAnswer(): string {
+  const assisted = assistedSetupSpoken();
   return (
     `${capitalise(numberWords(TRIAL.days))} days, with ${numberWords(TRIAL.minutes)} voice minutes and ` +
-    `${numberWords(TRIAL.conversations)} text conversations, and ${liveChannelsPhrase()} all switched on. ` +
-    "No card, nothing charged, and we set your business up with you — that part is free too."
+    `${numberWords(TRIAL.conversations)} text conversations. No card. ` +
+    `You set it up from your website or your price lists${assisted ? `, or we can do it with you for ${assisted}` : ""}.`
   );
+}
+
+/**
+ * "What happens if we use up our allowance?"
+ *
+ * The usage policy is built (billing/usage-policy.ts), so this says the
+ * owner's three choices — made in advance — with the pack prices and alert
+ * thresholds read from the catalogue. If packs are ever switched off again it
+ * falls back to the one sentence that is true without them.
+ */
+export function usageAnswer(market: Market = "AE"): string {
+  const packs = PACKS.filter((p) => p.status === "live" && p.prices[market] !== undefined);
+  if (packs.length === 0) {
+    return "Your dashboard shows what you've used, and nothing is added to your bill unless you choose it.";
+  }
+  const offers = packs.map(
+    (p) => `${numberWords(p.units)} ${p.pool === "minutes" ? "voice minutes" : "text conversations"} for ${spokenAmount(p.prices[market]!, market)}`,
+  );
+  const thresholds = ALERT_THRESHOLDS.map((t) => numberWords(t));
+  return (
+    "You choose in advance what happens when an allowance runs out: add a pack automatically, " +
+    `${offers.join(" or ")}, up to a monthly spending cap you set; move up to the next plan; ` +
+    `or stop at your allowance. We tell you at ${list(thresholds)} per cent, ` +
+    "and nothing is added to your bill unless you choose it."
+  );
+}
+
+/** "Do you offer a discount for several locations?", from the catalogue's volume terms. */
+export function volumeAnswer(): string {
+  const parts = VOLUME.tiers.map((tier) =>
+    "custom" in tier
+      ? `${numberWords(tier.from)} or more are priced by a person`
+      : `${numberWords(tier.from)} to ${numberWords(tier.to)} locations get ${numberWords(tier.percentOff)} per cent off each`,
+  );
+  return `Each location has its own plan. ${capitalise(list(parts))}.`;
 }
 
 // ---------------------------------------------------------------------------

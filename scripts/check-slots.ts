@@ -18,11 +18,19 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-slots-"));
 
 const { seedIfEmpty } = await import("../src/lib/seed");
 const { getLocation } = await import("../src/lib/store");
-const { BELLINE_LOCATION_ID } = await import("../src/lib/seed-belline");
 const { startCall } = await import("../src/lib/calls");
 const { executeTool } = await import("../src/lib/agent/tools");
 const { findAvailability } = await import("../src/lib/booking");
 const { todayIn } = await import("../src/lib/time");
+const { BELLINE_LOCATION_ID } = await import("../src/lib/seed-belline");
+
+/**
+ * A customer's clinic, not Belline's own line. This suite used to run against
+ * Belline's demo-call diary; Belle books nothing now and that diary is empty,
+ * so the picker is tested where a picker is actually shown: a venue with
+ * bookable services.
+ */
+const CLINIC_ID = "loc_meridian";
 
 let passed = 0;
 let failed = 0;
@@ -32,10 +40,10 @@ function test(name: string, fn: () => void | Promise<void>) {
   queue = queue.then(async () => {
     try {
       await fn();
-      console.log(`  [32m✓[0m ${name}`);
+      console.log(`  [32m✓[0m ${name}`);
       passed++;
     } catch (err) {
-      console.log(`  [31m✗[0m ${name}`);
+      console.log(`  [31m✗[0m ${name}`);
       console.log(`      ${err instanceof Error ? err.message : String(err)}`);
       failed++;
     }
@@ -43,20 +51,25 @@ function test(name: string, fn: () => void | Promise<void>) {
 }
 
 seedIfEmpty();
-const belline = getLocation(BELLINE_LOCATION_ID)!;
+const clinic = getLocation(CLINIC_ID)!;
+const SERVICE = clinic.salon!.services[0].id;
 
-/** The next day the demo diary actually offers something. */
+/**
+ * The next day the diary actually offers something — from tomorrow, because
+ * the clinic asks for two hours' notice and today's first slots are refused
+ * as too soon once the morning is under way.
+ */
 function nextOpenDay(): string {
-  const today = todayIn(belline.timezone);
-  for (let i = 0; i < 14; i++) {
+  const today = todayIn(clinic.timezone);
+  for (let i = 1; i < 15; i++) {
     const d = new Date(`${today}T12:00:00Z`);
     d.setUTCDate(d.getUTCDate() + i);
     const day = d.toISOString().slice(0, 10);
     if (
-      findAvailability(belline, {
-        locationId: belline.id,
+      findAvailability(clinic, {
+        locationId: clinic.id,
         date: day,
-        serviceIds: ["demo_call"],
+        serviceIds: [SERVICE],
       }).length
     ) {
       return day;
@@ -80,13 +93,13 @@ function check(date: string) {
  * correctly excludes the very times this call was just quoted.
  */
 function checkOn(date: string) {
-  const call = startCall(belline, "browser", "browser-console");
+  const call = startCall(clinic, "browser", "browser-console");
   return {
     call,
     out: executeTool(
       "check_availability",
-      { date, service_ids: ["demo_call"] },
-      { location: belline, call, callerNumber: "" } as never,
+      { date, service_ids: [SERVICE] },
+      { location: clinic, call, callerNumber: "" } as never,
     ),
   };
 }
@@ -112,8 +125,8 @@ test("every time shown is one the diary would actually take", async () => {
   const options = out.result.options as { time: string }[];
   const real = new Set(
     findAvailability(
-      belline,
-      { locationId: belline.id, date: day, serviceIds: ["demo_call"] },
+      clinic,
+      { locationId: clinic.id, date: day, serviceIds: [SERVICE] },
       // As this call, not as a stranger: the times it was just quoted are
       // being held *for* it, and a search from nowhere would not see them.
       { callId: call.id },
@@ -125,16 +138,16 @@ test("every time shown is one the diary would actually take", async () => {
 });
 
 test("a day with nothing free offers nothing to tap", async () => {
-  // Sunday is not in Belline's week; the picker must stay empty rather than
-  // invent a row of times nobody can have.
+  // Friday is not in this clinic's week; the picker must stay empty rather
+  // than invent a row of times nobody can have.
   const closed = new Date(`${day}T12:00:00Z`);
-  while (closed.getUTCDay() !== 6) closed.setUTCDate(closed.getUTCDate() + 1);
+  while (closed.getUTCDay() !== 5) closed.setUTCDate(closed.getUTCDate() + 1);
   const out = (await check(closed.toISOString().slice(0, 10))) as {
     result: Record<string, unknown>;
   };
   if (out.result.available) {
-    // Saturday happens to be open here; then the assertion is simply that
-    // whatever came back is internally consistent, which the test above owns.
+    // Open after all; then the assertion is simply that whatever came back is
+    // internally consistent, which the test above owns.
     assert.ok(Array.isArray(out.result.options));
     return;
   }
@@ -170,15 +183,22 @@ test("only the transport with a screen is marked as having one", async () => {
 
 test("the opening times come from the venue's own first service", async () => {
   // Whatever is shown before anybody speaks has to be bookable, same as the
-  // rest. Belline's own venue sells one thing, so that is what is offered.
-  const services = belline.salon!.services;
-  assert.equal(services.length, 1);
-  const slots = findAvailability(belline, {
-    locationId: belline.id,
+  // rest. The session offers the first service's openings only.
+  const services = clinic.salon!.services;
+  assert.ok(services.length > 0);
+  const slots = findAvailability(clinic, {
+    locationId: clinic.id,
     date: day,
     serviceIds: [services[0].id],
   });
   assert.ok(slots.length > 0, "the opening screen would have nothing to show");
+});
+
+test("Belline's own line has no services, so its call screen shows no times", () => {
+  // voice/session.ts openingTimes() returns early on an empty service list.
+  // Belle books nothing; a row of tappable times on her call would be a lie.
+  const belline = getLocation(BELLINE_LOCATION_ID)!;
+  assert.equal(belline.salon?.services.length ?? 0, 0);
 });
 
 queue.then(() => {
