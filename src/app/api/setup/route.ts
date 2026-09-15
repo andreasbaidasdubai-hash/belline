@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { getLocation, listLocationsFor } from "@/lib/store";
-import { applyDraft, draftFromWebsite, readiness } from "@/lib/onboarding";
+import { applyDraft, readiness, setupNote } from "@/lib/onboarding";
+import { draftFromRequest } from "@/lib/onboarding/uploads";
 import { publish } from "@/lib/brain";
 import type { WeeklyHours } from "@/lib/types";
 
@@ -14,6 +15,8 @@ export const dynamic = "force-dynamic";
  * Two verbs, and the gap between them is deliberate.
  *
  *   POST /api/setup { website }   — read it, return a draft. Writes nothing.
+ *        (or multipart: website and/or up to three PDFs or images, read once
+ *        and dropped — see lib/onboarding/uploads.ts)
  *   PUT  /api/setup { ...fields } — write the draft the owner confirmed.
  *
  * Nothing a model read off a web page reaches a live venue without a person
@@ -26,37 +29,12 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const auth = await requireApiUser();
   if (auth.response) return auth.response;
-  const user = auth.user;
 
-  let body: { website?: string };
-  try {
-    body = (await req.json()) as { website?: string };
-  } catch {
-    return NextResponse.json({ error: "Send JSON." }, { status: 400 });
-  }
-
-  const website = String(body.website ?? "").trim();
-  if (!website) {
-    return NextResponse.json({ error: "Paste the address of your website." }, { status: 422 });
-  }
-
-  try {
-    const draft = await draftFromWebsite(website);
-    return NextResponse.json({ ok: true, draft });
-  } catch (err) {
-    // Everything that can go wrong here is the customer's problem to
-    // understand, not ours to hide: a typo, a site behind a login, a site that
-    // is mostly images. Say which, and let them type it in instead.
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json(
-      {
-        error: message,
-        // The route out. A business with no website is a customer too.
-        fallback: "You can skip this and tell Belline about the business yourself.",
-      },
-      { status: 422 },
-    );
-  }
+  // JSON { website } or multipart website + up to three files. Validation,
+  // reading and refusals all live in the library so they can be checked
+  // without a request scope; the files are read once there and dropped.
+  const out = await draftFromRequest(req);
+  return NextResponse.json(out.body, { status: out.status });
 }
 
 export async function PUT(req: Request) {
@@ -101,11 +79,7 @@ export async function PUT(req: Request) {
   // configuration — so "who set this up, and what did it say on the call I am
   // complaining about" has an answer from the first day rather than the
   // second.
-  publish(
-    updated.id,
-    user,
-    body.website ? `Set up from ${String(body.website)}` : "Set up by hand",
-  );
+  publish(updated.id, user, setupNote(String(body.website ?? ""), Number(body.documents) || 0));
 
   return NextResponse.json({ ok: true, readiness: readiness(updated) });
 }

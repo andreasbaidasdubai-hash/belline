@@ -32,11 +32,46 @@ interface Draft {
     staff: string[];
     faqs: { q: string; a: string }[];
   };
+  /** "" when only documents were read. */
   sourceUrl: string;
+  documents?: number;
   gaps: { field: string; question: string; why: string }[];
 }
 
 type Stage = "ask" | "reading" | "review" | "saving" | "done";
+
+// The same limits the server enforces (lib/onboarding/uploads.ts), repeated
+// here so the owner hears about a fourth file before waiting on an upload.
+// The server checks again, and checks the bytes, whatever this says.
+const MAX_FILES = 3;
+const MAX_BYTES = 10 * 1024 * 1024;
+const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp";
+const ACCEPTED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+const ACCEPTED_NAME = /\.(pdf|jpe?g|png|webp)$/i;
+
+function sizeOf(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** "example.ae", "2 documents", or "example.ae and 2 documents". */
+function readFrom(draft: Draft): string {
+  let host = "";
+  try {
+    host = draft.sourceUrl ? new URL(draft.sourceUrl).hostname : "";
+  } catch {
+    host = draft.sourceUrl;
+  }
+  const n = draft.documents ?? 0;
+  const docs = n ? `${n === 1 ? "one document" : `${n} documents`}` : "";
+  return host && docs ? `${host} and ${docs}` : host || docs;
+}
+
+/** What the owner handed over, as the owner would say it: "your site", "your documents". */
+function sourcesSay(draft: Draft): string {
+  const n = draft.documents ?? 0;
+  if (draft.sourceUrl) return n ? "your site and documents" : "your site";
+  return n === 1 ? "your document" : "your documents";
+}
 
 export default function SetupWizard({
   venueName,
@@ -51,31 +86,76 @@ export default function SetupWizard({
 }) {
   const [stage, setStage] = useState<Stage>(alreadyReady ? "done" : "ask");
   const [website, setWebsite] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
+  function addFiles(event: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(event.target.files ?? []);
+    // Cleared so choosing the same file again, after removing it, still fires.
+    event.target.value = "";
+    const next = [...files];
+    let problem: string | null = null;
+    for (const file of picked) {
+      if (next.some((f) => f.name === file.name && f.size === file.size)) continue;
+      if (!ACCEPTED_TYPES.includes(file.type) && !ACCEPTED_NAME.test(file.name)) {
+        problem = `"${file.name}" is not a PDF, JPG, PNG or WebP file.`;
+        continue;
+      }
+      if (file.size > MAX_BYTES) {
+        problem = `"${file.name}" is larger than 10 MB. Try a smaller copy, or a photo of the page.`;
+        continue;
+      }
+      if (next.length >= MAX_FILES) {
+        problem = `You can add up to ${MAX_FILES} files. Remove one to add another.`;
+        break;
+      }
+      next.push(file);
+    }
+    setFiles(next);
+    setFileError(problem);
+  }
+
+  function removeFile(index: number) {
+    setFiles(files.filter((_, i) => i !== index));
+    setFileError(null);
+  }
+
   async function read(event: React.FormEvent) {
     event.preventDefault();
-    if (!website.trim()) return;
+    if (!website.trim() && !files.length) {
+      setError("Paste your website address, or add a price list or brochure.");
+      return;
+    }
     setStage("reading");
     setError(null);
     try {
-      const res = await fetch("/api/setup", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ website }),
-      });
+      let init: RequestInit;
+      if (files.length) {
+        const form = new FormData();
+        form.set("website", website.trim());
+        for (const file of files) form.append("files", file);
+        init = { method: "POST", body: form };
+      } else {
+        init = {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ website }),
+        };
+      }
+      const res = await fetch("/api/setup", init);
       const body = (await res.json()) as { ok?: boolean; draft?: Draft; error?: string };
       if (!res.ok || !body.draft) {
-        setError(body.error ?? "Could not read that page.");
+        setError(body.error ?? (files.length ? "Could not read those." : "Could not read that page."));
         setStage("ask");
         return;
       }
       setDraft(body.draft);
       setStage("review");
     } catch {
-      setError("Could not reach that address.");
+      setError(files.length ? "Could not send those files. Check your connection and try again." : "Could not reach that address.");
       setStage("ask");
     }
   }
@@ -89,6 +169,8 @@ export default function SetupWizard({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           website: draft.sourceUrl,
+          // A count for the version note. The files themselves are long gone.
+          documents: draft.documents ?? 0,
           name: draft.found.name,
           address: answers.address || draft.found.address,
           phone: answers.phone,
@@ -114,6 +196,8 @@ export default function SetupWizard({
   }
 
   const serif = { fontFamily: "var(--bl-font-display)", fontWeight: 700 } as const;
+  // The same label as the questions on the review screen: sentence case, not the form-caps default.
+  const fieldLabel = { display: "block", textTransform: "none", letterSpacing: 0, fontSize: 14, fontWeight: 600, margin: "0 0 6px" } as const;
 
   // ---- done ---------------------------------------------------------------
 
@@ -182,7 +266,7 @@ export default function SetupWizard({
           Here's what I understood.
         </h1>
         <p style={{ color: "var(--text-2)", fontSize: 15.5, lineHeight: 1.6, maxWidth: "56ch" }}>
-          Read from {new URL(draft.sourceUrl).hostname}. Change anything that is
+          Read from {readFrom(draft)}. Change anything that is
           wrong — Belline will say exactly what is on this screen, so a price
           that is out of date here is a price a customer gets told.
         </p>
@@ -200,7 +284,7 @@ export default function SetupWizard({
                     <span>{s.name}</span>
                     <span className="muted" style={{ fontSize: 13 }}>
                       {s.durationMin} min
-                      {s.price ? ` · ${s.price}` : " · no price on your site"}
+                      {s.price ? ` · ${s.price}` : ` · no price on ${sourcesSay(draft)}`}
                     </span>
                   </div>
                 ))}
@@ -226,7 +310,13 @@ export default function SetupWizard({
         {draft.gaps.length > 0 && (
           <>
             <h2 style={{ ...serif, fontSize: 22, letterSpacing: "-0.015em", margin: "36px 0 6px" }}>
-              {draft.gaps.length === 1 ? "One thing your site doesn't say." : `${draft.gaps.length} things your site doesn't say.`}
+              {(() => {
+                const what = sourcesSay(draft);
+                const verb = what === "your site" || what === "your document" ? "doesn't" : "don't";
+                return draft.gaps.length === 1
+                  ? `One thing ${what} ${verb} say.`
+                  : `${draft.gaps.length} things ${what} ${verb} say.`;
+              })()}
             </h2>
             <p className="muted" style={{ fontSize: 13.5, margin: "0 0 20px" }}>
               Skip any of them — you can add them later, and Belline will say it
@@ -295,36 +385,123 @@ export default function SetupWizard({
         anything goes live.
       </p>
 
-      <form onSubmit={read} style={{ marginTop: 28, display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <label htmlFor="setup-website" className="sr-only">
-          Your website address
-        </label>
-        {/* Not type="url": the browser refuses "yourbusiness.ae" without https://,
-            which is how nearly everybody types it. */}
-        <input
-          id="setup-website"
-          type="text"
-          inputMode="url"
-          autoComplete="url"
-          aria-label="Your website address"
-          value={website}
-          onChange={(e) => setWebsite(e.target.value)}
-          placeholder="yourbusiness.ae"
-          autoFocus
-          required
-          spellCheck={false}
-          style={{ flex: "1 1 280px", padding: "12px 14px", fontSize: 15 }}
-          disabled={stage === "reading"}
-        />
-        <button className="btn btn-accent" type="submit" disabled={stage === "reading"} style={{ padding: "12px 22px" }}>
-          {stage === "reading" ? "Reading it…" : "Read my website"}
-        </button>
+      <form onSubmit={read} style={{ marginTop: 28, display: "grid", gap: 22 }}>
+        <div>
+          <label htmlFor="setup-website" style={fieldLabel}>
+            Your website address
+          </label>
+          {/* Not type="url": the browser refuses "yourbusiness.ae" without https://,
+              which is how nearly everybody types it. */}
+          <input
+            id="setup-website"
+            type="text"
+            inputMode="url"
+            autoComplete="url"
+            aria-label="Your website address"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            placeholder="yourbusiness.ae"
+            autoFocus
+            spellCheck={false}
+            style={{ padding: "12px 14px", fontSize: 15 }}
+            disabled={stage === "reading"}
+          />
+        </div>
+
+        <div
+          style={{
+            border: "1px dashed var(--border)",
+            borderRadius: 12,
+            background: "var(--panel)",
+            padding: "16px 16px 14px",
+          }}
+        >
+          <label htmlFor="setup-files" style={fieldLabel}>
+            Add a price list or brochure
+          </label>
+          <p id="setup-files-hint" className="muted" style={{ fontSize: 12.5, margin: "0 0 10px", lineHeight: 1.5 }}>
+            Up to {MAX_FILES} files — PDF, JPG, PNG or WebP, 10 MB each. Your website, your files, or both.
+          </p>
+          <style>{`
+            .setup-files { padding: 8px; font-size: 14px; background: var(--bg); cursor: pointer; }
+            .setup-files::file-selector-button {
+              font: inherit; font-weight: 600; margin-right: 12px; padding: 8px 14px; min-height: 38px;
+              border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--text); cursor: pointer;
+            }
+            .setup-files:hover::file-selector-button { border-color: var(--accent-line); background: var(--panel-2); }
+          `}</style>
+          <input
+            id="setup-files"
+            className="setup-files"
+            type="file"
+            multiple
+            accept={ACCEPT}
+            aria-describedby={fileError ? "setup-files-hint setup-files-error" : "setup-files-hint"}
+            onChange={addFiles}
+            disabled={stage === "reading" || files.length >= MAX_FILES}
+          />
+
+          {fileError && (
+            <p id="setup-files-error" role="alert" style={{ fontSize: 13, color: "var(--bad)", margin: "10px 0 0" }}>
+              {fileError}
+            </p>
+          )}
+
+          {files.length > 0 && (
+            <ul aria-label="Files to read" style={{ listStyle: "none", margin: "12px 0 0", padding: 0, display: "grid", gap: 8 }}>
+              {files.map((file, i) => (
+                <li
+                  key={`${file.name}-${file.size}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "6px 6px 6px 12px",
+                    border: "1px solid var(--border-soft)",
+                    borderRadius: 10,
+                    background: "var(--bg)",
+                  }}
+                >
+                  <span style={{ flex: "1 1 auto", minWidth: 0, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {file.name}
+                  </span>
+                  <span className="muted" style={{ fontSize: 12.5, flex: "none" }}>
+                    {sizeOf(file.size)}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => removeFile(i)}
+                    disabled={stage === "reading"}
+                    aria-label={`Remove ${file.name}`}
+                    style={{ padding: "6px 12px", fontSize: 13, flex: "none" }}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div>
+          <button className="btn btn-accent" type="submit" disabled={stage === "reading"} style={{ padding: "12px 22px" }}>
+            {stage === "reading"
+              ? "Reading it…"
+              : files.length && website.trim()
+                ? "Read my website and files"
+                : files.length
+                  ? files.length === 1
+                    ? "Read my file"
+                    : "Read my files"
+                  : "Read my website"}
+          </button>
+        </div>
       </form>
 
       {stage === "reading" && (
-        <p className="muted" style={{ fontSize: 13, marginTop: 16 }}>
-          This takes a few seconds — it is reading the whole site, not just the
-          front page.
+        <p className="muted" role="status" style={{ fontSize: 13, marginTop: 16 }}>
+          This takes a few seconds.
         </p>
       )}
 
