@@ -1,57 +1,60 @@
 /**
  * Die Marke, an einer Stelle.
  *
- * Seit dem 15.09.2026: die Glocke in Messing, daneben "Belline" in
- * Instrument Sans, fett und eng gesetzt. Die Serifen-Wortmarke wirkte neben
- * dem Produkt altmodisch; die Glocke bleibt, weil sie das Zeichen ist, das
- * überall sonst steht — Favicon, WhatsApp-Profilbild, die Knöpfe zu Belle.
+ * Direction C, "The Bell Button" (15.09.2026): the bell sits in a solid Bell
+ * Brass badge, ink on brass, and the name is set in Bricolage Grotesque 700.
+ * The badge is the logo, the app icon, the avatar and the shape of the primary
+ * button, so it looks the same here as on belline.ai and in public/brand/.
  *
- * Inline gesetzt erbt die Wortmarke Farbe und Schrift der Seite — hell auf
- * dunkel und dunkel auf hell aus demselben Markup, ohne zweite Datei.
+ * The wordmark inherits the text colour of the page, so the same markup reads
+ * on light and dark grounds.
  */
 export default function Brand({
   size = 26,
   words = true,
   tone,
 }: {
-  /** Höhe der Glocke in Pixeln. Die Wortmarke skaliert mit. */
+  /** Nominal size in pixels. The badge is 1.15x, the name 0.9x (canvas: 28 badge, 21 name at 24). */
   size?: number;
-  /** false: nur die Glocke, etwa wo der Name schon danebensteht. */
+  /** false: the badge alone, where the name already stands beside it. */
   words?: boolean;
-  /** Farbe der Glocke. Unbesetzt Messing. */
+  /** Badge colour. Unset: Bell Brass. The bell stays ink, so pass a colour ink reads on. */
   tone?: string;
 }) {
+  const badge = Math.round(size * 1.15);
   return (
     <span
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: Math.round(size * 0.36),
+        gap: Math.round(badge * 0.29),
         color: "inherit",
         textDecoration: "none",
       }}
     >
       <svg
         viewBox="0 0 48 48"
-        width={size}
-        height={size}
-        fill="none"
+        width={badge}
+        height={badge}
         aria-hidden={words ? "true" : undefined}
         role={words ? undefined : "img"}
         aria-label={words ? undefined : "Belline"}
-        style={{ display: "block", color: tone ?? "var(--brass)", flexShrink: 0 }}
+        style={{ display: "block", flexShrink: 0 }}
       >
-        <circle cx="24" cy="9.5" r="3.5" fill="currentColor" />
-        <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor" />
-        <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor" />
+        <circle cx="24" cy="24" r="24" fill={tone ?? "var(--bl-brass)"} />
+        <g fill="#111111" transform="matrix(0.6 0 0 0.6 9.6 9.81)">
+          <circle cx="24" cy="10" r="4.2" />
+          <path d="M8.5 32a15.5 15.5 0 0 1 31 0Z" />
+          <rect x="5" y="34.5" width="38" height="7" rx="3.5" />
+        </g>
       </svg>
       {words && (
         <span
           style={{
-            fontFamily: '"Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif',
-            fontSize: Math.round(size * 1.05),
+            fontFamily: "var(--bl-font-display)",
+            fontSize: Math.round(size * 0.9),
             fontWeight: 700,
-            letterSpacing: "-0.03em",
+            letterSpacing: "-0.04em",
             lineHeight: 1,
             whiteSpace: "nowrap",
           }}

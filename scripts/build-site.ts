@@ -200,10 +200,31 @@ const TEXT = /\.(html|css|js|json)$/i;
 // bytes, and every reference follows.
 const HASHED = /\.(css|js|mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
 
+/**
+ * The brand tokens, inlined.
+ *
+ * public/site.css imports /brand/tokens.css so the dashboard and the site read
+ * one file. Left as an @import, every visitor would pay a second render-blocking
+ * request; inlined, the tokens ship inside the hashed stylesheet. The hash is
+ * taken over the inlined bytes, so a token change is a new stylesheet URL.
+ */
+const TOKENS_IMPORT = '@import url("/brand/tokens.css");';
+function assetBytes(asset: string): Buffer {
+  const bytes = fs.readFileSync(path.join(SOURCE, asset));
+  if (asset !== "site.css") return bytes;
+  const css = bytes.toString("utf8");
+  if (!css.includes(TOKENS_IMPORT)) {
+    console.error(`\n  site.css no longer imports the brand tokens (${TOKENS_IMPORT}).\n`);
+    process.exit(1);
+  }
+  const tokens = fs.readFileSync(path.join(SOURCE, "brand", "tokens.css"), "utf8");
+  return Buffer.from(css.replace(TOKENS_IMPORT, tokens), "utf8");
+}
+
 const hashedName = new Map<string, string>();
 for (const asset of assets) {
   if (!HASHED.test(asset)) continue;
-  const bytes = fs.readFileSync(path.join(SOURCE, asset));
+  const bytes = assetBytes(asset);
   const hash = crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 8);
   const ext = path.posix.extname(asset);
   hashedName.set(asset, `${asset.slice(0, -ext.length)}.${hash}${ext}`);
@@ -266,7 +287,7 @@ for (const asset of assets) {
   if (TEXT.test(asset)) {
     // site.js fetches /call-scenes.json, and call-scenes.json names the audio
     // files. Both have to follow the rename or the Listen button goes quiet.
-    fs.writeFileSync(target, repoint(fs.readFileSync(path.join(SOURCE, asset), "utf8")), "utf8");
+    fs.writeFileSync(target, repoint(assetBytes(asset).toString("utf8")), "utf8");
   } else {
     fs.copyFileSync(path.join(SOURCE, asset), target);
   }
@@ -348,6 +369,13 @@ const MARK = `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
     <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
   </svg>`;
 
+/**
+ * The bell button, for the header and footer lockups (Direction C): an ink
+ * bell on a Bell Brass badge. Logo colours are fixed, so hex rather than
+ * currentColor. The geometry is public/brand/belline-mark.svg.
+ */
+const BADGE = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" fill="#AD8639"/><g fill="#111111" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>`;
+
 /** Die Glocke im Sprechblasen-Umriss. Dasselbe Zeichen, getippt statt gesprochen. */
 const BUBBLE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M3 11.2C3 6.9 7.03 3.5 12 3.5s9 3.4 9 7.7c0 4.3-4.03 7.7-9 7.7a11 11 0 0 1-2.4-.26L5.4 20.5l.5-3.2A7.7 7.7 0 0 1 3 11.2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
@@ -419,9 +447,10 @@ function verticalPage(v: Vertical): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/icon.svg">
-<meta name="theme-color" content="#FBF9F5">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#FCFAF6">
 <title>${esc(v.title)}</title>
 <meta name="description" content="${esc(v.description)}">
 <link rel="canonical" href="${ORIGIN}/${v.slug}">
@@ -430,17 +459,17 @@ function verticalPage(v: Vertical): string {
 <meta property="og:url" content="${ORIGIN}/${v.slug}">
 <meta property="og:title" content="${esc(v.title)}">
 <meta property="og:description" content="${esc(v.description)}">
-<meta property="og:image" content="${ORIGIN}/img/og.jpg">
+<meta property="og:image" content="${ORIGIN}/brand/belline-og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="A concierge bell on a reception counter, a call arriving on a phone beside it.">
+<meta property="og:image:alt" content="The Belline bell button beside the words: Someone always answers.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(v.title)}">
 <meta name="twitter:description" content="${esc(v.description)}">
-<meta name="twitter:image" content="${ORIGIN}/img/og.jpg">
+<meta name="twitter:image" content="${ORIGIN}/brand/belline-og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
@@ -448,7 +477,7 @@ function verticalPage(v: Vertical): string {
 <header class="top">
   <div class="wrap top-in">
     <a class="brand" href="/">
-      ${MARK}
+      ${BADGE}
       <span>Belline</span>
     </a>
     <nav id="site-nav" data-open="false">
@@ -588,7 +617,7 @@ ${CALL_PANEL}
 <footer>
   <div class="wrap foot-in">
     <a class="brand" href="/">
-      ${MARK}
+      ${BADGE}
       <span>Belline</span>
     </a>
     <p>

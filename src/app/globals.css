@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Brand tokens (Direction C): the same file the marketing site uses. */
+@import "../../public/brand/tokens.css";
 
 /* ---------------------------------------------------------------------------
    Light, warm, quiet.
@@ -14,36 +16,33 @@
      Varianten derselben Idee, die nebeneinander wie zwei Produkte aussahen.
      Die Namen bleiben, damit nichts anderes angefasst werden muss; nur die
      Werte ändern sich. */
-  --bg: #F4F0E8;
-  --panel: #FBF9F5;
-  --panel-2: #F0EBE1;
-  --border: rgba(20, 17, 13, 0.13);
-  --border-soft: rgba(20, 17, 13, 0.07);
-  --text: #14110D;
-  --text-2: #4A443C;
-  /* #7D7469 lag auf beiden Untergründen knapp unter 4.5:1 — auf der Website
-     ist derselbe Ton durch die WCAG-Prüfung gefallen. Hier prüft nichts
-     automatisch, also steht der geprüfte Wert. */
-  --muted: #746C63;
-  --accent: #14110D;
-  --accent-soft: #EAE3D6;
-  --accent-line: #C9BEAC;
-  /* Messing wie in public/site.css. Die Marke wechselt beim Klick von der
-     Website ins Dashboard; zwei Messingtöne über diese Grenze sieht man. */
-  --gold: #8A672E;
-  --gold-ink: #8A6432;
-  --brass: #8A672E;
-  /* Messing auf Tinte statt auf Papier. Der dunkle Ton oben ist für Text auf
-     hellem Grund abgedunkelt; auf der schwarzen Anrufleiste wäre er fast
-     unsichtbar, und ein Fokusrahmen, den man nicht sieht, ist keiner. */
-  --gold-lit: #CDAA70;
-  --ok: #2F6B4F;
-  --ok-soft: #E2EBE4;
-  --warn: #8A5A1E;
-  --warn-soft: #F3E8D8;
-  --bad: #A33327;
-  --bad-soft: #F4E3E0;
-  --lift: 0 1px 2px rgba(20, 17, 13, 0.05);
+  /* Mapped onto public/brand/tokens.css (Direction C). The names stay so
+     nothing else has to change; ratios are recorded in docs/brand/guidelines.md. */
+  --bg: var(--bl-ivory);
+  --panel: var(--bl-white);
+  --panel-2: var(--bl-sand);
+  --border: var(--bl-rule);
+  --border-soft: var(--bl-rule-soft);
+  --text: var(--bl-ink);
+  --text-2: var(--bl-graphite);
+  --muted: var(--bl-stone);
+  --accent: var(--bl-ink);
+  --accent-soft: var(--bl-brass-tint);
+  --accent-line: var(--bl-rule-brass);
+  /* One brass for text on light grounds; the near-duplicate is gone. */
+  --gold: var(--bl-brass-desk);
+  --gold-ink: var(--bl-brass-desk);
+  --brass: var(--bl-brass-desk);
+  --brass-fill: var(--bl-brass);
+  /* Brass on ink surfaces (the call bar), where desk brass would vanish. */
+  --gold-lit: var(--bl-brass-lit);
+  --ok: var(--bl-lagoon);
+  --ok-soft: var(--bl-lagoon-tint);
+  --warn: var(--bl-brass-desk);
+  --warn-soft: var(--bl-brass-tint);
+  --bad: var(--bl-alert);
+  --bad-soft: var(--bl-alert-tint);
+  --lift: var(--bl-elev-0);
 
   color-scheme: light;
 }
@@ -77,7 +76,7 @@ a {
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--bl-radius-panel);
   box-shadow: var(--lift);
 }
 
@@ -124,6 +123,36 @@ details > summary::marker {
   white-space: nowrap;
 }
 
+/* Status badges (Direction C), the same as public/site.css. Available is
+   Lagoon on its tint (5.30:1), Beta desk brass on brass tint (4.99:1), Coming
+   soon a stone outline, Request an ink outline. */
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: var(--bl-radius-pill);
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.state-available { background: var(--bl-lagoon-tint); color: var(--bl-lagoon); }
+.state-available::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.state-beta { background: var(--bl-brass-tint); color: var(--bl-brass-desk); }
+.state-soon { border-color: var(--bl-rule-strong); color: var(--bl-stone); font-weight: 500; }
+.state-request { border-color: var(--bl-ink); color: var(--bl-ink); }
+
+/* Page titles in the display face. Placed here, with a selector that outranks
+   the .page-title rule further down, so that rule's size and spacing stay. */
+html .page-title {
+  font-family: var(--bl-font-display);
+  font-weight: 700;
+  letter-spacing: var(--bl-track-h1);
+}
+
 .loc-tabs {
   display: flex;
   gap: 6px;
@@ -145,7 +174,7 @@ details > summary::marker {
   justify-content: center;
   gap: 8px;
   padding: 9px 16px;
-  border-radius: 9px;
+  border-radius: var(--bl-radius-pill);
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
@@ -169,16 +198,18 @@ details > summary::marker {
   box-shadow: none;
 }
 
+/* The primary action: Bell Brass with ink words (5.62:1). White never sits on brass. */
 .btn-accent {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--bl-brass);
+  border-color: var(--bl-brass);
+  color: var(--bl-ink);
+  font-weight: 600;
 }
 
 .btn-accent:hover:not(:disabled) {
-  background: #2F2822;
-  border-color: #2F2822;
-  color: #fff;
+  background: var(--bl-ink);
+  border-color: var(--bl-ink);
+  color: var(--bl-ivory);
 }
 
 /* The selected one of a pair of view switches. Reads as pressed rather than
@@ -204,7 +235,7 @@ textarea,
 select {
   width: 100%;
   padding: 9px 12px;
-  border-radius: 9px;
+  border-radius: var(--bl-radius-input);
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
@@ -239,12 +270,13 @@ input:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: var(--accent-line);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  /* Focus ring: Lagoon 2px (border + 1px ring). */
+  border-color: var(--bl-lagoon);
+  box-shadow: 0 0 0 1px var(--bl-lagoon);
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--bl-lagoon);
   outline-offset: 2px;
 }
 
@@ -1521,10 +1553,10 @@ body:has(.callbar) {
    sah er aus wie eine App-Überschrift, in der Antiqua wie ein Schild an einer
    Tür — und dasselbe Schild steht auf der Seite, von der der Anruf kam. */
 .callbar-text strong {
-  font-family: "Fraunces", Georgia, serif;
+  font-family: var(--bl-font-display);
   font-size: clamp(34px, 10vw, 52px);
-  font-weight: 400;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: var(--bl-track-h1);
   line-height: 1;
 }
 .callbar-text span {

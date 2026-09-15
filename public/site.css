@@ -3,15 +3,21 @@
    gegen etwas Bestehendes, und die Begründung steht dabei, weil "es sieht
    besser aus" in drei Wochen niemandem mehr hilft. */
 
+/* Brand tokens (Direction C) from the one shared source. scripts/build-site.ts
+   inlines this file into the built stylesheet, so production makes no extra
+   request; served straight from public/ it is a normal import. */
+@import url("/brand/tokens.css");
+
+/* The site's own names, mapped onto the brand tokens. */
 :root {
   /* Warmes Papier statt reinem Weiß. #FFFFFF ist auf einem Bildschirm eine
      Lichtquelle; Papier ist es nicht, und die ganze Haltung dieser Seite ist
      gedruckt, nicht beleuchtet. */
-  --paper: #FBF9F5;
-  --paper-2: #F4F0E8;
-  --ink: #14110D;
-  --ink-2: #4A443C;
-  --ink-3: #746C63;
+  --paper: var(--bl-ivory);
+  --paper-2: var(--bl-sand);
+  --ink: var(--bl-ink);
+  --ink-2: var(--bl-graphite);
+  --ink-3: var(--bl-stone);
 
   /* Messing, nicht Gold. Der alte Verlauf wollte teuer wirken und wirkte
      digital; ein einzelner gedeckter Ton, sparsam eingesetzt, wirkt teuer,
@@ -23,18 +29,19 @@
      3.58 und fiel durch die Prüfung. Dasselbe galt für das Grau: #8A8176 lag
      bei 3.64. Beide sind so weit abgedunkelt, dass sie auf *beiden* Papieren
      bestehen, und keinen Schritt weiter. */
-  --brass: #8A672E;
-  --brass-soft: #E8DCC6;
+  --brass: var(--bl-brass-desk);
+  --brass-soft: var(--bl-brass-tint);
+  --brass-fill: var(--bl-brass);
 
   /* Haarlinien. Eine 1px-Linie in Tinte bei 12% ist das, was gedruckte
      Sachen benutzen, statt Karten mit Schatten übereinanderzustapeln. */
-  --rule: rgba(20, 17, 13, 0.12);
-  --rule-soft: rgba(20, 17, 13, 0.07);
+  --rule: var(--bl-rule);
+  --rule-soft: var(--bl-rule-soft);
 
   /* Die Auszeichnungsschrift, an einer Stelle.
      Vorher stand '"Instrument Serif", Georgia, serif' achtzehnmal im
      Stylesheet; ein Wechsel war eine Suche, bei der man eine übersieht. */
-  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --serif: var(--bl-font-display); /* Bricolage Grotesque since Direction C; the name stays so every rule follows */
 
   color-scheme: light;
 }
@@ -77,22 +84,22 @@ body {
 
 .display {
   font-family: var(--serif);
-  font-weight: 400;
-  /* Große Antiqua verträgt — und braucht — negative Laufweite und eine
-     Zeilenhöhe unter 1. Auf Defaults gesetzt wirkt sie schlaff. */
-  letter-spacing: -0.015em;
-  line-height: 1.04;
+  /* Direction C: Bricolage Grotesque 700, tight. The optical-size axis gives
+     the big sizes their inky warmth on its own. */
+  font-weight: 700;
+  letter-spacing: var(--bl-track-h1);
+  line-height: 1;
   text-wrap: balance;
   margin: 0;
 }
 
-h1.display { font-size: clamp(2.6rem, 1.5rem + 4.4vw, 5.4rem); }
-h2.display { font-size: clamp(1.85rem, 1.25rem + 2.1vw, 2.9rem); }
+h1.display { font-size: clamp(2.6rem, 1.5rem + 4.4vw, 5.4rem); letter-spacing: var(--bl-track-display); line-height: 0.96; }
+h2.display { font-size: clamp(1.85rem, 1.25rem + 2.1vw, 2.9rem); font-weight: 650; letter-spacing: var(--bl-track-h2); line-height: 1.08; }
 
 .eyebrow {
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.2em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: var(--bl-track-label);
   text-transform: uppercase;
   color: var(--brass);
   margin: 0 0 22px;
@@ -102,6 +109,9 @@ p { margin: 0 0 18px; color: var(--ink-2); max-width: 62ch; }
 .lead { font-size: 1.2rem; line-height: 1.5; color: var(--ink-2); }
 
 a { color: inherit; }
+
+/* Focus ring: Lagoon 2px (Direction C). Rules below that set their own win. */
+:focus-visible { outline: var(--bl-focus); outline-offset: var(--bl-focus-offset); }
 
 /* --- Kopfzeile -------------------------------------------------------------
    Eine Haarlinie statt einer Leiste mit Schatten. Nichts schwebt. */
@@ -135,13 +145,16 @@ a { color: inherit; }
 /* Glocke in Messing, daneben die Wortmarke in Instrument Sans, fett und eng
    (15.09.2026) — statt der Fraunces-Antiqua. Die Glocke ist so hoch wie die
    Versalhöhe plus Unterlänge des Namens, damit beides als eine Zeile steht. */
-.brand svg { width: 28px; height: 28px; color: var(--brass); display: block; }
-footer .brand svg { width: 25px; height: 25px; }
+/* Direction C: the bell button (brass badge, ink bell) and the name in
+   Bricolage Grotesque 700. Header lockup 38px badge / 28px name, as on the
+   approved canvas. */
+.brand svg { width: 38px; height: 38px; display: block; flex: none; }
+footer .brand svg { width: 32px; height: 32px; }
 .brand span {
-  font-family: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--bl-font-display);
   font-size: 1.75rem;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: var(--bl-track-display);
   line-height: 1;
 }
 footer .brand span { font-size: 1.55rem; }
@@ -161,11 +174,13 @@ footer .brand span { font-size: 1.55rem; }
 .top nav .nav-cta {
   padding: 9px 20px;
   border-radius: 999px;
-  background: var(--ink);
-  color: var(--paper);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
   border-bottom: 0;
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
-.top nav .nav-cta:hover { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.top nav .nav-cta:hover { background: var(--brass-fill); color: var(--ink); box-shadow: inset 0 0 0 1px var(--brass-fill); }
 /* Sichtbar neben "Get Belline", wie gewünscht — aber als Textzeile, nicht als
    zweite Pille. Zwei gleich schwere Pillen nebeneinander sind zwei
    Hauptknöpfe, und die Seite hat genau einen. */
@@ -212,25 +227,38 @@ footer .brand span { font-size: 1.55rem; }
    Kein 8px-Radius auf allem. Die primäre Handlung ist eine gefüllte Pille,
    die sekundäre eine Linie — zwei Formen, nicht zwei Grautöne. */
 
+/* Direction C: the primary is Bell Brass with ink words (5.62:1) and carries
+   the bell button at its leading edge; the secondary is an ink outline. White
+   never sits on brass (3.36:1). */
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   padding: 15px 28px;
   border-radius: 999px;
-  border: 1px solid var(--ink);
-  background: var(--ink);
-  color: var(--paper);
+  border: 1px solid var(--brass-fill);
+  background: var(--brass-fill);
+  color: var(--ink);
   font: inherit;
   font-size: 0.98rem;
-  font-weight: 500;
+  font-weight: 600;
   text-decoration: none;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-.btn:hover { background: transparent; color: var(--ink); }
-.btn.line { background: transparent; color: var(--ink); border-color: var(--rule); }
-.btn.line:hover { border-color: var(--ink); }
+.btn:not(.line):not(:has(svg)) { padding-left: 6px; }
+.btn:not(.line):not(:has(svg))::before {
+  content: "";
+  flex: none;
+  width: 38px;
+  height: 38px;
+  margin-block: -9px;
+  background: url("/brand/belline-mark-inverse.svg") center / contain no-repeat;
+}
+.btn:hover { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.btn:not(.line):not(:has(svg)):hover::before { background-image: url("/brand/belline-mark.svg"); }
+.btn.line { background: transparent; color: var(--ink); border-color: var(--ink); }
+.btn.line:hover { background: var(--ink); color: var(--paper); }
 .btn svg { width: 17px; height: 17px; }
 
 /* --- Hero ------------------------------------------------------------------
@@ -264,6 +292,7 @@ footer .brand span { font-size: 1.55rem; }
 .fact:last-child { border-right: 0; }
 .fact .n {
   font-family: var(--serif);
+  font-weight: 700;
   font-size: 2.4rem;
   line-height: 1;
   letter-spacing: -0.02em;
@@ -683,8 +712,9 @@ section { padding: 110px 0; }
      genau eine Zeilenhoehe hoch (font-size mal line-height), sonst sitzt der
      Preis daneben sechs Pixel hoeher als der in der Mitte. */
   min-height: 1.55em;
-  font-size: 0.66rem;
-  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: var(--bl-track-label);
   text-transform: uppercase;
   color: var(--brass);
   margin-bottom: 14px;
@@ -702,6 +732,7 @@ section { padding: 110px 0; }
 .plan-price .amt {
   display: block;
   font-family: var(--serif);
+  font-weight: 700;
   font-size: 2.9rem;
   line-height: 1;
   letter-spacing: -0.025em;
@@ -861,10 +892,10 @@ section { padding: 110px 0; }
 .book-form input:focus,
 .book-form select:focus,
 .book-form textarea:focus { outline: none; border-bottom-color: var(--ink); }
-.book-form input.is-bad, .book-form select.is-bad { border-bottom-color: #A33327; }
+.book-form input.is-bad, .book-form select.is-bad { border-bottom-color: var(--bl-alert); }
 .book-form input.is-hint { border-bottom-color: var(--brass); }
 
-.f-err { font-size: 0.8rem; font-style: normal; color: #A33327; }
+.f-err { font-size: 0.8rem; font-style: normal; color: var(--bl-alert); }
 .f-err.is-hint { color: var(--brass); }
 .f-err button {
   appearance: none; border: 0; background: none; font: inherit; font-size: inherit;
@@ -872,8 +903,8 @@ section { padding: 110px 0; }
 }
 .book-submit { justify-content: center; margin-top: 6px; }
 .f-note { font-size: 0.82rem; color: var(--ink-3); margin: 0; }
-.f-note.is-good { color: #2F6B4F; }
-.f-note.is-bad { color: #A33327; }
+.f-note.is-good { color: var(--bl-lagoon); }
+.f-note.is-bad { color: var(--bl-alert); }
 
 /* --- Was die verpassten Anrufe wert sind ----------------------------------- */
 .roi { max-width: 760px; margin-top: 34px; }
@@ -920,8 +951,10 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   gap: 12px;
   padding: 16px 26px 16px 22px;
   border-radius: 999px;
-  background: var(--ink);
-  color: var(--paper);
+  /* The floating bell is the bell button: brass with ink, as on the canvas. */
+  background: var(--brass-fill);
+  color: var(--ink);
+  font-weight: 600;
   text-decoration: none;
   font-size: 0.98rem;
   font-weight: 500;
@@ -930,7 +963,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 }
 .bell-fab { isolation: isolate; }
 .bell-fab[hidden] { display: none; }
-.bell-fab svg { width: 27px; height: 27px; display: block; color: var(--brass-soft); }
+.bell-fab svg { width: 27px; height: 27px; display: block; color: var(--ink); }
 
 /* Ein Telefon, das klingelt.
  *
@@ -1878,10 +1911,11 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   border-top: 1px solid var(--rule);
 }
 .channels > div { padding: 32px 0; border-bottom: 1px solid var(--rule-soft); }
+.channel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
 .channels h3 {
-  margin: 0 0 12px;
+  margin: 0;
   font-family: var(--serif);
-  font-weight: 500;
+  font-weight: 600;
   font-size: 1.5rem;
   letter-spacing: -0.015em;
 }
@@ -1892,6 +1926,29 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   font-size: 0.86rem !important;
   color: var(--brass);
 }
+
+/* --- Status badges (Direction C) --------------------------------------------
+   Available: Lagoon on its tint, 5.30:1. Beta: desk brass on brass tint,
+   4.99:1. Coming soon: stone outline, 5.22:1 on ivory. Request: ink outline.
+   Lagoon is for states only. Mirrored in src/app/globals.css. */
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: var(--bl-radius-pill);
+  border: 1px solid transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.state-available { background: var(--bl-lagoon-tint); color: var(--bl-lagoon); }
+.state-available::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.state-beta { background: var(--bl-brass-tint); color: var(--bl-brass-desk); }
+.state-soon { border-color: var(--bl-rule-strong); color: var(--bl-stone); font-weight: 500; }
+.state-request { border-color: var(--bl-ink); color: var(--bl-ink); }
 
 /* Was noch nicht läuft, steht trotzdem da — nur eben als Notiz und nicht als
    Versprechen. Ruhiger gesetzt als die Kanäle darüber, weil es keiner ist. */

@@ -1,23 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Belline">
-  <!--
-    Das Favicon.
-
-    Eine Kachel, weil ein Favicon auf einem Tab-Hintergrund liegt, den wir
-    nicht kennen — hell in einem Fenster, dunkel im nächsten. Eine freistehende
-    Marke verschwindet in einem der beiden Fälle; eine Kachel bringt ihren
-    eigenen Kontrast mit.
-
-    Die alte Version war eine Glocke mit Goldverlauf, Schallwellen und einem
-    zweiten Sockel darunter. Bei 16 Pixeln — also überall, wo ein Favicon
-    tatsächlich vorkommt — war davon nichts mehr zu erkennen.
-
-    Die Geometrie ist dieselbe wie in mark.svg, auf 64 skaliert und mittig
-    gesetzt: eine Marke, die sich je nach Größe anders verhält, ist zwei.
-  -->
-  <rect width="64" height="64" rx="14" fill="#14110D"/>
-  <g transform="translate(9.33 9.33) scale(0.9167)" fill="#E8DCC6">
-    <circle cx="24" cy="9.5" r="3.5"/>
-    <path d="M9 31.5a15 15 0 0 1 30 0Z"/>
-    <rect x="5" y="35" width="38" height="5.5" rx="2.75"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Belline">
+<!-- Favicon: the Belline bell button (Direction C). Source of truth: public/brand/. -->
+<g transform="translate(0 0) scale(1)"><circle cx="24" cy="24" r="24" fill="#AD8639"/><g fill="#111111" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></g>
 </svg>

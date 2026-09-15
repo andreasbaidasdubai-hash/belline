@@ -5,7 +5,25 @@ export const metadata: Metadata = {
   title: "Belline — AI reception",
   description:
     "AI voice reception for restaurants, salons and clinics: answers the phone, checks real availability, books, changes and cancels.",
-  icons: { icon: "/icon.svg", apple: "/icon.svg" },
+  metadataBase: new URL("https://app.belline.ai"),
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  openGraph: {
+    siteName: "Belline",
+    images: [
+      {
+        url: "/brand/belline-og.png",
+        width: 1200,
+        height: 630,
+        alt: "The Belline bell button beside the words: Someone always answers.",
+      },
+    ],
+  },
 };
 
 export const viewport: Viewport = {
@@ -29,7 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
       </head>

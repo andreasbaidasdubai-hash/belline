@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" role="img" aria-label="Belline">
+  <!-- The 16px drawing: knob squared to 2px, 1px gaps, 2px base. Used at 16 and 32 only. -->
+  <circle cx="8" cy="8" r="8" fill="#AD8639"/>
+  <g fill="#111111">
+    <rect x="7" y="3" width="2" height="2" rx="1"/>
+    <path d="M3.5 10.5a4.5 4.5 0 0 1 9 0Z"/>
+    <rect x="3" y="11.5" width="10" height="2" rx="1"/>
+  </g>
+</svg>

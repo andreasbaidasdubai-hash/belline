@@ -31,8 +31,8 @@ export default function WhatsAppPage() {
         display: "grid",
         placeItems: "center",
         padding: 24,
-        background: "#FBF9F5",
-        color: "#14110D",
+        background: "#FCFAF6",
+        color: "#111111",
         fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif',
       }}
     >
@@ -43,15 +43,15 @@ export default function WhatsAppPage() {
             fontSize: 11.5,
             letterSpacing: "0.14em",
             textTransform: "uppercase",
-            color: "#8A672E",
+            color: "#7E5E28",
           }}
         >
           WhatsApp Belle
         </p>
         <h1
           style={{
-            fontFamily: 'Fraunces, Georgia, serif',
-            fontWeight: 400,
+            fontFamily: "var(--bl-font-display)",
+            fontWeight: 700,
             fontSize: 34,
             lineHeight: 1.1,
             letterSpacing: "-0.02em",
@@ -60,7 +60,7 @@ export default function WhatsAppPage() {
         >
           Not on WhatsApp yet.
         </h1>
-        <p style={{ fontSize: 16, lineHeight: 1.55, margin: 0, color: "#4A443C" }}>
+        <p style={{ fontSize: 16, lineHeight: 1.55, margin: 0, color: "#55504A" }}>
           The WhatsApp line is built and runs on the same receptionist as everything else, but
           Meta&rsquo;s business verification has to clear before a number can answer. This
           page will take you straight to her the day it does. Until then, two ways that work
@@ -72,8 +72,8 @@ export default function WhatsAppPage() {
             style={{
               padding: "13px 22px",
               borderRadius: 999,
-              background: "#14110D",
-              color: "#FBF9F5",
+              background: "#111111",
+              color: "#FCFAF6",
               textDecoration: "none",
               fontWeight: 500,
             }}
@@ -85,8 +85,8 @@ export default function WhatsAppPage() {
             style={{
               padding: "13px 22px",
               borderRadius: 999,
-              border: "1px solid rgba(20,17,13,.22)",
-              color: "#14110D",
+              border: "1px solid rgba(17,17,17,.22)",
+              color: "#111111",
               textDecoration: "none",
               fontWeight: 500,
             }}
@@ -94,7 +94,7 @@ export default function WhatsAppPage() {
             Write with Belle on belline.ai
           </a>
         </div>
-        <p style={{ fontSize: 13, color: "#746C63", marginTop: 22 }}>
+        <p style={{ fontSize: 13, color: "#6E6961", marginTop: 22 }}>
           Or ring +1 571 778 5920 — an international call from the UAE.
         </p>
       </div>
