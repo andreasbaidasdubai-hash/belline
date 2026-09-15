@@ -10,3 +10,8 @@ audit
 test-results
 playwright-report
 voice-samples
+# Built output and local-only files: Vercel builds site/ itself, and uploading
+# a second copy (plus docs and build caches) kept making uploads abort.
+site
+docs
+*.tsbuildinfo
