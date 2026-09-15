@@ -14,11 +14,13 @@ import {
   annualPerMonth,
   checkSelection,
   money,
+  periodFee,
   priceOf,
   publicLines,
   sellable,
   type ProductId,
 } from "../billing/plans";
+import { overLimitSentence, volumeSentence } from "../billing/speak";
 import type { ToolContext, ToolOutcome } from "./tools";
 
 /**
@@ -199,14 +201,15 @@ function quote(input: Record<string, unknown>, ctx: ToolContext) {
     plan: p.id,
     name: p.name,
     price: `${money(priceOf(p.id, "AE"), "AE")} a month`,
-    annual: `${money(annualPerMonth([p.id], "AE"), "AE")} a month billed yearly (two months free)`,
+    annual: `${money(periodFee([p.id], "AE", "annual"), "AE")} billed yearly (${money(annualPerMonth([p.id], "AE"), "AE")} a month)`,
     includes: publicLines(p),
     most_popular: Boolean(p.recommended),
   }));
   const base = {
     plans,
-    trial: `${TRIAL.days} days free, ${TRIAL.phoneMinutes} minutes of live calls, every channel on, no card`,
-    always: "No setup fee. No per-minute charges: if a plan runs short, Belline keeps answering and suggests the next plan. Cancel any time.",
+    trial: `${TRIAL.days} days free, ${TRIAL.minutes} voice minutes and ${TRIAL.conversations} text conversations, every channel on, no card`,
+    always: `Priced per location. Setting up is free. ${overLimitSentence()} Cancel any time.`,
+    several_locations: volumeSentence(),
   };
 
   if (asks === "discount" || asks === "contract" || asks === "guarantee") {
@@ -224,7 +227,7 @@ function quote(input: Record<string, unknown>, ctx: ToolContext) {
     flag(ctx, "Group with several venues — wants pricing");
     return {
       ...base,
-      say: "Give the per-venue prices, then say groups are priced properly by a person and offer to set that up. Record the lead with stage wants_person.",
+      say: "Give the per-location prices and the several_locations terms exactly as given, then say a person applies the discount and prices twenty or more, and offer to set that up. Record the lead with stage wants_person.",
     };
   }
   return {
@@ -343,8 +346,8 @@ async function sendCheckout(input: Record<string, unknown>) {
   const mail = await sendEmail({
     to: shape.email,
     subject: "Your Belline plan",
-    text: `Here is the link to choose your plan and pay securely by card: ${url}\n\nNo setup fee, no per-minute charges, cancel any time.\n\nBelle, Belline`,
-    html: `<p><a href="${url}">Choose your plan and pay securely</a></p><p>No setup fee, no per-minute charges, cancel any time.</p><p>Belle, Belline</p>`,
+    text: `Here is the link to choose your plan and pay securely by card: ${url}\n\nSetting up is free, and you can cancel any time.\n\nBelle, Belline`,
+    html: `<p><a href="${url}">Choose your plan and pay securely</a></p><p>Setting up is free, and you can cancel any time.</p><p>Belle, Belline</p>`,
     replyTo: HELLO,
   });
   return {

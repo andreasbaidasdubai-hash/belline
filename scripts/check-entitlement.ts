@@ -62,12 +62,25 @@ const fresh = () => getLocation(venueId)!;
 const today = todayIn("Asia/Dubai");
 
 /** A completed phone call of `minutes`, just ended. */
-function phoneCall(venue: () => ReturnType<typeof fresh>, minutes: number) {
-  const call = startCall(venue(), "phone", "+971501234567");
+function phoneCall(venue: () => ReturnType<typeof fresh>, minutes: number, channel: "phone" | "embed" = "phone") {
+  const call = startCall(venue(), channel, "+971501234567");
   call.status = "completed";
   call.startedAt = new Date(Date.now() - minutes * 60_000).toISOString();
   call.endedAt = new Date().toISOString();
   saveCall(call);
+}
+
+/** `n` website-chat threads Belline replied to just now: one conversation each. */
+function chats(venue: () => ReturnType<typeof fresh>, n: number) {
+  for (let i = 0; i < n; i++) {
+    const call = startCall(venue(), "webchat", "Website");
+    const at = new Date(Date.now() - 60_000).toISOString();
+    call.transcript = [
+      { role: "caller", text: "Hello", at } as never,
+      { role: "agent", text: "Hi", at } as never,
+    ];
+    saveCall(call);
+  }
 }
 
 console.log("\n\x1b[1mA trial ends\x1b[0m\n");
@@ -106,9 +119,40 @@ test("test-console calls do not use up the trial", () => {
   assert.equal(lapseOf(fresh(), today), null);
 });
 
-test("sixty live minutes use up the trial", () => {
-  phoneCall(fresh, 60);
+test("thirty voice minutes use up the trial — the voice button counts as well as the phone", () => {
+  phoneCall(fresh, 20);
+  assert.equal(lapseOf(fresh(), today), null);
+  phoneCall(fresh, 10, "embed");
   assert.equal(lapseOf(fresh(), today), "trial_minutes_used");
+});
+
+const chatty = await signUp({
+  businessName: "Chatty Nails",
+  email: "owner@chattynails.test",
+  password: "Correct-Horse-Battery-9",
+  vertical: "salon",
+  timezone: "Asia/Dubai",
+});
+assert.ok(chatty.ok);
+const chattyVenue = () => getLocation(chatty.ok ? chatty.location.id : "")!;
+
+test("fifty text conversations use up the trial's chat, and only its chat — enforced only with card payments on", () => {
+  chats(chattyVenue, 49);
+  assert.equal(serviceState(chattyVenue(), today, { enforce: true, channel: "chat" }).answering, true);
+  chats(chattyVenue, 1);
+  const chat = serviceState(chattyVenue(), today, { enforce: true, channel: "chat" });
+  assert.equal(chat.answering, false);
+  assert.equal(chat.refused, "trial_conversations_used");
+  assert.doesNotMatch(chat.callerMessage ?? "", /trial|plan|pay|subscri|charge|AED/i);
+  assert.equal(serviceState(chattyVenue(), today, { enforce: true, channel: "phone" }).answering, true, "the phone stopped over chats");
+  assert.equal(serviceState(chattyVenue(), today, { channel: "chat" }).answering, true, "stopped with card payments off");
+});
+
+test("a trial that began before 2026-10 keeps the cap it was given: phone minutes only, no chat cap", () => {
+  const v = chattyVenue();
+  upsertLocation({ ...v, subscription: { ...v.subscription!, products: ["everything_starter"], trial: { endsOn: v.subscription!.trial!.endsOn, minutes: 60 } } });
+  assert.equal(serviceState(chattyVenue(), today, { enforce: true, channel: "chat" }).answering, true);
+  assert.equal(lapseOf(chattyVenue(), today), null);
 });
 
 console.log("\n\x1b[1mAnd when nothing stops\x1b[0m\n");
@@ -165,7 +209,7 @@ async function payingOn(name: string, sub: Record<string, unknown>) {
   return () => getLocation(loc.id)!;
 }
 
-const busy = await payingOn("Busy Dental", { products: ["everything_starter"] });
+const busy = await payingOn("Busy Dental", { products: ["v2_starter"] });
 
 test("a plan answers every channel, and opens the website voice button", () => {
   for (const channel of ["phone", "web_voice", "chat", "whatsapp"] as const) {
@@ -175,9 +219,14 @@ test("a plan answers every channel, and opens the website voice button", () => {
   assert.equal(mayStreamTo(busy()), true);
 });
 
-test("and keeps answering the phone far past its minutes", () => {
-  for (let i = 0; i < 5; i++) phoneCall(busy, 60);
-  assert.equal(serviceState(busy(), today, { enforce: true, channel: "phone" }).answering, true);
+const september = await payingOn("September Spa", { products: ["everything_business"], grandfatheredUntil: addDays(today, -400) });
+
+test("a venue on a September bundle never lapses, even carrying an old end date, and is answered as it was sold", () => {
+  assert.equal(lapseOf(september(), addDays(today, 900)), null);
+  for (let i = 0; i < 12; i++) phoneCall(september, 60);
+  for (const channel of ["phone", "web_voice", "chat", "whatsapp"] as const) {
+    assert.equal(serviceState(september(), today, { enforce: true, channel }).answering, true, channel);
+  }
 });
 
 const pilot = await payingOn("Pilot Clinic", { planId: "business", grandfatheredUntil: addDays(today, 30) });

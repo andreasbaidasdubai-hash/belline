@@ -107,7 +107,8 @@ export function clientBook(now = new Date()): ClientRow[] {
       const sub = location.subscription;
       const today = todayIn(location.timezone);
       const account = accountFor(location, today);
-      const phone = account?.usage.channels.find((c) => c.channel === "phone");
+      // The voice meter: pooled voice minutes on a 2026-10 plan, phone minutes on an older one.
+      const phone = account?.usage.meters.find((m) => m.unit === "minutes");
       const calls = listCalls(location.id);
       const lastCall = calls.reduce<string | null>(
         (latest, c) => (!latest || c.startedAt > latest ? c.startedAt : latest),

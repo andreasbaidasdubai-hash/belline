@@ -61,7 +61,7 @@ export const RATE_CARD_DATE = "2026-09-14";
 
 export interface Rate {
   usd: number;
-  per: "min" | "credit" | "M tokens" | "message" | "month";
+  per: "min" | "credit" | "M tokens" | "message" | "month" | "charge" | "share";
   /** Where the number came from. */
   source: string;
   /**
@@ -139,6 +139,23 @@ export const RATE_CARD: Record<string, Rate> = {
   META_UTILITY_TEMPLATE_AE: { usd: 0.0285, per: "message", source: "strategy §1.2; developers.facebook.com/docs/whatsapp/pricing — utility template, UAE", verified: true },
   META_UTILITY_TEMPLATE_GB: { usd: 0.0171, per: "message", source: "strategy §1.2 — utility template, UK", verified: true },
   META_UTILITY_TEMPLATE_US: { usd: 0.004, per: "message", source: "strategy §1.2 — utility template, US", verified: true },
+
+  // --- Card payments: Stripe ------------------------------------------------
+  // Priced as a share of each charge plus a fixed amount per charge. The UAE
+  // card rate is taken at its dearer, international-card figure so the
+  // margin is not flattered by a customer's choice of card.
+  STRIPE_CARD_SHARE_AE: {
+    usd: 0.039,
+    per: "share",
+    source: "stripe.com/ae/pricing — 2.9% domestic cards, +1% international; the dearer figure, unverified against the account's own contract",
+    verified: false,
+  },
+  STRIPE_CARD_FIXED_AE: {
+    usd: 0.27,
+    per: "charge",
+    source: "stripe.com/ae/pricing — AED 1 per successful charge ≈ $0.27, unverified",
+    verified: false,
+  },
 };
 
 /** A rate, from the environment if it has been overridden there. */

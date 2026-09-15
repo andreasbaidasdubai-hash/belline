@@ -3,7 +3,7 @@
  *
  * One catalogue, read by the billing engine, the checkout, Stripe, the
  * website and Belle, and checked against all of them by
- * `scripts/check-billing.ts` and `scripts/check-plans.ts`. Three rules hold it
+ * `scripts/check-billing.ts` and `scripts/check-plans.ts`. Four rules hold it
  * together:
  *
  *   Money is integer minor units — fils, pence, cents — never a float. An
@@ -12,43 +12,58 @@
  *
  *   Every feature carries whether it actually works. `status: "not-yet"` never
  *   reaches a public page; the test suite fails the build if it does. The same
- *   rule applies one level up — a whole product, channel or market can be
- *   `not-yet` — because the temptation to list a roadmap item on a pricing
+ *   rule applies one level up — a whole product, channel, pack or market can
+ *   be `not-yet` — because the temptation to list a roadmap item on a pricing
  *   card is strongest precisely when someone is deciding whether to pay.
  *
- *   There is no per-minute or per-conversation overage anywhere. An allowance
- *   that runs out is a prompt to move up, never a second number on a bill.
- *   Nothing here is unlimited either, and nothing is free: the trial is the
- *   only way to use Belline without paying.
+ *   A product id, once sold, is never repriced and its allowances never
+ *   change. Usage and fees are read live from this file by id, so changing a
+ *   sold id silently changes what an existing customer gets. A new price is a
+ *   new id in a new catalogue version; the old id becomes `legacy`.
  *
- * The shape (decided 14 September 2026, simplifying the strategy doc's
- * modules): three plans, every channel in every plan, differing only in how
- * much they include. One decision for a buyer, not a build-your-own form.
- * Priced per market in local money and never converted at runtime. Beside
- * them sits a **managed** track (addendum), built into the catalogue and
- * hidden until the things it promises exist.
+ *   Nothing is unlimited and nothing is charged that the owner did not
+ *   choose. When an allowance runs out, the owner's usage policy decides —
+ *   add a pack, move up, or stop at the allowance (billing/usage-policy.ts).
+ *
+ * Versions:
+ *   "original" — Starter / Business / Enterprise, sold until September 2026,
+ *                grandfathered for 90 days.
+ *   "2026-09"  — the everything_* bundles, per-channel allowances. Sold for a
+ *                few weeks; the venues on them keep them indefinitely.
+ *   "2026-10"  — v2: Starter / Growth / Scale, per location, pooled voice
+ *                minutes and text conversations, UAE only.
  */
 
 import { MARKETS, MARKET_CODES, formatMoney, type Market } from "../markets";
 
 export type { Market } from "../markets";
 
+/** The catalogue being sold today. Stamped on Stripe metadata and on the subscription. */
+export const CATALOGUE_VERSION = "2026-10";
+
 /** 1 AED = 100 fils. Every amount in this module is a minor unit. */
 export const FILS = 100;
 
 export type BillingCycle = "monthly" | "annual";
 
-/** Months of the year the annual cycle does not charge for. */
+/**
+ * Months of the year the computed annual cycle does not charge for. Only
+ * products without a stored annual price use it — the 2026-09 bundles, whose
+ * customers were sold ten months for twelve.
+ */
 export const ANNUAL_MONTHS_FREE = 2;
 
 // ---------------------------------------------------------------------------
-// Channels
+// Channels and pools
 // ---------------------------------------------------------------------------
 
 export type Channel = "phone" | "web_voice" | "chat" | "whatsapp";
+/** A unit is also a pool: every channel counting minutes shares one, and every channel counting conversations the other. */
 export type Unit = "minutes" | "conversations";
+export type Pool = Unit;
 
 export const CHANNEL_ORDER: Channel[] = ["phone", "web_voice", "chat", "whatsapp"];
+export const POOL_ORDER: Pool[] = ["minutes", "conversations"];
 
 export interface ChannelInfo {
   channel: Channel;
@@ -75,11 +90,24 @@ export const CHANNELS: Record<Channel, ChannelInfo> = {
   },
 };
 
+/** The pool a channel draws on: phone and the voice button share minutes; chat and WhatsApp share conversations. */
+export function poolOf(channel: Channel): Pool {
+  return CHANNELS[channel].unit;
+}
+
+export const POOL_CHANNELS: Record<Pool, Channel[]> = {
+  minutes: CHANNEL_ORDER.filter((c) => poolOf(c) === "minutes"),
+  conversations: CHANNEL_ORDER.filter((c) => poolOf(c) === "conversations"),
+};
+
+export const POOL_NAMES: Record<Pool, string> = {
+  minutes: "Voice minutes",
+  conversations: "Text conversations",
+};
+
 /**
- * One allowance, in the words the website and the checkout both use.
- *
- * Generated rather than typed into each plan, so "600 phone minutes" and the
- * number the engine counts against cannot disagree.
+ * One per-channel allowance, in the words the website and the checkout both
+ * use. Kept for the 2026-09 bundles, which were sold per channel.
  */
 export function allowanceText(channel: Channel, amount: number): string {
   const n = amount.toLocaleString("en-GB");
@@ -95,15 +123,44 @@ export function allowanceText(channel: Channel, amount: number): string {
   }
 }
 
+const POOL_PLACES: Record<Channel, string> = {
+  phone: "your phone line",
+  web_voice: "your website's voice button",
+  chat: "your website chat",
+  whatsapp: "WhatsApp",
+};
+
+function joinList(items: string[]): string {
+  return items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** The live channels a pool covers, as a phrase: "your phone line and your website's voice button". */
+export function poolPlaces(pool: Pool): string {
+  return joinList(POOL_CHANNELS[pool].filter((c) => CHANNELS[c].status === "live").map((c) => POOL_PLACES[c]));
+}
+
+/**
+ * One pooled allowance, naming only the channels that work today. WhatsApp
+ * joins the conversations sentence the day its channel is live, and not before.
+ */
+export function poolText(pool: Pool, amount: number): string {
+  const n = amount.toLocaleString("en-GB");
+  const unit = pool === "minutes" ? "voice minutes" : "text conversations";
+  return `${n} ${unit} a month, shared across ${poolPlaces(pool)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Products
 // ---------------------------------------------------------------------------
 
-export type PlanId = "everything_starter" | "everything_business" | "everything_pro";
+/** What the website sells today (catalogue 2026-10). */
+export type PlanId = "v2_starter" | "v2_growth" | "v2_scale";
+/** The September 2026 bundles. Legacy: never sold again, kept indefinitely for the venues on them. */
+export type BundleId = "everything_starter" | "everything_business" | "everything_pro";
 export type ManagedId = "professional" | "premium";
 /** The single-plan ladder sold until September 2026. Kept for grandfathered venues only. */
 export type LegacyPlanId = "starter" | "business" | "enterprise";
-export type ProductId = PlanId | ManagedId | LegacyPlanId;
+export type ProductId = PlanId | BundleId | ManagedId | LegacyPlanId;
 
 export interface Feature {
   text: string;
@@ -116,31 +173,54 @@ export interface Feature {
   gap?: string;
 }
 
+/**
+ * How long a legacy product is kept for the venues on it. `indefinite` never
+ * lapses; `{ days }` is stamped as `grandfatheredUntil` by billing/grandfather.ts.
+ */
+export type Grandfather = "indefinite" | { days: number };
+
 export interface Product {
   id: ProductId;
   /**
    * `plan` is what the website sells. `managed` is quoted and sold by a
-   * person. `legacy` is never sold — it exists so a venue that bought the old
-   * ladder is billed and answered correctly while grandfathered.
+   * person. `legacy` is never sold — it exists so a venue that bought an
+   * older catalogue is billed and answered exactly as it was sold.
    */
   kind: "plan" | "managed" | "legacy";
+  /** The catalogue version this product was sold under. */
+  version: string;
   name: string;
   summary: string;
   /** A whole product can be not-yet: then it is neither shown nor sold. */
   status: "live" | "not-yet";
   gap?: string;
   /**
-   * What a period includes, per channel. A channel that is absent is not part
-   * of the product. `null` is uncounted, and only the legacy ladder has it —
-   * check-plans fails the build if anything sellable does.
+   * Per-channel allowances (2026-09 and older). A channel that is absent is
+   * not part of the product. `null` is uncounted, and only the original
+   * ladder has it — check-plans fails the build if anything sellable does.
    */
   allowances: Partial<Record<Channel, number | null>>;
+  /**
+   * Pooled allowances (2026-10). Every channel of a pool is included and
+   * draws on the one number.
+   */
+  pools?: Partial<Record<Pool, number>>;
+  /** Users on the dashboard. Stored as a limit; see the report on enforcement. */
+  users?: number;
   /** Monthly, in the market's minor unit. Absent: not sold in that market. */
   prices: Partial<Record<Market, number>>;
+  /**
+   * Annual, billed once, in the market's minor unit — stored, never derived,
+   * for every product from 2026-10. Absent: ten months of the monthly price
+   * (how the 2026-09 bundles were sold).
+   */
+  annualPrices?: Partial<Record<Market, number>>;
   /** Markets whose price is a planning figure, not a decision. Listed in STATUS.md. */
   provisional?: Market[];
   features: Feature[];
   recommended?: boolean;
+  /** Legacy only. */
+  grandfather?: Grandfather;
 }
 
 /** Major units in, minor units out, in the MARKETS order. */
@@ -168,6 +248,8 @@ const INTEGRATIONS: Feature = {
     "partner-gated and issue no credentials without a signed agreement.",
 };
 
+// --- 2026-09 bundle features (frozen: these customers were sold them) --------
+
 const STARTER_FEATURES: Feature[] = [
   { text: "Keep your number — forward it to Belline", status: "live" },
   { text: "Books and changes appointments against your real availability", status: "live" },
@@ -184,9 +266,6 @@ const BUSINESS_FEATURES: Feature[] = [
   ...STARTER_FEATURES,
   { text: "Your own rules about what it may and may not decide", status: "live" },
   { text: "Every change versioned, with one-click revert", status: "live" },
-  // Not "it offers a slot": Belline does not ring the guest. It matches the
-  // freed slot to whoever wanted it and puts them at the top of the venue's
-  // own list, held for half an hour. The ringing is the team's.
   {
     text: "Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number",
     status: "live",
@@ -200,55 +279,139 @@ const PRO_FEATURES: Feature[] = [
   INTEGRATIONS,
 ];
 
-export const PRODUCTS: Product[] = [
-  // --- the three plans -------------------------------------------------------
-  //
-  // UAE prices decided 14 September 2026: every plan clears a 44% margin at
-  // typical use even on the pessimistic UAE-line costs (check:plans). The
-  // other markets are planning figures for a launch 2–3 months after the UAE.
+// --- 2026-10 plan features ----------------------------------------------------
+//
+// Placed per the strategy doc (§ Revised pricing). Every live/not-yet
+// judgement is carried over from the 2026-09 catalogue; anything the doc lists
+// that the codebase does not do is recorded as not-yet with the reason, never
+// promoted.
+
+const V2_STARTER_FEATURES: Feature[] = [
+  { text: "One location", status: "live" },
+  { text: "Keep your number — forward it to Belline", status: "live" },
+  { text: "Answers questions from your own hours, prices and policies", status: "live" },
+  { text: "Books and changes appointments against your real availability", status: "live" },
+  { text: "Summary and full transcript of every call and chat", status: "live" },
+  { text: "Your team can take over any chat from the inbox", status: "live" },
+  { text: "Your own words and colours on the website buttons", status: "live" },
   {
-    id: "everything_starter",
-    kind: "plan",
-    name: "Starter",
-    summary: "For a venue that wants every call and message answered properly.",
+    text: "One Google Calendar or Microsoft Outlook connection",
+    status: "not-yet",
+    gap:
+      "Google Calendar is written and tested but has never run — it needs GOOGLE_CLIENT_ID and " +
+      "GOOGLE_CLIENT_SECRET in Railway. There is no Microsoft Outlook integration in the codebase.",
+  },
+  DEPOSITS,
+];
+
+const V2_GROWTH_FEATURES: Feature[] = [
+  ...V2_STARTER_FEATURES,
+  { text: "Puts urgent calls through to your team, live", status: "live" },
+  { text: "A reminder text the day before every booking", status: "live" },
+  { text: "Your own rules about what it may and may not decide", status: "live" },
+  { text: "Every change versioned, with one-click revert", status: "live" },
+  {
+    text: "Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number",
     status: "live",
-    allowances: { phone: 200, web_voice: 100, chat: 150, whatsapp: 300 },
-    prices: price(299, 65, 119, 109, 79, 109, 69, 129, 299),
-    provisional: EXCEPT_AE,
-    features: STARTER_FEATURES,
   },
   {
-    id: "everything_business",
+    text: "WhatsApp, sharing your text conversations",
+    status: "not-yet",
+    gap: CHANNELS.whatsapp.gap,
+  },
+  {
+    text: "One specialist booking integration — Fresha, Treatwell, SevenRooms or OpenTable",
+    status: "not-yet",
+    gap: "Partner-gated: no credentials without a signed partner agreement, which the founder files.",
+  },
+];
+
+const V2_SCALE_FEATURES: Feature[] = [
+  ...V2_GROWTH_FEATURES,
+  { text: "Named contact for onboarding and changes", status: "live" },
+  { text: "Priority support", status: "live" },
+  {
+    text: "Several booking and calendar connections on one location",
+    status: "not-yet",
+    gap:
+      "A venue has one calendar source today. Multiple connections need the Google and partner " +
+      "integrations above to exist first.",
+  },
+  {
+    text: "Advanced routing and staff rules for calls",
+    status: "not-yet",
+    gap:
+      "Not built as a product feature: calls transfer to the venue's own number, and there is no " +
+      "routing editor for per-staff, per-service or time-of-day rules.",
+  },
+  {
+    text: "API and webhook access",
+    status: "not-yet",
+    gap:
+      "There is no customer-facing API or outbound webhook. It needs scoped keys, rate limits and " +
+      "an audit trail before it can be offered securely.",
+  },
+];
+
+export const PRODUCTS: Product[] = [
+  // --- 2026-10: the three plans ----------------------------------------------
+  //
+  // Decided by the founder: AED 199 / 399 / 799 per location per month, annual
+  // stored at 1,990 / 3,990 / 7,990, and the safer allowances (75 / 250 / 600
+  // voice minutes, 200 / 600 / 1,300 text conversations). UAE only; no other
+  // market is priced until it opens.
+  {
+    id: "v2_starter",
     kind: "plan",
-    name: "Business",
-    summary: "For a venue where the phone is genuinely busy.",
+    version: "2026-10",
+    name: "Starter",
+    summary: "For a small business that wants every enquiry answered.",
+    status: "live",
+    allowances: {},
+    pools: { minutes: 75, conversations: 200 },
+    users: 2,
+    prices: { AE: 199 * 100 },
+    annualPrices: { AE: 1990 * 100 },
+    features: V2_STARTER_FEATURES,
+  },
+  {
+    id: "v2_growth",
+    kind: "plan",
+    version: "2026-10",
+    name: "Growth",
+    summary: "For a business that wants Belline answering and booking across every channel it has.",
     status: "live",
     recommended: true,
-    allowances: { phone: 600, web_voice: 200, chat: 400, whatsapp: 800 },
-    prices: price(599, 129, 239, 219, 155, 219, 139, 269, 599),
-    provisional: EXCEPT_AE,
-    features: BUSINESS_FEATURES,
+    allowances: {},
+    pools: { minutes: 250, conversations: 600 },
+    users: 5,
+    prices: { AE: 399 * 100 },
+    annualPrices: { AE: 3990 * 100 },
+    features: V2_GROWTH_FEATURES,
   },
   {
-    id: "everything_pro",
+    id: "v2_scale",
     kind: "plan",
-    name: "Pro",
-    summary: "For a venue whose phone never stops.",
+    version: "2026-10",
+    name: "Scale",
+    summary: "For higher-volume teams with more complex reception rules.",
     status: "live",
-    allowances: { phone: 1500, web_voice: 300, chat: 1000, whatsapp: 1500 },
-    prices: price(1199, 259, 479, 429, 309, 429, 289, 539, 1099),
-    provisional: EXCEPT_AE,
-    features: PRO_FEATURES,
+    allowances: {},
+    pools: { minutes: 600, conversations: 1300 },
+    users: 15,
+    prices: { AE: 799 * 100 },
+    annualPrices: { AE: 7990 * 100 },
+    features: V2_SCALE_FEATURES,
   },
 
   // --- managed track (addendum §2) -------------------------------------------
   //
   // Quoted by a person, sold in the UAE only, and not-yet as a whole until the
-  // integrations, Arabic and outbound calling it describes exist. Belle may say
-  // "for groups, we quote" and hand over; she may not describe these.
+  // integrations, Arabic and outbound calling it describes exist.
   {
     id: "professional",
     kind: "managed",
+    version: "2026-09",
     name: "Professional",
     summary: "Managed for you, connected to the booking system you already use.",
     status: "not-yet",
@@ -277,6 +440,7 @@ export const PRODUCTS: Product[] = [
   {
     id: "premium",
     kind: "managed",
+    version: "2026-09",
     name: "Premium",
     summary: "Managed for a group, across its locations.",
     status: "not-yet",
@@ -299,54 +463,167 @@ export const PRODUCTS: Product[] = [
     ],
   },
 
-  // --- legacy ----------------------------------------------------------------
+  // --- legacy: 2026-09 bundles -------------------------------------------------
   //
-  // The ladder sold until this catalogue shipped. Never shown, never sold;
-  // kept so a pilot venue on it is billed and answered exactly as it was for
-  // its 90 days of grandfathering (addendum §3). Enterprise was sold as
-  // unlimited, and a grandfathered promise is kept as made.
+  // Sold for a few weeks in September 2026. Never sold again; every price,
+  // allowance and computed annual fee is exactly as sold, and the venues on
+  // them keep them indefinitely.
+  {
+    id: "everything_starter",
+    kind: "legacy",
+    version: "2026-09",
+    name: "Starter (September 2026)",
+    summary: "The September 2026 Starter bundle.",
+    status: "live",
+    allowances: { phone: 200, web_voice: 100, chat: 150, whatsapp: 300 },
+    prices: price(299, 65, 119, 109, 79, 109, 69, 129, 299),
+    provisional: EXCEPT_AE,
+    features: STARTER_FEATURES,
+    grandfather: "indefinite",
+  },
+  {
+    id: "everything_business",
+    kind: "legacy",
+    version: "2026-09",
+    name: "Business (September 2026)",
+    summary: "The September 2026 Business bundle.",
+    status: "live",
+    allowances: { phone: 600, web_voice: 200, chat: 400, whatsapp: 800 },
+    prices: price(599, 129, 239, 219, 155, 219, 139, 269, 599),
+    provisional: EXCEPT_AE,
+    features: BUSINESS_FEATURES,
+    grandfather: "indefinite",
+  },
+  {
+    id: "everything_pro",
+    kind: "legacy",
+    version: "2026-09",
+    name: "Pro (September 2026)",
+    summary: "The September 2026 Pro bundle.",
+    status: "live",
+    allowances: { phone: 1500, web_voice: 300, chat: 1000, whatsapp: 1500 },
+    prices: price(1199, 259, 479, 429, 309, 429, 289, 539, 1099),
+    provisional: EXCEPT_AE,
+    features: PRO_FEATURES,
+    grandfather: "indefinite",
+  },
+
+  // --- legacy: the original ladder ---------------------------------------------
+  //
+  // Never shown, never sold; kept so a pilot venue on it is billed and
+  // answered exactly as it was for its 90 days of grandfathering (addendum §3).
+  // Enterprise was sold as uncounted, and a grandfathered promise is kept as made.
   {
     id: "starter",
     kind: "legacy",
+    version: "original",
     name: "Starter (2026)",
     summary: "The original Starter plan.",
     status: "live",
     allowances: { phone: 60, web_voice: null, chat: null },
     prices: { AE: 179 * 100 },
     features: [],
+    grandfather: { days: 90 },
   },
   {
     id: "business",
     kind: "legacy",
+    version: "original",
     name: "Business (2026)",
     summary: "The original Business plan.",
     status: "live",
     allowances: { phone: 180, web_voice: null, chat: null },
     prices: { AE: 365 * 100 },
     features: [],
+    grandfather: { days: 90 },
   },
   {
     id: "enterprise",
     kind: "legacy",
+    version: "original",
     name: "Enterprise (2026)",
     summary: "The original Enterprise plan.",
     status: "live",
     allowances: { phone: null, web_voice: null, chat: null },
     prices: { AE: 899 * 100 },
     features: [],
+    grandfather: { days: 90 },
   },
 ];
 
-/** A one-off service. Managed track only (addendum §2). */
+// ---------------------------------------------------------------------------
+// Packs, services and volume
+// ---------------------------------------------------------------------------
+
+export type PackId = "pack_minutes_100" | "pack_conversations_150";
+
+/**
+ * Extra units for one billing period, added only under an owner's chosen
+ * usage policy (billing/usage-policy.ts). Never sold on their own.
+ */
+export interface Pack {
+  id: PackId;
+  version: string;
+  name: string;
+  pool: Pool;
+  units: number;
+  prices: Partial<Record<Market, number>>;
+  status: "live" | "not-yet";
+  gap?: string;
+}
+
+export const PACKS: Pack[] = [
+  {
+    id: "pack_minutes_100",
+    version: "2026-10",
+    name: "100 extra voice minutes",
+    pool: "minutes",
+    units: 100,
+    prices: { AE: 99 * 100 },
+    status: "live",
+  },
+  {
+    id: "pack_conversations_150",
+    version: "2026-10",
+    name: "150 extra text conversations",
+    pool: "conversations",
+    units: 150,
+    prices: { AE: 49 * 100 },
+    status: "live",
+  },
+];
+
+/** When the owner is told how much of an allowance is used, in percent. Once each, per pool, per period. */
+export const ALERT_THRESHOLDS = [70, 90, 100] as const;
+
+export function packFor(pool: Pool): Pack {
+  const pack = PACKS.find((p) => p.pool === pool);
+  if (!pack) throw new Error(`No pack for ${pool}`);
+  return pack;
+}
+
+/** A one-off service. */
 export interface Service {
-  id: "white_glove_setup";
+  id: "white_glove_setup" | "assisted_setup";
   name: string;
   status: "live" | "not-yet";
   gap?: string;
   prices: Partial<Record<Market, number>>;
+  /** The products it may be bought with. Absent: the managed track. */
+  forProducts?: ProductId[];
 }
 
 export const SERVICES: Service[] = [
+  {
+    id: "assisted_setup",
+    name: "Assisted setup",
+    status: "not-yet",
+    gap:
+      "The checkout sells subscriptions only; there is no Stripe line for a one-off fee, so a " +
+      "person would have to invoice it by hand.",
+    prices: { AE: 399 * 100 },
+    forProducts: ["v2_starter", "v2_growth"],
+  },
   {
     id: "white_glove_setup",
     name: "White-glove setup",
@@ -356,31 +633,68 @@ export const SERVICES: Service[] = [
   },
 ];
 
-/** What each legacy plan maps to today, for links that still carry `?plan=`. */
-export const LEGACY_TO_BUNDLE: Record<LegacyPlanId, PlanId> = {
-  starter: "everything_starter",
-  business: "everything_business",
-  enterprise: "everything_pro",
+/**
+ * Several locations. Each is its own subscription; the discount is applied by
+ * a person (a Stripe coupon on the group's subscriptions), never computed at
+ * checkout.
+ */
+export const VOLUME = {
+  perLocation: true,
+  tiers: [
+    { from: 5, to: 19, percentOff: 10 },
+    { from: 20, custom: true },
+  ],
+  appliedBy: "person",
+} as const;
+
+/** What each older plan maps to today, for links that still carry `?plan=` or an old `products=`. */
+export const LEGACY_TO_BUNDLE: Record<LegacyPlanId | BundleId, PlanId> = {
+  starter: "v2_starter",
+  business: "v2_growth",
+  enterprise: "v2_scale",
+  everything_starter: "v2_starter",
+  everything_business: "v2_growth",
+  everything_pro: "v2_scale",
 };
 
-/** How long a legacy venue keeps its plan after this catalogue ships. */
+/** How long a venue on the original ladder keeps its plan after the modular catalogue shipped. */
 export const GRANDFATHER_DAYS = 90;
 
+export function grandfatherOf(product: Product): Grandfather | null {
+  return product.kind === "legacy" ? (product.grandfather ?? { days: GRANDFATHER_DAYS }) : null;
+}
+
+/** True when a selection includes a legacy product whose grandfathering runs out. */
+export function grandfatherExpires(ids: readonly ProductId[]): boolean {
+  return ids.some((id) => {
+    const g = grandfatherOf(productById(id));
+    return g !== null && g !== "indefinite";
+  });
+}
+
 // ---------------------------------------------------------------------------
-// The trial (§2.3)
+// The trial
 // ---------------------------------------------------------------------------
 
 /**
- * Fourteen days, every channel switched on, and a cap on phone minutes so an
- * unattended trial cannot run up a bill. No card — the card is asked for when
- * somebody chooses a plan, never at signup.
+ * Fourteen days, no card, and a cap on both units so an unattended trial
+ * cannot run up a bill. The card is asked for when somebody chooses a plan,
+ * never at signup.
  */
 export const TRIAL = {
   days: 14,
-  phoneMinutes: 60,
+  /** Voice minutes, pooled across the phone and the voice button. */
+  minutes: 30,
+  /** Text conversations, pooled across chat (and WhatsApp once it is live). */
+  conversations: 50,
+  /** Stored as the entitlement; not said publicly while calendar connections are not-yet. */
+  calendarConnections: 1,
   /** What a new trial is trialling. Changing plan is a decision for the end. */
-  products: ["everything_starter"] as ProductId[],
+  products: ["v2_starter"] as ProductId[],
 } as const;
+
+/** Trials started before 2026-10 stored a phone cap only, and trialled this bundle's other allowances. */
+export const LEGACY_TRIAL_PRODUCTS: ProductId[] = ["everything_starter"];
 
 // ---------------------------------------------------------------------------
 // Lookup
@@ -412,17 +726,21 @@ export function sellable(market: Market): Product[] {
   return PRODUCTS.filter((p) => isSellable(p, market));
 }
 
+/** The plan the website marks as most popular. */
+export function recommendedPlan(market: Market): Product {
+  const plans = sellable(market);
+  return plans.find((p) => p.recommended) ?? plans[0] ?? productById("v2_growth");
+}
+
 // ---------------------------------------------------------------------------
 // A subscription's products
 // ---------------------------------------------------------------------------
 
 /**
- * Allowances across a set of products, per channel.
- *
- * A subscription is one plan today; the set is kept because a grandfathered
- * venue and a future add-on both fit it without another migration.
- * `undefined` for a channel none of them includes; `null` if any leaves it
- * uncounted (legacy only); otherwise the sum.
+ * Per-channel allowances across a set of products. `undefined` for a channel
+ * none of them allows individually; `null` if any leaves it uncounted (the
+ * original ladder only); otherwise the sum. Pooled products contribute nothing
+ * here — see `poolsOf`.
  */
 export function allowancesOf(ids: readonly ProductId[]): Partial<Record<Channel, number | null>> {
   const out: Partial<Record<Channel, number | null>> = {};
@@ -435,9 +753,26 @@ export function allowancesOf(ids: readonly ProductId[]): Partial<Record<Channel,
   return out;
 }
 
+/** Pooled allowances across a set of products. */
+export function poolsOf(ids: readonly ProductId[]): Partial<Record<Pool, number>> {
+  const out: Partial<Record<Pool, number>> = {};
+  for (const id of ids) {
+    for (const [pool, amount] of Object.entries(productById(id).pools ?? {}) as [Pool, number][]) {
+      out[pool] = (out[pool] ?? 0) + amount;
+    }
+  }
+  return out;
+}
+
+/** True when the selection is counted in pools (2026-10) rather than per channel. */
+export function isPooled(ids: readonly ProductId[]): boolean {
+  return ids.length > 0 && ids.every((id) => productById(id).pools !== undefined);
+}
+
 export function channelsOf(ids: readonly ProductId[]): Channel[] {
   const allowances = allowancesOf(ids);
-  return CHANNEL_ORDER.filter((c) => c in allowances);
+  const pools = poolsOf(ids);
+  return CHANNEL_ORDER.filter((c) => c in allowances || poolOf(c) in pools);
 }
 
 /** The monthly price of a selection, minor units. */
@@ -448,12 +783,16 @@ export function monthlyOf(ids: readonly ProductId[], market: Market): number {
 /**
  * What one billing period costs, minor units.
  *
- * Annual is ten months' money for twelve months, computed rather than stored,
- * so it cannot drift from the monthly figure.
+ * Annual is the stored annual price where the product has one (2026-10
+ * onwards). A product without one was sold at ten months for twelve, and that
+ * is still computed for it, so its customers pay exactly what they were sold.
  */
 export function periodFee(ids: readonly ProductId[], market: Market, cycle: BillingCycle): number {
-  const monthly = monthlyOf(ids, market);
-  return cycle === "annual" ? monthly * (12 - ANNUAL_MONTHS_FREE) : monthly;
+  if (cycle === "monthly") return monthlyOf(ids, market);
+  return ids.reduce((sum, id) => {
+    const stored = productById(id).annualPrices?.[market];
+    return sum + (stored ?? priceOf(id, market) * (12 - ANNUAL_MONTHS_FREE));
+  }, 0);
 }
 
 /**
@@ -463,6 +802,12 @@ export function periodFee(ids: readonly ProductId[], market: Market, cycle: Bill
  */
 export function annualPerMonth(ids: readonly ProductId[], market: Market): number {
   return Math.floor(periodFee(ids, market, "annual") / 12 / 100) * 100;
+}
+
+/** Whole months the annual price saves against twelve monthly payments, rounded down. */
+export function annualMonthsSaved(ids: readonly ProductId[], market: Market): number {
+  const monthly = monthlyOf(ids, market);
+  return monthly > 0 ? Math.floor((monthly * 12 - periodFee(ids, market, "annual")) / monthly) : 0;
 }
 
 export function selectionName(ids: readonly ProductId[]): string {
@@ -477,9 +822,8 @@ export type Selection =
 /**
  * Is this something a customer may buy?
  *
- * Exactly one live plan sold in the market. The checkout, the API and the
- * Stripe webhook all ask this, so none of them can accept what another would
- * refuse.
+ * Exactly one live plan sold in the market. The checkout, the API and Belle
+ * all ask this, so none of them can accept what another would refuse.
  */
 export function checkSelection(raw: readonly unknown[], market: Market): Selection {
   const ids = [...new Set(raw)];
@@ -494,6 +838,26 @@ export function checkSelection(raw: readonly unknown[], market: Market): Selecti
   return { ok: true, products: [id] };
 }
 
+/**
+ * Was this bought from us — now or under an earlier catalogue?
+ *
+ * The Stripe webhook asks this rather than `checkSelection`: a checkout
+ * opened on a 2026-09 bundle and paid after 2026-10 shipped is a real
+ * purchase, and the customer gets what they paid for. The original ladder
+ * arrives by its own `belline_plan` path; managed plans were never sold.
+ */
+export function checkPurchased(raw: readonly unknown[], market: Market): Selection {
+  const now = checkSelection(raw, market);
+  if (now.ok) return now;
+  const ids = [...new Set(raw)];
+  if (ids.length !== 1 || !isProductId(ids[0])) return now;
+  const product = productById(ids[0]);
+  if (product.kind === "legacy" && product.grandfather === "indefinite" && product.prices[market] !== undefined) {
+    return { ok: true, products: [product.id] };
+  }
+  return now;
+}
+
 // ---------------------------------------------------------------------------
 // Moving up
 // ---------------------------------------------------------------------------
@@ -504,41 +868,67 @@ export interface Recommendation {
   monthly: number;
 }
 
+type Usage = Partial<Record<Channel, number>>;
+
+function need(usage: Usage, channel: Channel): number {
+  return Math.max(0, usage[channel] ?? 0);
+}
+
+/** Does this selection carry this usage on these channels? */
+function carries(ids: readonly ProductId[], usage: Usage, keep: Set<Channel>): boolean {
+  const allowances = allowancesOf(ids);
+  const pools = poolsOf(ids);
+  const pooled: Partial<Record<Pool, number>> = {};
+  for (const channel of CHANNEL_ORDER) {
+    const n = need(usage, channel);
+    if (!keep.has(channel) && n === 0) continue;
+    if (channel in allowances) {
+      const amount = allowances[channel];
+      if (amount !== null && amount !== undefined && n > amount) return false;
+    } else if (poolOf(channel) in pools) {
+      pooled[poolOf(channel)] = (pooled[poolOf(channel)] ?? 0) + n;
+    } else {
+      return false;
+    }
+  }
+  return POOL_ORDER.every((pool) => (pooled[pool] ?? 0) <= (pools[pool] ?? 0));
+}
+
+/** What a selection includes of one pool, for the never-shrink rule. Null: uncounted, nothing to compare. */
+function poolCapacity(ids: readonly ProductId[], pool: Pool): number | null {
+  const pools = poolsOf(ids);
+  if (pools[pool] !== undefined) return pools[pool]!;
+  const allowances = allowancesOf(ids);
+  let total = 0;
+  for (const channel of POOL_CHANNELS[pool]) {
+    const amount = allowances[channel];
+    if (amount === null) return null;
+    total += amount ?? 0;
+  }
+  return total;
+}
+
 /**
  * The cheapest plan that would carry this usage, if it is a move up.
  *
- * Used to say "you want Business" rather than "you are over" — the second is
- * a complaint, the first is an answer. It never shrinks a channel the venue
- * already has, and never points downwards off the back of one quiet month.
+ * Used to say "you want Growth" rather than "you are over". It never shrinks
+ * what the venue already has — a pool or a channel — and never points
+ * downwards off the back of one quiet month.
  */
-export function recommend(
-  usage: Partial<Record<Channel, number>>,
-  current: readonly ProductId[],
-  market: Market,
-): Recommendation | null {
+export function recommend(usage: Usage, current: readonly ProductId[], market: Market): Recommendation | null {
   const keep = new Set(channelsOf(current));
-  const had = allowancesOf(current);
-  const need = (channel: Channel) => Math.max(0, usage[channel] ?? 0);
-
-  const fits = (ids: readonly ProductId[], candidate: boolean) => {
-    const allowances = allowancesOf(ids);
-    for (const channel of CHANNEL_ORDER) {
-      const amount = allowances[channel];
-      if (!keep.has(channel) && need(channel) === 0) continue;
-      if (amount === undefined) return false;
-      if (amount !== null && need(channel) > amount) return false;
-      const before = had[channel];
-      if (candidate && amount !== null && typeof before === "number" && amount < before) return false;
-    }
-    return true;
-  };
-
-  if (current.length > 0 && fits(current, false)) return null;
+  if (current.length > 0 && carries(current, usage, keep)) return null;
 
   let best: Recommendation | null = null;
   for (const plan of sellable(market)) {
     const ids = [plan.id];
-    if (!fits(ids, true)) continue;
+    if (!carries(ids, usage, keep)) continue;
+    const shrinks = POOL_ORDER.some((pool) => {
+      const before = poolCapacity(current, pool);
+      const after = poolCapacity(ids, pool);
+      return before !== null && after !== null && after < before;
+    });
+    if (shrinks) continue;
     const monthly = monthlyOf(ids, market);
     if (!best || monthly < best.monthly) best = { products: ids, name: plan.name, monthly };
   }
@@ -549,17 +939,30 @@ export function recommend(
   return best.monthly > now ? best : null;
 }
 
+/** The next plan up the sellable ladder, for the "upgrade" usage policy. */
+export function nextPlanUp(current: readonly ProductId[], market: Market): Product | null {
+  const plans = sellable(market);
+  const now = current.length && current.every((id) => productById(id).prices[market] !== undefined) ? monthlyOf(current, market) : 0;
+  return plans.find((p) => priceOf(p.id, market) > now) ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // What the public may see, and what it may not
 // ---------------------------------------------------------------------------
 
-/** The allowance lines a product shows, with the channel's own status. */
+/** The allowance lines a product shows: pools, per-channel allowances, users — each with its real status. */
 export function allowanceFeatures(product: Product): Feature[] {
-  return CHANNEL_ORDER.filter((c) => typeof product.allowances[c] === "number").map((channel) => ({
+  const pools = POOL_ORDER.filter((pool) => typeof product.pools?.[pool] === "number").map((pool) => {
+    const live = POOL_CHANNELS[pool].some((c) => CHANNELS[c].status === "live");
+    return { text: poolText(pool, product.pools![pool]!), status: live ? ("live" as const) : ("not-yet" as const) };
+  });
+  const channels = CHANNEL_ORDER.filter((c) => typeof product.allowances[c] === "number").map((channel) => ({
     text: allowanceText(channel, product.allowances[channel] as number),
     status: CHANNELS[channel].status,
     gap: CHANNELS[channel].gap,
   }));
+  const users = product.users ? [{ text: `Up to ${product.users} users on your dashboard`, status: "live" as const }] : [];
+  return [...pools, ...channels, ...users];
 }
 
 /** Everything a pricing card may say about a product: allowances first, then features. */
@@ -596,6 +999,9 @@ export function notYetLive(): { where: string; feature: string; gap: string }[] 
     for (const f of product.features) {
       if (f.status === "not-yet") add(product.name, f.text, f.gap);
     }
+  }
+  for (const pack of PACKS) {
+    if (pack.status === "not-yet") add("Pack", pack.name, pack.gap);
   }
   for (const service of SERVICES) {
     if (service.status === "not-yet") add("Service", service.name, service.gap);

@@ -42,7 +42,7 @@ const restaurant: Location = {
   // period arithmetic is exercised properly against the awkward dates in
   // scripts/check-billing.ts rather than here.
   subscription: {
-    products: ["everything_business"],
+    products: ["v2_growth"],
     market: "AE",
     cycle: "monthly",
     startedOn: "2026-09-01",
@@ -241,11 +241,11 @@ const salon: Location = {
   // both are states the billing page has to get right, so the demo data
   // exercises them rather than showing three copies of the happy path.
   subscription: {
-    products: ["everything_starter"],
+    products: ["v2_starter"],
     cycle: "monthly",
     startedOn: "2026-09-04",
     status: "trialing",
-    trial: { endsOn: "2026-09-18", minutes: 25 },
+    trial: { endsOn: "2026-09-18", minutes: 25, conversations: 50 },
   },
   hours: salonHours,
   closures: [],

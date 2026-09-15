@@ -155,9 +155,9 @@ await test("a demo is never built from a private address", async () => {
 });
 
 await test("checkout only for a real plan, and the link goes by email, not into the reply", async () => {
-  const bad = await executeTool("send_checkout", { email: "owner@palmdental.test", plan: "everything_ultra" }, chat());
-  assert.equal((bad.result as { sent: boolean }).sent, false);
-  const good = await executeTool("send_checkout", { email: "owner@palmdental.test", plan: "everything_business" }, chat());
+  const bad = await executeTool("send_checkout", { email: "owner@palmdental.test", plan: "everything_business" }, chat());
+  assert.equal((bad.result as { sent: boolean }).sent, false, "a plan that is no longer sold was accepted");
+  const good = await executeTool("send_checkout", { email: "owner@palmdental.test", plan: "v2_growth" }, chat());
   assert.doesNotMatch(JSON.stringify(good.result), /https?:\/\//);
 });
 

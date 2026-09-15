@@ -8,9 +8,13 @@ import {
   billableVoiceMinutes,
   channelOfCall,
   conversationStarts,
-  type ChannelUsage,
+  meterWords,
+  type Meter,
 } from "@/lib/billing/usage";
-import { CHANNELS, annualPerMonth, money, productById, type Channel } from "@/lib/billing/plans";
+import { ALERT_THRESHOLDS, CHANNELS, isPooled, money, nextPlanUp, productById } from "@/lib/billing/plans";
+import { packsSentence } from "@/lib/billing/speak";
+import { canManageUsers } from "@/lib/auth";
+import UsagePolicy from "./UsagePolicy";
 import { MARKETS } from "@/lib/markets";
 import { listCalls } from "@/lib/store";
 import { addDays, dateToSpoken, todayIn } from "@/lib/time";
@@ -21,35 +25,29 @@ import ManageBilling from "./ManageBilling";
 export const dynamic = "force-dynamic";
 
 /**
- * Plan, usage per channel, and what the next invoice will say.
+ * Plan, usage per allowance, and what the next invoice will say.
  *
- * The pricing page promises "no surprise invoices". This is where that promise
- * is either kept or exposed as marketing, so the page leads with the number a
- * venue is actually worried about — what this is going to cost — and then one
- * bar per channel they have, each against its own allowance.
+ * The page leads with the number a venue is actually worried about — what
+ * this is going to cost — and then one bar per allowance: the two pools on a
+ * 2026-10 plan (voice minutes, text conversations), or one per channel on an
+ * older product.
  *
  * Every figure here comes from billing/usage.ts, which is the same module the
  * invoice would be generated from. There is no second calculation on this page
  * to drift away from the first.
  */
 
-const UNIT_WORDS: Record<Channel, string> = {
-  phone: "phone minutes",
-  web_voice: "voice-button minutes",
-  chat: "chat conversations",
-  whatsapp: "WhatsApp conversations",
-};
-
-function Bar({ usage }: { usage: ChannelUsage }) {
+function Bar({ usage }: { usage: Meter }) {
   const { used, included } = usage;
-  const words = UNIT_WORDS[usage.channel];
+  const words = meterWords(usage.id);
+  const across = usage.kind === "pool" ? usage.channels.map((c) => CHANNELS[c].name).join(" · ") : null;
 
   if (included === null) {
     // Uncounted on a grandfathered plan. No bar: a bar needs an end, and
     // drawing one against an invented ceiling would invent a limit.
     return (
       <div style={{ marginTop: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{CHANNELS[usage.channel].name}</div>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{usage.name}</div>
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
           {used} {words} this period · not counted on your original plan
         </div>
@@ -68,11 +66,16 @@ function Bar({ usage }: { usage: ChannelUsage }) {
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13, marginBottom: 6 }}>
-        <strong>{CHANNELS[usage.channel].name}</strong>
+        <strong>{usage.name}</strong>
         <span className="muted" style={{ fontVariantNumeric: "tabular-nums" }}>
           {used} of {included} {words}
         </span>
       </div>
+      {across && (
+        <div className="muted" style={{ fontSize: 11.5, margin: "-2px 0 6px" }}>
+          Shared across {across}
+        </div>
+      )}
       <div
         style={{ display: "flex", height: 10, borderRadius: 999, background: "var(--border-soft)", overflow: "hidden" }}
         role="img"
@@ -84,7 +87,7 @@ function Bar({ usage }: { usage: ChannelUsage }) {
       <div className="muted" style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginTop: 5 }}>
         <span>
           {usage.overBy > 0
-            ? `${usage.overBy} past the allowance — not charged`
+            ? `${usage.overBy} past the allowance`
             : usage.projected > used && usage.projected > included
               ? `On this pace, about ${usage.projected} by period end`
               : " "}
@@ -180,7 +183,7 @@ export default async function BillingPage({
     .slice(0, 8);
 
   const ends = new Date(`${period.end}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
-  const units = new Set(usage.channels.map((c) => CHANNELS[c.channel].unit));
+  const units = new Set(usage.meters.map((m) => m.unit));
   const billedIn = MARKETS[market].currency;
 
   return (
@@ -230,8 +233,8 @@ export default async function BillingPage({
               </span>
             </div>
             <div style={{ padding: "4px 18px 20px" }}>
-              {usage.channels.map((c) => (
-                <Bar key={c.channel} usage={c} />
+              {usage.meters.map((m) => (
+                <Bar key={m.id} usage={m} />
               ))}
             </div>
           </div>
@@ -273,20 +276,12 @@ export default async function BillingPage({
               {trialing ? (
                 <Row label="Free trial" value="Nothing charged" />
               ) : (
-                products.map((id) => {
-                  const monthly = productById(id).prices[market] ?? 0;
-                  return (
-                    <Row
-                      key={id}
-                      label={productById(id).name}
-                      value={
-                        monthly === 0
-                          ? "Free"
-                          : `${money(subscription.cycle === "annual" ? annualPerMonth([id], market) : monthly, market)} / mo`
-                      }
-                    />
-                  );
-                })
+                // What they were sold: the fee usage.ts computed from the
+                // subscription, never a price looked up again from the catalogue.
+                <Row
+                  label={products.map((id) => productById(id).name).join(" + ")}
+                  value={bill.planFee === 0 ? "Free" : `${money(bill.planFee, market)} / mo`}
+                />
               )}
               {bill.prepaid && (
                 <p className="muted" style={{ fontSize: 11.5, margin: "2px 0 8px", lineHeight: 1.5 }}>
@@ -301,10 +296,11 @@ export default async function BillingPage({
                   Belline is billed in {billedIn}. Your own prices stay in {location.currency}.
                 </p>
               )}
+              {bill.packsMinor > 0 && <Row label="Packs you chose, this period" value={money(bill.packsMinor, market)} />}
               <Row label="Invoiced now" value={money(bill.dueNow, market)} strong />
               <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0", lineHeight: 1.5 }}>
-                The plan fee and nothing else. There is no per-minute or per-conversation charge on
-                any plan — if an allowance runs short, the answer is a bigger plan, not a bigger bill.
+                The plan fee for this period{bill.packsMinor > 0 ? ", and the packs your usage choice added" : ""}. Nothing
+                is added to your bill unless you chose it.
               </p>
               <Link
                 href={trialing || !products.length ? "/checkout" : `/checkout?products=${products.join(",")}`}
@@ -319,6 +315,23 @@ export default async function BillingPage({
               )}
             </div>
           </div>
+
+          {!trialing && isPooled(products) && (
+            <div className="panel" style={{ marginBottom: 14 }}>
+              <div className="panel-head">When an allowance runs out</div>
+              <UsagePolicy
+                locationId={location.id}
+                mode={subscription.usagePolicy?.mode ?? null}
+                capAed={
+                  subscription.usagePolicy?.monthlyCapMinor !== undefined ? subscription.usagePolicy.monthlyCapMinor / 100 : null
+                }
+                canEdit={canManageUsers(user)}
+                packs={packsSentence()}
+                alerts={`We tell you at ${ALERT_THRESHOLDS.map((t) => `${t}%`).join(", ").replace(/, (?=[^,]*$)/, " and ")} of each allowance, once each per period.`}
+                nextPlan={nextPlanUp(products, market)?.name ?? null}
+              />
+            </div>
+          )}
 
           <div className="panel">
             <div className="panel-head">What counts</div>
