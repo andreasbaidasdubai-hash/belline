@@ -334,12 +334,14 @@ tbody tr:hover {
   min-width: 0;
 }
 
-/* Who is signed in — pinned to the bottom of the sidebar on desktop. */
+/* Who is signed in — at the bottom of the sidebar on desktop.
+   In the flow, not position: absolute. Pinned absolutely it sat on top of the
+   last links whenever the list was taller than the window — which a Belline
+   staff login, with its extra links, always is. Now the list scrolls and this
+   stays underneath it. */
 .who {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 18px;
+  flex-shrink: 0;
+  margin-top: 12px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -351,6 +353,18 @@ tbody tr:hover {
 
 .sidebar {
   position: sticky;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar > * {
+  flex-shrink: 0;
+}
+
+.sidebar > .nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* --- sign-in ------------------------------------------------------------- */
@@ -1171,6 +1185,7 @@ tbody tr:hover {
     border-bottom: 1px solid var(--border);
     padding: 11px 14px;
     display: flex;
+    flex-direction: row;
     align-items: center;
     gap: 14px;
   }
@@ -1182,6 +1197,7 @@ tbody tr:hover {
 
   .who {
     position: static;
+    margin-top: 0;
     margin-left: auto;
     padding: 5px 8px;
     background: none;
