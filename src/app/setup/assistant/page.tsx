@@ -48,7 +48,7 @@ export default async function SetupAssistantPage({
         </span>
       </header>
       <main style={{ maxWidth: 980, margin: "0 auto", padding: "36px 22px 80px" }}>
-        <h1 style={{ fontFamily: '"Fraunces", Georgia, serif', fontWeight: 500, fontSize: 30, letterSpacing: "-0.02em", margin: "0 0 6px" }}>
+        <h1 style={{ fontFamily: "var(--bl-font-display)", fontWeight: 700, fontSize: 30, letterSpacing: "-0.02em", margin: "0 0 6px" }}>
           Set up with Belle
         </h1>
         <p className="muted" style={{ fontSize: 14.5, margin: "0 0 22px", maxWidth: "60ch", lineHeight: 1.6 }}>

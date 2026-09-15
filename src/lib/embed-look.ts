@@ -18,15 +18,15 @@ import type { EmbedAppearance } from "./types";
  * can give a hex, and the contrast rule below decides whether it is allowed.
  */
 export const EMBED_PALETTE: Record<string, string> = {
-  ink: "#14110D",
-  brass: "#8A672E",
+  ink: "#111111",
+  brass: "#7E5E28",
   forest: "#2F4A3A",
   navy: "#1F2E4A",
   wine: "#5E2434",
 };
 
-const PAPER = "#FBF9F5";
-const INK = "#14110D";
+const PAPER = "#FCFAF6";
+const INK = "#111111";
 
 /** Guidelines, in numbers. */
 export const APPEARANCE_RULES = {
@@ -135,7 +135,7 @@ export function resolveAppearance(appearance: EmbedAppearance | undefined) {
     accent,
     accentText: text,
     // The mark on the filled button: brass-soft on dark accents, brass on light ones.
-    accentMark: text === PAPER ? "#E8DCC6" : "#8A672E",
+    accentMark: text === PAPER ? "#C9A45E" : "#7E5E28",
     shape: appearance?.shape ?? "pill",
     corner: appearance?.corner ?? "right",
     whatsapp: appearance?.whatsapp ?? true,

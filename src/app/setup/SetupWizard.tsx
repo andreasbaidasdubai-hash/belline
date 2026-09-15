@@ -113,7 +113,7 @@ export default function SetupWizard({
     }
   }
 
-  const serif = { fontFamily: '"Fraunces", Georgia, serif', fontWeight: 500 } as const;
+  const serif = { fontFamily: "var(--bl-font-display)", fontWeight: 700 } as const;
 
   // ---- done ---------------------------------------------------------------
 

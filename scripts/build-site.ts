@@ -369,6 +369,13 @@ const MARK = `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
     <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
   </svg>`;
 
+/**
+ * The bell button, for the header and footer lockups (Direction C): an ink
+ * bell on a Bell Brass badge. Logo colours are fixed, so hex rather than
+ * currentColor. The geometry is public/brand/belline-mark.svg.
+ */
+const BADGE = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" fill="#AD8639"/><g fill="#111111" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>`;
+
 /** Die Glocke im Sprechblasen-Umriss. Dasselbe Zeichen, getippt statt gesprochen. */
 const BUBBLE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M3 11.2C3 6.9 7.03 3.5 12 3.5s9 3.4 9 7.7c0 4.3-4.03 7.7-9 7.7a11 11 0 0 1-2.4-.26L5.4 20.5l.5-3.2A7.7 7.7 0 0 1 3 11.2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
@@ -462,7 +469,7 @@ function verticalPage(v: Vertical): string {
 <meta name="twitter:image" content="${ORIGIN}/brand/belline-og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
@@ -470,7 +477,7 @@ function verticalPage(v: Vertical): string {
 <header class="top">
   <div class="wrap top-in">
     <a class="brand" href="/">
-      ${MARK}
+      ${BADGE}
       <span>Belline</span>
     </a>
     <nav id="site-nav" data-open="false">
@@ -610,7 +617,7 @@ ${CALL_PANEL}
 <footer>
   <div class="wrap foot-in">
     <a class="brand" href="/">
-      ${MARK}
+      ${BADGE}
       <span>Belline</span>
     </a>
     <p>

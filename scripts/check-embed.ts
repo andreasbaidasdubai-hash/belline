@@ -261,7 +261,7 @@ console.log("\nHow it looks — the venue's choices, within the guidelines\n");
     const look = resolveAppearance(r.ok ? r.appearance : {});
     assert.equal(look.voiceLabel, "Talk to us");
     assert.equal(look.accent, EMBED_PALETTE.ink);
-    assert.equal(look.accentText, "#FBF9F5");
+    assert.equal(look.accentText, "#FCFAF6");
     assert.ok(contrastRatio(look.accent, look.accentText) >= APPEARANCE_RULES.minContrast);
   });
 
@@ -291,10 +291,10 @@ console.log("\nHow it looks — the venue's choices, within the guidelines\n");
   await test("light accents get ink text and a brass mark; dark ones paper and brass-soft", () => {
     // Deep enough to pass, and light enough that ink reads better than paper.
     const light = resolveAppearance({ accent: "#C9A227" });
-    assert.equal(light.accentText, "#14110D");
-    assert.equal(light.accentMark, "#8A672E");
+    assert.equal(light.accentText, "#111111");
+    assert.equal(light.accentMark, "#7E5E28");
     const dark = resolveAppearance({ accent: "wine" });
-    assert.equal(dark.accentText, "#FBF9F5");
+    assert.equal(dark.accentText, "#FCFAF6");
   });
 
   await test("shape and corner are one of two, and anything else is refused", () => {

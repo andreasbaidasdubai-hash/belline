@@ -30,7 +30,7 @@ export default async function PayPage({
         <p style={{ fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase", color: "#8A672E", margin: 0 }}>
           Deposit{reference ? ` · ${reference}` : ""}
         </p>
-        <h1 style={{ fontFamily: "Fraunces, Georgia, serif", fontWeight: 400, fontSize: 34, lineHeight: 1.1, margin: "12px 0 16px" }}>
+        <h1 style={{ fontFamily: "var(--bl-font-display)", fontWeight: 700, fontSize: 34, lineHeight: 1.1, margin: "12px 0 16px" }}>
           {paid ? "Thank you." : "Nothing was charged."}
         </h1>
         <p style={{ fontSize: 16, lineHeight: 1.55, margin: 0, color: "#4A443C" }}>
