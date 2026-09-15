@@ -3,15 +3,21 @@
    gegen etwas Bestehendes, und die Begründung steht dabei, weil "es sieht
    besser aus" in drei Wochen niemandem mehr hilft. */
 
+/* Brand tokens (Direction C) from the one shared source. scripts/build-site.ts
+   inlines this file into the built stylesheet, so production makes no extra
+   request; served straight from public/ it is a normal import. */
+@import url("/brand/tokens.css");
+
+/* The site's own names, mapped onto the brand tokens. */
 :root {
   /* Warmes Papier statt reinem Weiß. #FFFFFF ist auf einem Bildschirm eine
      Lichtquelle; Papier ist es nicht, und die ganze Haltung dieser Seite ist
      gedruckt, nicht beleuchtet. */
-  --paper: #FBF9F5;
-  --paper-2: #F4F0E8;
-  --ink: #14110D;
-  --ink-2: #4A443C;
-  --ink-3: #746C63;
+  --paper: var(--bl-ivory);
+  --paper-2: var(--bl-sand);
+  --ink: var(--bl-ink);
+  --ink-2: var(--bl-graphite);
+  --ink-3: var(--bl-stone);
 
   /* Messing, nicht Gold. Der alte Verlauf wollte teuer wirken und wirkte
      digital; ein einzelner gedeckter Ton, sparsam eingesetzt, wirkt teuer,
@@ -23,13 +29,14 @@
      3.58 und fiel durch die Prüfung. Dasselbe galt für das Grau: #8A8176 lag
      bei 3.64. Beide sind so weit abgedunkelt, dass sie auf *beiden* Papieren
      bestehen, und keinen Schritt weiter. */
-  --brass: #8A672E;
-  --brass-soft: #E8DCC6;
+  --brass: var(--bl-brass-desk);
+  --brass-soft: var(--bl-brass-tint);
+  --brass-fill: var(--bl-brass);
 
   /* Haarlinien. Eine 1px-Linie in Tinte bei 12% ist das, was gedruckte
      Sachen benutzen, statt Karten mit Schatten übereinanderzustapeln. */
-  --rule: rgba(20, 17, 13, 0.12);
-  --rule-soft: rgba(20, 17, 13, 0.07);
+  --rule: var(--bl-rule);
+  --rule-soft: var(--bl-rule-soft);
 
   /* Die Auszeichnungsschrift, an einer Stelle.
      Vorher stand '"Instrument Serif", Georgia, serif' achtzehnmal im
@@ -861,10 +868,10 @@ section { padding: 110px 0; }
 .book-form input:focus,
 .book-form select:focus,
 .book-form textarea:focus { outline: none; border-bottom-color: var(--ink); }
-.book-form input.is-bad, .book-form select.is-bad { border-bottom-color: #A33327; }
+.book-form input.is-bad, .book-form select.is-bad { border-bottom-color: var(--bl-alert); }
 .book-form input.is-hint { border-bottom-color: var(--brass); }
 
-.f-err { font-size: 0.8rem; font-style: normal; color: #A33327; }
+.f-err { font-size: 0.8rem; font-style: normal; color: var(--bl-alert); }
 .f-err.is-hint { color: var(--brass); }
 .f-err button {
   appearance: none; border: 0; background: none; font: inherit; font-size: inherit;
@@ -872,8 +879,8 @@ section { padding: 110px 0; }
 }
 .book-submit { justify-content: center; margin-top: 6px; }
 .f-note { font-size: 0.82rem; color: var(--ink-3); margin: 0; }
-.f-note.is-good { color: #2F6B4F; }
-.f-note.is-bad { color: #A33327; }
+.f-note.is-good { color: var(--bl-lagoon); }
+.f-note.is-bad { color: var(--bl-alert); }
 
 /* --- Was die verpassten Anrufe wert sind ----------------------------------- */
 .roi { max-width: 760px; margin-top: 34px; }

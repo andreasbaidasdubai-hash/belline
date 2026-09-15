@@ -200,10 +200,31 @@ const TEXT = /\.(html|css|js|json)$/i;
 // bytes, and every reference follows.
 const HASHED = /\.(css|js|mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
 
+/**
+ * The brand tokens, inlined.
+ *
+ * public/site.css imports /brand/tokens.css so the dashboard and the site read
+ * one file. Left as an @import, every visitor would pay a second render-blocking
+ * request; inlined, the tokens ship inside the hashed stylesheet. The hash is
+ * taken over the inlined bytes, so a token change is a new stylesheet URL.
+ */
+const TOKENS_IMPORT = '@import url("/brand/tokens.css");';
+function assetBytes(asset: string): Buffer {
+  const bytes = fs.readFileSync(path.join(SOURCE, asset));
+  if (asset !== "site.css") return bytes;
+  const css = bytes.toString("utf8");
+  if (!css.includes(TOKENS_IMPORT)) {
+    console.error(`\n  site.css no longer imports the brand tokens (${TOKENS_IMPORT}).\n`);
+    process.exit(1);
+  }
+  const tokens = fs.readFileSync(path.join(SOURCE, "brand", "tokens.css"), "utf8");
+  return Buffer.from(css.replace(TOKENS_IMPORT, tokens), "utf8");
+}
+
 const hashedName = new Map<string, string>();
 for (const asset of assets) {
   if (!HASHED.test(asset)) continue;
-  const bytes = fs.readFileSync(path.join(SOURCE, asset));
+  const bytes = assetBytes(asset);
   const hash = crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 8);
   const ext = path.posix.extname(asset);
   hashedName.set(asset, `${asset.slice(0, -ext.length)}.${hash}${ext}`);
@@ -266,7 +287,7 @@ for (const asset of assets) {
   if (TEXT.test(asset)) {
     // site.js fetches /call-scenes.json, and call-scenes.json names the audio
     // files. Both have to follow the rename or the Listen button goes quiet.
-    fs.writeFileSync(target, repoint(fs.readFileSync(path.join(SOURCE, asset), "utf8")), "utf8");
+    fs.writeFileSync(target, repoint(assetBytes(asset).toString("utf8")), "utf8");
   } else {
     fs.copyFileSync(path.join(SOURCE, asset), target);
   }

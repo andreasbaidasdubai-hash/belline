@@ -177,9 +177,14 @@ function ruleBody(selector: string): string {
   return match ? match[2] : "";
 }
 
-await test("the tokens themselves are unchanged", () => {
-  assert.match(shellCss, /--muted:\s*#746C63;/);
-  assert.match(shellCss, /--brass:\s*#8A672E;/);
+await test("the text tokens keep their checked values", () => {
+  // Direction C: the app maps onto the shared brand tokens, whose values were
+  // checked for contrast (stone 4.56 on brass tint, desk brass 4.99 on it).
+  const tokensCss = fs.readFileSync(path.join(process.cwd(), "public", "brand", "tokens.css"), "utf8");
+  assert.match(shellCss, /--muted:\s*var\(--bl-stone\);/);
+  assert.match(shellCss, /--brass:\s*var\(--bl-brass-desk\);/);
+  assert.match(tokensCss, /--bl-stone:\s*#6E6961;/);
+  assert.match(tokensCss, /--bl-brass-desk:\s*#7E5E28;/);
 });
 
 await test("pills, table headers and calendar headings use the darker text on tint", () => {

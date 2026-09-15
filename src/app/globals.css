@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Brand tokens (Direction C): the same file the marketing site uses. */
+@import "../../public/brand/tokens.css";
 
 /* ---------------------------------------------------------------------------
    Light, warm, quiet.
@@ -14,36 +16,33 @@
      Varianten derselben Idee, die nebeneinander wie zwei Produkte aussahen.
      Die Namen bleiben, damit nichts anderes angefasst werden muss; nur die
      Werte ändern sich. */
-  --bg: #F4F0E8;
-  --panel: #FBF9F5;
-  --panel-2: #F0EBE1;
-  --border: rgba(20, 17, 13, 0.13);
-  --border-soft: rgba(20, 17, 13, 0.07);
-  --text: #14110D;
-  --text-2: #4A443C;
-  /* #7D7469 lag auf beiden Untergründen knapp unter 4.5:1 — auf der Website
-     ist derselbe Ton durch die WCAG-Prüfung gefallen. Hier prüft nichts
-     automatisch, also steht der geprüfte Wert. */
-  --muted: #746C63;
-  --accent: #14110D;
-  --accent-soft: #EAE3D6;
-  --accent-line: #C9BEAC;
-  /* Messing wie in public/site.css. Die Marke wechselt beim Klick von der
-     Website ins Dashboard; zwei Messingtöne über diese Grenze sieht man. */
-  --gold: #8A672E;
-  --gold-ink: #8A6432;
-  --brass: #8A672E;
-  /* Messing auf Tinte statt auf Papier. Der dunkle Ton oben ist für Text auf
-     hellem Grund abgedunkelt; auf der schwarzen Anrufleiste wäre er fast
-     unsichtbar, und ein Fokusrahmen, den man nicht sieht, ist keiner. */
-  --gold-lit: #CDAA70;
-  --ok: #2F6B4F;
-  --ok-soft: #E2EBE4;
-  --warn: #8A5A1E;
-  --warn-soft: #F3E8D8;
-  --bad: #A33327;
-  --bad-soft: #F4E3E0;
-  --lift: 0 1px 2px rgba(20, 17, 13, 0.05);
+  /* Mapped onto public/brand/tokens.css (Direction C). The names stay so
+     nothing else has to change; ratios are recorded in docs/brand/guidelines.md. */
+  --bg: var(--bl-ivory);
+  --panel: var(--bl-white);
+  --panel-2: var(--bl-sand);
+  --border: var(--bl-rule);
+  --border-soft: var(--bl-rule-soft);
+  --text: var(--bl-ink);
+  --text-2: var(--bl-graphite);
+  --muted: var(--bl-stone);
+  --accent: var(--bl-ink);
+  --accent-soft: var(--bl-brass-tint);
+  --accent-line: var(--bl-rule-brass);
+  /* One brass for text on light grounds; the near-duplicate is gone. */
+  --gold: var(--bl-brass-desk);
+  --gold-ink: var(--bl-brass-desk);
+  --brass: var(--bl-brass-desk);
+  --brass-fill: var(--bl-brass);
+  /* Brass on ink surfaces (the call bar), where desk brass would vanish. */
+  --gold-lit: var(--bl-brass-lit);
+  --ok: var(--bl-lagoon);
+  --ok-soft: var(--bl-lagoon-tint);
+  --warn: var(--bl-brass-desk);
+  --warn-soft: var(--bl-brass-tint);
+  --bad: var(--bl-alert);
+  --bad-soft: var(--bl-alert-tint);
+  --lift: var(--bl-elev-0);
 
   color-scheme: light;
 }

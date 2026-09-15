@@ -1,0 +1,66 @@
+/* Belline brand tokens: Direction C, "The Bell Button".
+   The one source for colour, type, radii, spacing, elevation and focus.
+   Imported by public/site.css (inlined into it by scripts/build-site.ts)
+   and by src/app/globals.css. Change a value here and both follow.
+   Contrast ratios are WCAG 2.x, computed; see docs/brand/guidelines.md. */
+
+:root {
+  /* Colour: grounds */
+  --bl-ivory: #FCFAF6;        /* page ground. Ink 18.11, graphite 7.65, stone 5.22 */
+  --bl-white: #FFFFFF;        /* panels, cards, inputs. Ink 18.88 */
+  --bl-sand: #F6F2EA;         /* sunk rows, hovers, table heads. Stone 4.88 */
+  --bl-brass-tint: #F3EAD8;   /* pills, selected rows. Desk brass 4.99, stone 4.56 */
+
+  /* Colour: text */
+  --bl-ink: #111111;          /* headings, marks, primary text */
+  --bl-graphite: #55504A;     /* body text */
+  --bl-stone: #6E6961;        /* meta text; never below 12px on brass tint */
+
+  /* Colour: brass */
+  --bl-brass: #AD8639;        /* Bell Brass: badge, primary button, fills. Ink on it 5.62. Never white text on it (3.36) */
+  --bl-brass-desk: #7E5E28;   /* Desk Brass: small brass text and links. 5.72 on ivory */
+  --bl-brass-lit: #C9A45E;    /* brass on ink surfaces, 8.05 on ink */
+
+  /* Colour: states (Lagoon is for states only) */
+  --bl-lagoon: #0B6B7A;       /* available, success, focus ring. 5.93 on ivory */
+  --bl-lagoon-tint: #E3F0F1;  /* 5.30 under lagoon text */
+  --bl-alert: #A33327;        /* errors. 6.58 on ivory */
+  --bl-alert-tint: #F6E4E0;   /* 5.59 under alert text */
+
+  /* Lines. Hairlines, no shadows. */
+  --bl-rule: rgba(17, 17, 17, 0.12);
+  --bl-rule-soft: rgba(17, 17, 17, 0.07);
+  --bl-rule-strong: rgba(17, 17, 17, 0.18);
+  --bl-rule-brass: #D9C9A6;   /* decorative brass hairline, hover borders; not a text colour */
+
+  /* Type */
+  --bl-font-display: "Bricolage Grotesque", ui-sans-serif, "Segoe UI", Arial, sans-serif;
+  --bl-font-text: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --bl-track-display: -0.045em;
+  --bl-track-h1: -0.035em;
+  --bl-track-h2: -0.02em;
+  --bl-track-label: 0.08em;
+
+  /* Radii */
+  --bl-radius-pill: 999px;
+  --bl-radius-panel: 14px;
+  --bl-radius-input: 10px;
+
+  /* Spacing, 4px base */
+  --bl-space-1: 4px;
+  --bl-space-2: 8px;
+  --bl-space-3: 12px;
+  --bl-space-4: 16px;
+  --bl-space-5: 24px;
+  --bl-space-6: 32px;
+  --bl-space-7: 48px;
+  --bl-space-8: 64px;
+
+  /* Elevation. Flat by rule; one lift for floating things only (menus, the chat dock). */
+  --bl-elev-0: none;
+  --bl-elev-float: 0 12px 32px -16px rgba(17, 17, 17, 0.35);
+
+  /* Focus ring: Lagoon 2px, offset 2px. On ink surfaces use --bl-brass-lit. */
+  --bl-focus: 2px solid var(--bl-lagoon);
+  --bl-focus-offset: 2px;
+}
