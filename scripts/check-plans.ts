@@ -178,12 +178,19 @@ test("the trial: fourteen days, 30 voice minutes, 50 text conversations, one cal
   assert.deepEqual([...TRIAL.products], ["v2_starter"]);
 });
 
-test("WhatsApp is not shown on any plan until it works, and nothing not-yet reaches a public line", () => {
-  assert.equal(CHANNELS.whatsapp.status, "not-yet");
+test("WhatsApp is live, shares every plan's text conversations with website chat, and nothing not-yet reaches a public line", () => {
+  assert.equal(CHANNELS.whatsapp.status, "live");
   for (const id of V2) {
     const lines = publicLines(productById(id));
     assert.ok(lines.length > 0, `${id} shows nothing`);
-    assert.ok(!lines.some((l) => /whatsapp/i.test(l)), `${id} shows WhatsApp: ${lines.join(" | ")}`);
+    const conversations = lines.find((l) => /text conversations a month/.test(l));
+    assert.ok(conversations, `${id} has no text conversations line`);
+    assert.match(conversations!, /your website chat and WhatsApp/, `${id}: ${conversations}`);
+    // The pool line is where WhatsApp is sold, on every plan alike: no separate
+    // "WhatsApp" feature that would imply a cheaper plan goes without it.
+    assert.equal(lines.filter((l) => /whatsapp/i.test(l)).length, 1, `${id}: ${lines.join(" | ")}`);
+    // It is a second number the business registers, never their existing one.
+    assert.ok(!lines.some((l) => /(?:your|their) (?:own |existing |current )?whats\s?app(?: number)?\b/i.test(l)), `${id}: ${lines.join(" | ")}`);
     for (const f of productById(id).features.filter((f) => f.status === "not-yet")) {
       assert.ok(!lines.includes(f.text), `${id} shows not-yet "${f.text}"`);
       assert.ok((f.gap ?? "").length > 40, `${id} "${f.text}" has no real gap`);

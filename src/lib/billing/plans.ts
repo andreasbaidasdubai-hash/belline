@@ -77,15 +77,14 @@ export const CHANNELS: Record<Channel, ChannelInfo> = {
   phone: { channel: "phone", name: "Phone", unit: "minutes", status: "live" },
   web_voice: { channel: "web_voice", name: "Website voice button", unit: "minutes", status: "live" },
   chat: { channel: "chat", name: "Website chat", unit: "conversations", status: "live" },
-  whatsapp: {
-    channel: "whatsapp",
-    name: "WhatsApp",
-    unit: "conversations",
-    status: "not-yet",
-    gap:
-      "Answering a customer's own WhatsApp number needs Meta business verification and Tech " +
-      "Provider onboarding for Belline. Today only Belline's own WhatsApp number answers.",
-  },
+  // Live on the second-number model: the owner registers a new number they
+  // own on /integrations (whatsapp-provision.ts), Meta texts it a code, and
+  // Belline answers it under Belline's own WhatsApp Business account. Their
+  // existing WhatsApp is never touched or answered. English only; voice notes
+  // are refused (reception/respond.ts). Internal note: Meta business
+  // verification for Belline's account is still pending, which limits how many
+  // numbers and conversations the account gets. Not for a public page.
+  whatsapp: { channel: "whatsapp", name: "WhatsApp", unit: "conversations", status: "live" },
 };
 
 /** The pool a channel draws on: phone and the voice button share minutes; chat and WhatsApp share conversations. */
@@ -138,8 +137,8 @@ export function poolPlaces(pool: Pool): string {
 }
 
 /**
- * One pooled allowance, naming only the channels that work today. WhatsApp
- * joins the conversations sentence the day its channel is live, and not before.
+ * One pooled allowance, naming only the channels that work today: a channel
+ * joins its sentence the day it is live, and not before.
  */
 export function poolText(pool: Pool, amount: number): string {
   const n = amount.toLocaleString("en-GB");
@@ -326,11 +325,8 @@ const V2_GROWTH_FEATURES: Feature[] = [
       "Works only on Belline's own booking list, which the September 2026 direction freezes; " +
       "it is not offered on public plans while Belline works with the customer's own booking system.",
   },
-  {
-    text: "WhatsApp, sharing your text conversations",
-    status: "not-yet",
-    gap: CHANNELS.whatsapp.gap,
-  },
+  // WhatsApp is not a Growth feature: every plan's text conversations pool
+  // covers it (poolText), exactly as channelsOf and entitlement.ts answer it.
   {
     text: "One specialist booking integration — Fresha, Treatwell, SevenRooms or OpenTable",
     status: "not-yet",
@@ -435,7 +431,9 @@ export const PRODUCTS: Product[] = [
       {
         text: "WhatsApp and website chat, fair use up to 2,000 conversations",
         status: "not-yet",
-        gap: CHANNELS.whatsapp.gap,
+        gap:
+          "Both channels work, but this is a managed-track allowance: the managed track is not public " +
+          "until its booking-system integration and Arabic exist.",
       },
       {
         text: "Connected to Fresha, Treatwell, SevenRooms or OpenTable",
@@ -697,7 +695,7 @@ export const TRIAL = {
   days: 14,
   /** Voice minutes, pooled across the phone and the voice button. */
   minutes: 30,
-  /** Text conversations, pooled across chat (and WhatsApp once it is live). */
+  /** Text conversations, pooled across website chat and WhatsApp (a trial includes every channel). */
   conversations: 50,
   /** Stored as the entitlement; not said publicly while calendar connections are not-yet. */
   calendarConnections: 1,

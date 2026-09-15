@@ -175,7 +175,7 @@ export const MINUTE_DEFINITION =
   "do not count, and neither do calls cut short by a fault on our side.";
 
 export const CONVERSATION_DEFINITION =
-  "A conversation is one customer's thread in your website chat in which Belline replies at " +
+  "A conversation is one customer's thread in your website chat or on WhatsApp in which Belline replies at " +
   "least once. Everything that customer says in the 24 hours after Belline's first reply is " +
   "the same conversation. Threads your team answers without Belline do not count.";
 

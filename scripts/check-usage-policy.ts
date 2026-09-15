@@ -357,6 +357,8 @@ await test("the over-limit sentence names the three choices, the alerts, the pac
 await test("packs, trial and volume sentences are read from the catalogue", () => {
   assert.equal(speak.packsSentence(), "100 extra voice minutes for AED 99, or 150 extra text conversations for AED 49.");
   assert.match(speak.trialSentence(), /14 days free: 30 voice minutes and 50 text conversations/);
+  // A trial answers every channel (entitlement.channelIncluded), WhatsApp too.
+  assert.match(speak.trialSentence(), /your website chat and WhatsApp all switched on/);
   assert.match(speak.volumeSentence(), /separate subscription/);
   assert.match(speak.volumeSentence(), /5 to 19 locations: 10% off/);
   assert.match(speak.volumeSentence(), /20 or more/);
