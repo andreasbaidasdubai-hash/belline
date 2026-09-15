@@ -921,6 +921,23 @@ footer { border-top: 1px solid var(--rule); padding: 44px 0 60px; }
 footer p { font-size: 0.86rem; color: var(--ink-3); margin: 0; line-height: 1.7; }
 footer a { color: var(--ink-2); text-underline-offset: 3px; }
 
+/* --- Floating buttons wait for the hero ------------------------------------
+   The hero already offers "Speak to Belline", and the three floating buttons
+   sat on top of its example conversation. site.js adds .fabs-waiting while the
+   hero is on screen; without JavaScript the class never appears. */
+.fabs-waiting .bell-fab,
+.fabs-waiting .chat-fab,
+.fabs-waiting .wa-fab {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.bell-fab,
+.chat-fab,
+.wa-fab {
+  transition: opacity 0.2s ease, visibility 0.2s, transform 0.16s ease;
+}
+
 /* --- Die Glocke ------------------------------------------------------------ */
 
 .bell-fab {
