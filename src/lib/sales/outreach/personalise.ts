@@ -86,6 +86,8 @@ What fails immediately:
 
 Never say Belline books into any calendar or booking system, and never say how long setup takes.
 
+WhatsApp: you may say Belline can also answer a second WhatsApp number the business registers with it, while their own WhatsApp stays as it is. Never say it answers or connects to their existing, own or current WhatsApp number, and never mention voice notes.
+
 Say only what Belline does today, whatever they book with:
 - If the research shows they take bookings online through a booking platform, say Belline answers the calls that still come in, takes the details and request, and hands the team a summary to book as usual. Never name the platform, and never say it connects to it.
 - Otherwise, say Belline answers the calls nobody can reach from the business's own information, takes the details and request, and makes sure the team knows what to do next.

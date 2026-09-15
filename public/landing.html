@@ -71,6 +71,7 @@
         { "@type": "Question", "name": "Are we tied in?", "acceptedAnswer": { "@type": "Answer", "text": "No. Monthly plans cancel any time and run to the end of the paid period. Annual plans are paid up front and include 2 months free." } },
         { "@type": "Question", "name": "We’re not a clinic, salon or restaurant. Can we still use it?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. If customers ring or message you with questions, Belline can answer from your information. Pick the closest trade when you sign up." } },
         { "@type": "Question", "name": "What do you do with our customers’ data?", "acceptedAnswer": { "@type": "Answer", "text": "Transcripts and messages are stored so you can check what was said. Call audio is not recorded. The data belongs to your business, and we hand it over if you leave." } },
+        { "@type": "Question", "name": "Does it answer WhatsApp?", "acceptedAnswer": { "@type": "Answer", "text": "Yes, on a second number. You register a new WhatsApp number with Belline from your dashboard, and Belline answers it from your information and passes requests to your team. Your own WhatsApp stays as it is." } },
         { "@type": "Question", "name": "Does it speak Arabic?", "acceptedAnswer": { "@type": "Answer", "text": "Not yet. Belline answers in English." } }
       ]
     }
@@ -114,10 +115,11 @@
 <main>
 
   <!--
-    The hero. Claim on the left; on the right, the two conversations Belline
-    actually has, drawn in HTML and clearly labelled as examples. Neither ends
-    in a booked time: the chat hands the request to the team, the call arrives
-    as a summary. That is what the product does today.
+    The hero. Claim on the left; on the right, the three conversations Belline
+    actually has — website chat, a phone call and WhatsApp — drawn in HTML and
+    clearly labelled as examples. None ends in a booked time: the chats hand
+    the request to the team, the call arrives as a summary. That is what the
+    product does today.
   -->
   <section class="hero">
     <div class="wrap hero-in hero-demo">
@@ -125,7 +127,8 @@
         <p class="eyebrow rise">AI voice and chat reception</p>
         <h1 class="display rise rise-1">Someone always answers.</h1>
         <p class="lead rise rise-2">
-          Belline answers the calls and website chats your team can’t get to.
+          Belline answers the calls, website chats and WhatsApp messages your
+          team can’t get to.
           It answers from your own information, and passes everything else to
           your team with a summary.
         </p>
@@ -202,9 +205,10 @@
         </figure>
 
         <!--
-          WhatsApp, so all three channels are visible. Marked Coming soon on the
-          card itself: answering a business's own WhatsApp number is not live
-          yet, and the hero is where a visitor decides what Belline does today.
+          WhatsApp, labelled as an example like the other two. It is live on
+          the second-number model: the business registers a new number with
+          Belline, and its existing WhatsApp is left as it is. Like the chat,
+          it ends with the request passed to the team, never a booked time.
         -->
         <figure class="demo-card demo-wa">
           <figcaption class="demo-head demo-head-wa">
@@ -212,7 +216,7 @@
               <svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path fill="currentColor" d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z"/></svg>
             </span>
             <span class="demo-title">WhatsApp</span>
-            <span class="state state-soon demo-soon">Coming soon</span>
+            <span class="demo-example">Example conversation</span>
           </figcaption>
           <ol class="chat-thread wa-thread">
             <li class="msg msg-visitor"><span class="vh">Customer: </span>Hi, can I book a cleaning on Saturday morning?</li>
@@ -263,8 +267,8 @@
       <div class="sec-head">
         <h2 class="display">Where Belline answers.</h2>
         <p class="sec-lead lead">
-          Your phone and your website, with the same information and the same
-          rules in each. WhatsApp for your business is coming soon.
+          Your phone, your website and a second WhatsApp number, with the same
+          information and the same rules in each.
         </p>
       </div>
 
@@ -300,10 +304,10 @@
           <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z"/><path fill="currentColor" stroke="none" d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z"/></svg>
           <div class="channel-head">
             <h3>WhatsApp for your business</h3>
-            <span class="state state-soon">Coming soon</span>
+            <span class="state state-available">Available</span>
           </div>
-          <p>Belline will answer WhatsApp for your business once Meta approves our business account. It isn’t available yet.</p>
-          <p class="channel-how">You can <a href="https://app.belline.ai/whatsapp">message Belle</a>, Belline’s own receptionist, on WhatsApp today.</p>
+          <p>Belline answers a second WhatsApp number you register with it. Your own WhatsApp stays as it is. Customers message it like any business on WhatsApp.</p>
+          <p class="channel-how">Set up from your dashboard. <a href="https://app.belline.ai/whatsapp">Message Belle</a>, Belline’s own receptionist, to try it.</p>
         </li>
       </ul>
 
@@ -526,7 +530,8 @@
       <div class="sec-head">
         <h2 class="display">Pick how much Belline answers.</h2>
         <p class="sec-lead lead">
-          Every plan answers your phone and your website. Plans differ in how
+          Every plan answers your phone, your website and a WhatsApp number
+          you register with Belline. Plans differ in how
           many voice minutes and text conversations they include.
           <span class="gen" data-gen="trial-short">14 days free, no card.</span>
         </p>
@@ -554,7 +559,7 @@
           </div>
           <ul>
             <li>75 voice minutes a month, shared across your phone line and your website's voice button</li>
-            <li>200 text conversations a month, shared across your website chat</li>
+            <li>200 text conversations a month, shared across your website chat and WhatsApp</li>
             <li>Up to 2 users on your dashboard</li>
             <li>One location</li>
             <li>Keep your number — forward it to Belline</li>
@@ -579,7 +584,7 @@
           </div>
           <ul>
             <li>250 voice minutes a month, shared across your phone line and your website's voice button</li>
-            <li>600 text conversations a month, shared across your website chat</li>
+            <li>600 text conversations a month, shared across your website chat and WhatsApp</li>
             <li>Up to 5 users on your dashboard</li>
             <li>Everything in Starter</li>
             <li>Puts urgent calls through to your team, live</li>
@@ -601,7 +606,7 @@
           </div>
           <ul>
             <li>600 voice minutes a month, shared across your phone line and your website's voice button</li>
-            <li>1,300 text conversations a month, shared across your website chat</li>
+            <li>1,300 text conversations a month, shared across your website chat and WhatsApp</li>
             <li>Up to 15 users on your dashboard</li>
             <li>Everything in Growth</li>
             <li>Named contact for onboarding and changes</li>
@@ -621,7 +626,7 @@
         </div>
         <div>
           <h4>What counts as a conversation</h4>
-          <p>A conversation is one customer's thread in your website chat in which Belline replies at least once. Everything that customer says in the 24 hours after Belline's first reply is the same conversation. Threads your team answers without Belline do not count.</p>
+          <p>A conversation is one customer's thread in your website chat or on WhatsApp in which Belline replies at least once. Everything that customer says in the 24 hours after Belline's first reply is the same conversation. Threads your team answers without Belline do not count.</p>
         </div>
         <div>
           <h4>When an allowance runs out</h4>
@@ -629,7 +634,7 @@
         </div>
         <div>
           <h4>14 days free</h4>
-          <p>14 days free: 30 voice minutes and 50 text conversations, with the phone, the voice button on your website and your website chat all switched on. No card, nothing charged. Standard onboarding is free.</p>
+          <p>14 days free: 30 voice minutes and 50 text conversations, with the phone, the voice button on your website, your website chat and WhatsApp all switched on. No card, nothing charged. Standard onboarding is free.</p>
         </div>
       </div>
 <!-- pricing:end -->
@@ -692,6 +697,10 @@
         <details>
           <summary>What do you do with our customers’ data?</summary>
           <div class="answer"><p>Transcripts and messages are stored so you can check what was said. Call audio is not recorded. The data belongs to your business, and we hand it over if you leave.</p></div>
+        </details>
+        <details>
+          <summary>Does it answer WhatsApp?</summary>
+          <div class="answer"><p>Yes, on a second number. You register a new WhatsApp number with Belline from your dashboard, and Belline answers it from your information and passes requests to your team. Your own WhatsApp stays as it is.</p></div>
         </details>
         <details>
           <summary>Does it speak Arabic?</summary>

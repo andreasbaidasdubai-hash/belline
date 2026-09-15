@@ -280,7 +280,12 @@ await test("she discloses being an AI, sells with specifics, and names nothing t
   const policies = bellineVenue.agent.policies.join(" ");
   assert.match(policies, /you are an AI/);
   assert.match(policies, /Never name or criticise a competitor/);
-  assert.match(policies, /WhatsApp/, "the not-yet list is not generated from the catalogue");
+  const notYet = bellineVenue.agent.policies.find((p) => p.includes("These do not work yet")) ?? "";
+  assert.match(notYet, /Microsoft Outlook connection/, "the not-yet list is not generated from the catalogue");
+  // WhatsApp is live on the second-number model: never in the not-yet list, never "coming soon".
+  assert.doesNotMatch(notYet, /WhatsApp/, "WhatsApp is still named as not working");
+  assert.doesNotMatch(policies, /WhatsApp[^.]{0,80}coming soon|coming soon[^.]{0,80}WhatsApp/i);
+  assert.match(policies, /second WhatsApp number/, "Belle does not know WhatsApp is sold as a second number");
   assert.doesNotMatch(policies, /live call transfer/, "the stale hand-typed not-yet list is back");
   assert.match(policies, /Card payment at checkout/, "card payment is not named as not-yet while Stripe is off");
   assert.doesNotMatch(policies, /usually one or two saved bookings|takes minutes|in minutes|fourteen days free/i);

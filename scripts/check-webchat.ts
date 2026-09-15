@@ -510,16 +510,75 @@ await test("the WhatsApp refusal for voice notes still stands — only the web c
 // ---------------------------------------------------------------------------
 head("Our own website, continued");
 
-await test("the front page does not claim WhatsApp is live", () => {
-  const raw = fs.readFileSync(path.join(process.cwd(), "public", "landing.html"), "utf8");
-  // What a visitor reads, not what the source says. The comments explain the
-  // decision to whoever edits the file next; they are not the claim.
-  const html = raw.replace(/<!--[\s\S]*?-->/g, "");
-  const whatsapp = html.slice(html.indexOf("WhatsApp"));
-  assert.ok(
-    /not connected|not yet|coming|not live/i.test(whatsapp.slice(0, 400)),
-    "WhatsApp is mentioned without saying it is not connected",
-  );
+// What a visitor reads, not what the source says. The comments explain the
+// decision to whoever edits the file next; they are not the claim.
+const visibleHtml = (file: string) =>
+  fs.readFileSync(path.join(process.cwd(), "public", file), "utf8").replace(/<!--[\s\S]*?-->/g, "");
+
+/**
+ * WhatsApp for a business is a SECOND number it registers with Belline. Its
+ * existing WhatsApp is never answered, so no public sentence may say Belline
+ * answers, connects or takes over "your (own/existing/current) WhatsApp", or
+ * name "your WhatsApp number". "Your own WhatsApp stays as it is" is the
+ * honest half and is allowed.
+ */
+const EXISTING_WHATSAPP_CLAIM =
+  /\b(?:answers?|answering|connects?|connecting|takes? over|runs?|on|into|to) (?:your|their) (?:own |existing |current |usual )?whats\s?app\b(?! stays)|\b(?:your|their) (?:existing|current|usual) whats\s?app\b(?! stays)|\b(?:your|their) (?:own )?whats\s?app (?:number|account|line)\b/i;
+
+await test("the pattern for an existing-WhatsApp claim catches the dishonest versions and spares the honest one", () => {
+  for (const bad of [
+    "Belline answers your WhatsApp.",
+    "Belline answers your existing WhatsApp number.",
+    "It connects to your own WhatsApp in a minute.",
+    "We take over your current WhatsApp.",
+    "Customers message your WhatsApp number.",
+  ]) assert.match(bad, EXISTING_WHATSAPP_CLAIM, bad);
+  for (const good of [
+    "Belline answers a second WhatsApp number you register with it.",
+    "Your own WhatsApp stays as it is.",
+    "Your own WhatsApp stays exactly as it is.",
+  ]) assert.doesNotMatch(good, EXISTING_WHATSAPP_CLAIM, good);
+});
+
+await test("the front page says WhatsApp is available, on a second number, and never 'coming soon'", () => {
+  const html = visibleHtml("landing.html");
+  const card = html.slice(html.indexOf("<h3>WhatsApp for your business</h3>"));
+  const body = card.slice(0, card.indexOf("</li>"));
+  assert.match(body, /state-available">Available</, "the WhatsApp channel card is not marked Available");
+  assert.match(body, /second WhatsApp number you register/, "the WhatsApp card does not say it is a second number");
+  assert.match(body, /own WhatsApp stays as it is/, "the WhatsApp card does not say their own WhatsApp is untouched");
+  assert.doesNotMatch(html, /coming soon[^<]{0,80}whats\s?app|whats\s?app[^<]{0,120}coming soon|once Meta approves|isn.t available yet/i);
+  assert.doesNotMatch(html, /state-soon[^>]*>[^<]*<\/span>\s*<\/(?:figcaption|div)>[\s\S]{0,40}whats/i);
+});
+
+await test("the hero's WhatsApp card is an example conversation like the other two, not a not-live card", () => {
+  const html = visibleHtml("landing.html");
+  const card = html.slice(html.indexOf('class="demo-card demo-wa"'), html.indexOf("</figure>", html.indexOf('class="demo-card demo-wa"')));
+  assert.ok(card.length > 0, "the hero WhatsApp card is gone");
+  assert.match(card, /<span class="demo-example">Example conversation<\/span>/);
+  assert.doesNotMatch(card, /Coming soon|demo-soon|state-soon/);
+  // Still no booked time: the request goes to the team.
+  assert.match(card, /pass that to the team/);
+  assert.doesNotMatch(card, /(?:booked|confirmed) (?:you )?for|see you (?:on|at)/i);
+  const css = fs.readFileSync(path.join(process.cwd(), "public", "site.css"), "utf8");
+  assert.doesNotMatch(css, /\.demo-wa\s*\{[^}]*dashed/, "the hero WhatsApp card still has the dashed not-live border");
+});
+
+await test("no public page claims a business's existing WhatsApp is answered, or voice notes on WhatsApp", () => {
+  const pages = fs.readdirSync(path.join(process.cwd(), "public")).filter((f) => f.endsWith(".html"));
+  const sources = [
+    ...pages.map((f) => ({ file: `public/${f}`, text: visibleHtml(f) })),
+    ...["site-content.ts", "build-site.ts"].map((f) => ({
+      file: `scripts/${f}`,
+      text: fs.readFileSync(path.join(process.cwd(), "scripts", f), "utf8"),
+    })),
+  ];
+  for (const { file, text } of sources) {
+    const plain = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    assert.doesNotMatch(plain, EXISTING_WHATSAPP_CLAIM, `${file} claims the business's existing WhatsApp is answered`);
+    assert.doesNotMatch(plain, /whats\s?app[^.]{0,120}voice notes?|voice notes?[^.]{0,120}whats\s?app/i, `${file} claims voice notes on WhatsApp`);
+    assert.doesNotMatch(plain, /Twilio sandbox|Belline's own Twilio/i, `${file} mentions the Twilio sandbox`);
+  }
 });
 
 // ---------------------------------------------------------------------------

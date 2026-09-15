@@ -157,10 +157,27 @@ test("the trial and volume answers are generated from the catalogue", () => {
   assert.match(volumeAnswer(), /five to nineteen locations get ten per cent off/i);
 });
 
-test("WhatsApp: Belle's own number today, a business's own number coming soon", () => {
+test("WhatsApp: available for a business on a second number it registers, and Belle answers Belline's own", () => {
   const whatsapp = faq(/whatsapp/i);
+  assert.match(whatsapp, /^Yes\./);
+  assert.match(whatsapp, /second number you register/);
+  assert.match(whatsapp, /your own WhatsApp stays as it is/);
   assert.match(whatsapp, /message me on WhatsApp/);
-  assert.match(whatsapp, /coming soon/);
+  assert.match(whatsapp, /Belline's own number/);
+  assert.doesNotMatch(whatsapp, /coming soon|Meta's approval|waiting on/i);
+});
+
+test("no answer claims a business's existing WhatsApp is answered, or that Belline listens to WhatsApp voice notes", () => {
+  const existing =
+    /\b(?:answers?|answering|connects?|takes? over|runs?|on|into|to) (?:your|their) (?:own |existing |current |usual )?whats\s?app\b(?! stays)|\b(?:your|their) (?:existing|current|usual) whats\s?app\b|\b(?:your|their) (?:own )?whats\s?app (?:number|account|line)\b/i;
+  for (const { q, a } of belline.agent.faqs) {
+    assert.doesNotMatch(a, existing, `${q}: ${a}`);
+    // Voice notes may only be mentioned as something it cannot do yet.
+    for (const m of a.matchAll(/[^.]*voice notes?[^.]*\./gi)) {
+      assert.match(m[0], /can't|cannot|doesn't|does not|not yet/i, `${q}: ${m[0]}`);
+    }
+  }
+  for (const policy of belline.agent.policies) assert.doesNotMatch(policy, existing, policy);
 });
 
 test("there are fifteen prepared answers", () => {

@@ -404,7 +404,12 @@ test("the generated pricing reads its trial and allowances from the catalogue, a
   assert.ok(html.includes(trialSentence().replace(/&/g, "&amp;")), "the trial sentence is not the catalogue's");
   assert.ok(html.includes(`${TRIAL.days} days free`));
   assert.doesNotMatch(html, PROMISES);
-  assert.doesNotMatch(html, /No surprise invoices|WhatsApp/);
+  assert.doesNotMatch(html, /No surprise invoices/);
+  // WhatsApp is live: the conversations are pooled with website chat, and the
+  // definition says so in the engine's words.
+  assert.match(html, /shared across your website chat and WhatsApp/);
+  assert.match(CONVERSATION_DEFINITION, /website chat or on WhatsApp/);
+  assert.doesNotMatch(html, /sandbox|your (?:own |existing |current )?WhatsApp number|voice notes?/i);
 });
 
 siteCopy("the pricing on the page is exactly what the catalogue renders — run npm run pricing if not", () => {
@@ -488,9 +493,10 @@ test("nothing that is not yet live appears anywhere public", () => {
     for (const gap of hidden) {
       assert.ok(!html.includes(gap.feature), `${file} advertises "${gap.feature}", which does not work yet`);
     }
-    for (const product of PRODUCTS.filter((p) => typeof p.allowances.whatsapp === "number")) {
+    // The retired per-channel bundles are never sold again, WhatsApp included.
+    for (const product of PRODUCTS.filter((p) => p.kind === "legacy" && typeof p.allowances.whatsapp === "number")) {
       const whatsapp = allowanceText("whatsapp", product.allowances.whatsapp as number);
-      assert.ok(!html.includes(whatsapp), `${file} sells "${whatsapp}"`);
+      assert.ok(!html.includes(whatsapp), `${file} sells the retired "${whatsapp}"`);
     }
   }
 });

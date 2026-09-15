@@ -2599,10 +2599,8 @@ h2.display {
 .call-sent { background: var(--bl-surface); }
 .chat-compose { border-color: var(--card-line); }
 
-/* WhatsApp in the hero: visible so all three channels show, but plainly not
-   live — the Coming soon badge sits in the card header, and a dashed border
-   sets it apart from the two cards that work today. */
-.demo-wa { border-style: dashed; }
+/* WhatsApp in the hero: the third live channel, labelled "Example
+   conversation" like the other two cards and drawn with the same border. */
 .demo-head-wa { gap: 10px; }
 .demo-wa-icon {
   display: inline-grid;
@@ -2615,7 +2613,6 @@ h2.display {
   flex: none;
 }
 .demo-wa-icon svg { width: 16px; height: 16px; }
-.demo-soon { margin-left: auto; }
 .wa-thread { padding-bottom: 18px; }
 
 /* Three plain facts as a light strip, no numbers. */

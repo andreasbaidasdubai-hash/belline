@@ -291,9 +291,31 @@ test("the real draft that promised Arabic is refused", () => {
   assert.ok(r.problems.some((p) => p.includes("English only")), JSON.stringify(r.problems));
 });
 
-test("WhatsApp, integrations and reminders are refused in the solution", () => {
+test("honest WhatsApp claims pass: a second number the business registers", () => {
+  for (const solution of [
+    "Belline answers the phone and a second WhatsApp number you register with it, alongside your front desk.",
+    "Belline answers calls and WhatsApp messages after hours, and your own WhatsApp stays as it is.",
+  ]) {
+    const r = checkDraft({ ...GOOD, solution }, CTX);
+    assert.ok(!r.problems.some((p) => /whats\s?app/i.test(p)), `${solution} → ${JSON.stringify(r.problems)}`);
+  }
+});
+
+test("claims that Belline answers the business's existing WhatsApp are refused", () => {
+  for (const solution of [
+    "Belline answers your WhatsApp after hours, alongside your front desk.",
+    "Belline answers your existing WhatsApp number when the desk is busy.",
+    "Belline connects to your own WhatsApp and answers patients.",
+    "Belline takes over your current WhatsApp after hours.",
+    "Patients message your WhatsApp number and Belline replies.",
+  ]) {
+    const r = checkDraft({ ...GOOD, solution }, CTX);
+    assert.ok(r.problems.some((p) => p.includes("existing WhatsApp")), `${solution} → ${JSON.stringify(r.problems)}`);
+  }
+});
+
+test("integrations and reminders are refused in the solution", () => {
   for (const [solution, why] of [
-    ["Belline answers on the phone and on WhatsApp, alongside your front desk.", "WhatsApp"],
     ["Belline answers after hours and books straight into Fresha.", "integrations"],
     ["Belline answers after hours and sends patients a reminder the day before.", "reminders"],
   ] as const) {

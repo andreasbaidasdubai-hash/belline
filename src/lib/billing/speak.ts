@@ -10,8 +10,9 @@ import { ALERT_THRESHOLDS, CHANNELS, CHANNEL_ORDER, PACKS, SERVICES, TRIAL, VOLU
  * knowledge). Spoken answers are in words, because a voice reading "AED 599"
  * aloud is a voice guessing how; the written sentences are for pages.
  *
- * Only live channels are named: WhatsApp is in the catalogue, and nobody may
- * sell it until it works.
+ * Only live channels are named: a channel in the catalogue is not sold until
+ * its status is `live`. WhatsApp is live on the second-number model, so it is
+ * named — never as the business's existing WhatsApp number.
  */
 
 const ONES = [

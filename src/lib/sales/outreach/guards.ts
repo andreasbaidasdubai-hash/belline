@@ -98,7 +98,13 @@ const TECH_TALK = [
  */
 const NOT_LIVE: { pattern: RegExp; why: string }[] = [
   { pattern: /\b(?:arabic|bilingual|multilingual|multiple languages|any language|in (?:their|your) (?:own )?language)\b/i, why: "English only" },
-  { pattern: /\bwhats\s?app\b/i, why: "WhatsApp not connected" },
+  // WhatsApp is live on the second-number model, so "a second WhatsApp number"
+  // is honest. What is not: Belline answering the business's existing number.
+  {
+    pattern:
+      /\b(?:answers?|answering|connects?|connecting|takes? over|runs?|on|into|to) (?:your|their) (?:own |existing |current |usual )?whats\s?app\b(?! stays)|\b(?:your|their) (?:existing|current|usual) whats\s?app\b(?! stays)|\b(?:your|their) (?:own )?whats\s?app (?:number|account|line)\b/i,
+    why: "existing WhatsApp: Belline answers a second number the business registers",
+  },
   { pattern: /\b(?:fresha|sevenrooms|opentable|treatwell|dentally|dentrix|zenoti|phorest|booksy|eat app)\b/i, why: "no booking-system integrations" },
   { pattern: /\b(?:reminders?|sms|texts? (?:them|you|patients?|clients?|guests?|callers?))\b/i, why: "no reminders or texts" },
   { pattern: /\b(?:google calendar|google cal|outlook|microsoft 365|office 365|ical)\b/i, why: "no calendar integration live" },
