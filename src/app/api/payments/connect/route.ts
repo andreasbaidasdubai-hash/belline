@@ -28,14 +28,12 @@ export async function GET(request: Request) {
   const back = `${origin}/integrations?loc=${encodeURIComponent(location.id)}&payments=1`;
 
   if (!stripeEnabled()) {
-    return NextResponse.redirect(`${back}&error=${encodeURIComponent("Card payments are not switched on yet.")}`);
+    return NextResponse.redirect(`${back}&error=payments_off`);
   }
   try {
     return NextResponse.redirect(await connectOnboardingUrl(location, back));
   } catch (err) {
     console.error("[payments] connect failed:", err);
-    return NextResponse.redirect(
-      `${back}&error=${encodeURIComponent("Stripe could not start the setup just now. Try again in a minute.")}`,
-    );
+    return NextResponse.redirect(`${back}&error=payments_failed`);
   }
 }

@@ -6,6 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Location, Vertical, WeeklyHours } from "./types";
 import { upsertLocation, listLocations } from "./store";
 import { BELLINE_TENANT_ID } from "./tenancy";
+import { CustomerError } from "./errors/customer";
 
 /**
  * Personalised demos.
@@ -71,19 +72,19 @@ export async function assertPublicUrl(raw: string): Promise<URL> {
   try {
     url = new URL(raw.includes("://") ? raw : `https://${raw}`);
   } catch {
-    throw new Error("That does not look like a web address.");
+    throw new CustomerError("That does not look like a web address.");
   }
 
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("Only http and https addresses can be read.");
+    throw new CustomerError("Only http and https addresses can be read.");
   }
 
   const resolved = await dns.lookup(url.hostname, { all: true }).catch(() => {
-    throw new Error(`Could not find ${url.hostname}.`);
+    throw new CustomerError(`Could not find ${url.hostname}.`);
   });
 
   if (resolved.length === 0 || resolved.some((r) => isPrivateAddress(r.address))) {
-    throw new Error("That address is not reachable from the public internet.");
+    throw new CustomerError("That address is not reachable from the public internet.");
   }
   return url;
 }
@@ -105,14 +106,14 @@ export async function readSite(raw: string): Promise<{ url: URL; text: string }>
   });
 
   if (response.status === 403 || response.status === 429) {
-    throw new Error(
+    throw new CustomerError(
       "That site blocks automated readers. Try a deeper page — their services or contact page often is not protected.",
     );
   }
   if (response.status === 404) {
-    throw new Error("That page does not exist. Check the address.");
+    throw new CustomerError("That page does not exist. Check the address.");
   }
-  if (!response.ok) throw new Error(`That site returned ${response.status}.`);
+  if (!response.ok) throw new CustomerError(`That site returned ${response.status}.`);
 
   const html = (await response.text()).slice(0, 400_000);
   const text = html
@@ -124,7 +125,7 @@ export async function readSite(raw: string): Promise<{ url: URL; text: string }>
     .replace(/\s+/g, " ")
     .trim();
 
-  if (text.length < 120) throw new Error("There was not enough readable text on that page.");
+  if (text.length < 120) throw new CustomerError("There was not enough readable text on that page.");
   return { url, text: text.slice(0, 24_000) };
 }
 
@@ -141,6 +142,8 @@ export interface Extracted {
   services: { name: string; durationMin: number; price: number }[];
   staff: string[];
   faqs: { q: string; a: string }[];
+  /** Opening hours as the page writes them. Absent when it does not say. */
+  hours?: string;
 }
 
 const SCHEMA = {
@@ -179,6 +182,12 @@ const SCHEMA = {
         properties: { q: { type: "string" }, a: { type: "string" } },
         required: ["q", "a"],
       },
+    },
+    hours: {
+      type: "string",
+      description:
+        "Opening hours exactly as the page states them, e.g. 'Mon-Sat 10:00-20:00, closed Sunday'. " +
+        "Empty string if the page does not say. Never guess.",
     },
   },
   required: ["name", "vertical", "address", "timezone", "greeting", "services", "staff", "faqs"],
@@ -223,7 +232,7 @@ export function extractionRequest(sources: Sources): Anthropic.MessageCreatePara
 
   let content: Anthropic.MessageCreateParamsNonStreaming["messages"][number]["content"];
   if (!files.length) {
-    if (!site) throw new Error("Nothing to read.");
+    if (!site) throw new CustomerError("Nothing to read.");
     // Exactly the prompt the website reader has always sent.
     content =
       `This is the readable text of ${site.url.href}. Read the business off it and call the tool.\n\n` +
@@ -276,7 +285,7 @@ export async function extractFromSources(sources: Sources, model: ModelCall = an
   const message = await model(extractionRequest(sources));
   const block = message.content.find((b) => b.type === "tool_use");
   if (!block || !block.input) {
-    throw new Error(
+    throw new CustomerError(
       sources.files?.length
         ? "Could not read a business off those documents. Try a clearer copy, or add your website."
         : "Could not read a business off that page.",

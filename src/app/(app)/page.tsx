@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
-import { overviewFor, summarise } from "@/lib/overview";
+import { overviewFor, summarise, visibleHealth } from "@/lib/overview";
+import { isBellineStaff } from "@/lib/auth";
 import { readiness } from "@/lib/onboarding";
 import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
@@ -54,7 +55,11 @@ export default async function OverviewPage({
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
 
-  const { did, worth, health, needsYou, recent } = overviewFor(location);
+  const overview = overviewFor(location);
+  const { did, worth, needsYou, recent } = overview;
+  // Staff see every line and the panel; an owner sees only what is theirs.
+  const staff = isBellineStaff(user);
+  const health = visibleHealth(overview.health, staff);
   const t = terms(location);
   const unwell = health.filter((h) => !h.ok);
   // A venue with no number, no services and no staff cannot answer anybody,
@@ -284,7 +289,8 @@ export default async function OverviewPage({
             </div>
           </div>
 
-          <div className="panel">
+          {staff && (
+          <div className="panel" data-testid="health-panel">
             <div className="panel-head">Belline health</div>
             <div style={{ padding: "12px 18px 16px" }}>
               {health.map((h) => (
@@ -311,6 +317,7 @@ export default async function OverviewPage({
               ))}
             </div>
           </div>
+          )}
         </div>
       </div>
     </>

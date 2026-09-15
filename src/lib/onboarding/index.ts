@@ -19,6 +19,7 @@ import { MARKETS, isMarket, marketDefaults, marketOf, type Market } from "../mar
 import { passwordProblem } from "../signup-rules";
 import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
+import { MENU_QUESTION, type Confirmed, type CurrentVenue } from "./review";
 
 /**
  * Getting a business live without a person in the loop.
@@ -489,58 +490,129 @@ export function setupNote(website: string, documents = 0): string {
  * told yes, which is the difference between this and the sales demo the reader
  * was built for.
  */
-export function applyDraft(
-  location: Location,
-  confirmed: {
-    name?: string;
-    address?: string;
-    phone?: string;
-    greeting?: string;
-    hours?: WeeklyHours;
-    services?: { name: string; durationMin: number; price: number }[];
-    staff?: string[];
-    faqs?: { q: string; a: string }[];
-    policies?: string[];
-  },
-): Location {
+export function applyDraft(location: Location, confirmed: Confirmed): Location {
+  const hours = confirmed.hours ?? location.hours;
+  let faqs = confirmed.faqs ?? location.agent.faqs;
+
   const next: Location = {
     ...location,
     name: confirmed.name?.trim() || location.name,
-    address: confirmed.address?.trim() || location.address,
-    phone: confirmed.phone?.trim() || location.phone,
-    hours: confirmed.hours ?? location.hours,
-    agent: {
-      ...location.agent,
-      greeting: confirmed.greeting?.trim() || location.agent.greeting,
-      faqs: confirmed.faqs ?? location.agent.faqs,
-      policies: confirmed.policies ?? location.agent.policies,
-    },
+    // An empty string is a cleared field, not a missing one: the review form
+    // always sends what is on screen.
+    address: confirmed.address !== undefined ? confirmed.address.trim() : location.address,
+    phone: confirmed.phone !== undefined ? confirmed.phone.trim() : location.phone,
+    hours,
   };
 
-  if (confirmed.services && location.vertical !== "restaurant") {
-    const services = confirmed.services.map((s, i) => ({
-      id: `svc${i + 1}`,
-      name: s.name,
-      durationMin: Math.max(5, Math.round(s.durationMin || 30)),
-      // Held after the appointment and never quoted to the guest. Fifteen
-      // minutes is the number every salon uses when asked, and it is editable.
-      bufferMin: 15,
-      price: Math.max(0, Math.round(s.price || 0)),
-    }));
-    const staff = (confirmed.staff ?? []).map((name, i) => ({
-      id: `stf${i + 1}`,
-      name,
-      // Everyone can do everything until somebody says otherwise. The opposite
-      // default — nobody can do anything — produces a venue that can never
-      // offer a slot, which reads as broken rather than as unfinished.
-      serviceIds: services.map((s) => s.id),
-      hours: next.hours,
-      timeOff: [],
-    }));
-    next.salon = { ...(location.salon ?? { resources: [], slotMinutes: 15 }), services, staff };
+  if (location.vertical === "restaurant") {
+    // A menu is something to answer questions about, never something to book:
+    // a table is booked, the lamb shoulder is not. So it is filed as one FAQ
+    // the agent reads, replacing the last menu it was given.
+    if (confirmed.services) {
+      faqs = faqs.filter((f) => f.q !== MENU_QUESTION);
+      const items = confirmed.services.filter((s) => s.name.trim());
+      if (items.length) {
+        const priced = (s: { name: string; price: number }) =>
+          s.price > 0 ? `${s.name.trim()} (${location.currency} ${Math.round(s.price)})` : s.name.trim();
+        faqs = [...faqs, { q: MENU_QUESTION, a: `${items.map(priced).join("; ")}.` }];
+      }
+    }
+  } else if (confirmed.services || confirmed.staff) {
+    const salon = location.salon ?? { services: [], staff: [], resources: [], slotMinutes: 15 };
+    const taken = new Set<string>();
+    const idFor = (prefix: string, name: string) => {
+      const base = `${prefix}_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 24) || "item"}`;
+      let candidate = base;
+      for (let n = 2; taken.has(candidate); n++) candidate = `${base}_${n}`;
+      taken.add(candidate);
+      return candidate;
+    };
+    const match = <T extends { name: string }>(list: T[], name: string) =>
+      list.find((x) => x.name.trim().toLowerCase() === name.trim().toLowerCase());
+
+    // A service keeps its id when its name is unchanged, so bookings already
+    // made against it still point at something.
+    const services = confirmed.services
+      ? confirmed.services.map((s) => {
+          const was = match(salon.services, s.name);
+          const id = was && !taken.has(was.id) ? was.id : idFor("svc", s.name);
+          taken.add(id);
+          return {
+            ...(was ?? {}),
+            id,
+            name: s.name.trim(),
+            durationMin: Math.max(5, Math.round(s.durationMin || 30)),
+            // Held after the appointment and never quoted to the guest. Fifteen
+            // minutes is the number every salon uses when asked, and it is editable.
+            bufferMin: was?.bufferMin ?? 15,
+            price: Math.max(0, Math.round(s.price || 0)),
+          };
+        })
+      : salon.services;
+    const serviceIds = services.map((s) => s.id);
+
+    const staff = confirmed.staff
+      ? confirmed.staff.map((name) => {
+          const was = match(salon.staff, name);
+          if (!was) {
+            return {
+              id: idFor("stf", name),
+              name: name.trim(),
+              // Everyone can do everything until somebody says otherwise. The opposite
+              // default — nobody can do anything — produces a venue that can never
+              // offer a slot, which reads as broken rather than as unfinished.
+              serviceIds,
+              hours,
+              timeOff: [],
+            };
+          }
+          taken.add(was.id);
+          const kept = was.serviceIds.filter((sid) => serviceIds.includes(sid));
+          return {
+            ...was,
+            serviceIds: kept.length ? kept : serviceIds,
+            // Somebody on the venue's old hours follows the new ones; a person
+            // with their own rota keeps it.
+            hours: JSON.stringify(was.hours) === JSON.stringify(location.hours) ? hours : was.hours,
+          };
+        })
+      : salon.staff.map((s) => ({
+          ...s,
+          serviceIds: s.serviceIds.filter((sid) => serviceIds.includes(sid)).length
+            ? s.serviceIds.filter((sid) => serviceIds.includes(sid))
+            : serviceIds,
+        }));
+
+    next.salon = { ...salon, services, staff };
   }
 
+  next.agent = {
+    ...location.agent,
+    greeting: confirmed.greeting?.trim() || location.agent.greeting,
+    faqs,
+    policies: confirmed.policies ?? location.agent.policies,
+  };
+
   return upsertLocation(next);
+}
+
+/** The venue as the review form starts from it (review.ts `CurrentVenue`). */
+export function currentVenue(location: Location): CurrentVenue {
+  return {
+    name: location.name,
+    vertical: location.vertical,
+    greeting: location.agent.greeting,
+    address: location.address,
+    phone: location.phone,
+    hours: location.hours,
+    services:
+      location.vertical === "restaurant"
+        ? []
+        : (location.salon?.services ?? []).map((s) => ({ name: s.name, durationMin: s.durationMin, price: s.price ?? 0 })),
+    staff: location.vertical === "restaurant" ? [] : (location.salon?.staff ?? []).map((s) => s.name),
+    faqs: location.agent.faqs,
+    policies: location.agent.policies,
+  };
 }
 
 /** Is this venue ready to answer a telephone? */

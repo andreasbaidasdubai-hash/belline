@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
+import { integrationErrorText } from "@/lib/errors/customer";
 import { seedIfEmpty } from "@/lib/seed";
 import { connectionState, googleConfigured } from "@/lib/integrations/google";
 import { whatsappConfigured, whatsappStatus } from "@/lib/whatsapp";
@@ -86,7 +87,7 @@ export default async function IntegrationsPage({
             fontSize: 13,
           }}
         >
-          {error}
+          {integrationErrorText(error)}
         </div>
       )}
 
@@ -189,8 +190,8 @@ export default async function IntegrationsPage({
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
               Belline can answer a WhatsApp number for {location.name} — a second number, so your
               own WhatsApp stays exactly as it is. We register it and connect it for you; there is
-              nothing to install. <a href="mailto:hello@belline.ai?subject=WhatsApp%20for%20my%20venue">Email us</a> to
-              get it started.
+              nothing to install. Connecting it yourself is being prepared, and it will
+              appear here when it is ready.
             </p>
           )}
         </div>
@@ -240,7 +241,7 @@ export default async function IntegrationsPage({
             <p style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 14 }}>
               Google Calendar isn&apos;t available on this account yet.
               {isBellineStaff(user) && (
-                <span className="muted"> (Ours to fix: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.)</span>
+                <span className="muted"> (Ours to fix: the Google client credentials are not set. See the ops flags.)</span>
               )}
             </p>
           )}

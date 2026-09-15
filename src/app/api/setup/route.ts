@@ -5,7 +5,8 @@ import { getLocation, listLocationsFor } from "@/lib/store";
 import { applyDraft, readiness, setupNote } from "@/lib/onboarding";
 import { draftFromRequest } from "@/lib/onboarding/uploads";
 import { publish } from "@/lib/brain";
-import type { WeeklyHours } from "@/lib/types";
+import { cleanConfirmed } from "@/lib/onboarding/review";
+import { customerError } from "@/lib/errors/customer";
 
 export const dynamic = "force-dynamic";
 
@@ -59,21 +60,18 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Not your venue." }, { status: 403 });
   }
 
-  const confirmed = {
-    name: body.name ? String(body.name) : undefined,
-    address: body.address ? String(body.address) : undefined,
-    phone: body.phone ? String(body.phone) : undefined,
-    greeting: body.greeting ? String(body.greeting) : undefined,
-    hours: (body.hours as WeeklyHours) ?? undefined,
-    services: Array.isArray(body.services)
-      ? (body.services as { name: string; durationMin: number; price: number }[])
-      : undefined,
-    staff: Array.isArray(body.staff) ? (body.staff as string[]) : undefined,
-    faqs: Array.isArray(body.faqs) ? (body.faqs as { q: string; a: string }[]) : undefined,
-    policies: Array.isArray(body.policies) ? (body.policies as string[]) : undefined,
-  };
+  // Every field is checked, hours included: the old handler cast whatever
+  // arrived to WeeklyHours and saved it.
+  const checked = cleanConfirmed(body);
+  if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 422 });
 
-  const updated = applyDraft(location, confirmed);
+  let updated;
+  try {
+    updated = applyDraft(location, checked.confirmed);
+  } catch (err) {
+    const out = customerError("setup", err, "failed", location.id);
+    return NextResponse.json({ error: `${out.message} ${out.next}` }, { status: 500 });
+  }
 
   // Recorded as a published version, like every other change to a venue's
   // configuration — so "who set this up, and what did it say on the call I am

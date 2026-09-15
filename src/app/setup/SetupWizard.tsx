@@ -2,6 +2,21 @@
 
 import { useState } from "react";
 import type { Vertical } from "@/lib/types";
+import {
+  CONFIDENCE_LABEL,
+  confidenceOf,
+  formFromDraft,
+  parseHours,
+  parseStaff,
+  payloadFromForm,
+  sourceLabel,
+  ticksNeeded,
+  type Confidence,
+  type CurrentVenue,
+  type Found,
+  type ReviewForm,
+  type Source,
+} from "@/lib/onboarding/review";
 
 /**
  * Setup as a conversation.
@@ -10,28 +25,19 @@ import type { Vertical } from "@/lib/types";
  * price list, a staff list and eight FAQs — perhaps forty fields, typed by
  * somebody who already published all of it on their own website.
  *
- * So: paste the website, Belline reads it, and the only things asked are the
- * ones the page did not answer. On a typical salon site that is two questions
- * instead of forty.
+ * So: paste the website, Belline reads it, and the owner checks what it found
+ * on one form where every line can be changed. Nothing read reaches the venue
+ * until the owner presses save, and hours, the address and prices that Belline
+ * read need a tick, because the reader is a model looking at a public web
+ * page, and it is wrong often enough that an unreviewed price would otherwise
+ * be quoted to a real customer on a real call.
  *
- * Everything shown is editable before it is saved, and nothing is live until
- * the owner presses the button. That is not politeness — the reader is a model
- * looking at a public web page, and it is wrong often enough that an
- * unreviewed price would otherwise be quoted to a real customer on a real
- * call.
+ * Setting up by hand opens the same form, filled with what the venue already
+ * has. There is one form, so the hand-typed path cannot drift from the read one.
  */
 
 interface Draft {
-  found: {
-    name: string;
-    vertical: Vertical;
-    address: string;
-    timezone: string;
-    greeting: string;
-    services: { name: string; durationMin: number; price: number }[];
-    staff: string[];
-    faqs: { q: string; a: string }[];
-  };
+  found: Found & { vertical: Vertical; timezone: string };
   /** "" when only documents were read. */
   sourceUrl: string;
   documents?: number;
@@ -48,9 +54,15 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp";
 const ACCEPTED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 const ACCEPTED_NAME = /\.(pdf|jpe?g|png|webp)$/i;
+const WEEK = [1, 2, 3, 4, 5, 6, 0];
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function sizeOf(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function hhmm(m: number): string {
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
 /** "example.ae", "2 documents", or "example.ae and 2 documents". */
@@ -66,31 +78,36 @@ function readFrom(draft: Draft): string {
   return host && docs ? `${host} and ${docs}` : host || docs;
 }
 
-/** What the owner handed over, as the owner would say it: "your site", "your documents". */
-function sourcesSay(draft: Draft): string {
-  const n = draft.documents ?? 0;
-  if (draft.sourceUrl) return n ? "your site and documents" : "your site";
-  return n === 1 ? "your document" : "your documents";
-}
-
 export default function SetupWizard({
   venueName,
   vertical,
+  currency,
   alreadyReady,
-  missing,
+  missing: missingAtLoad,
+  current,
+  manual,
 }: {
   venueName: string;
   vertical: Vertical;
+  currency: string;
   alreadyReady: boolean;
   missing: { label: string; where: string }[];
+  current: CurrentVenue;
+  /** Opened as "set it up by hand": straight to the form, from what is saved. */
+  manual: boolean;
 }) {
-  const [stage, setStage] = useState<Stage>(alreadyReady ? "done" : "ask");
+  const [stage, setStage] = useState<Stage>(manual ? "review" : alreadyReady ? "done" : "ask");
   const [website, setWebsite] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [form, setForm] = useState<ReviewForm | null>(manual ? formFromDraft(null, "typed", current) : null);
+  const [fileName, setFileName] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [fallback, setFallback] = useState<string | null>(null);
+  const [missing, setMissing] = useState(missingAtLoad);
+  const [newStaff, setNewStaff] = useState("");
+  const isRestaurant = vertical === "restaurant";
 
   function addFiles(event: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(event.target.files ?? []);
@@ -123,6 +140,14 @@ export default function SetupWizard({
     setFileError(null);
   }
 
+  function byHand() {
+    setDraft(null);
+    setForm(formFromDraft(null, "typed", current));
+    setError(null);
+    setFallback(null);
+    setStage("review");
+  }
+
   async function read(event: React.FormEvent) {
     event.preventDefault();
     if (!website.trim() && !files.length) {
@@ -131,13 +156,14 @@ export default function SetupWizard({
     }
     setStage("reading");
     setError(null);
+    setFallback(null);
     try {
       let init: RequestInit;
       if (files.length) {
-        const form = new FormData();
-        form.set("website", website.trim());
-        for (const file of files) form.append("files", file);
-        init = { method: "POST", body: form };
+        const body = new FormData();
+        body.set("website", website.trim());
+        for (const file of files) body.append("files", file);
+        init = { method: "POST", body };
       } else {
         init = {
           method: "POST",
@@ -146,13 +172,19 @@ export default function SetupWizard({
         };
       }
       const res = await fetch("/api/setup", init);
-      const body = (await res.json()) as { ok?: boolean; draft?: Draft; error?: string };
+      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; draft?: Draft; error?: string; fallback?: string };
       if (!res.ok || !body.draft) {
-        setError(body.error ?? (files.length ? "Could not read those." : "Could not read that page."));
+        setError(body.error ?? (files.length ? "Belline could not read those." : "Belline could not read that page."));
+        setFallback(body.fallback ?? null);
         setStage("ask");
         return;
       }
+      const source: Source = body.draft.sourceUrl ? (body.draft.documents ? "both" : "website") : "documents";
+      // The server never keeps a file's name, but this page chose the file, so
+      // "from price-list.pdf" can be said when there was exactly one.
+      setFileName(!body.draft.sourceUrl && files.length === 1 ? files[0].name : undefined);
       setDraft(body.draft);
+      setForm(formFromDraft(body.draft.found, source, current));
       setStage("review");
     } catch {
       setError(files.length ? "Could not send those files. Check your connection and try again." : "Could not reach that address.");
@@ -161,43 +193,54 @@ export default function SetupWizard({
   }
 
   async function save() {
-    if (!draft) return;
+    if (!form) return;
+    const check = payloadFromForm(form);
+    if (!check.ok) {
+      setError(check.error);
+      return;
+    }
     setStage("saving");
+    setError(null);
     try {
       const res = await fetch("/api/setup", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          website: draft.sourceUrl,
+          ...check.body,
+          website: draft?.sourceUrl ?? "",
           // A count for the version note. The files themselves are long gone.
-          documents: draft.documents ?? 0,
-          name: draft.found.name,
-          address: answers.address || draft.found.address,
-          phone: answers.phone,
-          greeting: draft.found.greeting,
-          services: draft.found.services,
-          staff: draft.found.staff,
-          faqs: draft.found.faqs,
-          policies: answers.policies
-            ? answers.policies.split("\n").map((s) => s.trim()).filter(Boolean)
-            : undefined,
+          documents: draft?.documents ?? 0,
         }),
       });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        readiness?: { missing: { label: string; where: string }[] };
+      };
       if (!res.ok) {
-        setError("Could not save that. Try again.");
+        setError(body.error ?? "That could not be saved. Try again. Nothing you typed has been lost.");
         setStage("review");
         return;
       }
+      // What is still missing, read from the venue as it was just saved, so
+      // nothing saved a second ago is listed as missing.
+      setMissing(body.readiness?.missing ?? []);
       setStage("done");
     } catch {
-      setError("Could not save that. Try again.");
+      setError("That could not be saved. Check your connection and try again. Nothing you typed has been lost.");
       setStage("review");
     }
+  }
+
+  /** Change a value; anything the owner types is theirs, so its source becomes "you typed". */
+  function edit(patch: (f: ReviewForm) => ReviewForm) {
+    setForm((f) => (f ? patch(f) : f));
+    setError(null);
   }
 
   const serif = { fontFamily: "var(--bl-font-display)", fontWeight: 700 } as const;
   // The same label as the questions on the review screen: sentence case, not the form-caps default.
   const fieldLabel = { display: "block", textTransform: "none", letterSpacing: 0, fontSize: 14, fontWeight: 600, margin: "0 0 6px" } as const;
+  const eyebrow = { fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase", margin: "0 0 14px", color: "var(--gold-ink)" } as const;
 
   // ---- done ---------------------------------------------------------------
 
@@ -205,7 +248,7 @@ export default function SetupWizard({
     return (
       <div>
         <h1 style={{ ...serif, fontSize: 34, letterSpacing: "-0.02em", lineHeight: 1.1, margin: "0 0 14px" }}>
-          {alreadyReady ? "Belline is ready." : "That's the hard part done."}
+          {alreadyReady && !form ? "Belline is ready." : "That's the hard part done."}
         </h1>
         <p style={{ color: "var(--text-2)", fontSize: 16, lineHeight: 1.6, maxWidth: "54ch" }}>
           {missing.length
@@ -235,6 +278,9 @@ export default function SetupWizard({
           <a className="btn" href="/golive" style={{ padding: "12px 20px" }}>
             Put it on my phone line
           </a>
+          <a className="btn" href="/setup?manual=1" style={{ padding: "12px 20px" }}>
+            Change what it knows
+          </a>
           <a className="btn" href="/" style={{ padding: "12px 20px" }}>
             Open the dashboard
           </a>
@@ -255,97 +301,299 @@ export default function SetupWizard({
 
   // ---- review -------------------------------------------------------------
 
-  if ((stage === "review" || stage === "saving") && draft) {
-    const f = draft.found;
+  if ((stage === "review" || stage === "saving") && form) {
+    const why = (field: string) => draft?.gaps.find((g) => g.field === field)?.why;
+    const hoursRead = parseHours(form.hours.value);
+    const ticks = ticksNeeded(form);
+    const read = (s: Source) => s !== "typed" && s !== "saved";
+
     return (
       <div>
-        <p className="muted" style={{ fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase", margin: "0 0 14px", color: "var(--gold-ink)" }}>
-          Step 2 of 2
+        <p className="muted" style={eyebrow}>
+          Check what Belline will say
         </p>
         <h1 style={{ ...serif, fontSize: 32, letterSpacing: "-0.02em", lineHeight: 1.12, margin: "0 0 14px" }}>
-          Here's what I understood.
+          {draft ? "Here's what I understood." : "Tell Belline about the business."}
         </h1>
         <p style={{ color: "var(--text-2)", fontSize: 15.5, lineHeight: 1.6, maxWidth: "56ch" }}>
-          Read from {readFrom(draft)}. Change anything that is
-          wrong — Belline will say exactly what is on this screen, so a price
-          that is out of date here is a price a customer gets told.
+          {draft ? `Read from ${readFrom(draft)}. ` : ""}Change anything that is wrong — Belline
+          will say exactly what is on this screen, so a price that is out of date here is a
+          price a customer gets told. Leave out anything you are unsure of: Belline will say it
+          does not know rather than guess.
         </p>
 
-        <div style={{ marginTop: 28, borderTop: "1px solid var(--border)" }}>
-          <Row label="Business">{f.name}</Row>
-          <Row label="Answers with">“{f.greeting}”</Row>
-          {f.address && <Row label="Address">{f.address}</Row>}
+        <div style={{ marginTop: 28, display: "grid", gap: 26 }}>
+          <Section label="Business name" source={form.name.source} confidence={confidenceOf("text", form.name.value, form.name.source)} fileName={fileName} htmlFor="review-name">
+            <input
+              id="review-name"
+              value={form.name.value}
+              onChange={(e) => edit((f) => ({ ...f, name: { value: e.target.value, source: "typed" } }))}
+            />
+          </Section>
 
-          {f.services.length > 0 && (
-            <Row label={vertical === "restaurant" ? "On the menu" : "What you offer"}>
-              <div style={{ display: "grid", gap: 4 }}>
-                {f.services.map((s) => (
-                  <div key={s.name} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <span>{s.name}</span>
-                    <span className="muted" style={{ fontSize: 13 }}>
-                      {s.durationMin} min
-                      {s.price ? ` · ${s.price}` : ` · no price on ${sourcesSay(draft)}`}
+          <Section label="Answers the phone with" source={form.greeting.source} confidence={confidenceOf("text", form.greeting.value, form.greeting.source)} fileName={fileName} htmlFor="review-greeting">
+            <textarea
+              id="review-greeting"
+              rows={2}
+              value={form.greeting.value}
+              onChange={(e) => edit((f) => ({ ...f, greeting: { value: e.target.value, source: "typed" } }))}
+            />
+          </Section>
+
+          <Section
+            label="Address"
+            hint={why("address")}
+            source={form.address.source}
+            confidence={confidenceOf("address", form.address.value, form.address.source)}
+            fileName={fileName}
+            htmlFor="review-address"
+          >
+            <input
+              id="review-address"
+              value={form.address.value}
+              autoComplete="street-address"
+              onChange={(e) => edit((f) => ({ ...f, address: { value: e.target.value, source: "typed" } }))}
+            />
+            {read(form.address.source) && form.address.value.trim() && (
+              <Tick checked={form.ticks.address} onChange={(v) => edit((f) => ({ ...f, ticks: { ...f.ticks, address: v } }))}>
+                This address is right
+              </Tick>
+            )}
+          </Section>
+
+          <Section label="Phone number for the business" source={form.phone.source} confidence={confidenceOf("text", form.phone.value, form.phone.source)} fileName={fileName} htmlFor="review-phone">
+            <input
+              id="review-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={form.phone.value}
+              onChange={(e) => edit((f) => ({ ...f, phone: { value: e.target.value, source: "typed" } }))}
+            />
+          </Section>
+
+          <Section
+            label="Opening hours"
+            hint={why("hours") ?? "Write them as you would on a sign, like Mon-Fri 09:00-18:00; Sat 10:00-16:00; Sun closed."}
+            source={form.hours.source}
+            confidence={confidenceOf("hours", form.hours.value, form.hours.source)}
+            fileName={fileName}
+            htmlFor="review-hours"
+          >
+            <textarea
+              id="review-hours"
+              rows={2}
+              value={form.hours.value}
+              onChange={(e) => edit((f) => ({ ...f, hours: { value: e.target.value, source: "typed" }, ticks: { ...f.ticks, hours: false } }))}
+            />
+            {hoursRead.ok ? (
+              <div aria-live="polite" data-testid="hours-preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "2px 16px", marginTop: 10, fontSize: 13 }}>
+                {WEEK.map((d) => (
+                  <div key={d} style={{ display: "flex", gap: 8 }}>
+                    <span style={{ width: 34, fontWeight: 600 }}>{DAY_NAMES[d]}</span>
+                    <span className="muted">
+                      {(hoursRead.hours[d] ?? []).length
+                        ? hoursRead.hours[d].map((r) => `${hhmm(r.start)}–${hhmm(r.end)}`).join(", ")
+                        : "Closed"}
                     </span>
                   </div>
                 ))}
               </div>
-            </Row>
-          )}
+            ) : (
+              <p role="status" style={{ fontSize: 13, color: "var(--bad)", margin: "8px 0 0" }}>
+                {hoursRead.error}
+              </p>
+            )}
+            {read(form.hours.source) && form.hours.value.trim() && (
+              <Tick checked={form.ticks.hours} onChange={(v) => edit((f) => ({ ...f, ticks: { ...f.ticks, hours: v } }))}>
+                These hours are right
+              </Tick>
+            )}
+          </Section>
 
-          {f.staff.length > 0 && <Row label="Who works there">{f.staff.join(", ")}</Row>}
-
-          {f.faqs.length > 0 && (
-            <Row label="It can already answer">
-              <div style={{ display: "grid", gap: 6 }}>
-                {f.faqs.map((q) => (
-                  <div key={q.q} style={{ fontSize: 14 }}>
-                    {q.q}
-                  </div>
-                ))}
-              </div>
-            </Row>
-          )}
-        </div>
-
-        {draft.gaps.length > 0 && (
-          <>
-            <h2 style={{ ...serif, fontSize: 22, letterSpacing: "-0.015em", margin: "36px 0 6px" }}>
-              {(() => {
-                const what = sourcesSay(draft);
-                const verb = what === "your site" || what === "your document" ? "doesn't" : "don't";
-                return draft.gaps.length === 1
-                  ? `One thing ${what} ${verb} say.`
-                  : `${draft.gaps.length} things ${what} ${verb} say.`;
-              })()}
-            </h2>
-            <p className="muted" style={{ fontSize: 13.5, margin: "0 0 20px" }}>
-              Skip any of them — you can add them later, and Belline will say it
-              does not know rather than guess.
-            </p>
-
-            <div style={{ display: "grid", gap: 20 }}>
-              {draft.gaps.map((gap) => (
-                <div key={gap.field}>
-                  <label htmlFor={`gap-${gap.field}`} style={{ textTransform: "none", letterSpacing: 0, fontSize: 14, fontWeight: 600 }}>
-                    {gap.question}
+          <Section
+            label={isRestaurant ? "On the menu" : "What you offer"}
+            hint={
+              why("services") ??
+              (isRestaurant
+                ? "Belline answers questions about the menu. Guests book a table, not a dish."
+                : "Belline only offers a time it can honour, so each one needs a length.")
+            }
+          >
+            <div style={{ display: "grid", gap: 10 }}>
+              {form.services.map((s, i) => (
+                <div key={i} style={{ display: "grid", gap: 8, gridTemplateColumns: isRestaurant ? "minmax(0, 1fr) 120px auto" : "minmax(0, 1fr) 96px 120px auto", alignItems: "end" }}>
+                  <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
+                    <span className="muted">
+                      {isRestaurant ? "Dish or section" : "Service"} · {sourceLabel(s.source, fileName)}
+                    </span>
+                    <input
+                      value={s.name}
+                      aria-label={`${isRestaurant ? "Dish" : "Service"} ${i + 1} name`}
+                      onChange={(e) => edit((f) => ({ ...f, services: f.services.map((x, j) => (j === i ? { ...x, name: e.target.value, source: "typed" } : x)) }))}
+                    />
                   </label>
-                  <p className="muted" style={{ fontSize: 12, margin: "2px 0 8px" }}>
-                    {gap.why}
-                  </p>
-                  <textarea
-                    id={`gap-${gap.field}`}
-                    rows={gap.field === "policies" || gap.field === "services" ? 3 : 2}
-                    value={answers[gap.field] ?? ""}
-                    onChange={(e) => setAnswers({ ...answers, [gap.field]: e.target.value })}
-                  />
+                  {!isRestaurant && (
+                    <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
+                      <span className="muted">Minutes</span>
+                      <input
+                        type="number"
+                        min={5}
+                        step={5}
+                        inputMode="numeric"
+                        aria-label={`Service ${i + 1} minutes`}
+                        value={s.durationMin || ""}
+                        onChange={(e) => edit((f) => ({ ...f, services: f.services.map((x, j) => (j === i ? { ...x, durationMin: Number(e.target.value), source: "typed" } : x)) }))}
+                      />
+                    </label>
+                  )}
+                  <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
+                    <span className="muted">
+                      Price, {currency} {s.price > 0 ? "" : `· ${CONFIDENCE_LABEL.missing.toLowerCase()}`}
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      inputMode="decimal"
+                      aria-label={`${isRestaurant ? "Dish" : "Service"} ${i + 1} price`}
+                      value={s.price || ""}
+                      onChange={(e) => edit((f) => ({ ...f, services: f.services.map((x, j) => (j === i ? { ...x, price: Number(e.target.value), source: "typed" } : x)) }))}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: "8px 12px", fontSize: 13 }}
+                    aria-label={`Remove ${s.name || `row ${i + 1}`}`}
+                    onClick={() => edit((f) => ({ ...f, services: f.services.filter((_, j) => j !== i) }))}
+                  >
+                    Remove
+                  </button>
                 </div>
               ))}
+              <div>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ padding: "8px 14px", fontSize: 13 }}
+                  onClick={() => edit((f) => ({ ...f, services: [...f.services, { name: "", durationMin: isRestaurant ? 30 : 60, price: 0, source: "typed" }] }))}
+                >
+                  {isRestaurant ? "Add a dish" : "Add a service"}
+                </button>
+              </div>
+              {form.services.some((s) => read(s.source) && s.price > 0) && (
+                <Tick checked={form.ticks.prices} onChange={(v) => edit((f) => ({ ...f, ticks: { ...f.ticks, prices: v } }))}>
+                  These prices are right
+                </Tick>
+              )}
             </div>
-          </>
-        )}
+          </Section>
+
+          {!isRestaurant && (
+            <Section label="Who works there" hint={why("staff")} htmlFor="review-staff">
+              {form.staff.length > 0 && (
+                <ul aria-label="Staff" style={{ listStyle: "none", padding: 0, margin: "0 0 10px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {form.staff.map((s, i) => (
+                    <li key={`${s.value}-${i}`} style={{ display: "flex", alignItems: "center", gap: 6, border: "1px solid var(--border)", borderRadius: 999, padding: "4px 6px 4px 12px", fontSize: 14 }}>
+                      {s.value}
+                      <span className="muted" style={{ fontSize: 11.5 }}>
+                        {sourceLabel(s.source, fileName)}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn"
+                        aria-label={`Remove ${s.value}`}
+                        style={{ padding: "2px 9px", fontSize: 12 }}
+                        onClick={() => edit((f) => ({ ...f, staff: f.staff.filter((_, j) => j !== i) }))}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  id="review-staff"
+                  placeholder="Layla, Omar and Sara"
+                  value={newStaff}
+                  onChange={(e) => setNewStaff(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    const names = parseStaff(newStaff);
+                    if (names.length) edit((f) => ({ ...f, staff: [...f.staff, ...names.map((value) => ({ value, source: "typed" as const }))] }));
+                    setNewStaff("");
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ padding: "8px 14px", fontSize: 13, flex: "none" }}
+                  onClick={() => {
+                    const names = parseStaff(newStaff);
+                    if (names.length) edit((f) => ({ ...f, staff: [...f.staff, ...names.map((value) => ({ value, source: "typed" as const }))] }));
+                    setNewStaff("");
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            </Section>
+          )}
+
+          <Section label="Questions it can answer">
+            <div style={{ display: "grid", gap: 14 }}>
+              {form.faqs.map((q, i) => (
+                <div key={i} style={{ display: "grid", gap: 6, paddingBottom: 12, borderBottom: "1px solid var(--border-soft)" }}>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {sourceLabel(q.source, fileName)}
+                  </span>
+                  <input
+                    aria-label={`Question ${i + 1}`}
+                    value={q.q}
+                    placeholder="Is there parking?"
+                    onChange={(e) => edit((f) => ({ ...f, faqs: f.faqs.map((x, j) => (j === i ? { ...x, q: e.target.value, source: "typed" } : x)) }))}
+                  />
+                  <textarea
+                    aria-label={`Answer ${i + 1}`}
+                    rows={2}
+                    value={q.a}
+                    placeholder="Yes, free parking behind the building."
+                    onChange={(e) => edit((f) => ({ ...f, faqs: f.faqs.map((x, j) => (j === i ? { ...x, a: e.target.value, source: "typed" } : x)) }))}
+                  />
+                  <div>
+                    <button type="button" className="btn" style={{ padding: "6px 12px", fontSize: 12.5 }} onClick={() => edit((f) => ({ ...f, faqs: f.faqs.filter((_, j) => j !== i) }))}>
+                      Remove this question
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div>
+                <button type="button" className="btn" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => edit((f) => ({ ...f, faqs: [...f.faqs, { q: "", a: "", source: "typed" }] }))}>
+                  Add a question
+                </button>
+              </div>
+            </div>
+          </Section>
+
+          <Section
+            label="Anything Belline must never do, or must always say?"
+            hint={why("policies") ?? "One rule per line. Deposits, cancellation, lateness — the rules your team already follow."}
+            source={form.policies.source}
+            htmlFor="review-policies"
+          >
+            <textarea
+              id="review-policies"
+              rows={3}
+              value={form.policies.value}
+              onChange={(e) => edit((f) => ({ ...f, policies: { value: e.target.value, source: "typed" } }))}
+            />
+          </Section>
+        </div>
 
         {error && (
-          <p role="alert" style={{ marginTop: 20, fontSize: 13, color: "var(--bad)" }}>
+          <p role="alert" style={{ marginTop: 20, fontSize: 13.5, color: "var(--bad)" }}>
             {error}
           </p>
         )}
@@ -358,12 +606,19 @@ export default function SetupWizard({
             className="btn"
             onClick={() => {
               setDraft(null);
+              setForm(null);
+              setError(null);
               setStage("ask");
             }}
             style={{ padding: "12px 18px" }}
           >
-            Try a different page
+            {draft ? "Try a different page" : "Read my website instead"}
           </button>
+          {ticks.length > 0 && stage !== "saving" && (
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              Tick {ticks.map((t) => ({ hours: "the hours", address: "the address", prices: "the prices" })[t]).join(" and ")} to save.
+            </span>
+          )}
         </div>
       </div>
     );
@@ -373,8 +628,8 @@ export default function SetupWizard({
 
   return (
     <div>
-      <p className="muted" style={{ fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase", margin: "0 0 14px", color: "var(--gold-ink)" }}>
-        Step 1 of 2
+      <p className="muted" style={eyebrow}>
+        Set up Belline
       </p>
       <h1 style={{ ...serif, fontSize: 34, letterSpacing: "-0.02em", lineHeight: 1.1, margin: "0 0 14px" }}>
         Where can Belline learn about your business?
@@ -484,7 +739,7 @@ export default function SetupWizard({
           )}
         </div>
 
-        <div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <button className="btn btn-accent" type="submit" disabled={stage === "reading"} style={{ padding: "12px 22px" }}>
             {stage === "reading"
               ? "Reading it…"
@@ -495,6 +750,9 @@ export default function SetupWizard({
                     ? "Read my file"
                     : "Read my files"
                   : "Read my website"}
+          </button>
+          <button type="button" className="btn" onClick={byHand} disabled={stage === "reading"} style={{ padding: "12px 18px" }}>
+            Set it up by hand
           </button>
         </div>
       </form>
@@ -510,11 +768,12 @@ export default function SetupWizard({
           <p role="alert" style={{ fontSize: 13.5, color: "var(--bad)", margin: "0 0 8px" }}>
             {error}
           </p>
-          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-            No website, or one Belline cannot read?{" "}
-            <a href="/agents">Set it up by hand instead</a> — it is the same
-            fields, typed rather than read.
+          <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>
+            {fallback ?? "No website, or one Belline cannot read?"} It is the same form, typed rather than read.
           </p>
+          <button type="button" className="btn" onClick={byHand} style={{ padding: "10px 16px" }}>
+            Set it up by hand
+          </button>
         </div>
       )}
 
@@ -526,22 +785,56 @@ export default function SetupWizard({
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Section({
+  label,
+  hint,
+  source,
+  confidence,
+  fileName,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  source?: Source;
+  confidence?: Confidence;
+  fileName?: string;
+  htmlFor?: string;
+  children: React.ReactNode;
+}) {
+  const tone = confidence === "clear" ? "var(--ok)" : confidence === "check" ? "var(--warn)" : "var(--text-2)";
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(0, 0.36fr) minmax(0, 1fr)",
-        gap: 18,
-        padding: "16px 0",
-        borderBottom: "1px solid var(--border-soft)",
-        alignItems: "baseline",
-      }}
-    >
-      <div className="muted" style={{ fontSize: 12.5 }}>
-        {label}
+    <div style={{ paddingBottom: 22, borderBottom: "1px solid var(--border-soft)" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "4px 10px", marginBottom: 6 }}>
+        <label htmlFor={htmlFor} style={{ textTransform: "none", letterSpacing: 0, fontSize: 14, fontWeight: 600, margin: 0 }}>
+          {label}
+        </label>
+        {source && (
+          <span className="muted" style={{ fontSize: 12 }}>
+            {sourceLabel(source, fileName)}
+          </span>
+        )}
+        {confidence && (
+          <span style={{ fontSize: 11.5, border: `1px solid ${tone}`, color: tone, borderRadius: 999, padding: "1px 8px" }}>
+            {CONFIDENCE_LABEL[confidence]}
+          </span>
+        )}
       </div>
-      <div style={{ fontSize: 15, lineHeight: 1.5 }}>{children}</div>
+      {hint && (
+        <p className="muted" style={{ fontSize: 12.5, margin: "0 0 8px" }}>
+          {hint}
+        </p>
+      )}
+      {children}
     </div>
+  );
+}
+
+function Tick({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 13.5, textTransform: "none", letterSpacing: 0 }}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} style={{ width: "auto" }} />
+      {children}
+    </label>
   );
 }

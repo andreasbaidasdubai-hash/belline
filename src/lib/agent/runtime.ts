@@ -859,11 +859,11 @@ ${
         ? `Running without a model key, so this is the booking engine answering directly. Today I have ${slots
             .slice(0, 3)
             .map((s) => minutesToSpoken(s.startMin))
-            .join(", ")}. Set ANTHROPIC_API_KEY to hear the real agent.`
+            .join(", ")}. The full agent is not switched on here yet.`
         : "Running without a model key. The booking engine found nothing open at that time today.";
     } else {
       reply =
-        "No ANTHROPIC_API_KEY is set, so you are talking to a stub. Ask for a time, like \"table for two at eight\", and the real booking engine will answer.";
+        "The full agent is not switched on here yet, so this is the booking engine on its own. Ask for a time, like \"table for two at eight\", and it will answer.";
     }
 
     for (const sentence of reply.split(/(?<=\.)\s+/)) {

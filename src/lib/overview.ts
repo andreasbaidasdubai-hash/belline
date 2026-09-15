@@ -74,6 +74,16 @@ export interface Health {
    * not print the same sentence twice on one screen.
    */
   fix?: string;
+  /** Belline's own configuration. Shown to Belline staff, never to an owner. */
+  staffOnly?: boolean;
+}
+
+/**
+ * The health lines a person may see. An owner is not shown "model key
+ * missing": it is not theirs to fix, and the words mean nothing to them.
+ */
+export function visibleHealth(health: Health[], staff: boolean): Health[] {
+  return staff ? health : health.filter((h) => !h.staffOnly);
 }
 
 export interface Overview {
@@ -229,6 +239,8 @@ export function overviewFor(location: Location): Overview {
       : []),
     {
       label: "Speech and model",
+      // Our configuration, not the owner's: nothing on their side fixes it.
+      staffOnly: true,
       ok: Boolean(
         process.env.ANTHROPIC_API_KEY && process.env.DEEPGRAM_API_KEY && process.env.ELEVENLABS_API_KEY,
       ),

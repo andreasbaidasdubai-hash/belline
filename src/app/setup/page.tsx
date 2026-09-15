@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Brand from "@/components/Brand";
 import { requireUser } from "@/lib/auth-server";
 import { listLocationsFor } from "@/lib/store";
-import { readiness } from "@/lib/onboarding";
+import { currentVenue, readiness } from "@/lib/onboarding";
 import { seedIfEmpty } from "@/lib/seed";
 import SetupWizard from "./SetupWizard";
 
@@ -18,9 +18,10 @@ export const metadata = { title: "Set up Belline" };
  * any of them — they have one job, and every other door on the screen is a way
  * of not doing it.
  */
-export default async function SetupPage() {
+export default async function SetupPage({ searchParams }: { searchParams: Promise<{ manual?: string }> }) {
   seedIfEmpty();
   const user = await requireUser();
+  const { manual } = await searchParams;
 
   const venue = listLocationsFor(user.tenantId)[0];
   // An owner with no venue has nothing to set up. That should be impossible —
@@ -52,8 +53,11 @@ export default async function SetupPage() {
         <SetupWizard
           venueName={venue.name}
           vertical={venue.vertical}
+          currency={venue.currency}
           alreadyReady={state.ready}
           missing={state.missing}
+          current={currentVenue(venue)}
+          manual={manual === "1"}
         />
       </main>
     </div>

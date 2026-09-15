@@ -3,6 +3,7 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { listCalls } from "@/lib/store";
 import { readiness } from "@/lib/onboarding";
+import { raiseException } from "@/lib/errors/customer";
 import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -58,9 +59,10 @@ export default async function GoLivePage({
   const lastCall = phoneCalls.reduce<string | null>((a, c) => (!a || c.startedAt > a ? c.startedAt : a), null);
   const target = dial || "<your Belline number>";
 
-  const request = `mailto:hello@belline.ai?subject=${encodeURIComponent(
-    `Belline number for ${location.name}`,
-  )}&body=${encodeURIComponent(`Please assign a Belline number to ${location.name} (venue ${location.id}).`)}`;
+  // Numbers are assigned by the Belline team until the number pool is switched
+  // on. Said as it is, and the team is told, instead of a mailto the owner has
+  // to remember to send.
+  if (!number) raiseException(`numbers:unassigned:${location.id}`, `venue ${location.id} opened Go live without a number`);
 
   return (
     <>
@@ -117,9 +119,10 @@ export default async function GoLivePage({
               Every venue gets its own number to forward to, so a call reaches your diary and not somebody
               else&apos;s. Yours has not been assigned yet.
             </p>
-            <a className="btn btn-accent" href={request} style={{ marginTop: 12, display: "inline-block" }}>
-              Ask for my number
-            </a>
+            <p className="muted" style={{ margin: "10px 0 0" }}>
+              Your number is being prepared. It will appear here as soon as it is ready, and there is
+              nothing you need to send.
+            </p>
           </>
         )}
       </Step>

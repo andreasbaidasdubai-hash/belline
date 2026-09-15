@@ -5,6 +5,8 @@ import { publish } from "../brain";
 import { isBlocking, validateVenue } from "../booking/config";
 import { normalisePhone } from "../leads";
 import { parseClock } from "../time";
+import { raiseException } from "../errors/customer";
+import { DAYS, dayIndexes } from "./review";
 import { readiness } from "./index";
 
 /**
@@ -35,26 +37,8 @@ export interface SetupToolResult {
   missing?: string[];
 }
 
-const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-
-function dayIndexes(raw: unknown): number[] | null {
-  const list = Array.isArray(raw) ? raw : [raw];
-  const out = new Set<number>();
-  for (const item of list) {
-    const word = String(item ?? "").trim().toLowerCase();
-    if (word === "every day" || word === "everyday" || word === "daily") [0, 1, 2, 3, 4, 5, 6].forEach((d) => out.add(d));
-    // The UAE working week.
-    else if (word === "weekdays") [1, 2, 3, 4, 5].forEach((d) => out.add(d));
-    else if (word === "weekend") [0, 6].forEach((d) => out.add(d));
-    else if (/^[0-6]$/.test(word)) out.add(Number(word));
-    else {
-      const i = DAYS.findIndex((d) => d.startsWith(word.slice(0, 3)) && word.length >= 3);
-      if (i < 0) return null;
-      out.add(i);
-    }
-  }
-  return [...out].sort();
-}
+// The same day words the setup review form reads (review.ts), so "weekdays"
+// means one thing whether it is typed or said to Belle.
 
 function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 32) || "item";
@@ -323,7 +307,11 @@ export async function runSetupTurn(
   const missing = () => readiness(getLocation(locationId)!).missing.map((m) => m.label);
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    return { reply: "The setup assistant is not switched on here yet (no ANTHROPIC_API_KEY). You can fill everything in on the How it works and Agent pages.", missing: missing() };
+    raiseException("model:setup_assistant_off", "setup assistant used without a model key");
+    return {
+      reply: "Belle's setup help is not switched on yet. You can fill everything in yourself on the setup form, at Set it up by hand.",
+      missing: missing(),
+    };
   }
 
   const client = new Anthropic();

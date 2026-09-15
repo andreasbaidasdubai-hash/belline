@@ -5,6 +5,7 @@ import { getLocation, upsertLocation } from "@/lib/store";
 import { authUrl, exchangeCode, googleConfigured, pushBooking } from "@/lib/integrations/google";
 import { listBookings } from "@/lib/store";
 import { todayIn } from "@/lib/time";
+import { customerError, raiseException } from "@/lib/errors/customer";
 
 export const dynamic = "force-dynamic";
 
@@ -29,16 +30,25 @@ export async function GET(request: Request) {
   const auth = await requireApiUser();
   if (auth.response) return auth.response;
 
-  if (!googleConfigured()) {
-    return NextResponse.json(
-      { error: "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET first." },
-      { status: 503 },
-    );
-  }
-
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const locationId = url.searchParams.get("state") ?? url.searchParams.get("locationId");
+  // Back to the integrations page with a code the page turns into a sentence.
+  // Never a message in the URL: the old one was Google's own text.
+  const back = (error: string) =>
+    NextResponse.redirect(
+      new URL(`/integrations?${locationId ? `loc=${encodeURIComponent(locationId)}&` : ""}error=${error}`, request.url),
+    );
+
+  if (!googleConfigured()) {
+    raiseException("google:not_configured", "Google Calendar connect used without client credentials");
+    return back("google_unavailable");
+  }
+  // The owner pressed Cancel on Google's screen, or Google refused.
+  if (url.searchParams.get("error")) {
+    customerError("google", `oauth returned ${url.searchParams.get("error")}`, "refused", locationId ?? "");
+    return back("google_refused");
+  }
 
   if (!locationId) return NextResponse.json({ error: "Which venue?" }, { status: 400 });
 
@@ -79,14 +89,9 @@ export async function GET(request: Request) {
 
     return NextResponse.redirect(new URL(`/integrations?loc=${location.id}&connected=1`, request.url));
   } catch (err) {
-    return NextResponse.redirect(
-      new URL(
-        `/integrations?loc=${location.id}&error=${encodeURIComponent(
-          err instanceof Error ? err.message : "Google refused the connection.",
-        )}`,
-        request.url,
-      ),
-    );
+    // The raw error is logged with a trace id; the owner gets a sentence.
+    customerError("google", err, "failed", location.id);
+    return back("google_failed");
   }
 }
 
