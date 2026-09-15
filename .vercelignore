@@ -1,0 +1,12 @@
+# What `vercel` must never upload for the static site. Vercel runs
+# `npm run site` itself, so scripts/, public/, src/ and package.json stay.
+.claude
+.env
+.env.*
+data
+.next
+node_modules
+audit
+test-results
+playwright-report
+voice-samples

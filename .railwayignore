@@ -1,0 +1,8 @@
+# What `railway up` must never upload. Secrets and local data stay on this
+# machine; agent worktrees are extra checkouts, not part of the app.
+.claude
+.env
+.env.*
+data
+.next
+node_modules

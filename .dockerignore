@@ -6,3 +6,6 @@ data
 .git
 *.tsbuildinfo
 marketing
+# Agent worktrees are full extra checkouts; in the build context they add a
+# second copy of src/ that next build would pick up.
+.claude
