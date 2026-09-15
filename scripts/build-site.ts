@@ -326,7 +326,7 @@ function navFor(active: string): string {
   return `${links}
       <a href="/#what">What it does</a>
       <a href="/#price">Pricing</a>
-      <a class="nav-cta" href="https://app.belline.ai/checkout">Get Belline</a>
+      <a class="nav-cta" href="https://app.belline.ai/checkout">Connect your business</a>
       <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Sign in</a>`;
 }
 

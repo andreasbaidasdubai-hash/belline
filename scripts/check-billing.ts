@@ -25,7 +25,7 @@ const plans = await import("../src/lib/billing/plans");
 const { MARKETS, MARKET_CODES, formatMoney, liveMarkets } = await import("../src/lib/markets");
 const usage = await import("../src/lib/billing/usage");
 const { applyPricing, renderMarket, renderPricing } = await import("./site-pricing");
-const { priceAnswer, trialAnswer, trialSentence, numberWords } = await import("../src/lib/billing/speak");
+const { priceAnswer, trialAnswer, trialSentence, numberWords, overLimitSentence } = await import("../src/lib/billing/speak");
 const { bellineVenue } = await import("../src/lib/seed-belline");
 
 const { PRODUCTS, TRIAL, aed, allowanceText, annualPerMonth, notYetLive, periodFee, priceOf, publicLines, sellable } = plans;
@@ -423,7 +423,27 @@ test("the pricing applies to landing.html whatever its line endings", () => {
     assert.doesNotThrow(() => { out = applyPricing(html); }, `${name}: applyPricing threw`);
     assert.match(out, /<select name="plan">\r?\n\s*<option value="\d+"[\s\S]*?data-name="Growth"/, `${name}: the ROI plan list was not regenerated`);
     assert.match(out, /"offers": \[\r?\n\s*\{ "@type": "Offer"/, `${name}: the structured-data offers were not regenerated`);
+    assert.match(out, /<p class="roi-out" id="roi-out" aria-live="polite">About AED [\d,]+ a month<\/p>/, `${name}: the ROI answer was not regenerated`);
+    assert.ok(out.includes(`data-gen="faq-allowance">${overLimitSentence()}<`), `${name}: the allowance answer was not generated`);
   }
+});
+
+// Strict: Google reads the structured FAQ, visitors read the visible one, and
+// both must say the same words. The two generated answers are included.
+test("the visible FAQ and the structured-data FAQ say exactly the same words", () => {
+  const html = applyPricing(landing);
+  const decode = (s: string) =>
+    s.replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&amp;/g, "&").trim();
+  const visible = [...html.matchAll(/<summary>([\s\S]*?)<\/summary>\s*<div class="answer">([\s\S]*?)<\/div>/g)].map((m) => ({
+    q: decode(m[1]),
+    a: decode(m[2]),
+  }));
+  const ld = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+  assert.ok(ld, "no structured data on the page");
+  const graph = JSON.parse(ld![1])["@graph"] as { "@type": string; mainEntity?: { name: string; acceptedAnswer: { text: string } }[] }[];
+  const faq = graph.find((g) => g["@type"] === "FAQPage")!.mainEntity!.map((e) => ({ q: e.name, a: e.acceptedAnswer.text }));
+  assert.ok(visible.length >= 10, `only ${visible.length} visible questions found`);
+  assert.deepEqual(faq, visible);
 });
 
 test("every market's page carries every sellable product's price, allowances and live lines", () => {

@@ -43,6 +43,27 @@
      Stylesheet; ein Wechsel war eine Suche, bei der man eine übersieht. */
   --serif: var(--bl-font-display); /* Bricolage Grotesque since Direction C; the name stays so every rule follows */
 
+  /* Semantic roles, so a palette change is a token change, not a hunt.
+     Each points at a brand token today; none carries a colour of its own
+     except the shadows, which the tokens only offer in one size. */
+  --btn-primary-bg: var(--bl-brass);
+  --btn-primary-text: var(--bl-ink);
+  --btn-primary-hover-bg: var(--bl-ink);
+  --btn-primary-hover-text: var(--bl-ivory);
+  --btn-primary-mark: url("/brand/belline-mark-inverse.svg");
+  --btn-primary-hover-mark: url("/brand/belline-mark.svg");
+  --mark-ground: var(--bl-brass);     /* the bell button's badge */
+  --mark-glyph: var(--bl-ink);        /* the bell inside it */
+  --accent-line: var(--bl-brass);     /* decorative rules and dots, never text */
+  --surface-dark: var(--bl-ink);      /* the call card's header bar */
+  --on-dark: var(--bl-ivory);         /* text on --surface-dark */
+  --on-dark-accent: var(--bl-brass-lit); /* labels and the level meter on --surface-dark */
+  --site-shadow-sheet: 0 18px 34px -22px rgba(17, 17, 17, 0.5);
+  --site-shadow-fab: 0 14px 34px -14px rgba(17, 17, 17, 0.5);
+  --site-shadow-fab-soft: 0 12px 28px -14px rgba(17, 17, 17, 0.42);
+  --site-shadow-chat-dock: 0 24px 60px -20px rgba(17, 17, 17, 0.55);
+  --site-shadow-call-dock: 0 20px 46px -16px rgba(17, 17, 17, 0.4);
+
   color-scheme: light;
 }
 
@@ -180,7 +201,7 @@ footer .brand span { font-size: 1.55rem; }
   border-bottom: 0;
   box-shadow: inset 0 0 0 1px var(--ink);
 }
-.top nav .nav-cta:hover { background: var(--brass-fill); color: var(--ink); box-shadow: inset 0 0 0 1px var(--brass-fill); }
+.top nav .nav-cta:hover { background: var(--btn-primary-bg); color: var(--btn-primary-text); box-shadow: inset 0 0 0 1px var(--btn-primary-bg); }
 /* Sichtbar neben "Get Belline", wie gewünscht — aber als Textzeile, nicht als
    zweite Pille. Zwei gleich schwere Pillen nebeneinander sind zwei
    Hauptknöpfe, und die Seite hat genau einen. */
@@ -236,9 +257,9 @@ footer .brand span { font-size: 1.55rem; }
   gap: 10px;
   padding: 15px 28px;
   border-radius: 999px;
-  border: 1px solid var(--brass-fill);
-  background: var(--brass-fill);
-  color: var(--ink);
+  border: 1px solid var(--btn-primary-bg);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font: inherit;
   font-size: 0.98rem;
   font-weight: 600;
@@ -253,10 +274,10 @@ footer .brand span { font-size: 1.55rem; }
   width: 38px;
   height: 38px;
   margin-block: -9px;
-  background: url("/brand/belline-mark-inverse.svg") center / contain no-repeat;
+  background: var(--btn-primary-mark) center / contain no-repeat;
 }
-.btn:hover { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-.btn:not(.line):not(:has(svg)):hover::before { background-image: url("/brand/belline-mark.svg"); }
+.btn:hover { background: var(--btn-primary-hover-bg); border-color: var(--btn-primary-hover-bg); color: var(--btn-primary-hover-text); }
+.btn:not(.line):not(:has(svg)):hover::before { background-image: var(--btn-primary-hover-mark); }
 .btn.line { background: transparent; color: var(--ink); border-color: var(--ink); }
 .btn.line:hover { background: var(--ink); color: var(--paper); }
 .btn svg { width: 17px; height: 17px; }
@@ -393,7 +414,7 @@ section { padding: 110px 0; }
     padding: 4px 22px calc(22px + env(safe-area-inset-bottom, 0px));
     background: var(--paper);
     border-bottom: 1px solid var(--rule);
-    box-shadow: 0 18px 34px -22px rgba(20, 17, 13, 0.5);
+    box-shadow: var(--site-shadow-sheet);
 
     /* Zu, und zwar so, dass es für Tastatur und Vorleseprogramm auch zu ist:
        visibility, nicht nur opacity. Ein unsichtbarer Link, den man antabben
@@ -913,18 +934,18 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   padding: 16px 26px 16px 22px;
   border-radius: 999px;
   /* The floating bell is the bell button: brass with ink, as on the canvas. */
-  background: var(--brass-fill);
-  color: var(--ink);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-weight: 600;
   text-decoration: none;
   font-size: 0.98rem;
   font-weight: 500;
-  box-shadow: 0 0 0 4px var(--paper), 0 14px 34px -14px rgba(20, 17, 13, 0.5);
+  box-shadow: 0 0 0 4px var(--paper), var(--site-shadow-fab);
   transition: transform 0.16s ease;
 }
 .bell-fab { isolation: isolate; }
 .bell-fab[hidden] { display: none; }
-.bell-fab svg { width: 27px; height: 27px; display: block; color: var(--ink); }
+.bell-fab svg { width: 27px; height: 27px; display: block; color: var(--btn-primary-text); }
 
 /* Ein Telefon, das klingelt.
  *
@@ -1016,7 +1037,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   font-size: 0.94rem;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 0 0 4px var(--paper), 0 12px 28px -14px rgba(20, 17, 13, 0.42);
+  box-shadow: 0 0 0 4px var(--paper), var(--site-shadow-fab-soft);
   transition: transform 0.16s ease;
 }
 .chat-fab[hidden] { display: none; }
@@ -1046,7 +1067,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   text-decoration: none;
   font-size: 0.94rem;
   font-weight: 500;
-  box-shadow: 0 0 0 4px var(--paper), 0 12px 28px -14px rgba(20, 17, 13, 0.42);
+  box-shadow: 0 0 0 4px var(--paper), var(--site-shadow-fab-soft);
   transition: transform 0.16s ease;
 }
 .wa-fab svg { width: 23px; height: 23px; display: block; color: var(--brass); }
@@ -1112,7 +1133,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   background: var(--paper);
   border: 1px solid var(--rule);
   border-radius: 14px;
-  box-shadow: 0 24px 60px -20px rgba(20, 17, 13, 0.55);
+  box-shadow: var(--site-shadow-chat-dock);
 }
 /* Die Ecke rundet der Rahmen selbst, nicht der Behälter: mit overflow:hidden
    würde der Schließknopf, der zehn Pixel außerhalb sitzt, weggeschnitten. */
@@ -1183,7 +1204,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   background: var(--paper);
   border: 1px solid var(--ink);
   border-radius: 14px;
-  box-shadow: 0 20px 46px -16px rgba(20, 17, 13, 0.4);
+  box-shadow: var(--site-shadow-call-dock);
 }
 .call-frame { width: 100%; height: 76px; border: 0; display: block; }
 .call-shut {
@@ -1587,7 +1608,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .trade-cards a:first-child { padding-left: 0; }
 .trade-cards a:last-child { border-right: 0; padding-right: 0; }
 .trade-cards a:hover,
-.trade-cards a:focus-visible { background: var(--paper-2, rgba(20, 17, 13, 0.025)); }
+.trade-cards a:focus-visible { background: var(--paper-2); }
 
 /* Unter den vier Karten: die Zeile für alle anderen. Gedämpft, damit die
    Karten die Bühne behalten, aber ein ganzer Satz — nicht eine Fußnote. */
@@ -1986,11 +2007,13 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   border-bottom: 1px solid var(--bl-rule-soft);
 }
 .demo-badge svg { width: 30px; height: 30px; display: block; }
+.mark-ground { fill: var(--mark-ground); }
+.mark-glyph { fill: var(--mark-glyph); }
 .demo-title { font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
 .demo-example { margin-left: auto; font-size: 0.75rem; color: var(--bl-stone); white-space: nowrap; }
-.demo-head-ink { background: var(--bl-ink); border-bottom-color: transparent; }
-.demo-head-ink .demo-title { color: var(--bl-ivory); }
-.demo-head-ink .demo-example { color: var(--bl-brass-lit); }
+.demo-head-ink { background: var(--surface-dark); border-bottom-color: transparent; }
+.demo-head-ink .demo-title { color: var(--on-dark); }
+.demo-head-ink .demo-example { color: var(--on-dark-accent); }
 
 .chat-thread {
   list-style: none;
@@ -2024,21 +2047,21 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   font-size: 0.8rem;
   color: var(--bl-stone);
 }
-.chat-compose i { width: 28px; height: 28px; border-radius: 50%; background: var(--bl-brass); }
+.chat-compose i { width: 28px; height: 28px; border-radius: 50%; background: var(--btn-primary-bg); }
 
 .call-bar {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 4px 14px 14px;
-  background: var(--bl-ink);
-  color: var(--bl-ivory);
+  background: var(--surface-dark);
+  color: var(--on-dark);
 }
 .call-who { display: grid; gap: 1px; min-width: 0; }
-.call-k { font-size: 0.75rem; color: var(--bl-brass-lit); }
+.call-k { font-size: 0.75rem; color: var(--on-dark-accent); }
 .call-num { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .call-level { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; height: 20px; }
-.call-level i { display: block; width: 3px; border-radius: 2px; background: var(--bl-brass-lit); }
+.call-level i { display: block; width: 3px; border-radius: 2px; background: var(--on-dark-accent); }
 .call-level i:nth-child(1) { height: 6px; }
 .call-level i:nth-child(2) { height: 13px; }
 .call-level i:nth-child(3) { height: 9px; }
@@ -2056,7 +2079,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   gap: 11px;
   color: var(--bl-graphite);
 }
-.call-lines li:nth-child(even) { color: var(--bl-ink); padding-left: 11px; border-left: 2px solid var(--bl-brass); }
+.call-lines li:nth-child(even) { color: var(--bl-ink); padding-left: 11px; border-left: 2px solid var(--accent-line); }
 .call-said-k { display: block; font-size: 0.75rem; font-weight: 600; color: var(--bl-stone); }
 
 .call-sent { margin: 2px 14px 14px; padding: 12px; background: var(--bl-sand); border-radius: var(--bl-radius-input); }
@@ -2369,7 +2392,30 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 }
 #worth .roi-fine { margin-top: 28px; }
 
+/* --- FAQ note and closer ------------------------------------------------------ */
+#faq .fine { margin-top: 28px; }
+#faq .fine a { color: var(--ink-2); text-underline-offset: 3px; }
+.closer-in {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 48px 72px;
+  align-items: start;
+}
+.closer .lead { margin: 20px 0 0; }
+.closer .cta-row { margin-top: 32px; }
+.closer .proof {
+  margin-top: 0;
+  padding: 4px 0 0 48px;
+  border-top: 0;
+  border-left: 1px solid var(--rule);
+}
+.closer .proof .fine { margin-top: 18px; }
+.closer .proof .dial-inline { color: var(--ink-2); text-underline-offset: 3px; }
+.closer-more { margin-top: 56px; }
+
 @media (max-width: 900px) {
+  .closer-in { grid-template-columns: 1fr; }
+  .closer .proof { padding: 30px 0 0; border-left: 0; border-top: 1px solid var(--rule); }
   .works-grid { grid-template-columns: 1fr; margin-top: 40px; }
   .works-grid > div { padding: 22px 0; border-bottom: 1px solid var(--rule-soft); }
   .routes > div,

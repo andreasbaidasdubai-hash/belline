@@ -118,7 +118,7 @@ ${picker}      <div class="cycle" role="group" aria-label="Billing period">
 
 ${markets.map((m, i) => renderMarket(m, i > 0)).join("\n\n")}
 
-      <p class="compare">An answering service takes a message. Belline takes the booking — and answers at three in the morning.</p>
+      <p class="compare">An answering service takes a message. Belline answers the question, takes the details and tells your team what to do next.</p>
 
       <div class="terms terms-4">
         <div>
@@ -183,17 +183,41 @@ function renderOffers(market: Market): string {
  * rewritten from the catalogue on every build, so nobody types it.
  */
 export function generatedPhrases(market: Market = liveMarkets()[0] ?? "AE"): Record<string, string> {
+  const saved = Math.min(...sellable(market).map((p) => annualMonthsSaved([p.id], market)));
   return {
     "trial-short": `${TRIAL.days} days free, no card.`,
     "roi-detail": renderRoi(market).detail,
+    "faq-allowance": overLimitSentence(),
+    "faq-tied-in":
+      "No. Monthly plans cancel any time and run to the end of the paid period. " +
+      (saved > 0
+        ? `Annual plans are paid up front and include ${saved} month${saved === 1 ? "" : "s"} free.`
+        : "Annual plans are paid up front."),
   };
 }
 
+/**
+ * FAQ answers that name packs, caps or annual terms. They are generated, and
+ * they appear twice: in the visible FAQ (by data-gen) and in the FAQPage
+ * structured data (by question), so both say the same words.
+ */
+const GENERATED_FAQ: Record<string, string> = {
+  "What happens if we use up our allowance?": "faq-allowance",
+  "Are we tied in?": "faq-tied-in",
+};
+
 function applyGenerated(html: string): string {
-  for (const [key, text] of Object.entries(generatedPhrases())) {
+  const phrases = generatedPhrases();
+  for (const [key, text] of Object.entries(phrases)) {
     const slot = new RegExp(`(<(span|p) class="gen" data-gen="${key}">)[^<]*(</\\2>)`, "g");
     if (!slot.test(html)) throw new Error(`landing.html has lost its generated "${key}" text.`);
     html = html.replace(slot, (_m, open: string, _tag: string, close: string) => `${open}${esc(text)}${close}`);
+  }
+  for (const [question, key] of Object.entries(GENERATED_FAQ)) {
+    const name = JSON.stringify(question).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const answer = new RegExp(`("name": ${name}, "acceptedAnswer": \\{ "@type": "Answer", "text": )"(?:[^"\\\\]|\\\\.)*"`);
+    if (!answer.test(html)) throw new Error(`landing.html's structured data has lost the answer to "${question}".`);
+    html = html.replace(answer, (_m, open: string) => `${open}${JSON.stringify(phrases[key])}`);
   }
   return html;
 }
