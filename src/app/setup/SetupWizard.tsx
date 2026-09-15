@@ -377,12 +377,12 @@ export default function SetupWizard({
         Step 1 of 2
       </p>
       <h1 style={{ ...serif, fontSize: 34, letterSpacing: "-0.02em", lineHeight: 1.1, margin: "0 0 14px" }}>
-        What's your website?
+        Where can Belline learn about your business?
       </h1>
       <p style={{ color: "var(--text-2)", fontSize: 16, lineHeight: 1.6, maxWidth: "54ch" }}>
-        Belline will read it and set itself up — your services, your hours, your
-        prices, the questions people ask. You check it on the next screen before
-        anything goes live.
+        Give it your website, a price list or brochure, or both. Belline drafts
+        your services, hours, prices and the questions people ask, and you check
+        every line on the next screen.
       </p>
 
       <form onSubmit={read} style={{ marginTop: 28, display: "grid", gap: 22 }}>
@@ -519,8 +519,8 @@ export default function SetupWizard({
       )}
 
       <p className="muted" style={{ fontSize: 12.5, marginTop: 34, lineHeight: 1.6, maxWidth: "52ch" }}>
-        Nothing is live until you say so. Belline will not answer a call until
-        you have seen what it learned and pressed save.
+        Reading these changes nothing for your customers. They only reach Belline
+        once you forward your phone line to it or add the chat to your website.
       </p>
     </div>
   );

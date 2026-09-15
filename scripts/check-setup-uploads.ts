@@ -320,6 +320,17 @@ await test("the published version says where the setup came from", () => {
   assert.match(historyFor(getLocation(venueId)!)[0].note, /^Set up from palmdental\.ae and 1 document$/);
 });
 
+await test("the setup screen mentions documents and makes no false 'not live' promise", () => {
+  // A venue answers as soon as its line forwards to Belline or the chat is on
+  // its site; nothing on this screen gates that, so the page must not say so.
+  const wizard = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "SetupWizard.tsx"), "utf8");
+  assert.doesNotMatch(wizard, /Nothing is live until/, "the false 'Nothing is live until you say so' line is back");
+  assert.doesNotMatch(wizard, /will not answer a call until/, "the setup screen promises a gate that does not exist");
+  assert.doesNotMatch(wizard, /set itself up/, "'sets itself up' overstates a one-page draft the owner has to check");
+  assert.doesNotMatch(wizard, /What's your website\?/, "the heading still asks only for a website");
+  assert.match(wizard, /price list or brochure/i);
+});
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 console.log(
