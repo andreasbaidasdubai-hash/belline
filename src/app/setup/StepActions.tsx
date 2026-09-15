@@ -109,13 +109,16 @@ export interface DestinationOption {
   id: "requests" | "link" | "belline" | "google" | "outlook";
   title: string;
   body: string;
-  state: "available" | "preparing" | "soon";
+  /** "connect": the option works once the owner connects an account at `connectUrl`. */
+  state: "available" | "preparing" | "soon" | "connect";
+  connectUrl?: string;
 }
 
 const STATE_LABEL: Record<DestinationOption["state"], string> = {
   available: "Available",
   preparing: "Being prepared",
   soon: "Coming soon",
+  connect: "Connect first",
 };
 
 export function DestinationPicker({
@@ -124,12 +127,15 @@ export function DestinationPicker({
   currentLink,
   requested,
   partners,
+  notice,
 }: {
   options: DestinationOption[];
   current?: string;
   currentLink?: string;
   requested: string[];
   partners: { id: string; name: string }[];
+  /** A sentence about what just happened, such as coming back from Google. */
+  notice?: string;
 }) {
   const open = options.filter((o) => o.state === "available").map((o) => o.id as string);
   const initial = current === "requests" && currentLink ? "link" : current && open.includes(current) ? current : "requests";
@@ -163,6 +169,11 @@ export function DestinationPicker({
 
   return (
     <div>
+      {notice && (
+        <p role="status" style={{ fontSize: 14, lineHeight: 1.5, margin: "0 0 14px" }}>
+          {notice}
+        </p>
+      )}
       <button type="button" className="btn btn-accent" onClick={run} disabled={busy} style={{ padding: "12px 22px" }}>
         {busy ? "Saving…" : "Use this"}
       </button>
@@ -214,7 +225,14 @@ export function DestinationPicker({
                   <input id="booking-link" type="url" inputMode="url" placeholder="https://" value={link} onChange={(e) => setLink(e.target.value)} />
                 </div>
               )}
-              {(o.id === "google" || o.id === "outlook") && (
+              {o.state === "connect" && o.connectUrl && (
+                <div style={{ paddingLeft: 28, marginTop: 8 }}>
+                  <a className="btn" href={o.connectUrl} style={{ padding: "6px 12px", fontSize: 13 }}>
+                    Connect {o.title}
+                  </a>
+                </div>
+              )}
+              {(o.id === "google" || o.id === "outlook") && (o.state === "soon" || o.state === "preparing") && (
                 <div style={{ paddingLeft: 28 }}>
                   <RequestIntegration id={o.id} name={o.title} label="Tell me when it's ready" requested={requested.includes(o.id)} />
                 </div>

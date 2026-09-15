@@ -3,8 +3,11 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { integrationErrorText } from "@/lib/errors/customer";
 import { seedIfEmpty } from "@/lib/seed";
-import { takesRequestsOnly } from "@/lib/booking/destination";
-import { connectionState, googleConfigured } from "@/lib/integrations/google";
+import { destinationOf, googleUsable, takesRequestsOnly } from "@/lib/booking/destination";
+import { GOOGLE_EXPIRED_TEXT, connectionState, listCalendarsFor } from "@/lib/integrations/google";
+import { flag } from "@/lib/flags";
+import { getLocation } from "@/lib/store";
+import GoogleCalendarControls from "./GoogleCalendarControls";
 import { whatsappConfigured, whatsappStatus } from "@/lib/whatsapp";
 import { provisioningReady } from "@/lib/whatsapp-provision";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -50,7 +53,13 @@ export default async function IntegrationsPage({
       ? await refreshConnectedAccount(location).catch(() => location)
       : location;
 
-  const google = connectionState(location);
+  // Calendars first: loading them is what finds out a token has expired, and
+  // the state below should say so on this load, not the next.
+  const googleOn = flag("booking.google");
+  const calendars = googleOn && googleUsable(location) ? await listCalendarsFor(location).catch(() => null) : null;
+  const googleVenue = getLocation(location.id) ?? location;
+  const google = connectionState(googleVenue);
+  const twoWay = destinationOf(googleVenue) === "google";
   const whatsapp = await whatsappStatus(location);
   const account = whatsapp.state === "connected" ? whatsapp.account : null;
 
@@ -223,30 +232,60 @@ export default async function IntegrationsPage({
             </span>
           </div>
 
-          <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch" }}>
-            Bookings are written into the venue&apos;s calendar as they happen — one way.
-            Belline stays in charge of availability, because it knows things a calendar
-            cannot: which practitioner is qualified, how many covers the kitchen can take at
-            eight, that the chair is held for ten minutes after the guest leaves. An event
-            dragged about in Google does not change the booking, and the event text says so.
-          </p>
-
-          {googleConfigured() ? (
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <a className="btn btn-accent" href={`/api/integrations/google?locationId=${location.id}`}>
-                {google.connected ? "Reconnect" : "Connect Google Calendar"}
-              </a>
-              {google.connected && (
-                <Link className="btn" href={`/calendar?loc=${location.id}`}>
-                  See the diary
-                </Link>
-              )}
+          {google.expired && (
+            <div
+              role="alert"
+              className="panel"
+              style={{ padding: "12px 14px", margin: "0 0 12px", borderColor: "var(--bad)", background: "var(--bad-soft)", fontSize: 13.5 }}
+            >
+              {GOOGLE_EXPIRED_TEXT}
             </div>
+          )}
+
+          {twoWay ? (
+            <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch" }}>
+              Belline reads busy times from the calendars you pick and adds each booking to
+              them. Your hours, services and rules still decide what can be booked; the
+              calendar can only take times away. To change or cancel a booking, do it in
+              Belline, so the customer&apos;s record stays right.
+            </p>
+          ) : (
+            <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch" }}>
+              Bookings are written into the venue&apos;s calendar as they happen — one way.
+              Belline stays in charge of availability, because it knows things a calendar
+              cannot: which practitioner is qualified, how many covers the kitchen can take at
+              eight, that the chair is held for ten minutes after the guest leaves. An event
+              dragged about in Google does not change the booking, and the event text says so.
+            </p>
+          )}
+
+          {googleOn ? (
+            <>
+              <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                <a className="btn btn-accent" href={`/api/integrations/google?locationId=${location.id}`}>
+                  {google.connected ? "Reconnect" : "Connect Google Calendar"}
+                </a>
+                {google.connected && !google.expired && (
+                  <Link className="btn" href={`/calendar?loc=${location.id}`}>
+                    See the diary
+                  </Link>
+                )}
+              </div>
+              {googleUsable(googleVenue) && googleVenue.google && (
+                <GoogleCalendarControls
+                  locationId={location.id}
+                  calendars={calendars}
+                  calendarId={googleVenue.google.calendarId}
+                  staff={(location.salon?.staff ?? []).map((s) => ({ id: s.id, name: s.name }))}
+                  staffCalendars={googleVenue.google.staffCalendars ?? {}}
+                />
+              )}
+            </>
           ) : (
             <p style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 14 }}>
               Google Calendar isn&apos;t available on this account yet.
               {isBellineStaff(user) && (
-                <span className="muted"> (Ours to fix: the Google client credentials are not set. See the ops flags.)</span>
+                <span className="muted"> (Ours to fix: the booking.google flag is off. See the ops flags.)</span>
               )}
             </p>
           )}

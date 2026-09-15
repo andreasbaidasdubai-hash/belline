@@ -258,7 +258,7 @@ await test("a booking link is stored as an address, and nonsense is refused", as
   assert.ok(!bad.ok && bad.field === "bookingLink");
 });
 
-await test("Google and Outlook cannot be chosen, with or without their flags", () => {
+await test("Google without a connection, Outlook and partners cannot be chosen, with or without their flags", () => {
   const venue = withDestination(salon, undefined, { reviewedAt: at });
   process.env.FLAG_STUBS = "on";
   process.env.FLAG_BOOKING_GOOGLE = "on";
@@ -311,7 +311,8 @@ await test("the bookings step shows calendars from their flags, and the integrat
   assert.match(page, /flag\("booking\.google"\)/);
   assert.match(page, /flag\("booking\.outlook"\)/);
   assert.match(page, /Coming soon/);
-  assert.doesNotMatch(page, /state: "available",\s*\}[^\]]*id: "google"/);
+  // Google is only ever "available" behind a working connection (check:google covers the rest).
+  assert.match(page, /if \(googleUsable\(venue\)\)/);
   assert.match(source("src/app/(app)/integrations/page.tsx"), /takesRequestsOnly\(location\)/);
 });
 

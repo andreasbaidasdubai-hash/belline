@@ -6,6 +6,15 @@ import { assertStubsSafe, stubsRequested } from "../flags";
 import type { EmailMessage } from "../providers/email";
 import type { ModelCall } from "../prospect";
 import type { Graph, GraphReply } from "../whatsapp-provision";
+import {
+  GOOGLE_SCOPES,
+  GoogleApiError,
+  GoogleAuthError,
+  zonedInstant,
+  type GoogleApi,
+  type GoogleCalendarEntry,
+  type GoogleEvent,
+} from "../integrations/google-api";
 
 /**
  * Fake providers for local end-to-end runs.
@@ -223,6 +232,8 @@ export interface StubEvent {
   end: string;
   summary?: string;
   status?: string;
+  transparent?: boolean;
+  bellineBookingId?: string;
 }
 
 /** Busy blocks and events per calendar. Writing the same event id twice replaces it. */
@@ -249,6 +260,113 @@ export function fakeGoogleCalendar() {
     },
     events(calendarId: string): StubEvent[] {
       return [...of(calendarId).values()];
+    },
+    /** Busy blocks and live events overlapping the window, the way events.list returns them. */
+    listEvents(calendarId: string, from: string, to: string): StubEvent[] {
+      const lo = Date.parse(from);
+      const hi = Date.parse(to);
+      const blocks = (busy.get(calendarId) ?? []).map((b, i) => ({ id: `busy${i}`, ...b }));
+      const live = [...of(calendarId).values()].filter((e) => e.status !== "cancelled");
+      return [...blocks, ...live].filter((e) => Date.parse(e.start) < hi && Date.parse(e.end) > lo);
+    },
+  };
+}
+
+/**
+ * The whole Google API Belline uses, on top of `fakeGoogleCalendar`.
+ *
+ * The code `stub-code` connects; any other is refused. `expire()` makes Google
+ * stop accepting every refresh token, the way a revoked or expired one fails.
+ * `calls` records each method, so a test can assert nothing was written.
+ */
+export function fakeGoogleApi(opts: { calendars?: GoogleCalendarEntry[] } = {}) {
+  const calendar = fakeGoogleCalendar();
+  const calls: { method: keyof GoogleApi; calendarId?: string; id?: string }[] = [];
+  const tokens = new Set<string>();
+  const revoked: string[] = [];
+  let expired = false;
+  let seq = 0;
+  const calendars = opts.calendars ?? [{ id: "primary", name: "Main calendar", primary: true }];
+
+  const toStub = (event: GoogleEvent): StubEvent => {
+    const at = (t: { dateTime: string; timeZone: string }) => {
+      const [date, clock] = t.dateTime.split("T");
+      const [h, m] = clock.split(":").map(Number);
+      return new Date(zonedInstant(date, h * 60 + m, t.timeZone)).toISOString();
+    };
+    return {
+      id: event.id,
+      start: at(event.start),
+      end: at(event.end),
+      summary: event.summary,
+      status: event.status,
+      bellineBookingId: event.extendedProperties.private.bellineBookingId,
+    };
+  };
+  const access = (token: string) => {
+    if (expired || !token.startsWith("stub-access-") || !tokens.has(token.slice("stub-access-".length))) {
+      throw new GoogleAuthError("stub: token refused");
+    }
+  };
+
+  const api: GoogleApi = {
+    async exchangeCode(code) {
+      calls.push({ method: "exchangeCode" });
+      if (code !== "stub-code") throw new GoogleApiError(400, "stub: invalid_grant");
+      const refreshToken = `stub-refresh-${++seq}-${randomUUID()}`;
+      tokens.add(refreshToken);
+      return { refreshToken, scope: GOOGLE_SCOPES.join(" ") };
+    },
+    async accessToken(refreshToken) {
+      calls.push({ method: "accessToken" });
+      if (expired || !tokens.has(refreshToken)) throw new GoogleAuthError("stub: invalid_grant");
+      return `stub-access-${refreshToken}`;
+    },
+    async listCalendars(token) {
+      access(token);
+      calls.push({ method: "listCalendars" });
+      return calendars;
+    },
+    async listEvents(token, calendarId, timeMin, timeMax) {
+      access(token);
+      calls.push({ method: "listEvents", calendarId });
+      return calendar.listEvents(calendarId, timeMin, timeMax);
+    },
+    async insertEvent(token, calendarId, event) {
+      access(token);
+      calls.push({ method: "insertEvent", calendarId, id: event.id });
+      if (calendar.events(calendarId).some((e) => e.id === event.id)) return { id: event.id, created: false };
+      await calendar.upsertEvent(calendarId, toStub(event));
+      return { id: event.id, created: true };
+    },
+    async putEvent(token, calendarId, event) {
+      access(token);
+      calls.push({ method: "putEvent", calendarId, id: event.id });
+      await calendar.upsertEvent(calendarId, toStub(event));
+    },
+    async cancelEvent(token, calendarId, eventId) {
+      access(token);
+      calls.push({ method: "cancelEvent", calendarId, id: eventId });
+      const existing = calendar.events(calendarId).find((e) => e.id === eventId);
+      if (existing) await calendar.upsertEvent(calendarId, { ...existing, status: "cancelled" });
+    },
+    async revoke(refreshToken) {
+      calls.push({ method: "revoke" });
+      tokens.delete(refreshToken);
+      revoked.push(refreshToken);
+    },
+  };
+
+  return {
+    api,
+    calendar,
+    calls,
+    revoked,
+    expire(): void {
+      expired = true;
+    },
+    restore(): void {
+      expired = false;
     },
   };
 }

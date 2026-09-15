@@ -7,7 +7,8 @@ import { currentVenue } from "@/lib/onboarding";
 import { INTEGRATIONS, bellineDiaryOffered, factsFrom, isStepId, journey, type Journey, type Step } from "@/lib/onboarding/journey";
 import { venueMarket } from "@/lib/onboarding/rules";
 import { requestRulesOf } from "@/lib/booking/requests";
-import { destinationOf, takesRequestsOnly } from "@/lib/booking/destination";
+import { destinationOf, googleUsable, takesRequestsOnly } from "@/lib/booking/destination";
+import { integrationErrorText } from "@/lib/errors/customer";
 import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
 import { MARKETS } from "@/lib/markets";
 import { flag } from "@/lib/flags";
@@ -122,9 +123,38 @@ function Rail({ j, active }: { j: Journey; active: Step }) {
 }
 
 /**
- * The bookings step's cards. Calendars show their flag's state and can never be
- * chosen here: no calendar adapter exists yet, so "Being prepared" is the most
- * a switched-on flag can honestly say.
+ * The Google card. With `booking.google` off it is "Coming soon", as before.
+ * With it on, it can be chosen only once a working connection exists; until
+ * then it offers the connection, and an expired one says so.
+ */
+function googleCard(venue: Location): DestinationOption {
+  const title = "Google Calendar";
+  if (!flag("booking.google")) {
+    return { id: "google", title, state: "soon", body: "Coming soon. Belline starts with requests, and you can ask to be told when it is ready." };
+  }
+  const connectUrl = `/api/integrations/google?locationId=${encodeURIComponent(venue.id)}&from=setup`;
+  if (googleUsable(venue)) {
+    const name = venue.google?.calendarName ?? "your calendar";
+    return { id: "google", title, body: `Belline checks ${name} for busy times and adds each booking to it.`, state: "available" };
+  }
+  if (venue.google?.expiredAt) {
+    return { id: "google", title, state: "connect", connectUrl, body: "Google stopped letting Belline in. Connect it again to use it; until then Belline takes requests." };
+  }
+  return { id: "google", title, state: "connect", connectUrl, body: "Connect your Google account first. Belline only reads busy times and adds bookings on the calendars you pick." };
+}
+
+/** What the page says after Google sends the owner back here. */
+function googleNotice(code: string | undefined): string | undefined {
+  if (code === "declined") return integrationErrorText("google_declined") ?? undefined;
+  if (code === "connected") return "Google Calendar is connected. Choose it below and press Use this.";
+  if (code === "google_unavailable" || code === "google_refused" || code === "google_failed") return integrationErrorText(code) ?? undefined;
+  return undefined;
+}
+
+/**
+ * The bookings step's cards. Outlook shows its flag's state and can never be
+ * chosen here: no adapter exists yet, so "Being prepared" is the most a
+ * switched-on flag can honestly say. Google follows `googleCard`.
  */
 function destinationOptions(venue: Location): DestinationOption[] {
   const calendar = (on: boolean): Pick<DestinationOption, "state" | "body"> =>
@@ -158,7 +188,7 @@ function destinationOptions(venue: Location): DestinationOption[] {
     ...(clinicPreview
       ? []
       : [
-          { id: "google", title: "Google Calendar", ...calendar(flag("booking.google")) } satisfies DestinationOption,
+          googleCard(venue),
           { id: "outlook", title: "Outlook calendar", ...calendar(flag("booking.outlook")) } satisfies DestinationOption,
         ]),
   ];
@@ -166,7 +196,7 @@ function destinationOptions(venue: Location): DestinationOption[] {
 
 const PARTNERS = ["fresha", "sevenrooms", "opentable", "treatwell", "other"].map((id) => ({ id, name: INTEGRATIONS[id] }));
 
-function Body({ step, j, venue, facts }: { step: Step; j: Journey; venue: Location; facts: ReturnType<typeof factsFrom> }) {
+function Body({ step, j, venue, facts, google }: { step: Step; j: Journey; venue: Location; facts: ReturnType<typeof factsFrom>; google?: string }) {
   const next = j.next;
   const onward = next && next.id !== step.id ? next : null;
   const cont = (
@@ -219,6 +249,7 @@ function Body({ step, j, venue, facts }: { step: Step; j: Journey; venue: Locati
           </p>
           <DestinationPicker
             options={destinationOptions(venue)}
+            notice={googleNotice(google)}
             current={venue.onboarding?.destination?.kind}
             currentLink={venue.onboarding?.destination?.bookingLink}
             requested={venue.onboarding?.integrationRequests ?? []}
@@ -389,10 +420,17 @@ function Body({ step, j, venue, facts }: { step: Step; j: Journey; venue: Locati
   }
 }
 
-export default async function SetupStepPage({ params }: { params: Promise<{ step: string }> }) {
+export default async function SetupStepPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ step: string }>;
+  searchParams: Promise<{ google?: string }>;
+}) {
   seedIfEmpty();
   const user = await requireUser();
   const { step: requested } = await params;
+  const { google } = await searchParams;
 
   const venue = listLocationsFor(user.tenantId)[0];
   if (!venue) redirect("/");
@@ -426,7 +464,7 @@ export default async function SetupStepPage({ params }: { params: Promise<{ step
       <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 90px" }}>
         <Rail j={j} active={step} />
         <main style={{ minWidth: 0, maxWidth: 720 }}>
-          <Body step={step} j={j} venue={venue} facts={facts} />
+          <Body step={step} j={j} venue={venue} facts={facts} google={google} />
         </main>
       </div>
     </div>

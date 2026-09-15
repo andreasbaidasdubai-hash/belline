@@ -2,6 +2,7 @@ import type { Call, DestinationKind, Location, OnboardingState } from "../types"
 import { readiness } from "./index";
 import { listCalls } from "../store";
 import { flag } from "../flags";
+import { googleUsable } from "../booking/destination";
 import { applyRules, type RulesInput } from "./rules";
 
 /**
@@ -314,8 +315,21 @@ export function recordStep(location: Location, action: StepAction, facts: Journe
     if (kind === "belline" && bellineDiaryOffered(location)) {
       return { ok: true, location: { ...location, onboarding: { ...o, destination: { kind, setAt: at } } } };
     }
-    // Google, Outlook and partner systems have no adapter yet, so choosing one
-    // would promise bookings nobody makes. The owner can ask to be told.
+    // Google, once its flag is on, can be chosen only with a working
+    // connection: choosing it unconnected would promise bookings nobody makes.
+    if (kind === "google" && flag("booking.google")) {
+      if (googleUsable(location)) {
+        return { ok: true, location: { ...location, onboarding: { ...o, destination: { kind, setAt: at } } } };
+      }
+      return {
+        ok: false,
+        status: 409,
+        error: "Connect Google Calendar first, then choose it here.",
+        fix: `/api/integrations/google?locationId=${encodeURIComponent(location.id)}&from=setup`,
+      };
+    }
+    // Outlook and partner systems have no adapter yet, so choosing one would
+    // promise bookings nobody makes. The owner can ask to be told.
     return {
       ok: false,
       status: 422,

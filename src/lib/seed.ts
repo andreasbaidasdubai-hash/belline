@@ -6,6 +6,7 @@ import { ensureBaseline } from "./brain";
 import { bellineVenue } from "./seed-belline";
 import { grandfatherLegacyPlans } from "./billing/grandfather";
 import { DEFAULT_TENANT_ID, businessIdForLocation, ensureTenancy } from "./tenancy";
+import { sealLegacyGoogleTokens } from "./integrations/google";
 
 const H = (h: number, m = 0) => h * 60 + m;
 
@@ -709,6 +710,8 @@ export function seedIfEmpty(): void {
   baselineBrains();
   // After the brains, so a live venue's activation date is its first version.
   ensureOnboarding();
+  // A Google refresh token never stays in plain text past a boot.
+  sealLegacyGoogleTokens();
 }
 
 /**

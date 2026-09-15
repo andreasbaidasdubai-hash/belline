@@ -202,6 +202,82 @@ test("service order does not change it", () => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// The same, when the book is a Google Calendar (P1-1). A fake Google, and every
+// real fetch blocked.
+
+console.log("\nThe same booking arriving twice, into Google Calendar\n");
+
+process.env.CREDENTIALS_KEY ??= Buffer.alloc(32, 3).toString("base64");
+process.env.FLAG_STUBS = "on";
+process.env.FLAG_BOOKING_GOOGLE = "on";
+const { installFetchGuard, blockedFetches, fakeGoogleApi } = await import("../src/lib/testing/stubs");
+installFetchGuard();
+const googleLib = await import("../src/lib/integrations/google");
+const { googleCalendarProvider } = await import("../src/lib/booking/google-provider");
+const { upsertLocation } = await import("../src/lib/store");
+const fakeGoogle = fakeGoogleApi();
+googleLib.setGoogleApi(fakeGoogle.api);
+
+async function testAsync(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
+    console.log(`  [32m✓[0m ${name}`);
+    passed++;
+  } catch (err) {
+    console.log(`  [31m✗[0m ${name}`);
+    console.log(`      ${err instanceof Error ? err.message : String(err)}`);
+    failed++;
+  }
+}
+
+const gVenue = upsertLocation({
+  ...(await googleLib.completeConnection(restaurant, "stub-code", "http://localhost/cb", "user_owner")),
+  onboarding: { version: 1, channels: {}, destination: { kind: "google", setAt: new Date().toISOString() } },
+});
+const gDay = futureDate(21);
+const [gSlot] = await googleCalendarProvider.checkAvailability({ location: gVenue }, { locationId: gVenue.id, date: gDay, partySize: 2 });
+const gInput = { date: gDay, startMin: gSlot?.startMin ?? 1140, guestName: "Andreas Baidas", guestPhone: "+44 7700 900123", partySize: 2 };
+const liveEvents = () => fakeGoogle.calendar.events("primary").filter((e) => e.status !== "cancelled").length;
+
+await testAsync("the same idempotency key twice is one event and one booking", async () => {
+  assert.ok(gSlot, "no slot to book");
+  const first = await googleCalendarProvider.createBooking({ location: gVenue }, gInput, "call_1:book");
+  const second = await googleCalendarProvider.createBooking({ location: gVenue }, gInput, "call_1:book");
+  assert.ok(first.ok && second.ok);
+  if (!first.ok || !second.ok) return;
+  assert.equal(second.duplicate, true);
+  assert.equal(second.booking.id, first.booking.id);
+  assert.equal(liveEvents(), 1);
+});
+
+await testAsync("the same booking under a different key is still one event (fingerprint)", async () => {
+  const again = await googleCalendarProvider.createBooking({ location: gVenue }, { ...gInput, guestPhone: "07700900123" }, "retry:other-key");
+  assert.ok(again.ok && again.duplicate);
+  assert.equal(liveEvents(), 1);
+});
+
+await testAsync("NOT blocked: a different guest at the same time is a second event", async () => {
+  const other = await googleCalendarProvider.createBooking(
+    { location: gVenue },
+    { ...gInput, guestName: "Mira Nassar", guestPhone: "+971 50 111 2222" },
+    "call_2:book",
+  );
+  assert.ok(other.ok && !other.duplicate, other.ok ? "" : other.detail);
+  assert.equal(liveEvents(), 2);
+  assert.equal(
+    listBookings({ locationId: gVenue.id, date: gDay }).filter((b) => b.status === "confirmed").length,
+    2,
+  );
+});
+
+await testAsync("nothing reached a real host", async () => {
+  assert.deepEqual(blockedFetches(), []);
+});
+
+delete process.env.FLAG_STUBS;
+delete process.env.FLAG_BOOKING_GOOGLE;
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 console.log(

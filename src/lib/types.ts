@@ -1088,6 +1088,12 @@ export interface Booking {
   cancelledAt?: string;
   cancelReason?: string;
   /**
+   * The Google Calendar event this booking is, and the calendar it is in.
+   * Derived from the idempotency key, so a second create finds the first.
+   */
+  calendarEventId?: string;
+  calendarId?: string;
+  /**
    * When this guest is due back, and for what.
    *
    * Written at booking time from the service's `recallDays` so that the recall

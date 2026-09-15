@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 
 export type Provider = "import" | "model" | "google" | "stripe" | "messaging" | "setup";
 
-export type Kind = "unavailable" | "not_configured" | "refused" | "failed";
+export type Kind = "unavailable" | "not_configured" | "refused" | "declined" | "failed";
 
 export interface CustomerMessage {
   /** One sentence, plain, active voice. Safe to render. */
@@ -48,6 +48,10 @@ const COPY: Record<Provider, Partial<Record<Kind, [string, string]>> & { failed:
   google: {
     not_configured: ["Google Calendar is not available on this account yet.", "Your bookings stay in Belline's diary in the meantime."],
     refused: ["Google did not allow the connection.", "Try connecting again, and choose Allow on Google's screen."],
+    declined: [
+      "No problem — requests for now.",
+      "Belline takes the details and your team confirms. You can connect Google Calendar whenever you like.",
+    ],
     failed: ["Google Calendar could not be connected just now.", "Try again in a few minutes."],
   },
   stripe: {
@@ -137,6 +141,7 @@ export function resetCustomerErrors(): void {
 export const INTEGRATION_ERRORS: Record<string, [Provider, Kind]> = {
   google_unavailable: ["google", "not_configured"],
   google_refused: ["google", "refused"],
+  google_declined: ["google", "declined"],
   google_failed: ["google", "failed"],
   payments_off: ["stripe", "not_configured"],
   payments_failed: ["stripe", "failed"],

@@ -1,4 +1,5 @@
 import type { DestinationKind, Location } from "../types";
+import { flag } from "../flags";
 
 /**
  * Where this venue's bookings go, without loading the booking engine.
@@ -13,15 +14,33 @@ export function destinationOf(location: Pick<Location, "onboarding">): Destinati
   return location.onboarding?.destination?.kind ?? "belline";
 }
 
+type Venue = Pick<Location, "onboarding"> & { google?: Location["google"] };
+
+/**
+ * Can Belline book into this venue's Google Calendar right now?
+ *
+ * The flag is on, a sealed token is stored, and Google has not stopped
+ * accepting it. Any of the three missing and the venue takes requests.
+ */
+export function googleUsable(location: Venue, env: Record<string, string | undefined> = process.env): boolean {
+  const link = location.google;
+  return Boolean(link?.sealedToken && !link.expiredAt && flag("booking.google", env));
+}
+
 /**
  * Does this venue take requests rather than confirmed bookings?
  *
- * Google, Outlook and partner systems count as requests until their adapters
- * exist. An owner who chose one is not told it works; the agent takes the
- * details and the team confirms, which is what happens today.
+ * Outlook and partner systems count as requests until their adapters exist.
+ * Google counts as requests whenever its connection is not usable — flag off,
+ * never connected, or the token expired — so a calendar Belline cannot see is
+ * never booked into. An owner who chose one is not told it works; the agent
+ * takes the details and the team confirms.
  */
-export function takesRequestsOnly(location: Pick<Location, "onboarding">): boolean {
-  return destinationOf(location) !== "belline";
+export function takesRequestsOnly(location: Venue): boolean {
+  const kind = destinationOf(location);
+  if (kind === "belline") return false;
+  if (kind === "google") return !googleUsable(location);
+  return true;
 }
 
 /** The owner's own booking link, when they gave one. */
