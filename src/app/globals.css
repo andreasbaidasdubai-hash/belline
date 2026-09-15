@@ -2133,8 +2133,25 @@ body:has(.callbar) {
 /* A table squeezed to 375px crushes its columns rather than overflowing, which
    is how Calls lost two columns and Team hid its buttons. Give it a floor and
    let the wrapper scroll. */
+/* Two columns of forwarding codes fit a phone as they are; the 640px floor
+   below pushed the Dial column off screen. */
+.forward-table td:last-child { word-break: break-all; }
+
+/* Set up with Belle: conversation beside the checklist, stacked on a phone
+   with the checklist first. */
+.setup-assistant {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  gap: 22px;
+  align-items: start;
+}
 @media (max-width: 760px) {
-  .table-wrap > table:not(.booking-table) { min-width: 640px; }
+  .setup-assistant { grid-template-columns: 1fr; }
+  .setup-assistant > aside { order: -1; }
+}
+
+@media (max-width: 760px) {
+  .table-wrap > table:not(.booking-table):not(.forward-table) { min-width: 640px; }
 }
 
 /* Bookings is the one table used mid-shift, so it becomes cards rather than

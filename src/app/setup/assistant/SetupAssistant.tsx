@@ -65,9 +65,11 @@ export default function SetupAssistant({
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 230px", gap: 22, alignItems: "start" }} className="setup-assistant">
+    // The grid lives in globals.css so it can stack on a phone; inline, the
+    // 230px side column left the conversation 77px wide at 375.
+    <div className="setup-assistant">
       <div className="panel" style={{ display: "flex", flexDirection: "column", height: "min(640px, 72vh)" }}>
-        <div style={{ flex: 1, overflowY: "auto", padding: "18px 18px 8px", display: "grid", gap: 10, alignContent: "start" }} role="log" aria-live="polite">
+        <div style={{ flex: 1, overflowY: "auto", padding: "18px 18px 8px", display: "grid", gap: 10, alignContent: "start" }} role="log" aria-live="polite" tabIndex={0} aria-label="Conversation with Belle">
           {lines.map((line, i) => (
             <div key={i} style={{ display: "flex", justifyContent: line.role === "user" ? "flex-end" : "flex-start" }}>
               <p

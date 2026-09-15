@@ -130,7 +130,7 @@ export default async function GoLivePage({
           On a <strong>du</strong> or <strong>e&amp;</strong> mobile, dial each code from the phone whose calls you want covered and press call.
         </p>
         <div className="table-wrap" tabIndex={0}>
-          <table>
+          <table className="forward-table">
             <thead>
               <tr>
                 <th>When</th>

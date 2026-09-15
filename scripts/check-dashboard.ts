@@ -258,6 +258,21 @@ await test("the console's status pill is not grey on its tint", () => {
   assert.doesNotMatch(read("src", "app", "(app)", "test", "Console.tsx"), /color:\s*connected \? "var\(--ok\)" : "var\(--muted\)"/, "status pill is --muted on --panel-2");
 });
 
+console.log("\n\x1b[1mLayout at 375\x1b[0m\n");
+
+await test("the Set up with Belle chat stacks on a phone instead of shrinking to 77px", () => {
+  const assistant = read("src", "app", "setup", "assistant", "SetupAssistant.tsx");
+  assert.doesNotMatch(assistant, /gridTemplateColumns: "minmax\(0, 1fr\) 230px"/, "the grid is still inline, where no media query can reach it");
+  assert.match(ruleBody(".setup-assistant"), /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*230px/);
+  assert.match(shellCss, /@media \(max-width:\s*760px\)\s*\{\s*\.setup-assistant\s*\{\s*grid-template-columns:\s*1fr/);
+  assert.match(assistant, /role="log"[^>]*tabIndex=\{0\}|tabIndex=\{0\}[^>]*role="log"/, "the scrollable conversation cannot be reached by keyboard");
+});
+
+await test("the Go live dial codes are not pushed off a phone screen by the 640px table floor", () => {
+  assert.match(read("src", "app", "(app)", "golive", "page.tsx"), /<table className="forward-table">/);
+  assert.match(shellCss, /\.table-wrap > table:not\(\.booking-table\):not\(\.forward-table\)/);
+});
+
 console.log("\n\x1b[1mWhen the database cannot be reached\x1b[0m\n");
 
 // Inbox and Integrations used to throw straight out of the page on a
