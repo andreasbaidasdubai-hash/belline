@@ -177,7 +177,9 @@ export function applyPricing(html: string): string {
   html = html.replace(block, () => renderPricing());
 
   const roi = renderRoi(home);
-  const select = /(<select name="plan">\n)[\s\S]*?(\n\s*<\/select>)/;
+  // \r?\n throughout: a Windows checkout (core.autocrlf) gives landing.html CRLF
+  // endings, and a bare \n made the site build throw in Docker and on Vercel.
+  const select = /(<select name="plan">\r?\n)[\s\S]*?(\r?\n\s*<\/select>)/;
   if (!select.test(html)) throw new Error("landing.html has lost the ROI calculator's plan list.");
   html = html.replace(select, (_m, open: string, close: string) => `${open}${roi.options}${close}`);
 
@@ -185,7 +187,7 @@ export function applyPricing(html: string): string {
   if (!out.test(html)) throw new Error("landing.html has lost the ROI calculator's answer line.");
   html = html.replace(out, (_m, open: string, close: string) => `${open}${roi.sentence}${close}`);
 
-  const offers = /("offers": \[\n)[\s\S]*?(\n\s*\])/;
+  const offers = /("offers": \[\r?\n)[\s\S]*?(\r?\n\s*\])/;
   if (!offers.test(html)) throw new Error("landing.html has lost its structured-data offers.");
   html = html.replace(offers, (_m, open: string, close: string) => `${open}${renderOffers(home)}${close}`);
 

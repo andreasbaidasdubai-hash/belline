@@ -411,6 +411,21 @@ siteCopy("the pricing on the page is exactly what the catalogue renders — run 
   assert.equal(applyPricing(landing), landing, "public/landing.html is stale against src/lib/billing/plans.ts");
 });
 
+// Strict, not siteCopy: this is the site build itself. A Windows checkout
+// (core.autocrlf) gives landing.html CRLF line endings, the markers stopped
+// matching, and `npm run site` threw inside the Docker build and on Vercel —
+// while every check here still passed.
+test("the pricing applies to landing.html whatever its line endings", () => {
+  const lf = landing.replace(/\r\n/g, "\n");
+  const crlf = lf.replace(/\n/g, "\r\n");
+  for (const [name, html] of [["LF", lf], ["CRLF", crlf]] as const) {
+    let out = "";
+    assert.doesNotThrow(() => { out = applyPricing(html); }, `${name}: applyPricing threw`);
+    assert.match(out, /<select name="plan">\r?\n\s*<option value="\d+"[\s\S]*?data-name="Growth"/, `${name}: the ROI plan list was not regenerated`);
+    assert.match(out, /"offers": \[\r?\n\s*\{ "@type": "Offer"/, `${name}: the structured-data offers were not regenerated`);
+  }
+});
+
 test("every market's page carries every sellable product's price, allowances and live lines", () => {
   // Every market, not only the open ones: the day a market opens, its page is
   // already pinned.
