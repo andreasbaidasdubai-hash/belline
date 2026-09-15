@@ -169,7 +169,7 @@ console.log("\n\x1b[1mText on tinted surfaces stays readable\x1b[0m\n");
 // axe measured the grey on the tinted surfaces at 4.34:1 (on --panel-2) and
 // 4.04:1 (on --accent-soft), and the venue-type label at 2.55:1 because of an
 // opacity. The fix is where the grey is used, never the tokens: --muted was
-// darkened on purpose (#636A77, not #6B7280) and must not be lightened back.
+// darkened on purpose (#5B6472, not #667085) and must not be lightened back.
 const shellCss = fs.readFileSync(path.join(process.cwd(), "src", "app", "globals.css"), "utf8");
 function ruleBody(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
@@ -178,13 +178,15 @@ function ruleBody(selector: string): string {
 }
 
 await test("the text tokens keep their checked values", () => {
-  // Ink + Indigo: the app maps onto the shared brand tokens, whose values were
-  // checked for contrast (muted 4.87 on indigo tint, indigo 5.62 on it).
+  // Navy + Electric Blue: the app maps onto the shared brand tokens, whose values
+  // were checked for contrast (muted 5.43 on the grey band, 5.38 on blue tint;
+  // white on blue 4.70). --bl-indigo is kept as an alias of --bl-blue.
   const tokensCss = fs.readFileSync(path.join(process.cwd(), "public", "brand", "tokens.css"), "utf8");
   assert.match(shellCss, /--muted:\s*var\(--bl-muted\);/);
   assert.match(shellCss, /--brass:\s*var\(--bl-indigo\);/);
-  assert.match(tokensCss, /--bl-muted:\s*#636A77;/);
-  assert.match(tokensCss, /--bl-indigo:\s*#4F46E5;/);
+  assert.match(tokensCss, /--bl-muted:\s*#5B6472;/);
+  assert.match(tokensCss, /--bl-blue:\s*#2667FF;/);
+  assert.match(tokensCss, /--bl-indigo:\s*var\(--bl-blue\);/);
 });
 
 await test("pills, table headers and calendar headings use the darker text on tint", () => {

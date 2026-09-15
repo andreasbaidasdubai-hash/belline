@@ -40,9 +40,9 @@ export async function LocationTabs({ base, active }: { base: string; active: str
             }}
           >
             {l.name}
-            {/* Faded only on the active indigo tab, and only slightly: white at
-                0.75 on indigo measured 4.26:1; at 0.9 it clears 4.5:1. */}
-            <span style={{ opacity: on ? 0.9 : 1, fontWeight: 500 }}>
+            {/* Not faded on the active blue tab: white on #2667FF is 4.70:1,
+                so any opacity drops it under 4.5:1 (0.9 measured 4.11). */}
+            <span style={{ fontWeight: 500 }}>
               {l.vertical}
             </span>
           </Link>

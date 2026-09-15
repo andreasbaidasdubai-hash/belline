@@ -164,15 +164,15 @@ export function bookingEmail(location: Location, booking: Booking, kind: Booking
 
   const button = (href: string, label: string, primary: boolean) =>
     `<a href="${esc(href)}" style="display:inline-block;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px;${
-      primary ? "background:#4F46E5;color:#FFFFFF;" : "border:1px solid #D1D5DB;color:#111827;"
+      primary ? "background:#2667FF;color:#FFFFFF;" : "border:1px solid #DDE3F5;color:#1B2735;"
     }">${esc(label)}</a>`;
 
-  const html = `<!doctype html><html><body style="margin:0;background:#FFFFFF;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#111827">
+  const html = `<!doctype html><html><body style="margin:0;background:#FFFFFF;font-family:Inter,-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1B2735">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border:1px solid #EAE4D8;border-radius:14px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border:1px solid #DDE3F5;border-radius:16px">
 <tr><td style="padding:28px 28px 8px">
-<p style="margin:0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#4F46E5">${esc(location.name)}</p>
-<h1 style="margin:10px 0 18px;font-family:Georgia,serif;font-weight:400;font-size:26px;line-height:1.2">${esc(heading)}</h1>
+<p style="margin:0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#1A4FD6">${esc(location.name)}</p>
+<h1 style="margin:10px 0 18px;font-family:'Plus Jakarta Sans',-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-weight:600;font-size:26px;line-height:1.2;letter-spacing:-0.02em">${esc(heading)}</h1>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;line-height:1.5">
 ${rows
   .map(

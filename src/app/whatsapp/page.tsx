@@ -33,7 +33,7 @@ export default function WhatsAppPage() {
         padding: 24,
         background: "var(--bl-ground)",
         color: "var(--bl-ink-900)",
-        fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif',
+        fontFamily: "var(--bl-font-text)",
       }}
     >
       <div style={{ maxWidth: 460 }}>

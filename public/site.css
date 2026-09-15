@@ -53,9 +53,9 @@
   --surface-dark: var(--bl-ink-900);  /* the call card's header bar */
   --on-dark: var(--bl-ground);        /* text on --surface-dark */
   --on-dark-accent: var(--bl-indigo-lit); /* labels and the level meter on --surface-dark (8.90:1) */
-  --site-shadow-sheet: 0 18px 34px -22px rgba(17, 24, 39, 0.5);
-  --site-shadow-fab: 0 14px 34px -14px rgba(17, 24, 39, 0.5);
-  --site-shadow-fab-soft: 0 12px 28px -14px rgba(17, 24, 39, 0.42);
+  --site-shadow-sheet: 0 18px 34px -22px rgba(27, 39, 53, 0.5);
+  --site-shadow-fab: 0 14px 34px -14px rgba(27, 39, 53, 0.5);
+  --site-shadow-fab-soft: 0 12px 28px -14px rgba(27, 39, 53, 0.42);
   --site-shadow-chat-dock: 0 24px 60px -20px rgba(17, 17, 17, 0.55);
   --site-shadow-call-dock: 0 20px 46px -16px rgba(17, 17, 17, 0.4);
 
@@ -68,7 +68,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--bl-font-text);
   /* 18px, nicht 17. Auf einem Laptop in Armlänge ist der Unterschied genau
      der zwischen "lesbar" und "angenehm"; die ganze Seite ist Fließtext mit
      einer Antiqua daneben, und die Antiqua wirkt nur groß, wenn die Grotesk

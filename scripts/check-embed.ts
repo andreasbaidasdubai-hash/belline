@@ -291,8 +291,8 @@ console.log("\nHow it looks — the venue's choices, within the guidelines\n");
   await test("light accents get ink text and an ink mark; dark ones white text and a white mark", () => {
     // Deep enough to pass, and light enough that ink reads better than paper.
     const light = resolveAppearance({ accent: "#C9A227" });
-    assert.equal(light.accentText, "#111827");
-    assert.equal(light.accentMark, "#111827");
+    assert.equal(light.accentText, "#1B2735");
+    assert.equal(light.accentMark, "#1B2735");
     const dark = resolveAppearance({ accent: "wine" });
     assert.equal(dark.accentText, "#FFFFFF");
     assert.equal(dark.accentMark, "#FFFFFF");
