@@ -20,6 +20,7 @@ import {
   sellable,
   type ProductId,
 } from "../billing/plans";
+import { overLimitSentence, volumeSentence } from "../billing/speak";
 import type { ToolContext, ToolOutcome } from "./tools";
 
 /**
@@ -207,7 +208,8 @@ function quote(input: Record<string, unknown>, ctx: ToolContext) {
   const base = {
     plans,
     trial: `${TRIAL.days} days free, ${TRIAL.minutes} voice minutes and ${TRIAL.conversations} text conversations, every channel on, no card`,
-    always: "Priced per location. Setting up is free. Cancel any time.",
+    always: `Priced per location. Setting up is free. ${overLimitSentence()} Cancel any time.`,
+    several_locations: volumeSentence(),
   };
 
   if (asks === "discount" || asks === "contract" || asks === "guarantee") {
@@ -225,7 +227,7 @@ function quote(input: Record<string, unknown>, ctx: ToolContext) {
     flag(ctx, "Group with several venues — wants pricing");
     return {
       ...base,
-      say: "Give the per-venue prices, then say groups are priced properly by a person and offer to set that up. Record the lead with stage wants_person.",
+      say: "Give the per-location prices and the several_locations terms exactly as given, then say a person applies the discount and prices twenty or more, and offer to set that up. Record the lead with stage wants_person.",
     };
   }
   return {

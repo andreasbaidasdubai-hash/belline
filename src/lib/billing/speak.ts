@@ -1,5 +1,5 @@
 import { MARKETS, formatMoney, type Market } from "../markets";
-import { CHANNELS, CHANNEL_ORDER, TRIAL, priceOf, sellable, type Channel } from "./plans";
+import { ALERT_THRESHOLDS, CHANNELS, CHANNEL_ORDER, TRIAL, VOLUME, packFor, priceOf, sellable, type Channel } from "./plans";
 
 /**
  * What Belle and the website say about price, generated from the catalogue.
@@ -77,7 +77,8 @@ export function priceAnswer(market: Market): string {
     `${capitalise(numberWords(plans.length))} plans, per location, per month, and every one ` +
     `covers ${liveChannelsPhrase()}. ${list(ladder)}.` +
     (popular ? ` ${popular.name} is the one most businesses take.` : "") +
-    " Setting up is free."
+    " Setting up is free. If an allowance runs out, you choose what happens: extra minutes or conversations " +
+    "added automatically, a move to the next plan, or a stop — and nothing is added to your bill unless you chose it."
   );
 }
 
@@ -105,4 +106,33 @@ export function trialSentence(): string {
 /** Money in the UAE, where every v2 price is set. */
 export function aedText(minor: number): string {
   return formatMoney(minor, "AE");
+}
+
+/** "100 extra voice minutes for AED 99, or 150 extra text conversations for AED 49." */
+export function packsSentence(): string {
+  const minutes = packFor("minutes");
+  const conversations = packFor("conversations");
+  return (
+    `${minutes.units} extra voice minutes for ${aedText(minutes.prices.AE ?? 0)}, ` +
+    `or ${conversations.units} extra text conversations for ${aedText(conversations.prices.AE ?? 0)}.`
+  );
+}
+
+/** What happens at 100% of an allowance: the owner's three choices, the alerts, and the one rule. */
+export function overLimitSentence(): string {
+  const thresholds = ALERT_THRESHOLDS.map((t) => `${t}%`);
+  const alerts = `${thresholds.slice(0, -1).join(", ")} and ${thresholds[thresholds.length - 1]}`;
+  return (
+    "When an allowance runs out, you choose what happens: add a pack automatically " +
+    `(${packsSentence().replace(/\.$/, "")}), up to a monthly spending cap you set; move up to the next plan; ` +
+    `or stop at the allowance. We tell you at ${alerts}. Nothing is added to your bill unless you chose it.`
+  );
+}
+
+/** Several locations, from the catalogue's volume terms. */
+export function volumeSentence(): string {
+  const parts = VOLUME.tiers.map((tier) =>
+    "custom" in tier ? `${tier.from} or more: priced with you` : `${tier.from} to ${tier.to} locations: ${tier.percentOff}% off`,
+  );
+  return `Each extra location is a separate subscription. ${parts.join(". ")}.`;
 }

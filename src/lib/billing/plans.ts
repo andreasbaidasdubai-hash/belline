@@ -580,8 +580,7 @@ export const PACKS: Pack[] = [
     pool: "minutes",
     units: 100,
     prices: { AE: 99 * 100 },
-    status: "not-yet",
-    gap: "Needs the usage policy (owner's choice, monthly cap, invoice item) before anything can be added to a bill.",
+    status: "live",
   },
   {
     id: "pack_conversations_150",
@@ -590,10 +589,12 @@ export const PACKS: Pack[] = [
     pool: "conversations",
     units: 150,
     prices: { AE: 49 * 100 },
-    status: "not-yet",
-    gap: "Needs the usage policy (owner's choice, monthly cap, invoice item) before anything can be added to a bill.",
+    status: "live",
   },
 ];
+
+/** When the owner is told how much of an allowance is used, in percent. Once each, per pool, per period. */
+export const ALERT_THRESHOLDS = [70, 90, 100] as const;
 
 export function packFor(pool: Pool): Pack {
   const pack = PACKS.find((p) => p.pool === pool);

@@ -28,7 +28,7 @@ import {
 } from "../src/lib/billing/plans";
 import { MARKETS, formatMoney, liveMarkets, type Market } from "../src/lib/markets";
 import { CONVERSATION_DEFINITION, MINUTE_DEFINITION } from "../src/lib/billing/usage";
-import { trialSentence } from "../src/lib/billing/speak";
+import { overLimitSentence, trialSentence } from "../src/lib/billing/speak";
 
 /** Re-exported for scripts/build-site.ts: the sentence itself lives with the catalogue's other sentences. */
 export { trialSentence };
@@ -130,8 +130,8 @@ ${markets.map((m, i) => renderMarket(m, i > 0)).join("\n\n")}
           <p>${esc(CONVERSATION_DEFINITION)}</p>
         </div>
         <div>
-          <h4>Your allowance, in plain sight</h4>
-          <p>Your billing page counts every voice minute and text conversation as it is used, and names the plan that would carry a busier month.</p>
+          <h4>When an allowance runs out</h4>
+          <p>${esc(overLimitSentence())}</p>
         </div>
         <div>
           <h4>${TRIAL.days} days free</h4>

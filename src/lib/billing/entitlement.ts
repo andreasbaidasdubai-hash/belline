@@ -3,6 +3,7 @@ import { getTenant } from "../store";
 import { accountFor, isPooledTrial, meterFor, periodFor, productsOf } from "./usage";
 import { channelsOf, grandfatherExpires, poolOf, type Channel } from "./plans";
 import { stripeEnabled } from "./stripe";
+import { applyUsagePolicy, governs, notifyAlerts, poolExhausted, settlePacks } from "./usage-policy";
 
 /**
  * Is this venue entitled to be answered — at all, and on this channel?
@@ -17,8 +18,11 @@ import { stripeEnabled } from "./stripe";
  * show who needs a call. A September 2026 bundle never lapses.
  *
  * **Units** — a trial's text conversations used up stops its chat (and only
- * its chat), under the same card-payments guard. Paid allowances are decided
- * by the owner's usage policy (billing/usage-policy.ts).
+ * its chat), under the same card-payments guard. On a 2026-10 plan a pool at
+ * 100% is decided by the owner's usage policy (billing/usage-policy.ts): a
+ * pack is added if they chose packs and it fits their cap; otherwise that
+ * pool's channels stop with `allowance_exhausted` — again only while card
+ * payments are on. Older products keep the terms they were sold on.
  *
  * **Channels** — a plan that does not include this channel (today only the
  * original ladder, which was never sold WhatsApp). That is enforced always:
@@ -29,7 +33,7 @@ import { stripeEnabled } from "./stripe";
  */
 
 export type Lapse = "trial_ended" | "trial_minutes_used" | "cancelled" | "legacy_plan_ended";
-export type Refusal = Lapse | "not_in_plan" | "trial_conversations_used";
+export type Refusal = Lapse | "not_in_plan" | "trial_conversations_used" | "allowance_exhausted";
 
 export interface ServiceState {
   /** Whether this venue — on this channel, if one was asked about — should be answered right now. */
@@ -96,6 +100,7 @@ export function unitRefusal(location: Location, today: string, channel: Channel)
     const m = account && meterFor(account, channel);
     if (m && m.included !== null && m.used >= m.included) return "trial_conversations_used";
   }
+  if (governs(location) && poolExhausted(location, today, poolOf(channel))) return "allowance_exhausted";
   return null;
 }
 
@@ -114,10 +119,21 @@ function messageFor(location: Location, channel: Channel | undefined): string {
 }
 
 export function serviceState(
-  location: Location,
+  venue: Location,
   today: string,
   opts: { enforce?: boolean; channel?: Channel } = {},
 ): ServiceState {
+  let location = venue;
+  // On a live channel, let the owner's usage policy act first — record the
+  // alerts it raises and add the packs they chose — so a pool that a pack
+  // refills is not refused. Charging (Stripe) and telling the owner (email)
+  // happen off the call path.
+  if (opts.channel && governs(location)) {
+    const applied = applyUsagePolicy(location, today, { stripe: stripeEnabled() });
+    location = applied.location;
+    if (applied.added.length && stripeEnabled()) void settlePacks(location.id).catch((err) => console.error("[packs]", err));
+    if (applied.alerts.length) void notifyAlerts(location, applied.alerts).catch((err) => console.error("[usage alerts]", err));
+  }
   const lapsed = lapseOf(location, today);
   const enforce = opts.enforce ?? stripeEnabled();
   const refuse = (refused: Refusal): ServiceState => ({

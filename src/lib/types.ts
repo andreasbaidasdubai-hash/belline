@@ -289,6 +289,51 @@ export interface Subscription {
   priceMinor?: number;
   /** The catalogue version the subscription was bought under (billing/plans.ts `CATALOGUE_VERSION`). */
   catalogueVersion?: string;
+  /**
+   * What the owner chose to happen at 100% of an allowance (billing/usage-policy.ts).
+   * Absent: nothing chosen yet, which behaves as `cap` and is never charged.
+   */
+  usagePolicy?: UsagePolicy;
+  /** Usage alerts already raised this period, per pool, so each goes once. */
+  alerts?: {
+    periodStart: DateStr;
+    sent: Partial<Record<"minutes" | "conversations", UsageAlertThreshold[]>>;
+  };
+  /** Packs added under a `packs` policy. Never written without one. */
+  packs?: UsagePack[];
+}
+
+export type UsageAlertThreshold = 70 | 90 | 100;
+
+export interface UsagePolicy {
+  /**
+   * `packs` — add a pack automatically at 100%, up to `monthlyCapMinor`.
+   * `upgrade` — recommend the next plan; behaves as `cap` until the owner confirms.
+   * `cap` — stop answering on that unit's channels at 100% until the next period.
+   */
+  mode: "packs" | "upgrade" | "cap";
+  /** Packs mode: the most packs may add in one period, minor units. Absent: no cap. */
+  monthlyCapMinor?: number;
+  chosenAt?: string;
+  /** The user id of the owner who chose it. */
+  chosenBy?: string;
+}
+
+export interface UsagePack {
+  periodStart: DateStr;
+  pool: "minutes" | "conversations";
+  units: number;
+  priceMinor: number;
+  /** `${locationId}:${periodStart}:${pool}:${n}` — also the Stripe idempotency key. */
+  key: string;
+  at: string;
+  /** Set once Stripe has the invoice item. */
+  invoiceItemId?: string;
+  /**
+   * Added while card payments were switched off. The units count; the pack is
+   * never charged, and the owner is told so.
+   */
+  pending?: true;
 }
 
 /**

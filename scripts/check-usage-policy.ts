@@ -1,0 +1,378 @@
+/**
+ * What happens at 100% of an allowance — and that nothing is ever charged the
+ * owner did not choose.
+ *
+ * The owner picks one of three: add a pack automatically (up to an optional
+ * monthly cap), move up to the next plan, or stop at the allowance. Until they
+ * pick, it behaves as a stop, and says "choose what happens at 100%". Alerts
+ * go at 70%, 90% and 100%, once per unit per period. Stopping is enforced
+ * only while card payments are on — a customer who cannot pay us must not
+ * lose their phone over it.
+ *
+ *   npm run check:usage-policy
+ */
+
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-policy-"));
+delete process.env.STRIPE_SECRET_KEY;
+
+const { seedIfEmpty } = await import("../src/lib/seed");
+const { signUp } = await import("../src/lib/onboarding");
+const { createUser } = await import("../src/lib/auth");
+const { getLocation, upsertLocation, saveCall } = await import("../src/lib/store");
+const { startCall } = await import("../src/lib/calls");
+const { PACKS, formatMoneyFor } = await import("../src/lib/billing/plans").then((m) => ({ ...m, formatMoneyFor: m.money }));
+const { accountFor } = await import("../src/lib/billing/usage");
+const { serviceState } = await import("../src/lib/billing/entitlement");
+const policy = await import("../src/lib/billing/usage-policy");
+const speak = await import("../src/lib/billing/speak");
+const { renderPricing } = await import("./site-pricing");
+
+let passed = 0;
+let failed = 0;
+
+async function test(name: string, fn: () => void | Promise<void>) {
+  try {
+    await fn();
+    console.log(`  \x1b[32m✓\x1b[0m ${name}`);
+    passed++;
+  } catch (err) {
+    console.log(`  \x1b[31m✗\x1b[0m ${name}`);
+    console.log(`      ${err instanceof Error ? err.message : String(err)}`);
+    failed++;
+  }
+}
+
+seedIfEmpty();
+
+const PERIOD = "2026-11-01";
+const TODAY = "2026-11-10";
+const MONEY = /AED|dirham|\bpay|charge|bill|plan|subscri|trial|pack/i;
+
+let n = 0;
+/** A paying v2 venue, its owner, and a way to read it back fresh. */
+async function venue(sub: Record<string, unknown> = {}) {
+  n++;
+  const signed = await signUp({
+    businessName: `Policy Venue ${n}`,
+    email: `owner${n}@policy.test`,
+    password: "Correct-Horse-Battery-9",
+    vertical: "salon",
+    timezone: "Asia/Dubai",
+  });
+  assert.ok(signed.ok, "signup failed");
+  const { location, user } = signed as Extract<typeof signed, { ok: true }>;
+  upsertLocation({
+    ...getLocation(location.id)!,
+    phone: "+97145550100",
+    subscription: { products: ["v2_starter"], market: "AE", cycle: "monthly", startedOn: PERIOD, status: "active", ...sub },
+  } as never);
+  return { id: location.id, owner: user, fresh: () => getLocation(location.id)! };
+}
+
+/** `minutes` of completed phone calls on a day inside the period, one minute each. */
+function talk(locationId: string, minutes: number, channel: "phone" | "embed" = "phone") {
+  for (let i = 0; i < minutes; i++) {
+    const c = startCall(getLocation(locationId)!, channel, "+971501234567");
+    const start = new Date("2026-11-05T12:00:00Z");
+    saveCall({ ...c, channel, startedAt: start.toISOString(), endedAt: new Date(start.getTime() + 60_000).toISOString(), status: "completed" });
+  }
+}
+
+/** `count` website-chat conversations inside the period. */
+function chats(locationId: string, count: number) {
+  for (let i = 0; i < count; i++) {
+    const c = startCall(getLocation(locationId)!, "webchat", "Website");
+    const at = "2026-11-05T12:00:00.000Z";
+    saveCall({ ...c, channel: "webchat", startedAt: at, status: "active", transcript: [{ role: "agent", text: "Hi", at }] } as never);
+  }
+}
+
+const decide = (v: { fresh: () => ReturnType<typeof getLocation> }, stripe = false) =>
+  policy.decide(v.fresh()!, TODAY, { stripe });
+const apply = (v: { fresh: () => ReturnType<typeof getLocation> }, stripe = false) =>
+  policy.applyUsagePolicy(v.fresh()!, TODAY, { stripe });
+
+console.log("\n\x1b[1mAlerts at 70%, 90% and 100%\x1b[0m\n");
+
+await test("nothing below 70%, then 70% once, then 90%, then 100% — each once per unit per period", async () => {
+  const v = await venue();
+  talk(v.id, 52); // 69% of 75
+  assert.deepEqual(decide(v).alerts, []);
+  talk(v.id, 1); // 70.7%
+  assert.deepEqual(decide(v).alerts, [{ pool: "minutes", threshold: 70 }]);
+  apply(v);
+  assert.deepEqual(decide(v).alerts, [], "the 70% alert was due twice");
+  assert.deepEqual(v.fresh().subscription!.alerts, { periodStart: PERIOD, sent: { minutes: [70] } });
+  talk(v.id, 15); // 90.7%
+  assert.deepEqual(decide(v).alerts, [{ pool: "minutes", threshold: 90 }]);
+  apply(v);
+  talk(v.id, 7); // 100%
+  assert.deepEqual(decide(v).alerts, [{ pool: "minutes", threshold: 100 }]);
+  apply(v);
+  assert.deepEqual(decide(v).alerts, []);
+});
+
+await test("a jump straight past two thresholds sends both, once", async () => {
+  const v = await venue();
+  talk(v.id, 70); // 93%
+  assert.deepEqual(decide(v).alerts, [{ pool: "minutes", threshold: 70 }, { pool: "minutes", threshold: 90 }]);
+  apply(v);
+  assert.deepEqual(decide(v).alerts, []);
+});
+
+await test("the two units are alerted separately, and a new period starts the count again", async () => {
+  const v = await venue();
+  chats(v.id, 140); // 70% of 200
+  assert.deepEqual(decide(v).alerts, [{ pool: "conversations", threshold: 70 }]);
+  apply(v);
+  const next = policy.decide(v.fresh(), "2026-12-02", { stripe: false });
+  assert.deepEqual(next.alerts, [], "last period's usage alerted in the new one");
+  const sub = v.fresh().subscription!;
+  upsertLocation({ ...v.fresh(), subscription: { ...sub, alerts: { periodStart: "2026-10-01", sent: { conversations: [70] } } } });
+  assert.deepEqual(decide(v).alerts, [{ pool: "conversations", threshold: 70 }], "an old period's record suppressed this one's alert");
+});
+
+console.log("\n\x1b[1mNo policy chosen yet\x1b[0m\n");
+
+await test("behaves as a stop at 100%, adds nothing, and asks the owner to choose", async () => {
+  const v = await venue();
+  talk(v.id, 300);
+  const d = decide(v);
+  assert.equal(d.pools.minutes.exhausted, true);
+  assert.equal(d.pools.minutes.action, "choose_policy");
+  assert.deepEqual(d.packs, []);
+  apply(v);
+  assert.equal(v.fresh().subscription!.packs, undefined, "a pack was added without a chosen policy");
+  assert.match(accountFor(v.fresh(), TODAY)!.notes.join(" "), /Choose what happens at 100%/);
+});
+
+await test("stops that unit only while card payments are on, and never tells the caller about money", async () => {
+  const v = await venue();
+  talk(v.id, 75);
+  const phone = serviceState(v.fresh(), TODAY, { enforce: true, channel: "phone" });
+  assert.equal(phone.answering, false);
+  assert.equal(phone.refused, "allowance_exhausted");
+  assert.doesNotMatch(phone.callerMessage ?? "", MONEY);
+  const bell = serviceState(v.fresh(), TODAY, { enforce: true, channel: "web_voice" });
+  assert.equal(bell.refused, "allowance_exhausted", "voice minutes are pooled: the voice button shares the stop");
+  assert.equal(serviceState(v.fresh(), TODAY, { enforce: true, channel: "chat" }).answering, true, "chat stopped over minutes");
+  assert.equal(serviceState(v.fresh(), TODAY, { channel: "phone" }).answering, true, "stopped with card payments off");
+  assert.equal(serviceState(v.fresh(), TODAY, { enforce: false, channel: "phone" }).answering, true);
+});
+
+console.log("\n\x1b[1mCap\x1b[0m\n");
+
+await test("a hard stop for the unit at 100%, nothing added", async () => {
+  const v = await venue({ usagePolicy: { mode: "cap", chosenAt: "2026-11-01T09:00:00Z", chosenBy: "usr_x" } });
+  chats(v.id, 200);
+  const d = decide(v);
+  assert.equal(d.pools.conversations.exhausted, true);
+  assert.equal(d.pools.conversations.action, "cap_reached");
+  assert.equal(d.pools.minutes.exhausted, false);
+  assert.deepEqual(d.packs, []);
+  assert.equal(serviceState(v.fresh(), TODAY, { enforce: true, channel: "chat" }).refused, "allowance_exhausted");
+  assert.equal(serviceState(v.fresh(), TODAY, { enforce: true, channel: "phone" }).answering, true);
+});
+
+console.log("\n\x1b[1mUpgrade\x1b[0m\n");
+
+await test("recommends the next plan, and behaves as a stop until the owner confirms it", async () => {
+  const v = await venue({ usagePolicy: { mode: "upgrade", chosenAt: "2026-11-01T09:00:00Z", chosenBy: "usr_x" } });
+  talk(v.id, 80);
+  const d = decide(v);
+  assert.equal(d.pools.minutes.action, "upgrade_recommended");
+  assert.equal(d.pools.minutes.exhausted, true);
+  assert.equal(d.pools.minutes.upgradeTo, "v2_growth");
+  assert.deepEqual(d.packs, []);
+  apply(v);
+  assert.deepEqual(v.fresh().subscription!.products, ["v2_starter"], "the plan was changed without the owner confirming");
+  assert.equal(serviceState(v.fresh(), TODAY, { enforce: true, channel: "phone" }).refused, "allowance_exhausted");
+});
+
+console.log("\n\x1b[1mPacks\x1b[0m\n");
+
+await test("at 100% a pack is added with an idempotent key, and the unit keeps going", async () => {
+  const v = await venue({ usagePolicy: { mode: "packs", chosenAt: "2026-11-01T09:00:00Z", chosenBy: "usr_x" } });
+  talk(v.id, 75);
+  const d = decide(v);
+  assert.equal(d.packs.length, 1);
+  assert.equal(d.packs[0].key, `${v.id}:${PERIOD}:minutes:1`);
+  assert.equal(d.packs[0].units, 100);
+  assert.equal(d.packs[0].priceMinor, PACKS.find((p) => p.pool === "minutes")!.prices.AE);
+  apply(v);
+  apply(v);
+  assert.equal(v.fresh().subscription!.packs!.length, 1, "applying twice added two packs");
+  const after = decide(v);
+  assert.equal(after.pools.minutes.exhausted, false);
+  assert.equal(after.pools.minutes.allowance, 175);
+  assert.equal(serviceState(v.fresh(), TODAY, { enforce: true, channel: "phone" }).answering, true);
+  talk(v.id, 100);
+  assert.equal(decide(v).packs[0].key, `${v.id}:${PERIOD}:minutes:2`);
+});
+
+await test("with card payments off, a pack is recorded as pending, never charged, and the owner is told so", async () => {
+  const v = await venue({ usagePolicy: { mode: "packs", chosenAt: "2026-11-01T09:00:00Z", chosenBy: "usr_x" } });
+  chats(v.id, 200);
+  apply(v, false);
+  const [pack] = v.fresh().subscription!.packs!;
+  assert.equal(pack.pending, true);
+  assert.equal(pack.invoiceItemId, undefined);
+  assert.equal(pack.pool, "conversations");
+  assert.match(accountFor(v.fresh(), TODAY)!.notes.join(" "), /not charged/i);
+});
+
+await test("with card payments on, a pack is recorded to be invoiced — the invoice item itself is Stripe's job, not this check's", async () => {
+  const v = await venue({ usagePolicy: { mode: "packs", chosenAt: "2026-11-01T09:00:00Z", chosenBy: "usr_x" } });
+  talk(v.id, 75);
+  apply(v, true);
+  const [pack] = v.fresh().subscription!.packs!;
+  assert.equal(pack.pending, undefined);
+  assert.equal(pack.invoiceItemId, undefined);
+});
+
+await test("the monthly spending cap stops packs, and then the unit stops like a cap", async () => {
+  const v = await venue({ usagePolicy: { mode: "packs", monthlyCapMinor: 15000, chosenAt: "2026-11-01T09:00:00Z", chosenBy: "usr_x" } });
+  talk(v.id, 75);
+  apply(v);
+  assert.equal(v.fresh().subscription!.packs!.length, 1);
+  talk(v.id, 100); // the second minutes pack (AED 99) would take the month to AED 198
+  const d = decide(v);
+  assert.deepEqual(d.packs, []);
+  assert.equal(d.pools.minutes.exhausted, true);
+  assert.equal(d.pools.minutes.action, "cap_reached");
+  assert.equal(serviceState(v.fresh(), TODAY, { enforce: true, channel: "phone" }).refused, "allowance_exhausted");
+});
+
+await test("the cap counts every pack this period, across both units", async () => {
+  const v = await venue({ usagePolicy: { mode: "packs", monthlyCapMinor: 15000, chosenAt: "2026-11-01T09:00:00Z", chosenBy: "usr_x" } });
+  talk(v.id, 75);
+  chats(v.id, 200);
+  const d = decide(v);
+  assert.deepEqual(d.packs.map((p) => p.pool).sort(), ["conversations", "minutes"], "AED 99 + AED 49 fits under AED 150");
+  talk(v.id, 100);
+  apply(v);
+  assert.equal(v.fresh().subscription!.packs!.length, 2);
+});
+
+await test("packs from a previous period neither count against this month's cap nor extend this month's allowance", async () => {
+  const v = await venue({ usagePolicy: { mode: "packs", monthlyCapMinor: 9900, chosenAt: "2026-11-01T09:00:00Z", chosenBy: "usr_x" } });
+  const sub = v.fresh().subscription!;
+  upsertLocation({
+    ...v.fresh(),
+    subscription: { ...sub, packs: [{ periodStart: "2026-10-01", pool: "minutes", units: 100, priceMinor: 9900, key: `${v.id}:2026-10-01:minutes:1`, at: "2026-10-20T00:00:00Z" }] },
+  });
+  talk(v.id, 75);
+  const d = decide(v);
+  assert.equal(d.pools.minutes.packUnits, 0, "last period's pack extended this period");
+  assert.equal(d.pools.minutes.base, 75);
+  assert.equal(d.packs.length, 1, "last period's pack used up this month's cap");
+  assert.equal(d.pools.minutes.allowance, 175, "the allowance after this decision is the plan plus the one new pack");
+});
+
+console.log("\n\x1b[1mNothing charged without a choice\x1b[0m\n");
+
+await test("far past every allowance with no policy, no pack is ever recorded", async () => {
+  const v = await venue();
+  talk(v.id, 400);
+  chats(v.id, 900);
+  apply(v, true);
+  apply(v, true);
+  assert.equal(v.fresh().subscription!.packs, undefined);
+});
+
+await test("the policy leaves older products and trials alone: a September bundle is answered as sold", async () => {
+  const v = await venue({ products: ["everything_starter"], usagePolicy: { mode: "cap", chosenAt: "2026-11-01T09:00:00Z", chosenBy: "usr_x" } });
+  talk(v.id, 400);
+  const d = decide(v);
+  assert.equal(d.applies, false);
+  assert.equal(serviceState(v.fresh(), TODAY, { enforce: true, channel: "phone" }).answering, true);
+});
+
+console.log("\n\x1b[1mOnly the owner chooses\x1b[0m\n");
+
+const home = await venue();
+const other = await venue();
+const staff = createUser({
+  email: "staff@policy.test",
+  name: "Staff",
+  password: "Correct-Horse-Battery-9",
+  role: "staff",
+  tenantId: home.owner.tenantId,
+  locationIds: [home.id],
+});
+assert.ok(staff.ok);
+
+await test("refused: nobody signed in, a member of staff, and an owner of another business", () => {
+  const body = { locationId: home.id, mode: "packs" };
+  assert.equal(policy.setUsagePolicyRequest(null, body).status, 401);
+  assert.equal(policy.setUsagePolicyRequest(staff.ok ? staff.user : null, body).status, 403);
+  const foreign = policy.setUsagePolicyRequest(other.owner, body);
+  assert.equal(foreign.status, 404);
+  assert.equal(home.fresh().subscription!.usagePolicy, undefined, "someone else's request changed the policy");
+});
+
+await test("refused: a mode that does not exist, and a cap that is not a whole, non-negative number of dirhams", () => {
+  for (const body of [
+    { locationId: home.id, mode: "unlimited" },
+    { locationId: home.id, mode: "packs", monthlyCapAed: -5 },
+    { locationId: home.id, mode: "packs", monthlyCapAed: 12.5 },
+    { locationId: home.id, mode: "packs", monthlyCapAed: "lots" },
+  ]) {
+    assert.equal(policy.setUsagePolicyRequest(home.owner, body).status, 400, JSON.stringify(body));
+  }
+});
+
+await test("the owner sets it: the choice, the cap in fils, who chose and when", () => {
+  const res = policy.setUsagePolicyRequest(home.owner, { locationId: home.id, mode: "packs", monthlyCapAed: 300 }, new Date("2026-11-03T08:00:00Z"));
+  assert.equal(res.status, 200);
+  assert.deepEqual(home.fresh().subscription!.usagePolicy, {
+    mode: "packs",
+    monthlyCapMinor: 30000,
+    chosenAt: "2026-11-03T08:00:00.000Z",
+    chosenBy: home.owner.id,
+  });
+  const cap = policy.setUsagePolicyRequest(home.owner, { locationId: home.id, mode: "cap" });
+  assert.equal(cap.status, 200);
+  assert.equal(home.fresh().subscription!.usagePolicy!.mode, "cap");
+  assert.equal(home.fresh().subscription!.usagePolicy!.monthlyCapMinor, undefined, "a spending cap survived a switch away from packs");
+});
+
+console.log("\n\x1b[1mOne set of sentences\x1b[0m\n");
+
+await test("the over-limit sentence names the three choices, the alerts, the pack prices, and what is never done", () => {
+  const s = speak.overLimitSentence();
+  for (const pack of PACKS) assert.ok(s.includes(formatMoneyFor(pack.prices.AE!, "AE")), `${pack.name} price missing`);
+  assert.match(s, /70%, 90% and 100%/);
+  assert.match(s, /upgrade|move up/i);
+  assert.match(s, /stop/i);
+  assert.match(s, /Nothing is added to your bill unless you chose it/);
+  assert.doesNotMatch(s, /keeps answering|no per-minute|unlimited/i);
+});
+
+await test("packs, trial and volume sentences are read from the catalogue", () => {
+  assert.equal(speak.packsSentence(), "100 extra voice minutes for AED 99, or 150 extra text conversations for AED 49.");
+  assert.match(speak.trialSentence(), /14 days free: 30 voice minutes and 50 text conversations/);
+  assert.match(speak.volumeSentence(), /separate subscription/);
+  assert.match(speak.volumeSentence(), /5 to 19 locations: 10% off/);
+  assert.match(speak.volumeSentence(), /20 or more/);
+});
+
+await test("packs are live in the catalogue now that the policy works", () => {
+  for (const pack of PACKS) assert.equal(pack.status, "live", pack.id);
+});
+
+await test("the website's generated pricing quotes the same sentence", () => {
+  assert.ok(renderPricing(["AE"]).includes(speak.overLimitSentence()));
+});
+
+fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
+
+console.log(
+  failed === 0 ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n` : `\n\x1b[31m✗ ${passed} passed, ${failed} failed\x1b[0m\n`,
+);
+process.exit(failed === 0 ? 0 : 1);

@@ -1,4 +1,4 @@
-import type { Call, Location, Subscription } from "../types";
+import type { Call, Location, Subscription, UsagePack } from "../types";
 import { listCalls } from "../store";
 import { callDurationSeconds } from "../calls";
 import { marketOf, type Market } from "../markets";
@@ -15,7 +15,10 @@ import {
   grandfatherExpires,
   isPooled,
   money,
+  nextPlanUp,
+  packFor,
   poolOf,
+  poolPlaces,
   poolsOf,
   productById,
   recommend,
@@ -26,6 +29,7 @@ import {
   type Recommendation,
   type Unit,
 } from "./plans";
+import { stripeEnabled } from "./stripe";
 
 /**
  * Minutes, conversations, allowances, and what the invoice will say.
@@ -254,11 +258,13 @@ export interface Meter {
   episodes: number;
   used: number;
   /**
-   * What this period includes. `null` only on the original ladder's
-   * uncounted channels — not a very large number, because a very large
-   * number renders as a bar.
+   * What this period includes, packs added this period counted in. `null`
+   * only on the original ladder's uncounted channels — not a very large
+   * number, because a very large number renders as a bar.
    */
   included: number | null;
+  /** Units of `included` that came from packs this period. */
+  packUnits: number;
   overBy: number;
   /** Share of the allowance used. 0 when uncounted. */
   fraction: number;
@@ -300,7 +306,9 @@ export interface Bill {
   planFee: number;
   /** True on the annual cycle: the plan fee was paid up front for the year. */
   prepaid: boolean;
-  /** What will be invoiced for the plan at the end of this period. */
+  /** Packs the owner's policy added this period and that will be charged. Pending packs are not. */
+  packsMinor: number;
+  /** What will be invoiced at the end of this period: the plan fee (unless prepaid) and chosen packs. Nothing else. */
   dueNow: number;
   state: Subscription["status"];
 }
@@ -414,6 +422,7 @@ function meter(
   included: number | null,
   used: Record<Channel, { used: number; episodes: number }>,
   share: number,
+  packUnits = 0,
 ): Meter {
   const n = channels.reduce((sum, c) => sum + used[c].used, 0);
   const episodes = channels.reduce((sum, c) => sum + used[c].episodes, 0);
@@ -427,6 +436,7 @@ function meter(
     episodes,
     used: n,
     included,
+    packUnits,
     overBy: included === null ? 0 : Math.max(0, n - included),
     fraction: included ? n / included : 0,
     projected: Math.round(n / share),
@@ -464,10 +474,21 @@ export function accountFor(location: Location, today: string): Account | null {
   const limits = limitsFor(sub, products);
   const used = usedInPeriod(location, period);
   const share = elapsed(period, today);
+  // Packs extend this period's pool and nothing else. Only a paid 2026-10
+  // plan has them, and only under a policy the owner chose.
+  const packs: UsagePack[] = !trialing && limits.pools ? (sub.packs ?? []).filter((p) => p.periodStart === period.start) : [];
+  const packUnits = (pool: Pool) => packs.filter((p) => p.pool === pool).reduce((sum, p) => sum + p.units, 0);
 
   const meters: Meter[] = limits.pools
     ? POOL_ORDER.filter((pool) => limits.pools![pool] !== undefined).map((pool) =>
-        meter(pool, POOL_CHANNELS[pool].filter((c) => limits.open.includes(c)), limits.pools![pool]!, used, share),
+        meter(
+          pool,
+          POOL_CHANNELS[pool].filter((c) => limits.open.includes(c)),
+          limits.pools![pool]! + packUnits(pool),
+          used,
+          share,
+          packUnits(pool),
+        ),
       )
     : limits.open.map((channel) => {
         // `null` is uncounted (the original ladder) and must survive as null;
@@ -506,11 +527,13 @@ export function accountFor(location: Location, today: string): Account | null {
 
   const fee = feeOf(sub, products, market);
   const prepaid = !trialing && sub.cycle === "annual";
+  const packsMinor = packs.filter((p) => !p.pending).reduce((sum, p) => sum + p.priceMinor, 0);
   const bill: Bill = {
     planFee: trialing ? 0 : fee,
     prepaid,
-    // Prepaid means the year is already paid: nothing further this period.
-    dueNow: prepaid || trialing ? 0 : fee,
+    packsMinor,
+    // Prepaid means the year's plan fee is already paid: only chosen packs remain.
+    dueNow: (prepaid || trialing ? 0 : fee) + packsMinor,
     state: sub.status,
   };
 
@@ -522,7 +545,7 @@ export function accountFor(location: Location, today: string): Account | null {
     subscription: sub,
     usage,
     bill,
-    notes: notesFor(name, market, products, sub, usage, bill),
+    notes: notesFor(name, market, products, sub, usage, bill, packs),
   };
 }
 
@@ -541,6 +564,41 @@ function spokenDate(date: string): string {
  * Written here rather than in the page because they are the same commitment
  * the pricing page makes, and two copies of a promise drift apart.
  */
+/** The sentence for a pool at 100%, in the words of the owner's policy. */
+function atLimitSentence(
+  pool: Pool,
+  sub: Subscription,
+  products: readonly ProductId[],
+  market: Market,
+  packs: UsagePack[],
+): string {
+  const places = poolPlaces(pool);
+  const stopped = stripeEnabled()
+    ? `Belline has stopped answering on ${places} until the next period.`
+    : "Card payments are not switched on yet, so nothing has stopped.";
+  const policy = sub.usagePolicy;
+  switch (policy?.mode) {
+    case "packs": {
+      const price = packFor(pool).prices[market] ?? 0;
+      const spent = packs.reduce((sum, p) => sum + p.priceMinor, 0);
+      if (policy.monthlyCapMinor !== undefined && spent + price > policy.monthlyCapMinor) {
+        return `Your monthly spending cap of ${money(policy.monthlyCapMinor, market)} is reached, so no more packs are added. ${stopped}`;
+      }
+      return `A pack of ${packFor(pool).name} is added on the next ${pool === "minutes" ? "call" : "conversation"}, as you chose.`;
+    }
+    case "upgrade": {
+      const next = nextPlanUp(products, market);
+      return next
+        ? `You chose to move up: ${next.name} would carry it — confirm it from Change plan. Until you do, it stops at the allowance. ${stopped}`
+        : `You are on the largest plan, so it stops at the allowance. ${stopped}`;
+    }
+    case "cap":
+      return `You chose to stop at the allowance. ${stopped}`;
+    default:
+      return `You have not chosen what happens at 100% yet, so it stops at the allowance. ${stopped}`;
+  }
+}
+
 function notesFor(
   name: string,
   market: Market,
@@ -548,6 +606,7 @@ function notesFor(
   sub: Subscription,
   usage: Usage,
   bill: Bill,
+  packs: UsagePack[] = [],
 ): string[] {
   const notes: string[] = [];
 
@@ -586,9 +645,48 @@ function notesFor(
     notes.push(`You are on ${name}, kept exactly as you bought it. It is no longer sold, and you can keep it.`);
   }
 
+  // A 2026-10 plan: what happens at 100% is the owner's choice, and until it
+  // is made that question leads the page.
+  const governed = sub.status !== "cancelled" && isPooled(products);
+  if (governed && !sub.usagePolicy) {
+    notes.unshift(
+      "Choose what happens at 100% of an allowance: add a pack automatically, move up to the next plan, " +
+        "or stop at the allowance. Until you choose, Belline stops at 100% — and nothing is added to your bill.",
+    );
+  }
+  for (const pack of packs) {
+    const name = packFor(pack.pool).name;
+    notes.push(
+      pack.pending
+        ? `Added ${name} (${money(pack.priceMinor, market)}) — not charged, because card payments are not switched on.`
+        : `Added ${name} for ${money(pack.priceMinor, market)}, as you chose — on your next invoice.`,
+    );
+  }
+
   for (const m of usage.meters) {
     if (m.included === null) continue;
     const what = meterWords(m.id);
+    if (governed && m.kind === "pool") {
+      const base = m.included - m.packUnits;
+      const covers = m.packUnits ? "your plan and packs include" : "your plan includes";
+      if (m.used >= m.included) {
+        notes.push(
+          m.overBy > 0
+            ? `${m.overBy} ${what} past the ${m.included} ${covers} this period.`
+            : `All ${m.included} ${what} ${covers} this period are used.`,
+        );
+        notes.push(atLimitSentence(m.id as Pool, sub, products, market, packs));
+      } else if (m.projected > m.included) {
+        notes.push(
+          `On this pace you will finish the period around ${m.projected} ${what}, past the ` +
+            `${m.included} ${covers}. Told now rather than at the end.`,
+        );
+      } else {
+        const crossed = [90, 70].find((t) => base > 0 && m.used * 100 >= t * base);
+        if (crossed) notes.push(`${crossed}% of your ${what} used — ${m.used} of ${base}.`);
+      }
+      continue;
+    }
     if (m.overBy > 0) {
       notes.push(`${m.overBy} ${what} past the ${m.included} your plan includes this period.`);
     } else if (m.projected > m.included) {

@@ -11,7 +11,10 @@ import {
   meterWords,
   type Meter,
 } from "@/lib/billing/usage";
-import { CHANNELS, money, productById } from "@/lib/billing/plans";
+import { ALERT_THRESHOLDS, CHANNELS, isPooled, money, nextPlanUp, productById } from "@/lib/billing/plans";
+import { packsSentence } from "@/lib/billing/speak";
+import { canManageUsers } from "@/lib/auth";
+import UsagePolicy from "./UsagePolicy";
 import { MARKETS } from "@/lib/markets";
 import { listCalls } from "@/lib/store";
 import { addDays, dateToSpoken, todayIn } from "@/lib/time";
@@ -293,9 +296,11 @@ export default async function BillingPage({
                   Belline is billed in {billedIn}. Your own prices stay in {location.currency}.
                 </p>
               )}
+              {bill.packsMinor > 0 && <Row label="Packs you chose, this period" value={money(bill.packsMinor, market)} />}
               <Row label="Invoiced now" value={money(bill.dueNow, market)} strong />
               <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0", lineHeight: 1.5 }}>
-                The plan fee for this period.
+                The plan fee for this period{bill.packsMinor > 0 ? ", and the packs your usage choice added" : ""}. Nothing
+                is added to your bill unless you chose it.
               </p>
               <Link
                 href={trialing || !products.length ? "/checkout" : `/checkout?products=${products.join(",")}`}
@@ -310,6 +315,23 @@ export default async function BillingPage({
               )}
             </div>
           </div>
+
+          {!trialing && isPooled(products) && (
+            <div className="panel" style={{ marginBottom: 14 }}>
+              <div className="panel-head">When an allowance runs out</div>
+              <UsagePolicy
+                locationId={location.id}
+                mode={subscription.usagePolicy?.mode ?? null}
+                capAed={
+                  subscription.usagePolicy?.monthlyCapMinor !== undefined ? subscription.usagePolicy.monthlyCapMinor / 100 : null
+                }
+                canEdit={canManageUsers(user)}
+                packs={packsSentence()}
+                alerts={`We tell you at ${ALERT_THRESHOLDS.map((t) => `${t}%`).join(", ").replace(/, (?=[^,]*$)/, " and ")} of each allowance, once each per period.`}
+                nextPlan={nextPlanUp(products, market)?.name ?? null}
+              />
+            </div>
+          )}
 
           <div className="panel">
             <div className="panel-head">What counts</div>

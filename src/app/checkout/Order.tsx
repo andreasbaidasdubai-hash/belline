@@ -16,6 +16,7 @@ import {
   type ProductId,
 } from "@/lib/billing/plans";
 import { formatMoney, type Market } from "@/lib/markets";
+import { overLimitSentence } from "@/lib/billing/speak";
 import CheckoutForm from "./CheckoutForm";
 import PayButton from "./PayButton";
 
@@ -183,7 +184,7 @@ export default function Order({
                 : `Or ${money(periodFee(ids, market, "annual"))} billed yearly (${money(annualPerMonth(ids, market))} a month)${savedText ? ` — ${savedText}` : ""}. Plus VAT where it applies.`}
           </p>
           <p className="muted" style={{ fontSize: 11.5, margin: "6px 0 0", lineHeight: 1.6 }}>
-            Priced per location. Setting up is free.
+            Priced per location. Setting up is free. {overLimitSentence()}
           </p>
         </div>
       </section>
