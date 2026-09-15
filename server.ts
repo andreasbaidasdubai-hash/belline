@@ -22,7 +22,7 @@ import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { meterTts } from "./src/lib/billing/cost";
 import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voice/session";
 import { ensureOwnWhatsAppAccount, ensureTwilioSandboxAccount } from "./src/lib/whatsapp";
-import { BrowserTransport, TwilioTransport } from "./src/lib/voice/transports";
+import { BrowserTransport, TwilioTransport, publicEvent } from "./src/lib/voice/transports";
 import { sendDueReminders } from "./src/lib/reminders";
 
 /**
@@ -263,7 +263,8 @@ function handleBrowser(
   const session = new VoiceSession(
     location,
     call,
-    new BrowserTransport(ws),
+    // No user means /ws/demo: a public socket, which never sees vendor error text.
+    new BrowserTransport(ws, !user),
     callerNumber,
   );
 
@@ -288,7 +289,9 @@ function handleBrowser(
   ws.on("error", () => void session.end("abandoned"));
 
   void session.start().catch((err) => {
-    ws.send(JSON.stringify({ type: "error", message: String(err) }));
+    console.error("[voice] browser session failed to start:", String(err));
+    const event = { type: "error", message: String(err) };
+    ws.send(JSON.stringify(user ? event : publicEvent(event)));
   });
 }
 

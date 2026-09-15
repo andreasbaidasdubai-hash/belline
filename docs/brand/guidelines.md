@@ -4,7 +4,7 @@
 
 The front-desk bell becomes a button you press: one solid blue badge with a white bell that is the logo, the app icon, the avatar and the shape of every primary action. White grounds, navy type, calm grey body text and a single electric blue give Belline the steady look of business software an owner can trust with their phone line. Pages breathe in full-width bands: white, a light grey band, and one dark navy band.
 
-**Personality.** The calm, competent front-of-house professional who is always there and never oversteps. Belline is for the owner of a clinic, salon or restaurant in the UAE who wants their phone and website chat answered properly, with their team told what to do next.
+**Personality.** The calm, competent front-of-house professional who is always there and never oversteps. Belline is for the owner of any UAE business that takes calls, messages or bookings and wants their phone and website chat answered properly, with their team told what to do next.
 
 **Fixed:** a bell mark inside a round badge, the name Belline in Plus Jakarta Sans, a light interface, English copy, and no gradients, glows, orbs or sound waves in the brand marks.
 

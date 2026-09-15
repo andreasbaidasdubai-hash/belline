@@ -433,6 +433,37 @@ await test("a visitor on the public call never sees a vendor's raw error, and th
   assert.match(session, /console\.error\(\s*"\[voice\] text-to-speech failed/, "a text-to-speech failure never reaches the server log");
 });
 
+await test("a public voice socket never receives a vendor's raw error text; the operator's does", async () => {
+  // The friendly sentence on the call page was not enough: the raw ElevenLabs
+  // text still travelled over /ws/demo, where anyone can read it in devtools.
+  const { BrowserTransport } = await import("../src/lib/voice/transports");
+  const vendor = "ElevenLabs 401: quota_exceeded, 12 credits remaining on key sk_live_abc";
+  const socketFor = () => {
+    const sent: string[] = [];
+    return { sent, socket: { OPEN: 1, readyState: 1, send: (d: string) => sent.push(d), close() {} } };
+  };
+  const pub = socketFor();
+  const op = socketFor();
+  const publicT = new BrowserTransport(pub.socket as never, true);
+  const operatorT = new BrowserTransport(op.socket as never);
+  for (const type of ["tts_error", "stt_error", "error"]) {
+    publicT.sendEvent({ type, message: vendor });
+    operatorT.sendEvent({ type, message: vendor });
+  }
+  publicT.sendEvent({ type: "transcript", role: "agent", text: "Hello" });
+  assert.equal(pub.sent.length, 4);
+  for (const frame of pub.sent) {
+    assert.ok(!frame.includes("ElevenLabs") && !frame.includes("quota") && !frame.includes("sk_live"), `a public socket saw vendor text: ${frame}`);
+  }
+  assert.equal(JSON.parse(pub.sent[0]).message, "voice unavailable");
+  assert.equal(JSON.parse(pub.sent[3]).text, "Hello", "ordinary events changed on the public socket");
+  for (const frame of op.sent) assert.equal(JSON.parse(frame).message, vendor, "the operator console lost the full error");
+  // And server.ts marks the socket public exactly when nobody is signed in.
+  const server = fs.readFileSync(path.join(process.cwd(), "server.ts"), "utf8");
+  assert.match(server, /new BrowserTransport\(ws, !user\)/, "server.ts no longer marks the demo socket public");
+  assert.match(server, /user \? event : publicEvent\(event\)/, "a failed session start sends raw error text to a public socket");
+});
+
 // ---------------------------------------------------------------------------
 head("Voice notes");
 
@@ -605,10 +636,24 @@ await test("the hero's calendar is marked coming soon, and no hero text says cal
   assert.match(entry, /Waiting for your team/);
   assert.doesNotMatch(plain, /\b(?:booked|confirmed)\b/i, "something in the hero reads as booked or confirmed");
   assert.doesNotMatch(hero, /state-available/, "something in the hero is marked Available");
-  // Examples are labelled, and there is at most one conversation.
-  assert.match(plain, /Example calendar/);
-  assert.equal((hero.match(/Example conversation/g) ?? []).length, 1, "the hero should show exactly one example conversation");
-  assert.doesNotMatch(hero, /demo-card|chat-thread|WhatsApp<\/span>/, "the old chat/WhatsApp cards are back in the hero");
+  // Examples are labelled: three conversations and one calendar, each saying so.
+  assert.equal((hero.match(/<span class="demo-example">Example conversation<\/span>/g) ?? []).length, 3, "the hero should show three labelled example conversations");
+  assert.equal((hero.match(/<figure class="demo-card /g) ?? []).length, 3, "every hero conversation card should be labelled as an example");
+  assert.equal((hero.match(/<span class="cal-sub">Example calendar<\/span>/g) ?? []).length, 1, "the hero should show one labelled example calendar");
+  assert.equal((hero.match(/<figure class="cal">/g) ?? []).length, 1);
+  assert.doesNotMatch(hero, /class="scene"|class="snip"/, "the single call snippet is back beside the full call card");
+});
+
+await test("the hero's WhatsApp card is a live example conversation, not a not-live card", () => {
+  const hero = heroHtml();
+  const at = hero.indexOf('class="demo-card demo-wa"');
+  assert.ok(at > 0, "the hero WhatsApp card is gone");
+  const card = hero.slice(at, hero.indexOf("</figure>", at));
+  assert.match(card, /<span class="demo-title">WhatsApp<\/span>/);
+  assert.match(card, /<span class="demo-example">Example conversation<\/span>/);
+  assert.doesNotMatch(card, /Coming soon|state-soon/);
+  assert.match(card, /pass that to the team/);
+  assert.doesNotMatch(card, /(?:booked|confirmed) (?:you )?for|see you (?:on|at)/i);
 });
 
 await test("the channels section still shows all four channels as Available, so the hero loses nothing", () => {
@@ -619,6 +664,16 @@ await test("the channels section still shows all four channels as Available, so 
     assert.ok(section.includes(`<h3>${channel}</h3>`), `the channels section has lost "${channel}"`);
   }
   assert.equal((section.match(/state-available">Available</g) ?? []).length, 4, "not every channel is marked Available");
+});
+
+await test("trade pages link only to homepage sections that exist, and their footer speaks to any business", () => {
+  const build = fs.readFileSync(path.join(process.cwd(), "scripts", "build-site.ts"), "utf8");
+  const ids = new Set([...visibleHtml("landing.html").matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+  const anchors = [...build.matchAll(/href="\/#([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(anchors.length > 0, "the trade-page template no longer links to any homepage section");
+  for (const id of anchors) assert.ok(ids.has(id), `a trade page links to /#${id}, which the homepage does not have`);
+  assert.match(build, /AI voice and chat reception for UAE businesses that take calls, messages or bookings\./);
+  assert.doesNotMatch(build, /clinics, dental practices, salons, restaurants/, "the trade-page footer still names four trades");
 });
 
 await test("the homepage speaks to any business, promotes no trade page, and keeps clinics to appointment requests", () => {

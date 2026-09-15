@@ -10,6 +10,19 @@ import type { Transport } from "./session";
  * away buffered audio — are contained entirely in here.
  */
 
+/** What a public socket is told instead of a vendor's error text. */
+export const PUBLIC_ERROR_MESSAGES: Record<string, string> = {
+  tts_error: "voice unavailable",
+  stt_error: "listening unavailable",
+  error: "something went wrong",
+};
+
+/** An event as a public socket may see it: error text replaced, the rest untouched. */
+export function publicEvent(event: Record<string, unknown>): Record<string, unknown> {
+  const generic = typeof event.type === "string" ? PUBLIC_ERROR_MESSAGES[event.type] : undefined;
+  return generic === undefined ? event : { ...event, message: generic };
+}
+
 export class BrowserTransport implements Transport {
   readonly input = { encoding: "linear16" as const, sampleRate: 16000 };
   readonly output = "pcm_16000" as const;
@@ -22,7 +35,17 @@ export class BrowserTransport implements Transport {
    */
   readonly screen = true;
 
-  constructor(private readonly socket: WebSocket) {}
+  constructor(
+    private readonly socket: WebSocket,
+    /**
+     * True on /ws/demo: a stranger on belline.ai or a customer's widget, with
+     * no sign-in. Anything on the socket is readable in devtools, so error
+     * events carry a generic message there, never a vendor's raw text (an
+     * ElevenLabs quota error once went out word for word). The signed-in
+     * operator console keeps the detail, and the server log always has it.
+     */
+    private readonly isPublic = false,
+  ) {}
 
   sendAudio(chunk: Buffer): void {
     if (this.socket.readyState === this.socket.OPEN) this.socket.send(chunk);
@@ -30,7 +53,7 @@ export class BrowserTransport implements Transport {
 
   sendEvent(event: Record<string, unknown>): void {
     if (this.socket.readyState === this.socket.OPEN) {
-      this.socket.send(JSON.stringify(event));
+      this.socket.send(JSON.stringify(this.isPublic ? publicEvent(event) : event));
     }
   }
 
