@@ -115,13 +115,14 @@
 <main>
 
   <!--
-    The hero. Claim on the left; on the right, one example phone call and the
-    request it becomes in a calendar, drawn in HTML and labelled as examples.
+    The hero. Claim on the left; on the right, the three conversations Belline
+    has today (website chat, a phone call, WhatsApp on a second number) and
+    the calendar the call's request lands in. Everything is drawn in HTML and
+    labelled as an example. None of the conversations ends in a booked time.
     Connecting Google Calendar or Outlook is not live yet, so the calendar
-    carries a "Coming soon" badge and the new entry is a request waiting for
+    carries a "Coming soon" badge and its new entry is a request waiting for
     the team, never a confirmed booking. The lead says "soon" for the same
-    reason. Chat and WhatsApp are not lost: the channels section below shows
-    all four channels.
+    reason.
   -->
   <section class="hero">
     <div class="wrap hero-in hero-demo">
@@ -148,44 +149,115 @@
       </div>
 
       <!--
-        One call, and the request it becomes. The calendar is neither Google's
-        nor Outlook's (no logos) and carries the Coming soon badge: connecting
-        one is not live. The new entry is a request waiting for the team, with
-        no fixed time, because Belline does not confirm bookings today.
+        Four pieces on a two-column stage: chat above WhatsApp on the left;
+        the call above the calendar on the right, joined by a short dashed
+        line so the call's request visibly lands in the calendar. On a phone
+        they stack chat, call, calendar, WhatsApp, which keeps that pair
+        together. The calendar is neither Google's nor Outlook's (no logos)
+        and carries the Coming soon badge. The new entry is the caller's
+        request, waiting for the team, because Belline does not confirm
+        bookings today.
       -->
-      <div class="scene" role="group" aria-label="Example: a phone call becomes a request in your calendar">
-        <figure class="snip">
-          <figcaption class="snip-head">
-            <span class="snip-title">Phone call</span>
-            <span class="snip-example">Example conversation</span>
+      <div class="stage" role="group" aria-label="Three example conversations, and an example calendar">
+        <!-- Website chat -->
+        <figure class="demo-card demo-chat">
+          <figcaption class="demo-head">
+            <span class="demo-badge" aria-hidden="true">
+              <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" class="mark-ground"/><g class="mark-glyph" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>
+            </span>
+            <span class="demo-title">Website chat</span>
+            <span class="demo-example">Example conversation</span>
           </figcaption>
-          <p class="snip-line"><span class="snip-k">Caller</span> Could I come in on Thursday, any time after six?</p>
-          <p class="snip-line"><span class="snip-k">Belline</span> I’ll pass that to the team with your details, and they’ll confirm a time with you.</p>
+          <ol class="chat-thread">
+            <li class="msg msg-visitor"><span class="vh">Visitor: </span>Do you do balayage?</li>
+            <li class="msg msg-belline">
+              <span class="vh">Belline: </span>Yes. Balayage starts at AED 650 and takes about three hours, with a short consultation first.
+              <span class="msg-source">From your price list</span>
+            </li>
+            <li class="msg msg-visitor"><span class="vh">Visitor: </span>Could I come on Thursday after 6?</li>
+            <li class="msg msg-belline">
+              <span class="vh">Belline: </span>I’ll pass that to the team with your details, and they’ll confirm a time with you. What name should they use?
+            </li>
+          </ol>
         </figure>
 
+        <!-- Phone call -->
+        <figure class="demo-card demo-call">
+          <figcaption class="demo-head demo-head-ink">
+            <span class="demo-title">Phone call</span>
+            <span class="demo-example">Example conversation</span>
+          </figcaption>
+          <div class="call-bar">
+            <span class="call-who">
+              <span class="call-k">Caller</span>
+              <span class="call-num">+971 50 ••• 4417</span>
+            </span>
+            <span class="call-level" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="call-time"><span class="vh">Call length </span>01:12</span>
+          </div>
+          <ol class="call-lines">
+            <li><span class="call-said-k">Caller</span> Hi, I’d like a table for six on Friday, around eight.</li>
+            <li><span class="call-said-k">Belline</span> I can take that for the team. Can I have your name?</li>
+            <li><span class="call-said-k">Caller</span> Maryam Haddad.</li>
+            <li><span class="call-said-k">Belline</span> Thank you, Maryam. The team will call you back to confirm your table.</li>
+          </ol>
+          <div class="call-sent">
+            <p class="call-sent-head">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Sent to your team
+            </p>
+            <dl>
+              <div><dt>Name</dt><dd>Maryam Haddad</dd></div>
+              <div><dt>Request</dt><dd>Table for 6, Friday around 20:00</dd></div>
+            </dl>
+          </div>
+        </figure>
+
+        <!-- The calendar the call's request lands in. Not live yet. -->
         <figure class="cal">
           <figcaption class="cal-head">
             <span class="cal-day">
-              <span class="cal-dow">Thursday</span>
+              <span class="cal-dow">Friday</span>
               <span class="cal-sub">Example calendar</span>
             </span>
             <span class="state state-soon cal-soon">Coming soon: books into your calendar</span>
           </figcaption>
           <div class="cal-body">
             <ol class="cal-hours" aria-hidden="true">
-              <li>15:00</li><li>16:00</li><li>17:00</li><li>18:00</li><li>19:00</li>
+              <li>18:00</li><li>19:00</li><li>20:00</li><li>21:00</li>
             </ol>
             <ul class="cal-events">
-              <li class="cal-ev cal-ev-a"><span class="cal-time">15:00</span>Sara K.<span class="cal-what">Appointment</span></li>
-              <li class="cal-ev cal-ev-b"><span class="cal-time">16:30</span>Omar R.<span class="cal-what">Consultation</span></li>
+              <li class="cal-ev cal-ev-a"><span class="cal-time">18:00</span>Hana S.<span class="cal-what">Table for 2</span></li>
+              <li class="cal-ev cal-ev-b"><span class="cal-time">19:00</span>Omar R., table for 4</li>
               <li class="cal-ev cal-ev-new">
                 <span class="cal-new-k">New request from Belline</span>
-                <span class="cal-new-what">Layla M., Thursday after 18:00</span>
+                <span class="cal-new-what">Maryam H., table for 6, around 20:00</span>
                 <span class="cal-new-state">Waiting for your team</span>
               </li>
-              <li class="cal-ev cal-ev-d"><span class="cal-time">19:30</span>Rami T., appointment</li>
             </ul>
           </div>
+        </figure>
+
+        <!--
+          WhatsApp, labelled as an example like the others. It is live on the
+          second-number model: the business registers a new number with
+          Belline, and its existing WhatsApp is left as it is. Like the chat,
+          it ends with the request passed to the team, never a booked time.
+        -->
+        <figure class="demo-card demo-wa">
+          <figcaption class="demo-head demo-head-wa">
+            <span class="demo-wa-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path fill="currentColor" d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z"/></svg>
+            </span>
+            <span class="demo-title">WhatsApp</span>
+            <span class="demo-example">Example conversation</span>
+          </figcaption>
+          <ol class="chat-thread wa-thread">
+            <li class="msg msg-visitor"><span class="vh">Customer: </span>Hi, can I book a manicure on Saturday morning?</li>
+            <li class="msg msg-belline">
+              <span class="vh">Belline: </span>I’ll pass that to the team, and they’ll confirm a time with you here. What name should they use?
+            </li>
+          </ol>
         </figure>
       </div>
     </div>

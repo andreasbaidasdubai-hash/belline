@@ -605,10 +605,24 @@ await test("the hero's calendar is marked coming soon, and no hero text says cal
   assert.match(entry, /Waiting for your team/);
   assert.doesNotMatch(plain, /\b(?:booked|confirmed)\b/i, "something in the hero reads as booked or confirmed");
   assert.doesNotMatch(hero, /state-available/, "something in the hero is marked Available");
-  // Examples are labelled, and there is at most one conversation.
-  assert.match(plain, /Example calendar/);
-  assert.equal((hero.match(/Example conversation/g) ?? []).length, 1, "the hero should show exactly one example conversation");
-  assert.doesNotMatch(hero, /demo-card|chat-thread|WhatsApp<\/span>/, "the old chat/WhatsApp cards are back in the hero");
+  // Examples are labelled: three conversations and one calendar, each saying so.
+  assert.equal((hero.match(/<span class="demo-example">Example conversation<\/span>/g) ?? []).length, 3, "the hero should show three labelled example conversations");
+  assert.equal((hero.match(/<figure class="demo-card /g) ?? []).length, 3, "every hero conversation card should be labelled as an example");
+  assert.equal((hero.match(/<span class="cal-sub">Example calendar<\/span>/g) ?? []).length, 1, "the hero should show one labelled example calendar");
+  assert.equal((hero.match(/<figure class="cal">/g) ?? []).length, 1);
+  assert.doesNotMatch(hero, /class="scene"|class="snip"/, "the single call snippet is back beside the full call card");
+});
+
+await test("the hero's WhatsApp card is a live example conversation, not a not-live card", () => {
+  const hero = heroHtml();
+  const at = hero.indexOf('class="demo-card demo-wa"');
+  assert.ok(at > 0, "the hero WhatsApp card is gone");
+  const card = hero.slice(at, hero.indexOf("</figure>", at));
+  assert.match(card, /<span class="demo-title">WhatsApp<\/span>/);
+  assert.match(card, /<span class="demo-example">Example conversation<\/span>/);
+  assert.doesNotMatch(card, /Coming soon|state-soon/);
+  assert.match(card, /pass that to the team/);
+  assert.doesNotMatch(card, /(?:booked|confirmed) (?:you )?for|see you (?:on|at)/i);
 });
 
 await test("the channels section still shows all four channels as Available, so the hero loses nothing", () => {

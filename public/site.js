@@ -937,6 +937,9 @@
     function (entries) {
       root.classList.toggle("fabs-waiting", entries[0].isIntersecting);
     },
-    { threshold: 0.35 },
+    // Any part of the hero, not a share of it: on a phone the example cards
+    // make the hero several screens tall, so 35% of it never fit on screen
+    // and the buttons sat on the chat card.
+    { threshold: 0 },
   ).observe(hero);
 })();
