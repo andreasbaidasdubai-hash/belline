@@ -4,12 +4,17 @@ import Brand from "@/components/Brand";
 import { requireUser } from "@/lib/auth-server";
 import { listCalls, listLocationsFor } from "@/lib/store";
 import { currentVenue } from "@/lib/onboarding";
-import { factsFrom, isStepId, journey, type Journey, type Step } from "@/lib/onboarding/journey";
+import { INTEGRATIONS, bellineDiaryOffered, factsFrom, isStepId, journey, type Journey, type Step } from "@/lib/onboarding/journey";
+import { venueMarket } from "@/lib/onboarding/rules";
+import { requestRulesOf } from "@/lib/booking/requests";
+import { destinationOf, takesRequestsOnly } from "@/lib/booking/destination";
+import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
+import { MARKETS } from "@/lib/markets";
 import { flag } from "@/lib/flags";
 import { seedIfEmpty } from "@/lib/seed";
 import type { Location } from "@/lib/types";
 import SetupWizard from "../SetupWizard";
-import { ActionButton, DestinationPicker, type DestinationOption } from "../StepActions";
+import { ActionButton, DestinationPicker, RulesForm, type DestinationOption } from "../StepActions";
 
 export const dynamic = "force-dynamic";
 
@@ -116,35 +121,50 @@ function Rail({ j, active }: { j: Journey; active: Step }) {
   );
 }
 
-function destinationOptions(): DestinationOption[] {
-  const calendar = (on: boolean): DestinationOption["state"] => (on ? "preparing" : "soon");
+/**
+ * The bookings step's cards. Calendars show their flag's state and can never be
+ * chosen here: no calendar adapter exists yet, so "Being prepared" is the most
+ * a switched-on flag can honestly say.
+ */
+function destinationOptions(venue: Location): DestinationOption[] {
+  const calendar = (on: boolean): Pick<DestinationOption, "state" | "body"> =>
+    on
+      ? { state: "preparing", body: "Being prepared. Belline starts with requests until it is ready." }
+      : { state: "soon", body: "Coming soon. Belline starts with requests, and you can ask to be told when it is ready." };
+  const clinicPreview = venue.vertical === "clinic" && !flag("vertical.clinic.selfserve");
   return [
     {
-      kind: "belline",
-      title: "Belline's diary",
-      body: "Belline books straight into the calendar in your dashboard, and your team sees every booking there.",
+      id: "requests",
+      title: "Phone, WhatsApp or walk-ins",
+      body: "Belline takes the details and tells the customer your team will confirm. Each request arrives in your Inbox.",
       state: "available",
     },
     {
-      kind: "requests",
-      title: "Take requests, and confirm them yourself",
-      body: "Belline takes the details and your team confirms each booking.",
-      state: "preparing",
+      id: "link",
+      title: "I have a booking link",
+      body: "The same, and in chats Belline also gives people your own booking link.",
+      state: "available",
     },
-    {
-      kind: "google",
-      title: "Google Calendar",
-      body: "Belline checks when you are free and books into your own calendar.",
-      state: calendar(flag("booking.google")),
-    },
-    {
-      kind: "outlook",
-      title: "Outlook calendar",
-      body: "The same, for a Microsoft 365 calendar.",
-      state: calendar(flag("booking.outlook")),
-    },
+    ...(bellineDiaryOffered(venue)
+      ? [
+          {
+            id: "belline",
+            title: "Belline's diary",
+            body: "Belline books straight into the calendar in your dashboard, and your team sees every booking there.",
+            state: "available",
+          } satisfies DestinationOption,
+        ]
+      : []),
+    ...(clinicPreview
+      ? []
+      : [
+          { id: "google", title: "Google Calendar", ...calendar(flag("booking.google")) } satisfies DestinationOption,
+          { id: "outlook", title: "Outlook calendar", ...calendar(flag("booking.outlook")) } satisfies DestinationOption,
+        ]),
   ];
 }
+
+const PARTNERS = ["fresha", "sevenrooms", "opentable", "treatwell", "other"].map((id) => ({ id, name: INTEGRATIONS[id] }));
 
 function Body({ step, j, venue, facts }: { step: Step; j: Journey; venue: Location; facts: ReturnType<typeof factsFrom> }) {
   const next = j.next;
@@ -192,18 +212,56 @@ function Body({ step, j, venue, facts }: { step: Step; j: Journey; venue: Locati
       return (
         <>
           <Heading step={step} title="Where should bookings go?" />
-          <p style={lede}>You can change this later. Options that are not ready yet are shown as they are.</p>
-          <DestinationPicker options={destinationOptions()} current={venue.onboarding?.destination?.kind} />
+          <p style={lede}>
+            {venue.vertical === "clinic" && !flag("vertical.clinic.selfserve")
+              ? "Clinics take booking requests only while clinics are in preview. You can change this later."
+              : "You can change this later. Options that are not ready yet are shown as they are."}
+          </p>
+          <DestinationPicker
+            options={destinationOptions(venue)}
+            current={venue.onboarding?.destination?.kind}
+            currentLink={venue.onboarding?.destination?.bookingLink}
+            requested={venue.onboarding?.integrationRequests ?? []}
+            partners={PARTNERS}
+          />
         </>
       );
 
     case "rules": {
       const policies = venue.agent.policies;
+      const requests = takesRequestsOnly(venue);
+      const rules = requestRulesOf(venue);
+      const o = venue.onboarding;
+      const clinicRule = venue.vertical === "clinic" && (
+        <div className="panel" style={{ padding: "14px 16px", marginTop: 22 }}>
+          <strong style={{ fontSize: 14 }}>Always on for clinics</strong>
+          <p className="muted" style={{ margin: "6px 0 0", fontSize: 13.5, lineHeight: 1.55 }}>
+            {CLINIC_MEDICAL_RULE}
+          </p>
+        </div>
+      );
       return (
         <>
-          <Heading step={step} title="Check the rules Belline follows." />
-          <p style={lede}>Belline follows these on every call and chat. Change them first if anything is wrong.</p>
-          <ActionButton action="rules" label="Confirm these rules" />
+          <Heading step={step} title={requests ? "How Belline takes a request." : "Check the rules Belline follows."} />
+          <p style={lede}>
+            {requests
+              ? "A few answers, and Belline follows them on every call and chat."
+              : "Belline follows these on every call and chat. Change them first if anything is wrong."}
+          </p>
+          <RulesForm
+            mode={destinationOf(venue) === "belline" ? "belline" : "requests"}
+            restaurant={venue.vertical === "restaurant"}
+            country={MARKETS[venueMarket(venue)].name}
+            initial={{
+              askFor: rules.askFor.length > 0,
+              transferNumber: o?.escalation?.transferNumber || venue.agent.transferNumber || venue.phone,
+              notify: o?.escalation?.notifyEmail || o?.escalation?.notifyWhatsApp || "",
+              afterHours: rules.afterHours,
+              neverSay: rules.neverSay.join("\n"),
+            }}
+          />
+          {clinicRule}
+          {requests ? null : (
           <div className="panel" style={{ padding: "14px 16px", marginTop: 22 }}>
             {policies.length ? (
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: 1.6 }}>
@@ -220,6 +278,7 @@ function Body({ step, j, venue, facts }: { step: Step; j: Journey; venue: Locati
               <Link href="/agents?from=setup">Change the rules</Link>
             </p>
           </div>
+          )}
         </>
       );
     }

@@ -200,19 +200,27 @@ await test("the review save records review, and import only when something was r
   assert.equal(markReviewed(fresh, [], true, now).onboarding!.importedAt, at);
 });
 
-await test("only a destination Belline can honour today is accepted", () => {
-  for (const kind of ["google", "outlook", "requests", "partner", "nonsense"]) {
+await test("requests are accepted; calendars, partners and (for a new signup) the diary are not", () => {
+  for (const kind of ["google", "outlook", "partner", "nonsense", "belline"]) {
     const out = recordStep(fresh, { kind: "destination", destination: kind as never }, NO_FACTS, now);
     assert.equal(out.ok, false, kind);
     if (!out.ok) assert.doesNotMatch(out.error, /undefined|Error|flag/);
   }
-  const ok = recordStep(fresh, { kind: "destination", destination: "belline" }, NO_FACTS, now);
+  const ok = recordStep(fresh, { kind: "destination", destination: "requests" }, NO_FACTS, now);
   assert.ok(ok.ok);
-  if (ok.ok) assert.deepEqual(ok.location.onboarding!.destination, { kind: "belline", setAt: at });
+  if (ok.ok) assert.deepEqual(ok.location.onboarding!.destination, { kind: "requests", setAt: at });
+  process.env.FLAG_BELLINE_DIARY = "on";
+  try {
+    assert.ok(recordStep(fresh, { kind: "destination", destination: "belline" }, NO_FACTS, now).ok, "FLAG_BELLINE_DIARY=on offers the diary");
+  } finally {
+    delete process.env.FLAG_BELLINE_DIARY;
+  }
 });
 
-await test("rules confirmation is recorded", () => {
-  const out = recordStep(fresh, { kind: "rules" }, NO_FACTS, now);
+await test("rules confirmation is recorded, once a destination is chosen", () => {
+  const early = recordStep(fresh, { kind: "rules" }, NO_FACTS, now);
+  assert.ok(!early.ok && early.status === 409 && early.fix === "/setup/bookings");
+  const out = recordStep(withState(fresh, { destination: { kind: "requests", setAt: at } }), { kind: "rules" }, NO_FACTS, now);
   assert.ok(out.ok && out.location.onboarding!.rulesConfirmedAt === at);
 });
 

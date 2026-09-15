@@ -3,6 +3,7 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { integrationErrorText } from "@/lib/errors/customer";
 import { seedIfEmpty } from "@/lib/seed";
+import { takesRequestsOnly } from "@/lib/booking/destination";
 import { connectionState, googleConfigured } from "@/lib/integrations/google";
 import { whatsappConfigured, whatsappStatus } from "@/lib/whatsapp";
 import { provisioningReady } from "@/lib/whatsapp-provision";
@@ -57,7 +58,11 @@ export default async function IntegrationsPage({
     <>
       <PageHeader
         title="Integrations"
-        subtitle="Belline decides availability. A connected calendar is where the team already looks, so bookings are mirrored into it."
+        subtitle={
+          takesRequestsOnly(location)
+            ? "Belline takes booking requests and your team confirms each one. Calendars and booking systems below are shown as they are today."
+            : "Belline decides availability. A connected calendar is where the team already looks, so bookings are mirrored into it."
+        }
       />
       <LocationTabs base="/integrations" active={location.id} />
 

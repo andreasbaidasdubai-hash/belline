@@ -1,6 +1,8 @@
 import type { Call, DestinationKind, Location, OnboardingState } from "../types";
 import { readiness } from "./index";
 import { listCalls } from "../store";
+import { flag } from "../flags";
+import { applyRules, type RulesInput } from "./rules";
 
 /**
  * From signup to answering real calls, as one ordered list.
@@ -105,7 +107,13 @@ export function isActivated(location: Location): boolean {
   return !location.onboarding || Boolean(location.onboarding.activatedAt);
 }
 
-export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now: Date = new Date()): Journey {
+export interface JourneyOptions {
+  /** `vertical.clinic.selfserve`. Read from the flags when not given. */
+  clinicSelfServe?: boolean;
+}
+
+export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now: Date = new Date(), opts: JourneyOptions = {}): Journey {
+  const clinicSelfServe = opts.clinicSelfServe ?? flag("vertical.clinic.selfserve");
   const o = location.onboarding ?? freshOnboarding();
   const activated = isActivated(location);
 
@@ -147,6 +155,15 @@ export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now:
     }
     for (const m of readiness(location).missing) {
       blockers.push({ step: "review", label: `${m.label} is still missing`, fix: `${m.where}?from=setup` });
+    }
+    // Clinics can set up and try Belline, but not answer real patients until
+    // the health-data opinion is in and the flag is on.
+    if (location.vertical === "clinic" && !clinicSelfServe) {
+      blockers.push({
+        step: "golive",
+        label: "Clinics are in a requests-only preview, and going live opens when clinics open. We will tell you when it does",
+        fix: "/setup/test",
+      });
     }
   }
 
@@ -228,19 +245,52 @@ export function markReviewed(location: Location, fields: string[], imported: boo
 }
 
 export type StepAction =
-  | { kind: "destination"; destination: DestinationKind }
-  | { kind: "rules" }
+  | { kind: "destination"; destination: DestinationKind; bookingLink?: string }
+  | { kind: "integration"; integration: string }
+  | { kind: "rules"; rules?: RulesInput }
   | { kind: "activate"; by: string };
 
-export type StepResult = { ok: true; location: Location } | { ok: false; status: number; error: string; fix?: string };
+export type StepResult =
+  | { ok: true; location: Location }
+  | { ok: false; status: number; error: string; fix?: string; field?: string };
+
+/** Systems an owner can ask Belline to connect to. Asking records interest; nothing more. */
+export const INTEGRATIONS: Record<string, string> = {
+  fresha: "Fresha",
+  sevenrooms: "SevenRooms",
+  opentable: "OpenTable",
+  treatwell: "Treatwell",
+  google: "Google Calendar",
+  outlook: "Outlook",
+  other: "another booking system",
+};
 
 /**
- * Only destinations Belline can honour today are accepted. Belline's own diary
- * is the booking engine every venue already runs on. Requests-only, Google,
- * Outlook and partner systems each need an adapter that is not built yet, and
- * accepting them here would promise a booking outcome nobody delivers.
+ * Is Belline's own diary offered to this venue?
+ *
+ * Kept for accounts that already book into it, and for new signups only when
+ * FLAG_BELLINE_DIARY is on. A clinic is never offered it while clinics are a
+ * requests-only preview.
  */
-export const AVAILABLE_DESTINATIONS: DestinationKind[] = ["belline"];
+export function bellineDiaryOffered(location: Location, env: Record<string, string | undefined> = process.env): boolean {
+  if (location.vertical === "clinic" && !flag("vertical.clinic.selfserve", env)) return false;
+  return flag("belline.diary", env) || location.onboarding?.destination?.kind === "belline" || isActivated(location);
+}
+
+/** An owner's own booking page: a public http(s) address, or why not. */
+export function checkBookingLink(raw: string): { ok: true; url: string } | { ok: false; error: string } {
+  const text = raw.trim();
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+  } catch {
+    return { ok: false, error: "That booking link does not look like a web address." };
+  }
+  if (!/^https?:$/.test(url.protocol) || !url.hostname.includes(".") || text.length > 300 || /\s/.test(text)) {
+    return { ok: false, error: "That booking link does not look like a web address." };
+  }
+  return { ok: true, url: url.toString() };
+}
 
 /** Apply one owner action to the record. The server calls this; it re-checks the journey itself. */
 export function recordStep(location: Location, action: StepAction, facts: JourneyFacts, now: Date = new Date()): StepResult {
@@ -248,14 +298,45 @@ export function recordStep(location: Location, action: StepAction, facts: Journe
   const at = now.toISOString();
 
   if (action.kind === "destination") {
-    if (!AVAILABLE_DESTINATIONS.includes(action.destination)) {
-      return { ok: false, status: 422, error: "That option is not available yet. Choose Belline's diary for now; you can change it later." };
+    const kind = action.destination;
+    if (kind === "requests") {
+      let bookingLink: string | undefined;
+      if (action.bookingLink?.trim()) {
+        const link = checkBookingLink(action.bookingLink);
+        if (!link.ok) return { ok: false, status: 422, error: link.error, field: "bookingLink" };
+        bookingLink = link.url;
+      }
+      return {
+        ok: true,
+        location: { ...location, onboarding: { ...o, destination: { kind, ...(bookingLink ? { bookingLink } : {}), setAt: at } } },
+      };
     }
-    return { ok: true, location: { ...location, onboarding: { ...o, destination: { kind: action.destination, setAt: at } } } };
+    if (kind === "belline" && bellineDiaryOffered(location)) {
+      return { ok: true, location: { ...location, onboarding: { ...o, destination: { kind, setAt: at } } } };
+    }
+    // Google, Outlook and partner systems have no adapter yet, so choosing one
+    // would promise bookings nobody makes. The owner can ask to be told.
+    return {
+      ok: false,
+      status: 422,
+      error: "That option is not ready yet. Start with booking requests; you can ask to be told when it is ready.",
+    };
+  }
+
+  if (action.kind === "integration") {
+    const id = action.integration.trim().toLowerCase();
+    if (!(id in INTEGRATIONS)) return { ok: false, status: 422, error: "We do not know that booking system." };
+    const requested = [...new Set([...(o.integrationRequests ?? []), id])];
+    return { ok: true, location: { ...location, onboarding: { ...o, integrationRequests: requested } } };
   }
 
   if (action.kind === "rules") {
-    return { ok: true, location: { ...location, onboarding: { ...o, rulesConfirmedAt: at } } };
+    if (!o.destination) {
+      return { ok: false, status: 409, error: "Choose where bookings go first.", fix: stepUrl("bookings") };
+    }
+    const out = applyRules({ ...location, onboarding: o }, action.rules ?? {}, now);
+    if (!out.ok) return { ok: false, status: 422, error: out.error, field: out.field };
+    return { ok: true, location: out.location };
   }
 
   // Go live. Refused here as well as hidden on screen, so a direct request

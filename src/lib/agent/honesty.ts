@@ -32,6 +32,10 @@ const SOURCES = new Set([
   "book",
   "change_booking",
   "join_waitlist",
+  // Only the customer's own requested time, echoed. Repeating it back is not
+  // availability; saying it is free is caught by the prompt and the request
+  // guard below.
+  "take_booking_request",
 ]);
 
 /**
@@ -228,6 +232,56 @@ export function repairReply(reply: string, verdict: HonestyVerdict): string {
     ? honestAlternative(verdict)
     : "I'll tell you exactly what's free — which day would suit you?";
   return `${kept.join(" ")} ${follow}`;
+}
+
+// ---------------------------------------------------------------------------
+// Request-only businesses
+// ---------------------------------------------------------------------------
+
+/**
+ * Words that tell somebody they hold a booking.
+ *
+ * At a business that confirms its own bookings, Belline never holds one to
+ * give. "See you Friday!" is as much a false confirmation as "you're booked",
+ * and a guest who reads either turns up.
+ */
+const CLAIM =
+  /\b(confirmed|booked(?: in)?|reserved|see you(?: then| on| at| soon| friday| saturday| sunday| monday| tuesday| wednesday| thursday| tomorrow| tonight)?|you'?re all set|all set|locked in|got you down|have you down|pencilled (?:you )?in)\b/gi;
+
+/**
+ * A claim word is fine after something that makes it future or conditional:
+ * "the team will confirm once it's booked", "nothing is confirmed yet". Only
+ * the words before the claim, in the same sentence, are read.
+ */
+const HEDGE = /\b(will|once|when|until|if|not|nothing|before|as soon as|yet|to be|isn't|hasn't|haven't|aren't|can't|cannot)\b|'ll\b|n't\b/i;
+
+export interface ClaimVerdict {
+  ok: boolean;
+  /** The words that claimed a booking. */
+  claims: string[];
+}
+
+function claimsIn(sentence: string): string[] {
+  const found: string[] = [];
+  for (const m of sentence.matchAll(CLAIM)) {
+    const before = sentence.slice(0, m.index);
+    if (!HEDGE.test(before)) found.push(m[0].toLowerCase());
+  }
+  return found;
+}
+
+export function checkRequestReply(reply: string): ClaimVerdict {
+  const claims = sentencesOf(reply).flatMap(claimsIn);
+  return { ok: claims.length === 0, claims: [...new Set(claims)] };
+}
+
+export const REQUEST_HANDOVER = "Your request is with the team, and they'll get back to you to confirm.";
+
+/** The reply with every sentence that claimed a booking taken out, ending on the honest line. */
+export function repairRequestReply(reply: string, verdict: ClaimVerdict): string {
+  if (verdict.ok) return reply;
+  const kept = sentencesOf(reply).filter((s) => claimsIn(s).length === 0);
+  return [...kept, REQUEST_HANDOVER].join(" ");
 }
 
 /**

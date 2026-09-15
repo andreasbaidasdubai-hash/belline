@@ -6,6 +6,9 @@ import {
   type BookingProvider,
   type ProviderContext,
 } from "../booking/provider";
+import { bookingLinkOf, takesRequestsOnly } from "../booking/destination";
+import { requestRulesOf, takeBookingRequest } from "../booking/requests";
+import { transferAllowed } from "../onboarding/rules";
 import { sendSms, smsEnabled } from "../providers/sms";
 // The same checker the website's booking form uses. Two copies of "is this a
 // real address" drift, and the one that drifts is the one nobody tested.
@@ -83,6 +86,61 @@ export function toolsFor(
           description: "Only if the caller asked for a specific person by name.",
         },
       };
+
+  // A business that confirms its own bookings gets no diary tools at all. The
+  // agent cannot quote a free time it has no way to look up, or announce a
+  // booking it has no way to make, and that is enforced here rather than asked
+  // for in the prompt.
+  const requestsOnly = !location.internal && takesRequestsOnly(location);
+  const rules = requestRulesOf(location);
+  const link = bookingLinkOf(location);
+  const requestTools: Anthropic.Tool[] = requestsOnly
+    ? [
+        {
+          name: "take_booking_request",
+          description:
+            "Pass a booking request to the team. This business confirms every booking itself: this books nothing, and you cannot see what is free. " +
+            "Call it once you have their name, a contact number you have read back, and when they would like to come. " +
+            "Afterwards say the request is with the team, who will get back to them to confirm. Never say it is booked, confirmed or reserved.",
+          input_schema: {
+            type: "object",
+            properties: {
+              guest_name: { type: "string" },
+              guest_phone: { type: "string", description: "Contact number, digits as given." },
+              preferred: { type: "string", description: "When they would like to come, in their words, including any second choice." },
+              date: { type: "string", description: `Optional. ${DATE_DESC}` },
+              time: { type: "string", description: `Optional. ${TIME_DESC}` },
+              ...(isRestaurant
+                ? { party_size: { type: "integer", description: "Number of people, including children." } }
+                : { service: { type: "string", description: "What they would like to book, in their words." } }),
+              // No notes for a clinic: that is where a symptom would be written down.
+              ...(location.vertical === "clinic"
+                ? {}
+                : { notes: { type: "string", description: "Anything the team needs to know: occasion, seating, access." } }),
+            },
+            required: [
+              "guest_name",
+              "guest_phone",
+              "preferred",
+              ...(rules.askFor.includes("partySize") && isRestaurant ? ["party_size"] : []),
+              ...(rules.askFor.includes("service") && !isRestaurant ? ["service"] : []),
+            ],
+          },
+        },
+        // A link is something to read and tap, so messages only. Texting it on
+        // a phone call would need SMS, which is not switched on for this.
+        ...(link && channel === "text"
+          ? ([
+              {
+                name: "send_booking_link",
+                description:
+                  "Give them the business's own booking link, for someone who would rather book themselves. It does not book anything.",
+                input_schema: { type: "object", properties: {} },
+              },
+            ] satisfies Anthropic.Tool[])
+          : []),
+      ]
+    : [];
 
   const all: Anthropic.Tool[] = [
     {
@@ -210,6 +268,7 @@ export function toolsFor(
         required: ["guest_name", "phone", "date", "earliest", "latest"],
       },
     },
+    ...requestTools,
     {
       name: "take_message",
       description:
@@ -306,10 +365,10 @@ export function toolsFor(
   // And books nothing. With a diary in reach she proposed demo slots to people
   // who had only said hello, and the honesty guard turned that into "I haven't
   // got anything free there".
-  return location.internal ? all.filter((t) => !BOOKING_TOOL_NAMES.has(t.name)) : all;
+  return location.internal || requestsOnly ? all.filter((t) => !BOOKING_TOOL_NAMES.has(t.name)) : all;
 }
 
-const BOOKING_TOOL_NAMES = new Set([
+export const BOOKING_TOOL_NAMES = new Set([
   "check_availability",
   "book",
   "lookup_booking",
@@ -429,6 +488,17 @@ export async function executeTool(
   // The call id travels with every provider call: it is what lets the engine
   // hold a quoted slot against other lines without holding it against this one.
   const pctx: ProviderContext = { location, callId: ctx.call.id };
+
+  // Belt and braces for the tool list: a diary tool named by a model that
+  // remembered it from somewhere else still books nothing here.
+  if (BOOKING_TOOL_NAMES.has(name) && !location.internal && takesRequestsOnly(location)) {
+    return {
+      result: {
+        error: "not_supported",
+        say: "This business confirms bookings itself. Take the details with take_booking_request, and do not say whether a time is free.",
+      },
+    };
+  }
 
   switch (name) {
     case "check_availability": {
@@ -787,6 +857,57 @@ export async function executeTool(
       };
     }
 
+    case "take_booking_request": {
+      if (!takesRequestsOnly(location) || location.internal) {
+        return { result: { error: "Use check_availability and book here." } };
+      }
+      let date: string | undefined;
+      if (input.date !== undefined && input.date !== null && input.date !== "") {
+        const d = normaliseDate(ctx, input.date);
+        if (typeof d !== "string") return { result: d };
+        date = d;
+      }
+      let startMin: number | undefined;
+      if (input.time !== undefined && input.time !== null && input.time !== "") {
+        const t = normaliseTime(input.time);
+        if (typeof t !== "number") return { result: t };
+        startMin = t;
+      }
+      const out = takeBookingRequest(location, ctx.call, {
+        guestName: String(input.guest_name ?? ""),
+        guestPhone: String(input.guest_phone ?? ctx.callerNumber ?? ""),
+        preferred: String(input.preferred ?? ""),
+        what: input.service !== undefined ? String(input.service) : undefined,
+        partySize: Number(input.party_size) || undefined,
+        date,
+        startMin,
+        notes: input.notes !== undefined ? String(input.notes) : undefined,
+      });
+      if (!out.ok) return { result: { requested: false, missing: out.missing, say: out.say } };
+      return {
+        result: {
+          requested: true,
+          already_requested: out.duplicate,
+          // Their own time echoed back, so repeating it is not an invention.
+          ...(out.request.startMin !== undefined ? { requested_time: minutesToClock(out.request.startMin) } : {}),
+          say: out.duplicate
+            ? "They already asked for this. Tell them it is with the team, once, without suggesting two requests were made."
+            : "Tell them their request is with the team, who will get back to them to confirm. Do not say it is booked, confirmed or reserved, and do not say whether the time is free.",
+        },
+      };
+    }
+
+    case "send_booking_link": {
+      const link = bookingLinkOf(location);
+      if (!link) return { result: { error: "There is no booking link. Take the request with take_booking_request." } };
+      return {
+        result: {
+          link,
+          say: "Give them the link exactly as written. Booking there is up to them; do not say anything is booked.",
+        },
+      };
+    }
+
     case "take_message": {
       const message = String(input.message ?? "");
       ctx.call.escalation = `${String(input.caller_name ?? "Caller")}${
@@ -802,7 +923,9 @@ export async function executeTool(
 
     case "transfer_call": {
       const number = location.agent.transferNumber?.trim();
-      if (!number) {
+      // Checked again at dial time: a number saved before the country rule,
+      // or edited around the setup form, is still not dialled abroad.
+      if (!number || !transferAllowed(location, number)) {
         return {
           result: {
             transferred: false,

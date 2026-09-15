@@ -4,6 +4,8 @@ import { canEditAgent } from "@/lib/auth";
 import { getLocation, listCalls, listLocationsFor, upsertLocation } from "@/lib/store";
 import { factsFrom, journey, recordStep, type StepAction } from "@/lib/onboarding/journey";
 import type { DestinationKind } from "@/lib/types";
+import type { RulesInput } from "@/lib/onboarding/rules";
+import { track } from "@/lib/reception/events";
 
 export const dynamic = "force-dynamic";
 
@@ -31,15 +33,33 @@ export async function POST(req: Request) {
   }
 
   let action: StepAction;
-  if (body.action === "destination") action = { kind: "destination", destination: String(body.destination ?? "") as DestinationKind };
-  else if (body.action === "rules") action = { kind: "rules" };
-  else if (body.action === "activate") action = { kind: "activate", by: user.id };
+  if (body.action === "destination") {
+    action = {
+      kind: "destination",
+      destination: String(body.destination ?? "") as DestinationKind,
+      bookingLink: typeof body.bookingLink === "string" ? body.bookingLink : undefined,
+    };
+  } else if (body.action === "integration") action = { kind: "integration", integration: String(body.integration ?? "") };
+  else if (body.action === "rules") {
+    const r = (body.rules ?? {}) as RulesInput;
+    action = { kind: "rules", rules: { askFor: r.askFor, transferNumber: r.transferNumber, notify: r.notify, afterHours: r.afterHours, neverSay: r.neverSay } };
+  } else if (body.action === "activate") action = { kind: "activate", by: user.id };
   else return NextResponse.json({ error: "Unknown step." }, { status: 400 });
 
   const facts = factsFrom(location, listCalls(location.id));
   const out = recordStep(location, action, facts);
-  if (!out.ok) return NextResponse.json({ error: out.error, fix: out.fix }, { status: out.status });
+  if (!out.ok) return NextResponse.json({ error: out.error, fix: out.fix, field: out.field }, { status: out.status });
 
   const saved = upsertLocation(out.location);
+  if (action.kind === "integration") {
+    // Interest, for whoever decides which partner to build first. Never throws.
+    await track({
+      tenantId: saved.tenantId,
+      locationId: saved.id,
+      name: "integration.requested",
+      payload: { integration: action.integration, requested: saved.onboarding?.integrationRequests ?? [] },
+    });
+    return NextResponse.json({ ok: true, requested: saved.onboarding?.integrationRequests ?? [] });
+  }
   return NextResponse.json({ ok: true, next: journey(saved, facts).next?.url ?? "/" });
 }

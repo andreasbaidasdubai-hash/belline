@@ -245,6 +245,36 @@ export interface Location {
 
 export type DestinationKind = "requests" | "belline" | "google" | "outlook" | "partner";
 
+export interface RequestRules {
+  /** Details a request needs besides a name and a number. */
+  askFor: ("partySize" | "service")[];
+  /** Outside opening hours: take the request as usual, or only a message. */
+  afterHours: "request" | "message";
+  /** Things the agent must never say, in the owner's words. */
+  neverSay: string[];
+}
+
+/**
+ * A booking somebody asked for at a business that confirms bookings itself.
+ * Nothing is reserved: the team reads this in the Inbox and gets back to them.
+ */
+export interface BookingRequest {
+  id: string;
+  /** The conversation and the requested slot, hashed, so asking twice records once. */
+  key: string;
+  at: string;
+  guestName: string;
+  guestPhone: string;
+  /** What they want, as they put it: a service, "a table". */
+  what?: string;
+  partySize?: number;
+  /** When they would like it, in their words: "Friday 8pm, or Saturday". */
+  preferred: string;
+  date?: string;
+  startMin?: number;
+  notes?: string;
+}
+
 export interface OnboardingState {
   version: 1;
   importedAt?: string;
@@ -255,6 +285,13 @@ export interface OnboardingState {
   destination?: { kind: DestinationKind; partner?: string; bookingLink?: string; setAt: string };
   rulesConfirmedAt?: string;
   escalation?: { transferNumber?: string; notifyEmail?: string; notifyWhatsApp?: string };
+  /** How Belline takes a booking request, set on the rules step. */
+  requestRules?: RequestRules;
+  /**
+   * Systems the owner asked Belline to connect to ("fresha", "google"). A
+   * request is recorded, never a connection: nothing here is built yet.
+   */
+  integrationRequests?: string[];
   channels: {
     web?: { domains: string[]; detectedAt?: string; lastCheckAt?: string };
     phone?: {
@@ -1197,6 +1234,8 @@ export interface Call {
    */
   attentionResolvedAt?: string;
   attentionResolvedBy?: string;
+  /** Booking requests taken in this conversation, at a request-only business. */
+  bookingRequests?: BookingRequest[];
 }
 
 // ---------------------------------------------------------------------------

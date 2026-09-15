@@ -31,6 +31,7 @@ export const FLAG_NAMES = [
   "import.maps",
   "booking.google",
   "booking.outlook",
+  "belline.diary",
   "vertical.clinic.selfserve",
   "forwarding.autotest",
   "forwarding.carrier.virgin",
@@ -68,6 +69,9 @@ const DEFS: Record<Exclude<StaticFlag, "stubs">, FlagDef> = {
   // Google's OAuth verification; the site keeps "Coming soon" until this is on.
   "booking.google": { needs: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "CREDENTIALS_KEY"], explicit: true },
   "booking.outlook": { needs: ["MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET", "CREDENTIALS_KEY"], explicit: true },
+  // Belline's own diary for new signups (FLAG_BELLINE_DIARY). Accounts already
+  // on it keep it whatever this says.
+  "belline.diary": { needs: [], explicit: true },
   // Waits on the health-data opinion.
   "vertical.clinic.selfserve": { needs: [], explicit: true },
   "forwarding.autotest": { needs: [...TWILIO, "TWILIO_TESTER_NUMBER"], explicit: true },

@@ -4,7 +4,8 @@ import type { Conversation, Provider } from "./types";
 import { getCall, getLocation, saveCall } from "../store";
 import { startCall } from "../calls";
 import { AgentSession } from "../agent/runtime";
-import { checkTimes, publishedTimes, repairReply } from "../agent/honesty";
+import { checkRequestReply, checkTimes, publishedTimes, repairReply, repairRequestReply } from "../agent/honesty";
+import { takesRequestsOnly } from "../booking/destination";
 import { metaAdapter } from "./channel/meta";
 import { twilioAdapter } from "./channel/twilio";
 import { internalAdapter } from "./channel/internal";
@@ -224,6 +225,25 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
     // the answer stays. Repaired from the tool's own output rather than
     // regenerated: a second model call costs a second and might invent again.
     reply = repairReply(reply, honesty);
+  }
+
+  // At a business that confirms its own bookings, nothing Belline writes may
+  // tell somebody they hold one. Same shape as the check above: the original is
+  // kept for audit, and only the sentences that claimed a booking are removed.
+  if (takesRequestsOnly(location)) {
+    const claim = checkRequestReply(reply);
+    if (!claim.ok) {
+      await track({
+        tenantId,
+        businessId: conversation.businessId,
+        channel: conversation.channel,
+        conversationId,
+        traceId,
+        name: "ai.claimed_confirmation",
+        payload: { claims: claim.claims, replaced: reply },
+      });
+      reply = repairRequestReply(reply, claim);
+    }
   }
 
   if (modelError && !reply) {

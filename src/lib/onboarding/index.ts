@@ -20,6 +20,7 @@ import { passwordProblem } from "../signup-rules";
 import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
 import { MENU_QUESTION, type Confirmed, type CurrentVenue } from "./review";
+import { takesRequestsOnly } from "../booking/destination";
 
 /**
  * Getting a business live without a person in the loop.
@@ -625,7 +626,11 @@ export function readiness(location: Location): {
   const missing: { label: string; where: string }[] = [];
 
   if (!location.address.trim()) missing.push({ label: "An address", where: "/agents" });
-  if (location.vertical === "restaurant") {
+  // A business that confirms its own bookings needs no tables, sittings,
+  // services or rota in Belline: nothing is booked against them.
+  if (takesRequestsOnly(location)) {
+    // Only what every business needs, below.
+  } else if (location.vertical === "restaurant") {
     if (!location.restaurant?.tables.length) {
       missing.push({ label: "Your tables", where: "/venue" });
     }

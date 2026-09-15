@@ -16,6 +16,9 @@ import {
 } from "./index";
 import { findBookingByRef, findBookingsByPhone, getBooking } from "../store";
 import { holdForSlot, MAX_QUOTED_HOLDS } from "./holds";
+import { takesRequestsOnly } from "./destination";
+
+export { takesRequestsOnly } from "./destination";
 
 /**
  * Where a booking actually happens.
@@ -64,6 +67,10 @@ export interface ProviderContext {
 }
 
 export interface Capabilities {
+  /** Can Belline see what is free? Without it, no time is ever quoted as open. */
+  availability: boolean;
+  /** Does a booking made here count as confirmed? Without it, only requests. */
+  confirms: boolean;
   /** Can an existing booking be moved? */
   reschedule: boolean;
   cancel: boolean;
@@ -135,6 +142,8 @@ export const localProvider: BookingProvider = {
   name: "belline",
 
   capabilities: {
+    availability: true,
+    confirms: true,
     reschedule: true,
     cancel: true,
     staffSelection: true,
@@ -199,14 +208,82 @@ export const localProvider: BookingProvider = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Requests only
+// ---------------------------------------------------------------------------
+
+const REQUESTS_ONLY =
+  "This business confirms bookings itself. Take the details with take_booking_request, and do not say whether a time is free.";
+
+/**
+ * A business whose book Belline cannot see.
+ *
+ * Every capability is false, and the tool layer reads that: the agent is never
+ * handed check_availability or book here, so it has nothing to quote a time
+ * from and no way to announce a booking. These methods answer anyway, and
+ * answer no, so a call that slips past the tool list still cannot book.
+ */
+export const requestOnlyProvider: BookingProvider = {
+  name: "requests",
+
+  capabilities: {
+    availability: false,
+    confirms: false,
+    reschedule: false,
+    cancel: false,
+    staffSelection: false,
+    waitlist: false,
+  },
+
+  async getServices({ location }) {
+    return location.salon?.services ?? [];
+  },
+
+  async getStaff({ location }) {
+    return location.salon?.staff ?? [];
+  },
+
+  async checkAvailability() {
+    return [];
+  },
+
+  async createBooking() {
+    return { ok: false, reason: "requests_only", detail: REQUESTS_ONLY, alternatives: [] };
+  },
+
+  async getBookingByRef() {
+    return null;
+  },
+
+  async getBookingById() {
+    return null;
+  },
+
+  async findBookingsByPhone() {
+    return [];
+  },
+
+  async rescheduleBooking() {
+    return { ok: false, reason: "requests_only", detail: REQUESTS_ONLY, alternatives: [] };
+  },
+
+  async cancelBooking() {
+    return { ok: false, detail: "I can't change bookings here. Let me take a message and the team will do it." };
+  },
+};
+
 /**
  * Which book this venue writes into.
  *
- * One provider today. The signature takes the venue rather than a provider id
- * because the choice belongs to the venue — a group with a restaurant on
- * SevenRooms and a spa on Fresha is two providers in one tenant, and anything
- * keyed higher up would have to be undone.
+ * The signature takes the venue rather than a provider id because the choice
+ * belongs to the venue — a group with a restaurant on SevenRooms and a spa on
+ * Fresha is two providers in one tenant, and anything keyed higher up would
+ * have to be undone.
+ *
+ * Belline's diary where the venue uses it; requests for everything else.
+ * Google, Outlook and partner systems have no adapter yet, so a venue that
+ * chose one takes requests until it exists (see destination.ts).
  */
-export function providerFor(_location: Location): BookingProvider {
-  return localProvider;
+export function providerFor(location: Location): BookingProvider {
+  return takesRequestsOnly(location) ? requestOnlyProvider : localProvider;
 }

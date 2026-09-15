@@ -4,6 +4,7 @@ import { authorityRules } from "./agent/authority";
 import { terms } from "./verticals";
 import { matchesFor, markOffered, markCancelled } from "./waitlist";
 import { todayIn, minutesToSpoken } from "./time";
+import { describeRequest } from "./booking/requests";
 
 /**
  * What still needs a person.
@@ -31,7 +32,9 @@ export type AttentionKind =
   | "booking_failed"
   | "abandoned"
   /** Somebody on the waitlist can now have what they asked for. */
-  | "waitlist_match";
+  | "waitlist_match"
+  /** A business that confirms its own bookings has one to confirm. */
+  | "booking_request";
 
 export interface AttentionItem {
   /** The call this came from. Absent on a waitlist match, which has no call. */
@@ -76,7 +79,9 @@ export function attentionFor(location: Location, includeResolved = false): Atten
   const rules = authorityRules(location);
 
   const items = listCalls(location.id)
-    .filter((call) => call.status === "completed")
+    // A booking request is work the moment it is taken, even while the
+    // conversation it came from is still open.
+    .filter((call) => call.status === "completed" || Boolean(call.bookingRequests?.length))
     .filter((call) => includeResolved || !call.attentionResolvedAt)
     // A demo line's calls are strangers kicking the tyres; they are not work.
     .filter((call) => !call.isDemo)
@@ -88,6 +93,21 @@ export function attentionFor(location: Location, includeResolved = false): Atten
         at: call.endedAt ?? call.startedAt,
         what: call.summary ?? firstAsk(call) ?? "—",
       };
+
+      // Nothing was booked: the team has to confirm it, or offer another time.
+      if (call.bookingRequests?.length) {
+        return call.bookingRequests.map((r) => ({
+          ...base,
+          kind: "booking_request" as const,
+          urgency: 80,
+          who: r.guestName,
+          what: describeRequest(r),
+          why: `You confirm bookings yourself, so Belline took the details and told them you will get back to them.`,
+          todo: `Confirm it with the ${t.guest}, or offer another time.`,
+          at: r.at,
+          callbackNumber: r.guestPhone,
+        }));
+      }
 
       if (call.outcome === "escalated") {
         const rule = rules.find((r) => r.id === call.authorityRuleId);
@@ -216,6 +236,7 @@ export function reopenAttention(callId: string): Call | null {
 
 export const KIND_LABEL: Record<AttentionKind, string> = {
   waitlist_match: "Slot free",
+  booking_request: "Booking request",
   escalated: "Sent elsewhere",
   transferred: "Transferred",
   message: "Message",
