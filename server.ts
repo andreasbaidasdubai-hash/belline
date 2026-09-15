@@ -24,6 +24,7 @@ import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voic
 import { ensureOwnWhatsAppAccount, ensureTwilioSandboxAccount } from "./src/lib/whatsapp";
 import { BrowserTransport, TwilioTransport, publicEvent } from "./src/lib/voice/transports";
 import { sendDueReminders } from "./src/lib/reminders";
+import { stubsRequested } from "./src/lib/flags";
 
 /**
  * Custom server.
@@ -42,6 +43,15 @@ const dev = !process.argv.includes("--prod") && process.env.NODE_ENV !== "produc
 const port = Number(process.env.PORT ?? 3000);
 const app = next({ dev });
 const handle = app.getRequestHandler();
+
+// Local end-to-end runs only. Throws, and so refuses to boot, in production or
+// next to a real database; otherwise every outbound fetch to a host that is
+// not this machine throws from here on.
+if (stubsRequested()) {
+  const { installStubs } = await import("./src/lib/testing/stubs");
+  installStubs();
+  console.log("[stubs] FLAG_STUBS=on: fake providers, outbound requests to other hosts are blocked");
+}
 
 await app.prepare();
 // Only valid after prepare(); it is what keeps dev-mode hot reload working

@@ -1,0 +1,275 @@
+import { createHmac, randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+
+import { assertStubsSafe, stubsRequested } from "../flags";
+import type { EmailMessage } from "../providers/email";
+import type { ModelCall } from "../prospect";
+import type { Graph, GraphReply } from "../whatsapp-provision";
+
+/**
+ * Fake providers for local end-to-end runs.
+ *
+ * Every outside service the self-serve journey touches has a stand-in here:
+ * the model, the Twilio number pool, Meta's Graph API, Stripe, Google
+ * Calendar and the mailer. Each one records what it was asked, so a test can
+ * assert on the conversation rather than on a mock's return value.
+ *
+ * Loaded only through `installStubs()`, which checks `FLAG_STUBS=on` is safe
+ * here (never production, never next to a real database) and then puts a
+ * guard on `fetch`: while stubs are on, a request to any host that is not
+ * this machine throws. A stub that forgot to intercept something fails
+ * loudly instead of reaching a real provider.
+ */
+
+const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\]|::1|[\w-]+\.localhost)$/i;
+
+export class BlockedFetchError extends Error {
+  constructor(readonly host: string) {
+    super(`Stub mode blocked an outbound request to ${host}. Use a stub provider instead.`);
+    this.name = "BlockedFetchError";
+  }
+}
+
+const globalRef = globalThis as unknown as {
+  __bellineStubFetch?: { original: typeof fetch; blocked: string[] };
+};
+
+function hostOf(input: string | URL | Request): string {
+  const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  try {
+    return new URL(raw).hostname;
+  } catch {
+    // A relative URL has no host of its own; it can only mean this server.
+    return "localhost";
+  }
+}
+
+/** Wrap `fetch` so only local hosts are reachable. Idempotent. */
+export function installFetchGuard(): void {
+  if (globalRef.__bellineStubFetch) return;
+  const original = globalThis.fetch;
+  const state = { original, blocked: [] as string[] };
+  globalRef.__bellineStubFetch = state;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const host = hostOf(input);
+    if (!LOCAL.test(host)) {
+      state.blocked.push(host);
+      throw new BlockedFetchError(host);
+    }
+    return original(input, init);
+  }) as typeof fetch;
+}
+
+/** Hosts the guard refused, oldest first. */
+export function blockedFetches(): string[] {
+  return [...(globalRef.__bellineStubFetch?.blocked ?? [])];
+}
+
+/** Put the real `fetch` back. Tests only. */
+export function removeFetchGuard(): void {
+  const state = globalRef.__bellineStubFetch;
+  if (!state) return;
+  globalThis.fetch = state.original;
+  globalRef.__bellineStubFetch = undefined;
+}
+
+/**
+ * Turn stub mode on for this process.
+ *
+ * Throws when `FLAG_STUBS=on` is unsafe here. Returns false and changes
+ * nothing when stubs were not asked for.
+ */
+export function installStubs(env: Record<string, string | undefined> = process.env): boolean {
+  if (!stubsRequested(env)) return false;
+  assertStubsSafe(env);
+  installFetchGuard();
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Model
+// ---------------------------------------------------------------------------
+
+export type ModelReply = Awaited<ReturnType<ModelCall>>;
+type ModelParams = Parameters<ModelCall>[0];
+
+/**
+ * A scripted model. Replies are handed out in order; a function reply sees
+ * the request, so a test can answer based on what was asked.
+ */
+export function fakeModel(script: (ModelReply | ((params: ModelParams) => ModelReply))[]) {
+  const calls: ModelParams[] = [];
+  const call: ModelCall = async (params) => {
+    calls.push(params);
+    const next = script[calls.length - 1];
+    if (!next) throw new Error(`The fake model has no scripted reply for call ${calls.length}.`);
+    return typeof next === "function" ? next(params) : next;
+  };
+  return { call, calls };
+}
+
+/** A model reply that calls one tool with `input`. */
+export function toolReply(name: string, input: unknown): ModelReply {
+  return { content: [{ type: "tool_use", input, ...{ name, id: `toolu_stub_${randomUUID()}` } }] };
+}
+
+// ---------------------------------------------------------------------------
+// Meta Graph
+// ---------------------------------------------------------------------------
+
+/**
+ * Meta's Graph API for number provisioning. Adding a number returns an id,
+ * the code `123456` verifies and anything else is refused the way Meta
+ * refuses it. `respond` overrides any path.
+ */
+export function fakeGraph(respond: (path: string, body: Record<string, unknown>) => GraphReply | undefined = () => undefined) {
+  const posts: { path: string; body: Record<string, unknown> }[] = [];
+  let seq = 0;
+  const graph: Graph = {
+    async post(p, body) {
+      posts.push({ path: p, body });
+      const custom = respond(p, body);
+      if (custom) return custom;
+      if (p.endsWith("/verify_code")) {
+        return body.code === "123456"
+          ? { ok: true, status: 200, body: { success: true } }
+          : { ok: false, status: 400, body: { error: { message: "Invalid code", code: 136025 } } };
+      }
+      if (p.endsWith("/phone_numbers")) return { ok: true, status: 200, body: { id: `stub_phone_${++seq}` } };
+      return { ok: true, status: 200, body: { success: true } };
+    },
+  };
+  return { graph, posts };
+}
+
+// ---------------------------------------------------------------------------
+// Twilio number pool
+// ---------------------------------------------------------------------------
+
+/** Pre-bought numbers. A claim is atomic within the process; none left is null. */
+export function fakeNumberPool(numbers: readonly string[]) {
+  const free = [...numbers];
+  const assigned = new Map<string, string>();
+  const voiceUrls = new Map<string, string>();
+  return {
+    claim(locationId: string, voiceUrl: string): string | null {
+      const existing = assigned.get(locationId);
+      if (existing) return existing;
+      const number = free.shift();
+      if (!number) return null;
+      assigned.set(locationId, number);
+      voiceUrls.set(number, voiceUrl);
+      return number;
+    },
+    release(locationId: string): void {
+      const number = assigned.get(locationId);
+      if (!number) return;
+      assigned.delete(locationId);
+      voiceUrls.delete(number);
+      free.push(number);
+    },
+    assigned,
+    voiceUrls,
+    get freeCount() {
+      return free.length;
+    },
+  };
+}
+
+/** `STUB_POOL=+97140000001,+97140000002` as a list. */
+export function stubPoolFromEnv(env: Record<string, string | undefined> = process.env): string[] {
+  return (env.STUB_POOL ?? "").split(",").map((n) => n.trim()).filter(Boolean);
+}
+
+// ---------------------------------------------------------------------------
+// Stripe
+// ---------------------------------------------------------------------------
+
+/**
+ * Checkout and webhooks. The checkout URL points back at this server, and
+ * `signWebhook` produces a genuine `Stripe-Signature` header, so the real
+ * webhook route verifies it with the real library.
+ */
+export function fakeStripe(origin: string) {
+  const sessions: { id: string; url: string; params: Record<string, unknown> }[] = [];
+  return {
+    checkout: {
+      sessions: {
+        async create(params: Record<string, unknown>) {
+          const id = `cs_test_stub_${randomUUID().replace(/-/g, "")}`;
+          const session = { id, url: `${origin.replace(/\/+$/, "")}/__stub/stripe/checkout?session=${id}`, params };
+          sessions.push(session);
+          return { id, url: session.url, object: "checkout.session" as const };
+        },
+      },
+    },
+    sessions,
+  };
+}
+
+export function signWebhook(payload: string, secret: string, timestamp = Math.floor(Date.now() / 1000)): string {
+  const v1 = createHmac("sha256", secret).update(`${timestamp}.${payload}`).digest("hex");
+  return `t=${timestamp},v1=${v1}`;
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar
+// ---------------------------------------------------------------------------
+
+export interface StubEvent {
+  id: string;
+  start: string;
+  end: string;
+  summary?: string;
+  status?: string;
+}
+
+/** Busy blocks and events per calendar. Writing the same event id twice replaces it. */
+export function fakeGoogleCalendar() {
+  const events = new Map<string, Map<string, StubEvent>>();
+  const busy = new Map<string, { start: string; end: string }[]>();
+  const of = (calendarId: string) => {
+    if (!events.has(calendarId)) events.set(calendarId, new Map());
+    return events.get(calendarId)!;
+  };
+  return {
+    addBusy(calendarId: string, start: string, end: string): void {
+      busy.set(calendarId, [...(busy.get(calendarId) ?? []), { start, end }]);
+    },
+    async freeBusy(calendarId: string, from: string, to: string) {
+      const confirmed = [...of(calendarId).values()]
+        .filter((e) => e.status !== "cancelled")
+        .map(({ start, end }) => ({ start, end }));
+      return [...(busy.get(calendarId) ?? []), ...confirmed].filter((b) => b.start < to && b.end > from);
+    },
+    async upsertEvent(calendarId: string, event: StubEvent): Promise<StubEvent> {
+      of(calendarId).set(event.id, event);
+      return event;
+    },
+    events(calendarId: string): StubEvent[] {
+      return [...of(calendarId).values()];
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Email
+// ---------------------------------------------------------------------------
+
+/** Writes each message as one line of `outbox.ndjson`. Never reaches Resend. */
+export function stubMailer(dataDir: string) {
+  const file = path.join(dataDir, "outbox.ndjson");
+  return {
+    file,
+    async send(message: EmailMessage): Promise<{ sent: boolean; reason?: string }> {
+      fs.mkdirSync(dataDir, { recursive: true });
+      fs.appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), ...message })}\n`);
+      return { sent: true };
+    },
+    read(): (EmailMessage & { at: string })[] {
+      if (!fs.existsSync(file)) return [];
+      return fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    },
+  };
+}

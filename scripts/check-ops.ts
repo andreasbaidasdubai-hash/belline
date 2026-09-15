@@ -6,6 +6,7 @@
  */
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,6 +21,7 @@ const { buildReport, csv, exportCsv } = await import("../src/lib/reports");
 const { applyRotaChange, strandedBookings, weekRota } = await import("../src/lib/rota");
 const { staffWorkingRanges } = await import("../src/lib/booking/salon");
 const { addDays, todayIn } = await import("../src/lib/time");
+const { checkDbRefusal, isCheckProcess } = await import("../src/lib/db/guard");
 
 let passed = 0;
 let failed = 0;
@@ -172,6 +174,60 @@ await test("a booking left outside the new hours is reported, not moved", () => 
   assert.ok(out.ok);
   const stranded = strandedBookings(out.ok ? out.location : salon, out.ok ? out.person : person, monday);
   assert.deepEqual(stranded.map((b) => b.id), ["bk_rota_1"]);
+});
+
+console.log("\n\x1b[1mCheck scripts and the database\x1b[0m\n");
+
+const CHECK_ARGV = ["node", path.join("scripts", "check-queue.ts")];
+const PROD_URL = "postgres://belline:s3cret-pass@prod-db.invalid:5432/belline";
+
+await test("a check script refuses a shared database, and the message names the host but not the password", () => {
+  const refusal = checkDbRefusal({ DATABASE_URL: PROD_URL }, CHECK_ARGV);
+  assert.match(refusal ?? "", /Refusing to connect: check-queue\.ts .* prod-db\.invalid/);
+  assert.doesNotMatch(refusal ?? "", /s3cret/);
+  assert.ok(checkDbRefusal({ DATABASE_URL: "garbage" }, CHECK_ARGV));
+  assert.ok(checkDbRefusal({ DATABASE_URL: "postgres://u:p@localhost.evil.example/db" }, CHECK_ARGV));
+});
+
+await test("a local database, the disabled placeholder, no database, or an allowed staging host are fine", () => {
+  assert.equal(checkDbRefusal({}, CHECK_ARGV), null);
+  assert.equal(checkDbRefusal({ DATABASE_URL: "postgres://u:p@localhost:5432/t" }, CHECK_ARGV), null);
+  assert.equal(checkDbRefusal({ DATABASE_URL: "postgres://nobody:nothing@disabled.invalid:5432/none" }, CHECK_ARGV), null);
+  assert.equal(checkDbRefusal({ DATABASE_URL: PROD_URL, ALLOW_CHECK_DB: "prod-db.invalid" }, CHECK_ARGV), null);
+  assert.ok(checkDbRefusal({ DATABASE_URL: PROD_URL, ALLOW_CHECK_DB: "staging.invalid" }, CHECK_ARGV));
+});
+
+await test("the app and the worker are not judged, only check scripts", () => {
+  assert.equal(isCheckProcess(["node", "server.ts"]), false);
+  assert.equal(isCheckProcess(["node", "C:\\repo\\scripts\\worker.ts"]), false);
+  assert.equal(isCheckProcess(["node", "C:\\repo\\scripts\\check-ops.ts"]), true);
+  assert.equal(checkDbRefusal({ DATABASE_URL: PROD_URL }, ["node", "server.ts"]), null);
+});
+
+await test("no check:* script in package.json loads an env file", () => {
+  const scripts = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8")).scripts as Record<string, string>;
+  const loaders = Object.entries(scripts).filter(([name, cmd]) => (name === "check" || name.startsWith("check:")) && /env-file/.test(cmd));
+  assert.deepEqual(loaders.map(([name]) => name), []);
+});
+
+await test("check:queue with a production .env exits non-zero before any query, saying why", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "belline-envguard-"));
+  try {
+    const envFile = path.join(dir, ".env");
+    // `.invalid` never resolves, so even a broken guard could not reach anything.
+    fs.writeFileSync(envFile, `DATABASE_URL=${PROD_URL}\n`);
+    const env = { ...process.env };
+    delete env.DATABASE_URL;
+    const run = spawnSync(process.execPath, ["--import", "tsx", `--env-file=${envFile}`, path.join("scripts", "check-queue.ts")], {
+      cwd: process.cwd(), env, encoding: "utf8", timeout: 60_000,
+    });
+    const out = `${run.stdout}${run.stderr}`;
+    assert.notEqual(run.status, 0, out);
+    assert.match(out, /Refusing to connect: check-queue\.ts/);
+    assert.doesNotMatch(out, /passed|getaddrinfo|ENOTFOUND/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
