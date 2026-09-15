@@ -1,26 +1,24 @@
 /**
  * Die Marke, an einer Stelle.
  *
- * Vorher stand sie an sieben Stellen als `<img src="/logo.svg">` mit je einer
- * eigenen Höhe. Das hatte zwei Folgen: die Wortmarke musste in die Datei
- * eingebrannt werden, obwohl die Seite die Schrift ohnehin lädt, und ein
- * Wechsel der Marke war eine Suche durch sieben Dateien, bei der man eine
- * übersieht.
+ * Seit dem 15.09.2026: die Glocke in Messing, daneben "Belline" in
+ * Instrument Sans, fett und eng gesetzt. Die Serifen-Wortmarke wirkte neben
+ * dem Produkt altmodisch; die Glocke bleibt, weil sie das Zeichen ist, das
+ * überall sonst steht — Favicon, WhatsApp-Profilbild, die Knöpfe zu Belle.
  *
- * Inline gesetzt erbt das Zeichen `currentColor` und die Wortmarke die
- * Schrift — hell auf dunkel und dunkel auf hell aus demselben Markup, ohne
- * zweite Datei.
+ * Inline gesetzt erbt die Wortmarke Farbe und Schrift der Seite — hell auf
+ * dunkel und dunkel auf hell aus demselben Markup, ohne zweite Datei.
  */
 export default function Brand({
   size = 26,
   words = true,
   tone,
 }: {
-  /** Höhe des Zeichens in Pixeln. Die Wortmarke skaliert mit. */
+  /** Höhe der Glocke in Pixeln. Die Wortmarke skaliert mit. */
   size?: number;
-  /** Nur das Zeichen, etwa wo der Name schon danebensteht. */
+  /** false: nur die Glocke, etwa wo der Name schon danebensteht. */
   words?: boolean;
-  /** Farbe des Zeichens. Unbesetzt nimmt es die Textfarbe an. */
+  /** Farbe der Glocke. Unbesetzt Messing. */
   tone?: string;
 }) {
   return (
@@ -28,7 +26,7 @@ export default function Brand({
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: Math.round(size * 0.42),
+        gap: Math.round(size * 0.36),
         color: "inherit",
         textDecoration: "none",
       }}
@@ -50,11 +48,12 @@ export default function Brand({
       {words && (
         <span
           style={{
-            fontFamily: '"Fraunces", Georgia, serif',
-            fontSize: Math.round(size * 1.55),
-            fontWeight: 500,
-            letterSpacing: "-0.015em",
+            fontFamily: '"Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif',
+            fontSize: Math.round(size * 1.05),
+            fontWeight: 700,
+            letterSpacing: "-0.03em",
             lineHeight: 1,
+            whiteSpace: "nowrap",
           }}
         >
           Belline

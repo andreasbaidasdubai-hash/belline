@@ -132,14 +132,19 @@ a { color: inherit; }
 }
 /* 34 statt 26. In einer 1220-px-Leiste war das Zeichen ein Detail; eine
    Marke, die man suchen muss, ist keine. */
-.brand svg { width: 34px; height: 34px; color: var(--brass); display: block; }
+/* Glocke in Messing, daneben die Wortmarke in Instrument Sans, fett und eng
+   (15.09.2026) — statt der Fraunces-Antiqua. Die Glocke ist so hoch wie die
+   Versalhöhe plus Unterlänge des Namens, damit beides als eine Zeile steht. */
+.brand svg { width: 28px; height: 28px; color: var(--brass); display: block; }
+footer .brand svg { width: 25px; height: 25px; }
 .brand span {
-  font-family: var(--serif);
-  font-size: 2.05rem;
-  letter-spacing: -0.015em;
+  font-family: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
 }
-footer .brand svg { width: 30px; height: 30px; }
-footer .brand span { font-size: 1.8rem; }
+footer .brand span { font-size: 1.55rem; }
 
 .top nav { display: flex; align-items: center; gap: 26px; margin-left: auto; }
 .top nav a {
@@ -1663,7 +1668,6 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
  * Gesammelt an einer Stelle statt an zwölf, damit "die Antiqua ist zu dünn"
  * eine Zeile zu ändern ist und keine Suche.
  */
-.brand span,
 .fact .n,
 .step .num,
 .handled-row .q,
