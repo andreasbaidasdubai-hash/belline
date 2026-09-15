@@ -1,31 +1,28 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
-import { getLocation, upsertLocation } from "@/lib/store";
+import { getLocation } from "@/lib/store";
 import { publish } from "@/lib/brain";
-import { connectVenueNumber, whatsappConfigured, whatsappMissing } from "@/lib/whatsapp";
-import {
-  finishNumber,
-  graphClient,
-  provisioningMissing,
-  provisioningReady,
-  resendCode,
-  startNumber,
-} from "@/lib/whatsapp-provision";
+import { flag } from "@/lib/flags";
+import { isConfigured } from "@/lib/db/client";
+import { connectVenueNumber, whatsappConfigured } from "@/lib/whatsapp";
+import { graphClient, provisioningReady, resendCode } from "@/lib/whatsapp-provision";
+import { finishWhatsApp, resetWhatsApp, startWhatsApp, type Connect, type Provisioning } from "@/lib/whatsapp-selfserve";
+import { raiseException } from "@/lib/errors/customer";
 
 export const dynamic = "force-dynamic";
 
 /**
- * A venue owner putting their own number on WhatsApp, in two steps.
+ * A venue owner putting a number on WhatsApp, in two steps.
  *
  *   POST   { locationId, number, displayName }  → Meta texts the SIM a code
- *   PUT    { locationId, code }                  → verified, registered, Belle answers it
+ *   PUT    { locationId, code }                  → verified, registered; Meta reviews the name
  *   PATCH  { locationId, method? }               → send the code again (SMS or a call)
- *   DELETE ?locationId=                          → give up on the pending number
+ *   DELETE ?locationId=                          → give up on the pending number, or try again
  *
  * Nothing here needs the owner to have a Meta account. The number lives in
- * Belline's own WhatsApp business account, which is why our own line has to
- * be connected first — and why this says so rather than failing later.
+ * Belline's own WhatsApp business account. Behind `channel.whatsapp.selfserve`:
+ * with it off, the card says "Coming soon" and this refuses plainly.
  */
 
 async function venueFor(body: { locationId?: string }) {
@@ -38,53 +35,53 @@ async function venueFor(body: { locationId?: string }) {
   return { user: auth.user, location } as const;
 }
 
-function notReady() {
-  const missing = [...new Set([...whatsappMissing(), ...provisioningMissing()])];
-  return NextResponse.json(
-    {
-      error:
-        "WhatsApp numbers can't be set up just yet — Belline's own line is still being connected. Email hello@belline.ai and we'll do it with you.",
-      missing,
+/** The Graph and account to use, or null when self-serve is not on here. */
+async function provisioning(): Promise<(Provisioning & { connect: Connect }) | null> {
+  if (!flag("channel.whatsapp.selfserve")) return null;
+  if (flag("stubs")) {
+    // Local stubbed runs: the fake Graph, and no account row without a database.
+    const { stubGraph } = await import("@/lib/testing/stubs");
+    return { graph: stubGraph().graph, wabaId: "stub_waba", connect: async () => ({ ok: true }) };
+  }
+  if (!whatsappConfigured() || !provisioningReady()) {
+    raiseException("whatsapp:selfserve:unconfigured", "channel.whatsapp.selfserve is on but Belline's own WhatsApp line is not fully configured");
+    return null;
+  }
+  return {
+    graph: graphClient(),
+    wabaId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID!.trim(),
+    connect: async ({ location, number, phoneNumberId, pin }) => {
+      if (!isConfigured()) return { ok: false, error: "no database" };
+      const out = await connectVenueNumber({ location, number, phoneNumberId, pin });
+      return out.ok ? { ok: true } : out;
     },
-    { status: 503 },
-  );
+  };
 }
+
+const COMING_SOON = { error: "Connecting WhatsApp yourself is coming soon. Everything else works without it." };
 
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { locationId?: string; number?: string; displayName?: string };
   const v = await venueFor(body);
   if ("response" in v) return v.response;
-  if (!whatsappConfigured() || !provisioningReady()) return notReady();
+  const p = await provisioning();
+  if (!p) return NextResponse.json(COMING_SOON, { status: 503 });
   if (v.location.demo?.enabled) return NextResponse.json({ error: "That is a demo venue." }, { status: 400 });
 
-  const started = await startNumber({
-    wabaId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID!.trim(),
-    number: String(body.number ?? ""),
-    displayName: String(body.displayName ?? v.location.name),
-    graph: graphClient(),
-  });
-  if (!started.ok) return NextResponse.json({ error: started.error }, { status: 400 });
-
-  const number = String(body.number ?? "").replace(/[^\d+]/g, "");
-  upsertLocation({
-    ...v.location,
-    whatsappPending: {
-      number,
-      phoneNumberId: started.phoneNumberId,
-      displayName: String(body.displayName ?? v.location.name),
-      startedAt: new Date().toISOString(),
-    },
-  });
-  return NextResponse.json({ ok: true, pending: true, number });
+  const out = await startWhatsApp(v.location, { number: String(body.number ?? ""), displayName: String(body.displayName ?? v.location.name) }, p);
+  if (!out.ok) return NextResponse.json({ error: out.error }, { status: 400 });
+  return NextResponse.json({ ok: true, pending: true, number: out.location.onboarding?.channels.whatsapp?.number });
 }
 
 export async function PATCH(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { locationId?: string; method?: string };
   const v = await venueFor(body);
   if ("response" in v) return v.response;
+  const p = await provisioning();
+  if (!p) return NextResponse.json(COMING_SOON, { status: 503 });
   const pending = v.location.whatsappPending;
   if (!pending) return NextResponse.json({ error: "Nothing waiting for a code." }, { status: 400 });
-  const sent = await resendCode(pending.phoneNumberId, graphClient(), body.method === "VOICE" ? "VOICE" : "SMS");
+  const sent = await resendCode(pending.phoneNumberId, p.graph, body.method === "VOICE" ? "VOICE" : "SMS");
   if (!sent.ok) return NextResponse.json({ error: sent.error }, { status: 400 });
   return NextResponse.json({ ok: true });
 }
@@ -93,34 +90,20 @@ export async function PUT(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { locationId?: string; code?: string };
   const v = await venueFor(body);
   if ("response" in v) return v.response;
-  const pending = v.location.whatsappPending;
-  if (!pending) return NextResponse.json({ error: "Nothing waiting for a code." }, { status: 400 });
+  const p = await provisioning();
+  if (!p) return NextResponse.json(COMING_SOON, { status: 503 });
 
-  const finished = await finishNumber({ phoneNumberId: pending.phoneNumberId, code: String(body.code ?? ""), graph: graphClient() });
-  if (!finished.ok) return NextResponse.json({ error: finished.error }, { status: 400 });
-
-  const connected = await connectVenueNumber({
-    location: v.location,
-    number: pending.number,
-    phoneNumberId: pending.phoneNumberId,
-    pin: finished.pin,
-  });
-  if (!connected.ok) return NextResponse.json({ error: connected.error }, { status: 400 });
-
-  const cleared = { ...v.location };
-  delete cleared.whatsappPending;
-  upsertLocation(cleared);
-  publish(v.location.id, v.user, `WhatsApp number connected: ${pending.number}`);
-
-  return NextResponse.json({ ok: true, number: pending.number });
+  const number = v.location.whatsappPending?.number;
+  const out = await finishWhatsApp(v.location, String(body.code ?? ""), p);
+  if (!out.ok) return NextResponse.json({ error: out.error }, { status: 400 });
+  publish(v.location.id, v.user, `WhatsApp number connected: ${number}`);
+  return NextResponse.json({ ok: true, number, state: "pending_name" });
 }
 
 export async function DELETE(req: Request) {
   const locationId = new URL(req.url).searchParams.get("locationId") ?? "";
   const v = await venueFor({ locationId });
   if ("response" in v) return v.response;
-  const cleared = { ...v.location };
-  delete cleared.whatsappPending;
-  upsertLocation(cleared);
+  resetWhatsApp(v.location);
   return NextResponse.json({ ok: true });
 }

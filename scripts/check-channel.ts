@@ -200,6 +200,175 @@ test("both are given today's date in the venue's own timezone", () => {
   assert.ok(t.includes("Work out what"));
 });
 
+console.log("\n\x1b[1mThe forwarding test call\x1b[0m\n");
+
+{
+  const { upsertLocation, listCalls, findCallBySid } = await import("../src/lib/store");
+  const { openWindow, isVerificationCall, recordVerificationCall, verificationState, TEST_SCRIPT, WINDOW_MINUTES } = await import(
+    "../src/lib/telephony/verify"
+  );
+  const { startCall } = await import("../src/lib/calls");
+  const { billableVoiceMinutes } = await import("../src/lib/billing/usage");
+  const { journey } = await import("../src/lib/onboarding/journey");
+  const { listExceptions } = await import("../src/lib/exceptions");
+
+  // Async tests in this block; the ones above are synchronous.
+  const tests: [string, () => void | Promise<void>][] = [];
+  const t = (name: string, fn: () => void | Promise<void>) => tests.push([name, fn]);
+  const quiet = <T,>(fn: () => T): T => {
+    const error = console.error;
+    console.error = () => {};
+    try {
+      return fn();
+    } finally {
+      console.error = error;
+    }
+  };
+
+  const BELLINE = "+97140000001";
+  const OWN = "+971501234567";
+  const venue = () => getLocation("loc_lumiere")!;
+  upsertLocation({
+    ...venue(),
+    phone: BELLINE,
+    agent: { ...venue().agent, transferNumber: OWN },
+    onboarding: { version: 1, channels: {} },
+  });
+  const now = new Date();
+  const params = (extra: Record<string, string> = {}) => ({ To: BELLINE, From: "+971509999999", CallSid: "CA_test_1", ...extra });
+
+  t("with no window open, a call to the Belline number is a real call", () => {
+    assert.equal(isVerificationCall(venue(), params(), now), false);
+  });
+
+  t("inside the window, a call to the venue's number is the test; to another number it is not", () => {
+    const opened = openWindow(venue(), "du", now);
+    assert.ok(opened.ok);
+    assert.equal(venue().onboarding?.channels.phone?.carrier, "du");
+    assert.equal(isVerificationCall(venue(), params(), now), true);
+    assert.equal(isVerificationCall(venue(), params({ To: "+97140000999" }), now), false);
+  });
+
+  t("when Twilio names the forwarding line, it has to be the owner's own", () => {
+    assert.equal(isVerificationCall(venue(), params({ ForwardedFrom: "045550000" }), now), false, "a stranger's forwarded call counted");
+    assert.equal(isVerificationCall(venue(), params({ ForwardedFrom: "0501234567" }), now), true, "the owner's line in national form was refused");
+    assert.equal(isVerificationCall(venue(), params({ CalledVia: "+971501234567" }), now), true);
+  });
+
+  t("the window closes after ten minutes", () => {
+    const after = new Date(now.getTime() + (WINDOW_MINUTES + 1) * 60_000);
+    assert.equal(isVerificationCall(venue(), params(), after), false);
+  });
+
+  t("a test call marks forwarding verified, is stored as a test, bills 0 and is kept out of the call list", () => {
+    const before = listCalls(venue().id).length;
+    const call = recordVerificationCall(venue(), params(), now);
+    assert.equal(call.isTest, true);
+    assert.equal(call.transcript[0].text, TEST_SCRIPT);
+    assert.equal(billableVoiceMinutes(call), 0);
+    assert.ok(venue().onboarding?.channels.phone?.forwardingVerifiedAt);
+    assert.equal(venue().onboarding?.channels.phone?.verification, undefined, "the window stayed open after verifying");
+    assert.equal(listCalls(venue().id).length, before, "the test call shows in the venue's calls and counts");
+    assert.ok(listCalls(venue().id, { includeTests: true }).some((c) => c.id === call.id));
+    assert.equal(journey(venue()).steps.find((s) => s.id === "channels")!.done, true);
+    assert.equal(verificationState(venue()).state, "verified");
+  });
+
+  t("the same CallSid twice records one test call", () => {
+    const again = recordVerificationCall(venue(), params(), now);
+    assert.equal(again.id, findCallBySid("CA_test_1")!.id);
+    assert.equal(listCalls(venue().id, { includeTests: true }).filter((c) => c.callSid === "CA_test_1").length, 1);
+  });
+
+  t("the same CallSid twice on a real call creates one call", () => {
+    const a = startCall(venue(), "phone", "+971508888888", { callSid: "CA_real_1" });
+    const b = startCall(venue(), "phone", "+971508888888", { callSid: "CA_real_1" });
+    assert.equal(a.id, b.id);
+    assert.equal(listCalls(venue().id).filter((c) => c.callSid === "CA_real_1").length, 1);
+    const c = startCall(venue(), "phone", "+971508888888", { callSid: "CA_real_2" });
+    assert.notEqual(c.id, a.id);
+  });
+
+  t("two windows with no call open a ticket; the owner is shown what to check", () => {
+    const salonB = getLocation("loc_azure")!;
+    upsertLocation({ ...salonB, phone: "+97140000002", onboarding: { version: 1, channels: {} } });
+    const t0 = new Date("2026-09-15T10:00:00.000Z");
+    const late = (m: number) => new Date(t0.getTime() + m * 60_000);
+    openWindow(getLocation(salonB.id)!, "eand", t0);
+    assert.equal(quiet(() => verificationState(getLocation(salonB.id)!, late(11))).state, "expired");
+    openWindow(getLocation(salonB.id)!, "eand", late(12));
+    const second = quiet(() => verificationState(getLocation(salonB.id)!, late(30)));
+    assert.deepEqual(second, { state: "expired", failedWindows: 2 });
+    assert.equal(listExceptions({ locationId: salonB.id, kind: "forwarding_unverified_2x" }).length, 1);
+  });
+
+  t("the voice webhook still refuses a bad signature before it looks at the window", async () => {
+    const { POST } = await import("../src/app/api/twilio/voice/route");
+    const keep = { ...process.env };
+    process.env.TWILIO_AUTH_TOKEN = "test-token";
+    try {
+      const res = await POST(
+        new Request("https://app.belline.ai/api/twilio/voice", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": "forged", host: "app.belline.ai" },
+          body: new URLSearchParams(params({ CallSid: "CA_forged" })).toString(),
+        }),
+      );
+      assert.equal(res.status, 403);
+      assert.equal(findCallBySid("CA_forged"), undefined);
+    } finally {
+      process.env = keep;
+    }
+  });
+
+  t("a signed call inside the window gets the test script and hangs up, with no stream", async () => {
+    const crypto = await import("node:crypto");
+    const { POST } = await import("../src/app/api/twilio/voice/route");
+    const salonC = getLocation("loc_azure")!;
+    upsertLocation({ ...salonC, phone: "+97140000003", onboarding: { version: 1, channels: {} } });
+    openWindow(getLocation(salonC.id)!, "du");
+    const keep = { ...process.env };
+    process.env.TWILIO_AUTH_TOKEN = "test-token";
+    try {
+      const url = "https://app.belline.ai/api/twilio/voice";
+      const form = { To: "+97140000003", From: "+971507777777", CallSid: "CA_signed_1" };
+      const payload = url + Object.keys(form).sort().map((k) => k + form[k as keyof typeof form]).join("");
+      const signature = crypto.createHmac("sha1", "test-token").update(payload, "utf8").digest("base64");
+      const send = () =>
+        POST(
+          new Request(url, {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": signature, host: "app.belline.ai", "x-forwarded-proto": "https" },
+            body: new URLSearchParams(form).toString(),
+          }),
+        );
+      const res = await send();
+      const xml = await res.text();
+      assert.equal(res.status, 200);
+      assert.ok(xml.includes("Belline test call"), xml);
+      assert.ok(!xml.includes("<Stream"), "the test call opened a metered stream");
+      assert.ok(getLocation(salonC.id)!.onboarding?.channels.phone?.forwardingVerifiedAt);
+      const retry = await (await send()).text();
+      assert.ok(retry.includes("Belline test call"), "Twilio's retry of the same call reached the agent");
+      assert.equal(listCalls(salonC.id, { includeTests: true }).filter((c) => c.callSid === "CA_signed_1").length, 1);
+    } finally {
+      process.env = keep;
+    }
+  });
+
+  for (const [name, fn] of tests) {
+    try {
+      await fn();
+      console.log(`  \x1b[32m✓\x1b[0m ${name}`);
+      passed++;
+    } catch (err) {
+      console.log(`  \x1b[31m✗\x1b[0m ${name}`);
+      console.log(`      ${err instanceof Error ? err.message : String(err)}`);
+      failed++;
+    }
+  }
+}
+
 console.log(
   failed === 0
     ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n`

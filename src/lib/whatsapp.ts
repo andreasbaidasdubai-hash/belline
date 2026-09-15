@@ -141,10 +141,9 @@ export async function ensureOwnWhatsAppAccount(): Promise<
  * by that id. What differs per venue is the number, Meta's id for it, and
  * which venue it books into — which is all this function records.
  *
- * Connected by a member of Belline staff from the Clients console, after the
- * number has been added in Meta's dashboard. Not self-serve: adding a number
- * to our account is something only we can do, and the honest thing is a
- * button we press rather than a form a customer fills in and waits on.
+ * Called by the owner's own two-step flow (whatsapp-selfserve.ts, behind
+ * `channel.whatsapp.selfserve`), and by a member of Belline staff from the
+ * Clients console for a number added in Meta's dashboard by hand.
  */
 export async function connectVenueNumber(input: {
   location: Location;

@@ -299,8 +299,25 @@ export interface OnboardingState {
       forwardingVerifiedAt?: string;
       carrier?: "du" | "eand" | "virgin" | "landline" | "pbx";
       modes?: ("noanswer" | "busy" | "unreachable" | "all")[];
+      /** The open "I've set it — test it" window, if any. See telephony/verify.ts. */
+      verification?: { nonce: string; openedAt: string; expiresAt: string; callSid?: string };
+      /** Windows that closed with no call arriving. Two opens a ticket. */
+      failedWindows?: number;
     };
-    whatsapp?: { status: "none" | "pending_code" | "pending_name" | "live" | "rejected"; since: string };
+    whatsapp?: {
+      status: "none" | "pending_code" | "pending_name" | "live" | "rejected";
+      since: string;
+      number?: string;
+      /** Meta's id for the number, which the name-review check asks about. */
+      phoneNumberId?: string;
+      /** Meta's reason, in words, when the name or number was refused. */
+      reason?: string;
+      /** Refusals so far. The second opens a ticket. */
+      rejections?: number;
+      /** Our side is broken (Meta token expired); nothing for the owner to do. */
+      blocked?: "token";
+      checkedAt?: string;
+    };
   };
   tests?: { runId: string; at: string; results: { scenario: string; passed: boolean; detail?: string }[]; passed: boolean };
   activatedAt?: string;
@@ -1242,6 +1259,27 @@ export interface Call {
   attentionResolvedBy?: string;
   /** Booking requests taken in this conversation, at a request-only business. */
   bookingRequests?: BookingRequest[];
+  /**
+   * The forwarding test call the owner made during a verification window.
+   * Answered with a short script, never billed and kept out of every count.
+   */
+  isTest?: boolean;
+  /** Twilio's id for a phone call, so a retried webhook cannot record it twice. */
+  callSid?: string;
+}
+
+/** A pre-bought Belline number waiting in, or taken from, the pool. See telephony/pool.ts. */
+export interface PoolNumber {
+  /** E.164. */
+  number: string;
+  status: "free" | "assigned" | "quarantine";
+  locationId?: string;
+  addedAt: string;
+  assignedAt?: string;
+  /** When it was given back. It stays out of the pool for 30 days after. */
+  releasedAt?: string;
+  /** "pool" when code assigned it, or the staff user who did it by hand. */
+  assignedBy?: string;
 }
 
 // ---------------------------------------------------------------------------

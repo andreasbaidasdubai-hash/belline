@@ -24,7 +24,9 @@ import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voic
 import { ensureOwnWhatsAppAccount, ensureTwilioSandboxAccount } from "./src/lib/whatsapp";
 import { BrowserTransport, TwilioTransport, publicEvent } from "./src/lib/voice/transports";
 import { sendDueReminders } from "./src/lib/reminders";
-import { stubsRequested } from "./src/lib/flags";
+import { flag, stubsRequested } from "./src/lib/flags";
+import { graphClient } from "./src/lib/whatsapp-provision";
+import { runWhatsAppChecks } from "./src/lib/whatsapp-selfserve";
 import { PEER_HEADER } from "./src/lib/onboarding/limit";
 
 /**
@@ -59,6 +61,11 @@ await app.prepare();
 // once we take over the upgrade event.
 const upgradeHandler = app.getUpgradeHandler();
 seedIfEmpty();
+// Local stubbed runs only: STUB_POOL's numbers go into the pool.
+if (stubsRequested()) {
+  const { seedStubPool } = await import("./src/lib/telephony/pool");
+  seedStubPool();
+}
 const reconciled = reconcileStaleCalls();
 void warmGreetings();
 // Our own WhatsApp number, connected the moment its credentials exist. Logged
@@ -93,6 +100,17 @@ function sweepReminders(): void {
 }
 setTimeout(sweepReminders, 30_000).unref?.();
 setInterval(sweepReminders, REMINDER_SWEEP_MS).unref?.();
+
+// WhatsApp numbers waiting on Meta's display-name review, asked about every
+// ten minutes. Only with self-serve WhatsApp on; the fake Graph under stubs.
+const WHATSAPP_CHECK_MS = 10 * 60 * 1000;
+async function checkWhatsAppNames(): Promise<void> {
+  if (!flag("channel.whatsapp.selfserve")) return;
+  const graph = flag("stubs") ? (await import("./src/lib/testing/stubs")).stubGraph().graph : graphClient();
+  const r = await runWhatsAppChecks(graph);
+  if (r.moved) console.log(`[whatsapp] name reviews: ${r.checked} checked, ${r.moved} moved on`);
+}
+setInterval(() => void checkWhatsAppNames().catch((err) => console.error("[whatsapp] name check failed:", err)), WHATSAPP_CHECK_MS).unref?.();
 
 const server = createServer((req, res) => {
   // The socket address, for the signup rate limit when no proxy header is
@@ -344,7 +362,7 @@ function handleTwilio(ws: WebSocket): void {
           ws.close();
           return;
         }
-        const call = startCall(location, "phone", params.from ?? "unknown");
+        const call = startCall(location, "phone", params.from ?? "unknown", { callSid: params.callSid });
         if (location.demo?.enabled) {
           call.isDemo = true;
           saveCall(call);

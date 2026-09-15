@@ -556,7 +556,7 @@ export function executeSetupTool(
           ok: true,
           say:
             prefix +
-            (known
+            (known?.landline
               ? known.landline.replace("your Belline number", to)
               : "Landlines are forwarded by the provider. Tell them to call their provider and ask for conditional call forwarding, on no answer and on busy, to " + to + "."),
         };
@@ -568,6 +568,10 @@ export function executeSetupTool(
             prefix +
             `Belline has not checked Virgin Mobile's codes yet, so do not give codes. Tell them to ask Virgin Mobile for conditional call forwarding, on no answer and on busy, to ${to}.`,
         };
+      }
+      // No number, no codes: a code with a placeholder in it gets dialled as printed.
+      if (!forwardingCodes(number).length) {
+        return { ok: true, say: `${prefix}The mobile codes appear on the Go live page with the number in them, as soon as the number is ready. Do not give codes before then.` };
       }
       const codes = forwardingCodes(number)
         .map((c) => `${c.when}: dial ${c.dial}`)

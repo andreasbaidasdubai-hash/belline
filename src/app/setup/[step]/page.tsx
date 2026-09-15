@@ -13,6 +13,8 @@ import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
 import { MARKETS } from "@/lib/markets";
 import { flag } from "@/lib/flags";
 import { ownerTickets } from "@/lib/exceptions";
+import { whatsappStatus } from "@/lib/whatsapp";
+import { whatsappCard, type WhatsAppCard as WhatsAppCardState } from "@/lib/whatsapp-selfserve";
 import { seedIfEmpty } from "@/lib/seed";
 import type { Location } from "@/lib/types";
 import SetupWizard from "../SetupWizard";
@@ -197,7 +199,21 @@ function destinationOptions(venue: Location): DestinationOption[] {
 
 const PARTNERS = ["fresha", "sevenrooms", "opentable", "treatwell", "other"].map((id) => ({ id, name: INTEGRATIONS[id] }));
 
-function Body({ step, j, venue, facts, google }: { step: Step; j: Journey; venue: Location; facts: ReturnType<typeof factsFrom>; google?: string }) {
+function Body({
+  step,
+  j,
+  venue,
+  facts,
+  google,
+  whatsapp,
+}: {
+  step: Step;
+  j: Journey;
+  venue: Location;
+  facts: ReturnType<typeof factsFrom>;
+  google?: string;
+  whatsapp: WhatsAppCardState;
+}) {
   const next = j.next;
   const onward = next && next.id !== step.id ? next : null;
   const cont = (
@@ -315,13 +331,17 @@ function Body({ step, j, venue, facts, google }: { step: Step; j: Journey; venue
       );
     }
 
-    case "channels":
+    case "channels": {
+      const phone = venue.onboarding?.channels.phone;
+      const web = venue.onboarding?.channels.web;
+      const phoneWorks = Boolean(phone?.forwardingVerifiedAt) || facts.phoneCalls > 0;
+      const webWorks = Boolean(web?.detectedAt) || facts.webConversations > 0;
       return (
         <>
           <Heading step={step} title="Let calls and chats reach Belline." />
           <p style={lede}>
-            One is enough to go live. This step is marked done when the first forwarded call or website conversation
-            arrives.
+            One is enough to go live. The phone counts once your test call arrives, and the website once the widget loads
+            on your site.
           </p>
           {step.done ? (
             cont
@@ -330,24 +350,47 @@ function Body({ step, j, venue, facts, google }: { step: Step; j: Journey; venue
               Set up call forwarding
             </Link>
           )}
-          <Card title="Your phone line" status={facts.phoneCalls > 0 ? "Working" : venue.phone ? "Waiting for a call" : "Number being prepared"}>
-            {facts.phoneCalls > 0
+          <Card
+            title="Your phone line"
+            status={phoneWorks ? "Working" : venue.phone ? "Waiting for the test call" : flag("numbers.pool") ? "Get your number" : "Number being prepared"}
+          >
+            {phoneWorks
               ? "Forwarded calls are reaching Belline."
               : venue.phone
-                ? `Forward the calls you miss to ${venue.phone}, then ring your own number from another phone.`
-                : "Your Belline number is being prepared. It appears on the forwarding page as soon as it is ready."}
+                ? `Forward the calls you miss to ${venue.phone}, then press "I've set it — test it" on the forwarding page.`
+                : flag("numbers.pool")
+                  ? "Get your Belline number on the forwarding page. It takes a second."
+                  : "Your Belline number is being prepared. It appears on the forwarding page as soon as it is ready."}
           </Card>
-          <Card title="Your website" status={facts.webConversations > 0 ? "Working" : "Not added yet"}>
-            {facts.webConversations > 0 ? (
-              "Website visitors are talking to Belline."
+          <Card title="Your website" status={webWorks ? "Installed" : venue.embed?.enabled ? "Waiting for the widget to load" : "Not added yet"}>
+            {webWorks ? (
+              "The widget is on your website."
             ) : (
               <>
                 Add the chat to your site with one line of code. <Link href="/website?from=setup">Add it to my website</Link>
               </>
             )}
           </Card>
+          <Card title="WhatsApp (optional)" status={whatsapp.state === "live" ? "Connected" : whatsapp.state === "soon" ? "Coming soon" : "Optional"}>
+            {whatsapp.state === "soon" ? (
+              "Belline will answer a second WhatsApp number for you. Going live does not wait for it."
+            ) : whatsapp.state === "live" ? (
+              "Belline answers your WhatsApp number."
+            ) : (
+              <>
+                Going live does not wait for it. <Link href="/integrations?from=setup">Set up WhatsApp</Link>
+                {onward && (
+                  <>
+                    {" · "}
+                    <Link href={onward.url}>Skip — add WhatsApp later</Link>
+                  </>
+                )}
+              </>
+            )}
+          </Card>
         </>
       );
+    }
 
     case "test":
       return (
@@ -441,6 +484,8 @@ export default async function SetupStepPage({
   const j = journey(venue, facts);
   const step = j.steps.find((s) => s.id === requested)!;
   const tickets = ownerTickets(venue.id);
+  // Only the channels step shows it, and only that step pays for the lookup.
+  const whatsapp = requested === "channels" ? whatsappCard(venue, await whatsappStatus(venue)) : ({ state: "soon" } as WhatsAppCardState);
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -466,7 +511,7 @@ export default async function SetupStepPage({
       <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 90px" }}>
         <Rail j={j} active={step} />
         <main style={{ minWidth: 0, maxWidth: 720 }}>
-          <Body step={step} j={j} venue={venue} facts={facts} google={google} />
+          <Body step={step} j={j} venue={venue} facts={facts} google={google} whatsapp={whatsapp} />
           {/* A ticket the team is working on, so the owner is not left guessing. */}
           {tickets.map((t) => (
             <div key={t.ticket} className="panel" role="status" style={{ padding: "12px 16px", marginTop: 22, fontSize: 13.5 }}>

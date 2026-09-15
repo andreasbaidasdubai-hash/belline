@@ -1,13 +1,20 @@
 import type { Call, Location } from "./types";
-import { id, listCalls, saveCall } from "./store";
+import { findCallBySid, id, listCalls, saveCall } from "./store";
 import { currentVersion } from "./brain";
 
 export function startCall(
   location: Location,
   channel: Call["channel"],
   from: string,
+  opts: { callSid?: string } = {},
 ): Call {
+  // Twilio retries a webhook it did not hear back from, and a stream can
+  // reconnect. One CallSid is one call, however many times it arrives.
+  const sid = opts.callSid?.trim();
+  const existing = sid ? findCallBySid(sid) : undefined;
+  if (existing && existing.locationId === location.id) return existing;
   const call: Call = {
+    ...(sid ? { callSid: sid } : {}),
     id: id("call"),
     locationId: location.id,
     channel,

@@ -263,6 +263,7 @@ export const INTEGRATIONS: Record<string, string> = {
   treatwell: "Treatwell",
   google: "Google Calendar",
   outlook: "Outlook",
+  whatsapp: "WhatsApp",
   other: "another booking system",
 };
 

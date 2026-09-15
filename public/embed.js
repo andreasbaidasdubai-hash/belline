@@ -228,6 +228,25 @@
     }
   }
 
+  // Tell Belline the widget loaded here. This is how the dashboard knows it is
+  // installed, the moment the page loads. The browser attaches this page's
+  // origin; a site the venue did not name is refused, and the widget then
+  // takes itself off the page rather than sit there refusing every tap.
+  try {
+    fetch(origin + "/api/embed/" + encodeURIComponent(key) + "/seen", { method: "POST", mode: "cors" })
+      .then(function (r) {
+        if (r.status === 403) {
+          dock.remove();
+          console.warn("[belline] this website is not on the venue's list, so the widget is not shown.");
+        }
+      })
+      .catch(function () {
+        /* a failed ping never costs the venue its widget */
+      });
+  } catch (e) {
+    /* an old browser without fetch keeps the widget */
+  }
+
   try {
     fetch(origin + "/api/embed/" + encodeURIComponent(key) + "/config", { mode: "cors" })
       .then(function (r) {

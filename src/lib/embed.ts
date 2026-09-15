@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { EmbedAppearance, EmbedConfig, EmbedMode, Location } from "./types";
 import { listCalls, upsertLocation } from "./store";
-import { todayIn } from "./time";
+import { dateIn, todayIn } from "./time";
 import { serviceState } from "./billing/entitlement";
 
 /**
@@ -208,7 +208,7 @@ export function checkEmbedGate(location: Location): EmbedGate {
   // widget off for the day — while the widget screen reported their calls as
   // visitors'.
   const used = listCalls(location.id).filter(
-    (call) => call.channel === "embed" && call.startedAt.slice(0, 10) === today,
+    (call) => call.channel === "embed" && dateIn(call.startedAt, location.timezone) === today,
   ).length;
 
   if (used < config.maxCallsPerDay) {
@@ -222,6 +222,49 @@ export function checkEmbedGate(location: Location): EmbedGate {
     message:
       "We've had a lot of calls through the website today. Please ring us instead — we'd rather not keep you waiting.",
   };
+}
+
+// ---------------------------------------------------------------------------
+// Knowing it is installed
+
+export type SeenResult = { ok: true; firstTime: boolean; location: Location } | { ok: false };
+
+/**
+ * The widget loaded on a page: `embed.js` says so once per page view.
+ *
+ * The browser writes the `Origin` header itself, so a page cannot claim to be
+ * the venue's site. Only an origin the venue named counts, and it sets
+ * `channels.web.detectedAt` the first time; later pings only move
+ * `lastCheckAt`. Anything else is refused and writes nothing — and the widget
+ * takes the refusal as its cue not to render.
+ */
+export function recordSeen(location: Location, origin: string | null, now: Date = new Date()): SeenResult {
+  if (!location.embed || !originAllowed(location.embed, origin)) return { ok: false };
+  const o = location.onboarding ?? { version: 1 as const, channels: {} };
+  const web = o.channels.web;
+  const at = now.toISOString();
+  const firstTime = !web?.detectedAt;
+  const updated = upsertLocation({
+    ...location,
+    onboarding: {
+      ...o,
+      channels: {
+        ...o.channels,
+        web: { domains: location.embed.allowedOrigins, detectedAt: web?.detectedAt ?? at, lastCheckAt: at },
+      },
+    },
+  });
+  return { ok: true, firstTime, location: updated };
+}
+
+/**
+ * The websites to prefill the widget with: what it is already on, else what
+ * setup read the business from.
+ */
+export function suggestedOrigins(location: Location, businessWebsite?: string): string[] {
+  if (location.embed?.allowedOrigins.length) return location.embed.allowedOrigins;
+  const known = [...(location.onboarding?.channels.web?.domains ?? []), businessWebsite ?? ""];
+  return [...new Set(known.map(normaliseOrigin).filter((o): o is string => Boolean(o)))];
 }
 
 /**

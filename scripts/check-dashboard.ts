@@ -276,7 +276,8 @@ await test("the Set up with Belle chat stacks on a phone instead of shrinking to
 });
 
 await test("the Go live dial codes are not pushed off a phone screen by the 640px table floor", () => {
-  assert.match(read("src", "app", "(app)", "golive", "page.tsx"), /<table className="forward-table">/);
+  // The codes table moved into the phone flow's client component.
+  assert.match(read("src", "app", "(app)", "golive", "PhoneSetup.tsx"), /<table className="forward-table">/);
   assert.match(shellCss, /\.table-wrap > table:not\(\.booking-table\):not\(\.forward-table\)/);
 });
 

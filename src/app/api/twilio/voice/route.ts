@@ -1,4 +1,5 @@
-import { listLocations } from "@/lib/store";
+import { findCallBySid, listLocations } from "@/lib/store";
+import { TEST_SCRIPT, isVerificationCall, recordVerificationCall } from "@/lib/telephony/verify";
 import { twilioSignatureValid } from "@/lib/voice/twilio-signature";
 import { signStreamToken } from "@/lib/auth";
 import { checkDemoGate, clearOldDemoBookings, isDemo } from "@/lib/demo";
@@ -124,6 +125,18 @@ export async function POST(request: Request) {
     return xml(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">${escapeXml(service.callerMessage ?? "Nobody is able to take your call just now.")}</Say>
+  <Hangup/>
+</Response>`);
+  }
+
+  // The owner's forwarding test, inside the ten minutes they opened for it.
+  // Answered with a script and hung up: no stream, no agent, no minutes. A
+  // retried webhook for the same CallSid gets the same answer and no second row.
+  if (isVerificationCall(location, params) || (params.CallSid && findCallBySid(params.CallSid)?.isTest)) {
+    recordVerificationCall(location, params);
+    return xml(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">${escapeXml(TEST_SCRIPT)}</Say>
   <Hangup/>
 </Response>`);
   }

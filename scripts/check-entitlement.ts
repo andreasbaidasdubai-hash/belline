@@ -65,8 +65,12 @@ const today = todayIn("Asia/Dubai");
 function phoneCall(venue: () => ReturnType<typeof fresh>, minutes: number, channel: "phone" | "embed" = "phone") {
   const call = startCall(venue(), channel, "+971501234567");
   call.status = "completed";
-  call.startedAt = new Date(Date.now() - minutes * 60_000).toISOString();
-  call.endedAt = new Date().toISOString();
+  // Started now and ended `minutes` later, rather than ending now: minutes
+  // belong to the day a call started, and back-dating the start put a call
+  // made just after midnight in Dubai on the day before the trial began.
+  const start = Date.now();
+  call.startedAt = new Date(start).toISOString();
+  call.endedAt = new Date(start + minutes * 60_000).toISOString();
   saveCall(call);
 }
 

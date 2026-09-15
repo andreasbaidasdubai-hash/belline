@@ -134,8 +134,17 @@ export function toolReply(name: string, input: unknown): ModelReply {
  */
 export function fakeGraph(respond: (path: string, body: Record<string, unknown>) => GraphReply | undefined = () => undefined) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
+  const gets: string[] = [];
+  /** Meta's display-name review per number id. PENDING_REVIEW until a test says otherwise. */
+  const names = new Map<string, string>();
+  let getReply: GraphReply | undefined;
   let seq = 0;
   const graph: Graph = {
+    async get(p) {
+      gets.push(p);
+      if (getReply) return getReply;
+      return { ok: true, status: 200, body: { id: p, name_status: names.get(p) ?? "PENDING_REVIEW", code_verification_status: "VERIFIED" } };
+    },
     async post(p, body) {
       posts.push({ path: p, body });
       const custom = respond(p, body);
@@ -149,7 +158,27 @@ export function fakeGraph(respond: (path: string, body: Record<string, unknown>)
       return { ok: true, status: 200, body: { success: true } };
     },
   };
-  return { graph, posts };
+  return {
+    graph,
+    posts,
+    gets,
+    /** Meta finishing its review of a number's name: "APPROVED" or "DECLINED". */
+    setNameStatus(phoneNumberId: string, status: string): void {
+      names.set(phoneNumberId, status);
+    },
+    /** Make every read answer this, e.g. an expired token. Undefined restores. */
+    failGets(reply: GraphReply | undefined): void {
+      getReply = reply;
+    },
+  };
+}
+
+const graphRef = globalThis as unknown as { __bellineStubGraph?: ReturnType<typeof fakeGraph> };
+
+/** One fake Graph for the whole stubbed server, so the routes and the job see the same numbers. */
+export function stubGraph(): ReturnType<typeof fakeGraph> {
+  graphRef.__bellineStubGraph ??= fakeGraph();
+  return graphRef.__bellineStubGraph;
 }
 
 // ---------------------------------------------------------------------------

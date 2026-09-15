@@ -6,6 +6,7 @@ import type {
   Business,
   Call,
   Location,
+  PoolNumber,
   Session,
   SupportException,
   Tenant,
@@ -48,9 +49,12 @@ interface Db {
   costs: CostEvent[];
   /** Things a person at Belline has to step in on. See exceptions.ts. */
   exceptions: SupportException[];
+  /** Pre-bought Belline numbers. See telephony/pool.ts. */
+  numberPool: PoolNumber[];
 }
 
 const EMPTY: Db = {
+  numberPool: [],
   tenants: [],
   businesses: [],
   locations: [],
@@ -412,11 +416,24 @@ export function saveWaitlistEntry(entry: WaitlistEntry): WaitlistEntry {
 
 // --- calls -----------------------------------------------------------------
 
-export function listCalls(locationId?: string): Call[] {
+/**
+ * A venue's calls, newest first.
+ *
+ * Forwarding test calls are left out unless asked for: the owner ringing
+ * their own number to check it works is not a customer, and every count,
+ * report and bill reads this list.
+ */
+export function listCalls(locationId?: string, opts: { includeTests?: boolean } = {}): Call[] {
   const out = load().calls;
   return (locationId ? out.filter((c) => c.locationId === locationId) : out)
+    .filter((c) => opts.includeTests || !c.isTest)
     .slice()
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+}
+
+/** The phone call Twilio knows by this id, test calls included. */
+export function findCallBySid(callSid: string): Call | undefined {
+  return callSid ? load().calls.find((c) => c.callSid === callSid) : undefined;
 }
 
 export function getCall(callId: string): Call | undefined {
@@ -435,6 +452,25 @@ export function saveCall(call: Call): Call {
 /** Where the collections are written. The mail outbox sits beside them. */
 export function dataDir(): string {
   return DATA_DIR;
+}
+
+// --- number pool -----------------------------------------------------------
+
+export function listPoolRows(): PoolNumber[] {
+  return load().numberPool;
+}
+
+/**
+ * Change the pool in one synchronous step.
+ *
+ * Nothing between reading the rows and writing them awaits, so two claims in
+ * the same process can never see the same free number. See telephony/pool.ts.
+ */
+export function mutatePool<T>(fn: (rows: PoolNumber[]) => T): T {
+  const db = load();
+  const out = fn(db.numberPool);
+  persist("numberPool");
+  return out;
 }
 
 // --- support exceptions ----------------------------------------------------

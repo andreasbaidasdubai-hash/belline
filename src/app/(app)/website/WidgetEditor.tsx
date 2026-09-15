@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { EmbedAppearance, EmbedMode } from "@/lib/types";
 import { APPEARANCE_RULES, EMBED_PALETTE, accentHex, contrastRatio, textOn } from "@/lib/embed-look";
+import InstallGuide from "./InstallGuide";
 
 /**
  * Switching the website widget on, and saying what it offers.
@@ -43,10 +44,11 @@ const MODES: { id: EmbedMode; title: string; what: string; costs: string }[] = [
 
 export default function WidgetEditor({
   locationId,
-  enabled,
+  enabled: enabledAtLoad,
   mode,
   origins,
-  snippet,
+  snippet: snippetAtLoad,
+  builderTabs,
   offering,
   used,
   limits,
@@ -57,8 +59,10 @@ export default function WidgetEditor({
   locationId: string;
   enabled: boolean;
   mode: EmbedMode;
+  /** The saved sites, or the website setup read the business from when there are none yet. */
   origins: string[];
   snippet: string;
+  builderTabs: { id: string; name: string; steps: string[]; note?: string }[];
   offering: { voice: boolean; chat: boolean };
   used: { voice: number; chat: number };
   limits: { voice: number; chat: number };
@@ -68,6 +72,8 @@ export default function WidgetEditor({
   /** The venue's WhatsApp number, if Belle answers one — the third button. */
   whatsappNumber: string | null;
 }) {
+  const [enabled, setEnabled] = useState(enabledAtLoad);
+  const [snippet, setSnippet] = useState(snippetAtLoad);
   const [pick, setPick] = useState<EmbedMode>(mode);
   const [sites, setSites] = useState(origins.join("\n"));
   const [busy, setBusy] = useState(false);
@@ -108,15 +114,17 @@ export default function WidgetEditor({
           appearance: look,
         }),
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as { error?: string; enabled?: boolean; snippet?: string; origins?: string[] };
       if (!res.ok) {
         setError(data.error ?? "That didn't save. Try again in a moment.");
         return;
       }
-      // A full reload rather than patching state: the snippet, the key and the
-      // day's usage are all rendered on the server, and a half-updated screen
-      // about a public endpoint is worse than a second of waiting.
-      window.location.reload();
+      // Patched in place rather than reloaded: a reload threw away whatever was
+      // typed in the sites box when the save failed half-way. The sites come
+      // back normalised, so a typo is visible straight away.
+      setEnabled(Boolean(data.enabled));
+      if (data.snippet) setSnippet(data.snippet);
+      if (data.origins) setSites(data.origins.join("\n"));
     } catch {
       setError("That didn't save. Try again in a moment.");
     } finally {
@@ -479,6 +487,7 @@ export default function WidgetEditor({
             <button className="btn" style={{ marginTop: 12 }} onClick={copy} disabled={busy}>
               {copied ? "Copied" : "Copy the line"}
             </button>
+            <InstallGuide snippet={snippet} tabs={builderTabs} />
             <p className="muted" style={{ fontSize: 12.5, margin: "14px 0 0" }}>
               The key in that line is public, like a payment provider&rsquo;s. It
               is not a password — the list of websites above is what protects

@@ -8,6 +8,7 @@ import { draftFromRequest } from "@/lib/onboarding/uploads";
 import { publish } from "@/lib/brain";
 import { cleanConfirmed } from "@/lib/onboarding/review";
 import { customerError } from "@/lib/errors/customer";
+import { normaliseOrigin } from "@/lib/embed";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +73,15 @@ export async function PUT(req: Request) {
     // The review step is done, and the import step with it when what was
     // saved came from a website or files rather than being typed.
     const imported = Boolean(String(body.website ?? "").trim()) || Number(body.documents) > 0;
-    updated = upsertLocation(markReviewed(updated, Object.keys(checked.confirmed), imported));
+    updated = markReviewed(updated, Object.keys(checked.confirmed), imported);
+    // The website setup read goes on as the widget's suggested site, so the
+    // owner is not asked for it a second time on the website step.
+    const site = normaliseOrigin(String(body.website ?? ""));
+    const o = updated.onboarding!;
+    if (site && !o.channels.web?.domains.includes(site)) {
+      updated = { ...updated, onboarding: { ...o, channels: { ...o.channels, web: { ...o.channels.web, domains: [...(o.channels.web?.domains ?? []), site] } } } };
+    }
+    updated = upsertLocation(updated);
   } catch (err) {
     const out = customerError("setup", err, "failed", location.id);
     return NextResponse.json({ error: `${out.message} ${out.next}` }, { status: 500 });

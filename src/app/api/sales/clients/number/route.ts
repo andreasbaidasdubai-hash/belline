@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { getLocation, listLocations, upsertLocation } from "@/lib/store";
+import { recordManualAssignment, releaseNumber } from "@/lib/telephony/pool";
+import { listExceptions, updateException } from "@/lib/exceptions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +49,20 @@ export async function POST(request: Request) {
     }
   }
 
-  upsertLocation({ ...venue, phone: digits ? `+${digits}` : "" });
-  return NextResponse.json({ ok: true, phone: digits ? `+${digits}` : "" });
+  const phone = digits ? `+${digits}` : "";
+  // The pool follows what staff set: a number cleared from a venue is
+  // quarantined, a number set by hand is marked taken so code never hands it
+  // out again.
+  if (venue.phone.trim() && venue.phone.replace(/\D/g, "") !== digits) releaseNumber(venue.id);
+  if (phone) recordManualAssignment(venue.id, phone, auth.user.id);
+  upsertLocation({ ...venue, phone });
+
+  // The override is the fix for a "being prepared" ticket, so it closes it
+  // with a note saying what was done.
+  if (phone) {
+    for (const row of listExceptions({ locationId: venue.id, kind: "pool_empty" })) {
+      updateException(row.id, { kind: "resolve", note: `Number ${phone} assigned by hand.`, minutes: 0, by: auth.user.id });
+    }
+  }
+  return NextResponse.json({ ok: true, phone });
 }

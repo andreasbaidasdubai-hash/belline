@@ -83,6 +83,24 @@ export const INSTALL_STEPS: Record<Platform, { name: string; steps: string[]; no
   },
 };
 
+/** The builder tabs on the website page, in the order most owners need them. */
+export const BUILDER_TABS: { id: string; name: string; steps: string[]; note?: string }[] = [
+  { id: "wordpress", ...INSTALL_STEPS.wordpress },
+  { id: "wix", ...INSTALL_STEPS.wix },
+  { id: "shopify", ...INSTALL_STEPS.shopify },
+  { id: "squarespace", ...INSTALL_STEPS.squarespace },
+  {
+    id: "gtm",
+    name: "Google Tag Manager",
+    steps: [
+      "In Tag Manager, open your container and click New tag.",
+      "Choose Custom HTML as the tag type and paste the snippet.",
+      "Set the trigger to All Pages, save, and click Submit to publish.",
+    ],
+  },
+  { id: "custom", ...INSTALL_STEPS.custom },
+];
+
 export interface InstallCheck {
   platform: Platform | null;
   installed: boolean;

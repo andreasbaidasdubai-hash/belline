@@ -1,9 +1,10 @@
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
-import { listCalls } from "@/lib/store";
-import { todayIn } from "@/lib/time";
+import { getBusiness, listCalls } from "@/lib/store";
+import { dateIn, todayIn } from "@/lib/time";
 import { chatAllowed, voiceAllowed, WEBCHAT_DEFAULTS } from "@/lib/webchat";
-import { EMBED_DEFAULTS, embedSnippet } from "@/lib/embed";
+import { EMBED_DEFAULTS, embedSnippet, suggestedOrigins } from "@/lib/embed";
+import { BUILDER_TABS } from "@/lib/onboarding/platform";
 import { venueWhatsApp } from "@/lib/whatsapp";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import WidgetEditor from "./WidgetEditor";
@@ -40,7 +41,7 @@ export default async function WebsitePage({
 
   const embed = location.embed;
   const today = todayIn(location.timezone);
-  const calls = listCalls(location.id).filter((c) => c.startedAt.slice(0, 10) === today);
+  const calls = listCalls(location.id).filter((c) => dateIn(c.startedAt, location.timezone) === today);
 
   // Counted here rather than taken from the gates, because the gates answer
   // "may another one start" and this answers "what has it done today" — which
@@ -65,8 +66,9 @@ export default async function WebsitePage({
         locationId={location.id}
         enabled={Boolean(embed?.enabled)}
         mode={embed?.mode ?? "both"}
-        origins={embed?.allowedOrigins ?? []}
+        origins={suggestedOrigins(location, getBusiness(location.tenantId, location.businessId)?.website)}
         snippet={embed?.enabled ? embedSnippet(location, origin) : ""}
+        builderTabs={BUILDER_TABS}
         offering={{
           voice: voiceAllowed(embed),
           chat: chatAllowed(embed),
@@ -80,7 +82,7 @@ export default async function WebsitePage({
         appearance={embed?.appearance ?? {}}
         whatsappNumber={whatsapp?.phoneE164 ?? null}
       />
-      {embed?.enabled && <InstallCheck locationId={location.id} />}
+      {embed?.enabled && <InstallCheck locationId={location.id} detectedAt={location.onboarding?.channels.web?.detectedAt ?? null} />}
     </>
   );
 }

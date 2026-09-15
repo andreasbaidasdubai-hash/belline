@@ -8,10 +8,10 @@ import { GOOGLE_EXPIRED_TEXT, connectionState, listCalendarsFor } from "@/lib/in
 import { flag } from "@/lib/flags";
 import { getLocation } from "@/lib/store";
 import GoogleCalendarControls from "./GoogleCalendarControls";
-import { whatsappConfigured, whatsappStatus } from "@/lib/whatsapp";
-import { provisioningReady } from "@/lib/whatsapp-provision";
+import { whatsappStatus } from "@/lib/whatsapp";
+import { whatsappCard } from "@/lib/whatsapp-selfserve";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
-import ConnectWhatsApp from "./ConnectWhatsApp";
+import WhatsAppCard from "./WhatsAppCard";
 import RemindersForm from "./RemindersForm";
 import { smsEnabled } from "@/lib/providers/sms";
 import { reminderHours, remindersEnabled } from "@/lib/reminders";
@@ -151,63 +151,13 @@ export default async function IntegrationsPage({
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head">WhatsApp</div>
         <div style={{ padding: 18 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <span
-              className="pill"
-              style={
-                account
-                  ? { background: "var(--ok-soft)", color: "var(--ok)", borderColor: "var(--ok)" }
-                  : whatsapp.state === "unavailable"
-                    ? { background: "var(--warn-soft)", color: "var(--warn)", borderColor: "var(--warn)" }
-                    : undefined
-              }
-            >
-              {account ? "Connected" : whatsapp.state === "unavailable" ? "Couldn't check" : "Not connected"}
-            </span>
-            {account && (
-              <span className="mono" style={{ fontSize: 13.5 }}>
-                {account.phoneE164}
-              </span>
-            )}
-          </div>
-          {whatsapp.state === "unavailable" ? (
-            // Not "Not connected": the number may already be live, and offering
-            // to connect it again is how an owner registers it twice.
-            <p role="status" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
-              Belline couldn&apos;t check this venue&apos;s WhatsApp just now. Nothing has changed on
-              your number. Reload this page in a minute.
-            </p>
-          ) : account ? (
-            <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
-              Belline answers this number on WhatsApp — questions, bookings, changes — and every
-              thread is in your inbox. Put it on your website, your Google profile and your
-              Instagram as &ldquo;WhatsApp us&rdquo;. Your own WhatsApp is untouched.
-            </p>
-          ) : whatsappConfigured() && provisioningReady() && !location.demo?.enabled ? (
-            <>
-              <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
-                Belline can answer a WhatsApp number for {location.name} — a second number, so your
-                own WhatsApp stays exactly as it is. Type the number, type the code Meta texts to
-                it, done: about a minute, no Meta account, nothing to install.
-              </p>
-              <ConnectWhatsApp
-                locationId={location.id}
-                venueName={location.name}
-                pending={
-                  location.whatsappPending
-                    ? { number: location.whatsappPending.number, displayName: location.whatsappPending.displayName }
-                    : null
-                }
-              />
-            </>
-          ) : (
-            <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
-              Belline can answer a WhatsApp number for {location.name} — a second number, so your
-              own WhatsApp stays exactly as it is. We register it and connect it for you; there is
-              nothing to install. Connecting it yourself is being prepared, and it will
-              appear here when it is ready.
-            </p>
-          )}
+          <WhatsAppCard
+            locationId={location.id}
+            venueName={location.name}
+            card={location.demo?.enabled && !account ? { state: "soon" } : whatsappCard(location, whatsapp)}
+            pendingName={location.whatsappPending?.displayName ?? null}
+            notifyRequested={Boolean(location.onboarding?.integrationRequests?.includes("whatsapp"))}
+          />
         </div>
       </div>
 

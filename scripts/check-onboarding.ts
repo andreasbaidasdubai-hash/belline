@@ -376,8 +376,8 @@ await test("du and e& mobiles get the conditional codes with the venue's own num
 await test("landlines are sent to the carrier, with the right number to call", () => {
   const carriers = uaeCarriers("+97145550142");
   assert.deepEqual(carriers.map((c) => c.id), ["du", "eand"]);
-  assert.match(carriers[0].landline, /155/);
-  assert.match(carriers[1].landline, /101/);
+  assert.match(carriers[0].landline ?? "", /155/);
+  assert.match(carriers[1].landline ?? "", /101/);
 });
 
 console.log("\n\x1b[1mThe widget on their website\x1b[0m\n");
