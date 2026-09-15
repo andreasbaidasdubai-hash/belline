@@ -551,17 +551,60 @@ await test("the front page says WhatsApp is available, on a second number, and n
   assert.doesNotMatch(html, /state-soon[^>]*>[^<]*<\/span>\s*<\/(?:figcaption|div)>[\s\S]{0,40}whats/i);
 });
 
-await test("the hero's WhatsApp card is an example conversation like the other two, not a not-live card", () => {
+/**
+ * The hero leads with a calendar, but connecting a calendar is not live yet.
+ * Any stretch of hero text that talks about booking into a calendar must say
+ * "soon" in the same sentence; the calendar card must carry the Coming soon
+ * badge; and its new entry is a request waiting for the team, never booked.
+ */
+const CALENDAR_CLAIM = /[^.?!<>]*\bbook(?:s|ing|ed)?\b[^.?!<>]*\bcalendar\b[^.?!<>]*/gi;
+const unsoonedCalendarClaims = (text: string) =>
+  [...text.matchAll(CALENDAR_CLAIM)].map((m) => m[0]).filter((s) => !/\bsoon\b/i.test(s));
+const heroHtml = () => {
   const html = visibleHtml("landing.html");
-  const card = html.slice(html.indexOf('class="demo-card demo-wa"'), html.indexOf("</figure>", html.indexOf('class="demo-card demo-wa"')));
-  assert.ok(card.length > 0, "the hero WhatsApp card is gone");
-  assert.match(card, /<span class="demo-example">Example conversation<\/span>/);
-  assert.doesNotMatch(card, /Coming soon|demo-soon|state-soon/);
-  // Still no booked time: the request goes to the team.
-  assert.match(card, /pass that to the team/);
-  assert.doesNotMatch(card, /(?:booked|confirmed) (?:you )?for|see you (?:on|at)/i);
-  const css = fs.readFileSync(path.join(process.cwd(), "public", "site.css"), "utf8");
-  assert.doesNotMatch(css, /\.demo-wa\s*\{[^}]*dashed/, "the hero WhatsApp card still has the dashed not-live border");
+  const start = html.indexOf('<section class="hero">');
+  return html.slice(start, html.indexOf("</section>", start));
+};
+
+await test("the pattern for a live-calendar claim catches today-tense lines and spares 'soon'", () => {
+  for (const bad of [
+    "Belline books straight into your calendar.",
+    "It books customers into the calendar you already use.",
+    "Booking directly into your Google calendar.",
+  ]) assert.ok(unsoonedCalendarClaims(bad).length > 0, bad);
+  for (const good of [
+    "Soon, it will also book straight into the calendar you already use.",
+    "Coming soon: books into your calendar",
+  ]) assert.deepEqual(unsoonedCalendarClaims(good), [], good);
+});
+
+await test("the hero's calendar is marked coming soon, and no hero text says calendar booking works today", () => {
+  const hero = heroHtml();
+  assert.ok(hero.length > 0, "no hero section");
+  const plain = hero.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.match(hero, /<span class="state state-soon[^"]*">Coming soon: books into your calendar<\/span>/, "the hero calendar has lost its Coming soon badge");
+  assert.deepEqual(unsoonedCalendarClaims(plain), [], "the hero says calendar booking works today");
+  assert.match(plain, /\bsoon\b[^.]*calendar/i, "the hero lead no longer says the calendar is coming soon");
+  // The new entry is a request for the team, and nothing in the hero is booked or confirmed.
+  const entry = hero.slice(hero.indexOf('class="cal-ev cal-ev-new"'), hero.indexOf("</li>", hero.indexOf('class="cal-ev cal-ev-new"')));
+  assert.ok(entry.length > 0, "the hero calendar has no new request");
+  assert.match(entry, /Waiting for your team/);
+  assert.doesNotMatch(plain, /\b(?:booked|confirmed)\b/i, "something in the hero reads as booked or confirmed");
+  assert.doesNotMatch(hero, /state-available/, "something in the hero is marked Available");
+  // Examples are labelled, and there is at most one conversation.
+  assert.match(plain, /Example calendar/);
+  assert.equal((hero.match(/Example conversation/g) ?? []).length, 1, "the hero should show exactly one example conversation");
+  assert.doesNotMatch(hero, /demo-card|chat-thread|WhatsApp<\/span>/, "the old chat/WhatsApp cards are back in the hero");
+});
+
+await test("the channels section still shows all four channels as Available, so the hero loses nothing", () => {
+  const html = visibleHtml("landing.html");
+  const start = html.indexOf('<section id="channels"');
+  const section = html.slice(start, html.indexOf("</section>", start));
+  for (const channel of ["Your phone", "A voice button on your website", "Chat on your website", "WhatsApp for your business"]) {
+    assert.ok(section.includes(`<h3>${channel}</h3>`), `the channels section has lost "${channel}"`);
+  }
+  assert.equal((section.match(/state-available">Available</g) ?? []).length, 4, "not every channel is marked Available");
 });
 
 await test("no public page claims a business's existing WhatsApp is answered, or voice notes on WhatsApp", () => {
