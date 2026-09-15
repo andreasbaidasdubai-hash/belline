@@ -29,9 +29,9 @@
   <article class="wrap legal">
     <p class="eyebrow">Legal</p>
     <h1 class="display">Privacy policy</h1>
-    <p class="legal-updated">Last updated 13 September 2026</p>
+    <p class="legal-updated">Last updated 15 September 2026</p>
 
-    <p>Belline answers the telephone, website chat and messages for businesses that take bookings. Doing that means handling the details of the people who contact those businesses. This page says what we collect, why, who helps us process it, how long we keep it and what you can ask us to do with it.</p>
+    <p>Belline answers the telephone, website chat and WhatsApp messages for businesses. Doing that means handling the details of the people who contact those businesses. This page says what we collect, why, who helps us process it, how long we keep it and what you can ask us to do with it.</p>
 
     <h2>Who we are</h2>
     <p>Belline is operated by <span data-legal="entity">Belline</span>, <span data-legal="address">reachable at hello@belline.ai</span>. For anything on this page, write to <a href="mailto:hello@belline.ai">hello@belline.ai</a>.</p>
@@ -43,19 +43,19 @@
     <h2>What we collect</h2>
     <h3>When somebody contacts a business through Belline</h3>
     <ul>
-      <li>The phone number they call from, or the chat they write in.</li>
+      <li>The phone number they call from, the WhatsApp number they message from, or the chat they write in.</li>
       <li>What is said or written, kept as a text transcript, together with a short summary.</li>
-      <li>The details of any booking made, changed or cancelled: name, number, date, time, what was booked, notes, and an email address where the business needs one.</li>
+      <li>The details of any request they make: their name and number, what they asked for, when they would like it, notes, and an email address where the business needs one.</li>
       <li>Messages taken for the business, and whether the call was put through to a person.</li>
-      <li>Where a deposit is due, whether it has been paid. Card details are entered on Stripe's page and never reach us.</li>
     </ul>
-    <p><strong>Call audio is not recorded.</strong> The voice is turned into text as the call happens, and the audio itself is not kept.</p>
+    <p><strong>Call audio is not recorded.</strong> The voice is turned into text as the call happens, and the audio itself is not kept. A voice note sent in website chat is turned into text the same way, and the recording is not kept.</p>
 
     <h3>When a business signs up</h3>
     <ul>
       <li>The business name, the type of business, the owner's name and email address, and a password, stored only as a salted hash.</li>
       <li>The information the business gives Belline to answer with: opening hours, services, prices, staff, rules and common questions.</li>
-      <li>Billing details handled by Stripe. We keep the plan, the billing period and Stripe's reference for the customer, not card numbers.</li>
+      <li>Price lists or brochures uploaded at setup. They are read once to draft the business's information and are not stored. Only the information the owner saves is kept.</li>
+      <li>Once card payments are open, billing details are handled by Stripe. We keep the plan, the billing period and Stripe's reference for the customer, never card numbers.</li>
     </ul>
 
     <h3>When you visit belline.ai</h3>
@@ -63,9 +63,9 @@
 
     <h2>What we use it for</h2>
     <ul>
-      <li>To answer the call or message and do what was asked: answer a question, make or change a booking, take a message, put the caller through.</li>
-      <li>To send what the booking needs: a confirmation, a reminder before the visit, and a link to pay a deposit where the business asks for one.</li>
-      <li>To show the business what happened, so it can check every call and booking.</li>
+      <li>To answer the call or message and do what was asked: answer a question, take a message or a booking request, put the caller through.</li>
+      <li>Where the business has turned it on and it is available: messages about the customer's request or booking. None are available yet.</li>
+      <li>To show the business what happened, so it can check every conversation and follow up every request.</li>
       <li>To recognise a returning customer by number, so they are greeted properly.</li>
       <li>To run, secure, fix and bill for the service.</li>
     </ul>
@@ -74,23 +74,23 @@
     <h2>Who helps us</h2>
     <p>Belline is built on services from other companies, each of which processes data only to provide its part:</p>
     <ul>
-      <li><strong>Twilio</strong> — telephone lines, text messages and WhatsApp.</li>
-      <li><strong>Deepgram</strong> — turning speech into text during a call.</li>
+      <li><strong>Twilio</strong> — telephone lines, and WhatsApp messages where a number is connected through Twilio.</li>
+      <li><strong>Deepgram</strong> — turning speech into text during a call, and voice notes sent in website chat.</li>
       <li><strong>ElevenLabs</strong> — turning Belline's replies into speech.</li>
-      <li><strong>Anthropic</strong> — the language model that understands the request and decides what to say.</li>
+      <li><strong>Anthropic</strong> — the language model that understands the request and decides what to say, and that reads the website, price lists and brochures a business gives it at setup.</li>
       <li><strong>Railway</strong> — hosting for the application and its data.</li>
       <li><strong>Vercel</strong> — hosting for this website.</li>
-      <li><strong>Stripe</strong> — subscription billing and, where a business uses them, deposits.</li>
-      <li><strong>Meta</strong> — WhatsApp messages, through the WhatsApp Business Platform (Cloud API), where a business has registered a WhatsApp number with Belline.</li>
-      <li><strong>Google</strong> — only if a business connects its Google Calendar, to copy bookings into it.</li>
+      <li><strong>Stripe</strong> — subscription billing, once card payments are open.</li>
+      <li><strong>Meta</strong> — WhatsApp messages, through the WhatsApp Business Platform (Cloud API), where a business has registered a second WhatsApp number with Belline.</li>
+      <li><strong>Google</strong> — only if a business connects a Google Calendar, once that connection is available. No calendar can be connected yet.</li>
     </ul>
     <p>Some of these companies process data outside the United Arab Emirates, including in the United States and the European Union. We rely on their contractual commitments to protect it.</p>
 
     <h2>How long we keep it</h2>
-    <p>Transcripts, bookings and messages are kept for as long as the business's account is open, so the business can look back at what happened. When an account is closed, we delete its data within 90 days, except records we must keep by law, such as invoices. A business can ask us to delete specific records sooner.</p>
+    <p>Transcripts, requests and messages are kept for as long as the business's account is open, so the business can look back at what happened. When an account is closed, we delete its data within 90 days, except records we must keep by law, such as invoices. A business can ask us to delete specific records sooner.</p>
 
     <h2>How we protect it</h2>
-    <p>Data travels encrypted. Passwords are stored as salted hashes. Each person signed in to a business account sees only the venues they are given, and what they can change depends on their role. Credentials for connected services are stored encrypted.</p>
+    <p>Data travels encrypted. Passwords are stored as salted hashes. Each person signed in to a business account sees only the locations they are given, and what they can change depends on their role. Credentials for connected services are stored encrypted.</p>
 
     <h2>What you can ask for</h2>
     <p>You can ask to see the personal data held about you, to have it corrected, or to have it deleted, and you can object to how it is used. If you contacted a business that uses Belline, ask that business, or write to us and we will pass it on and help. Account holders can write to us directly. We answer within 30 days.</p>

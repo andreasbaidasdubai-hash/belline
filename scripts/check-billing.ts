@@ -527,6 +527,34 @@ siteCopy("the trial on the landing page and in the terms is the catalogue's", ()
   );
 });
 
+/**
+ * terms.html is static, so the catalogue's sentences are pasted into it — and
+ * pinned here, strictly, so a catalogue change cannot leave the terms behind.
+ */
+test("the terms carry the catalogue's trial and over-limit sentences word for word", () => {
+  const terms = publicPages.find((p) => p.file === "terms.html")!.html;
+  assert.ok(terms.includes(trialSentence()), `terms.html does not carry the catalogue's trial sentence: "${trialSentence()}"`);
+  assert.ok(terms.includes(overLimitSentence()), `terms.html does not carry the catalogue's over-limit sentence: "${overLimitSentence()}"`);
+});
+
+test("the legal pages claim nothing that is not live", () => {
+  for (const file of ["terms.html", "privacy.html"]) {
+    const html = publicPages.find((p) => p.file === file)!.html.replace(/<!--[\s\S]*?-->/g, "");
+    assert.match(html, /Last updated 15 September 2026/, `${file}: last-updated date`);
+    for (const [pattern, what] of [
+      [/\b(?:books?|booking|booked) (?:straight |directly )?(?:into|against|in) (?:your|the|their) (?:real |existing )?(?:diary|calendar)\b/i, "books into a diary or calendar"],
+      [/Belline diary|makes, changes and cancels bookings|booking made, changed or cancelled/i, "the Belline diary"],
+      [/reminders? (?:by text|texts?)|confirmations? and reminders|a reminder before the visit/i, "reminder texts"],
+      [/deposit links?|link to pay a deposit|<h2>[^<]*deposits?/i, "deposits"],
+      [/Get Belline|\b24\s?\/\s?7\b|inside out|Nothing you book is real/i, "retired marketing lines"],
+    ] as [RegExp, string][]) {
+      assert.doesNotMatch(html, pattern, `${file}: ${what}`);
+    }
+  }
+  const terms = publicPages.find((p) => p.file === "terms.html")!.html;
+  assert.match(terms, /second WhatsApp number/, "the terms do not say WhatsApp is a second number registered with Belline");
+});
+
 test("Belle's trial answer is generated from the catalogue", () => {
   const faqs = bellineVenue.agent.faqs.map((f) => f.a);
   assert.ok(faqs.includes(trialAnswer()), "Belle's trial answer is not generated from the catalogue");
