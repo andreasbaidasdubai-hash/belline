@@ -15,6 +15,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { VERTICALS, type Vertical } from "./site-content";
 import { applyPricing, trialSentence } from "./site-pricing";
+import { TRIAL } from "../src/lib/billing/plans";
 
 const SOURCE = "public";
 const OUT = "site";
@@ -423,9 +424,9 @@ const BELL_FAB = `<a class="wa-fab" href="https://app.belline.ai/whatsapp" aria-
   <span class="chat-fab-say">Write with Belle</span>
 </button>
 
-<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Speak to Belle now">
+<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Speak to Belline now">
   ${MARK}
-  <span class="bell-fab-say">Speak to Belle</span>
+  <span class="bell-fab-say">Speak to Belline</span>
 </a>`;
 
 /**
@@ -436,8 +437,9 @@ const BELL_FAB = `<a class="wa-fab" href="https://app.belline.ai/whatsapp" aria-
  * design: an operator who arrives on /salons from a search and then clicks
  * through to the pricing should not feel handed to another company.
  *
- * Two scenes, deliberately in that order. The first is the booking, which is
- * what they came to see. The second is the call Belline refuses, which is what
+ * Two scenes, deliberately in that order. The first is the request taken for
+ * the team to confirm, which is what they came to see. The second is the call
+ * Belline hands over or refuses, which is what
  * they are actually deciding about — a receptionist that will say anything is
  * worse than no receptionist, and every operator knows it.
  */
@@ -514,13 +516,12 @@ function verticalPage(v: Vertical): string {
           Varianten für sich.
         -->
         <div class="cta-row rise rise-3">
-          <a class="btn" href="https://app.belline.ai/checkout">Get Belline</a>
+          <a class="btn" href="https://app.belline.ai/checkout">Connect your business</a>
         </div>
 
         <p class="hero-note rise rise-4">
-          Keep your existing number. No porting, no new hardware, nothing for
-          your callers to learn. Or ring it —
-          <a href="tel:+15717785920">+1 571 778 5920</a>.
+          Keep your existing number. No porting, no new hardware. Answers in
+          English. Or <a href="https://app.belline.ai/call?start=1" data-call>speak to Belline in your browser</a>, free.
         </p>
       </div>
 
@@ -532,13 +533,13 @@ ${CALL_PANEL}
     <div class="wrap">
       <div class="sec-head">
         <div>
-          <p class="eyebrow">What it checks</p>
-          <h2 class="display">Answering is the easy part.<br>Knowing what is genuinely free is not.</h2>
+          <p class="eyebrow">Rules it follows</p>
+          <h2 class="display">Answering is the easy part.<br>Knowing what not to say is harder.</h2>
         </div>
         <p class="sec-lead">
-          A voice agent that cannot see your book is an expensive answering
-          machine. Belline holds the constraints your team holds in their head,
-          which is why it can commit to a time without anyone checking it after.
+          Belline answers only from what you tell it: your services, prices,
+          hours and rules. What it doesn’t know, it takes as a message for your
+          team.
         </p>
       </div>
 
@@ -562,7 +563,7 @@ ${CALL_PANEL}
           <p class="eyebrow">Where it stops</p>
           <h2 class="display">The most important thing it does is know what it must not answer.</h2>
           <p style="margin-top:26px">${esc(v.boundary)}</p>
-          <a class="btn" href="https://app.belline.ai/checkout">Get Belline</a>
+          <a class="btn" href="https://app.belline.ai/checkout">Connect your business</a>
         </div>
         <figure class="plate">
           <img src="${esc(v.image)}" width="880" height="495" loading="lazy" alt="${esc(v.imageAlt)}">
@@ -576,36 +577,35 @@ ${CALL_PANEL}
       <p class="eyebrow">Hear it now</p>
       <h2 class="display">Be the caller.</h2>
       <p class="lead" style="margin-top:26px; max-width:50ch">
-        The same receptionist your callers would reach. Book something, change
-        it, then try to catch it out.
+        The same receptionist your callers would reach. Ask it something hard,
+        then ask for a person.
       </p>
 
       <div class="cta-row" style="margin-top:34px">
         <a class="btn" href="https://app.belline.ai/call?start=1" data-call>
           ${MARK}
-          Speak to Belle
+          Speak to Belline
         </a>
       </div>
 
       <p class="fine" style="max-width:56ch">
         Free, in your browser, 24 hours a day. Or ring
-        <a href="tel:+15717785920">+1 571 778 5920</a> — an international call
-        from the UAE; your usual charges apply. Nothing you book is real — the
-        agent says so itself. Calls last up to six minutes and the line is
-        capped each day.
+        <a href="tel:+15717785920">+1 571 778 5920</a>. That’s an international
+        call from the UAE, so your usual charges apply. Calls last up to ten
+        minutes, and the line takes a limited number of calls each day.
       </p>
 
       <div class="terms">
         <div>
           <h4>Keep your number</h4>
-          <p>Belline sits behind the line you already have. Your team always gets first refusal; it picks up the calls nobody reaches.</p>
+          <p>Forward calls to Belline from the line you already have. Forward only the calls nobody answers, and your team still picks up first.</p>
         </div>
         <div>
           <h4>Nothing to install</h4>
           <p>No new handset, no app for your staff, no change to what is printed on your door.</p>
         </div>
         <div>
-          <h4>14 days free</h4>
+          <h4>${TRIAL.days} days free</h4>
           <p>${trialSentence()}</p>
         </div>
       </div>
@@ -622,7 +622,7 @@ ${CALL_PANEL}
     </a>
     <p>
       AI reception for businesses across the UAE that take bookings — clinics, dental practices, salons, restaurants and more.<br>
-      <a href="tel:+15717785920">+1 571 778 5920</a> ·
+      <a href="tel:+15717785920">+1 571 778 5920</a> (an international call from the UAE) ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
       <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a><br>
       <a href="/privacy">Privacy policy</a> ·
