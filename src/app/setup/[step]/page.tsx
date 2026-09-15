@@ -12,6 +12,7 @@ import { integrationErrorText } from "@/lib/errors/customer";
 import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
 import { MARKETS } from "@/lib/markets";
 import { flag } from "@/lib/flags";
+import { ownerTickets } from "@/lib/exceptions";
 import { seedIfEmpty } from "@/lib/seed";
 import type { Location } from "@/lib/types";
 import SetupWizard from "../SetupWizard";
@@ -392,7 +393,7 @@ function Body({ step, j, venue, facts, google }: { step: Step; j: Journey; venue
                   <Link href={blocker.fix} className="btn btn-accent" style={primary}>
                     Fix this
                   </Link>
-                  <Link href="/setup/assistant" className="btn" style={{ padding: "12px 18px" }}>
+                  <Link href={`/setup/assistant?step=${blocker.step}`} className="btn" style={{ padding: "12px 18px" }}>
                     Ask Belle
                   </Link>
                 </div>
@@ -439,6 +440,7 @@ export default async function SetupStepPage({
   const facts = factsFrom(venue, listCalls(venue.id));
   const j = journey(venue, facts);
   const step = j.steps.find((s) => s.id === requested)!;
+  const tickets = ownerTickets(venue.id);
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -456,7 +458,7 @@ export default async function SetupStepPage({
         <span className="muted" style={{ fontSize: 12.5, marginLeft: "auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {venue.name}
         </span>
-        <Link href="/setup/assistant" style={{ fontSize: 12.5, flex: "none" }}>
+        <Link href={`/setup/assistant?step=${step.id}`} style={{ fontSize: 12.5, flex: "none" }}>
           Ask Belle
         </Link>
       </header>
@@ -465,6 +467,12 @@ export default async function SetupStepPage({
         <Rail j={j} active={step} />
         <main style={{ minWidth: 0, maxWidth: 720 }}>
           <Body step={step} j={j} venue={venue} facts={facts} google={google} />
+          {/* A ticket the team is working on, so the owner is not left guessing. */}
+          {tickets.map((t) => (
+            <div key={t.ticket} className="panel" role="status" style={{ padding: "12px 16px", marginTop: 22, fontSize: 13.5 }}>
+              <strong>Ticket {t.ticket}</strong> · {t.status}. We will contact you at the email address on your account.
+            </div>
+          ))}
         </main>
       </div>
     </div>

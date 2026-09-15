@@ -1282,6 +1282,52 @@ export interface User {
    * so only the latest works. See `signLoginToken` in auth.ts.
    */
   loginNonce?: string;
+  /**
+   * The one password-reset link outstanding, by nonce. Kept apart from
+   * `loginNonce` so asking for a reset does not cancel a sign-in link Belle
+   * sent, and cleared on use. See `signResetToken` in auth.ts.
+   */
+  resetNonce?: string;
+}
+
+/** Why a person at Belline has to step in. See exceptions.ts. */
+export type ExceptionKind =
+  | "pool_empty"
+  | "number_assign_failed"
+  | "forwarding_unverified_2x"
+  | "whatsapp_rejected"
+  | "whatsapp_token_expired"
+  | "import_failed_3x"
+  | "payment_failed_final"
+  | "stripe_off_trial_end"
+  | "deletion_legal_hold"
+  | "owner_requested_human"
+  | "vendor_balance_low"
+  | "webhook_failures"
+  | "billing_dispute"
+  | "account_recovery"
+  | "handoff_requested";
+
+export interface SupportException {
+  id: string;
+  /** Short and readable, said to the owner: "B-7K2Q". */
+  ticket: string;
+  tenantId: string;
+  locationId?: string;
+  kind: ExceptionKind;
+  reason: string;
+  context: Record<string, unknown>;
+  source: "belle" | "system" | "owner";
+  status: "open" | "waiting_customer" | "resolved";
+  /** How many times the same thing was raised while this was open. */
+  count: number;
+  openedAt: string;
+  lastRaisedAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  resolution?: string;
+  /** Minutes a person spent on it: the human-touch metric. */
+  humanMinutes?: number;
 }
 
 export interface Session {

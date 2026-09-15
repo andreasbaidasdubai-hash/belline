@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { listLocationsFor } from "@/lib/store";
 import { readiness } from "@/lib/onboarding";
+import { isStepId } from "@/lib/onboarding/journey";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import { seedIfEmpty } from "@/lib/seed";
 import SetupAssistant from "./SetupAssistant";
@@ -17,18 +18,21 @@ export const metadata = { title: "Set up with Belle" };
  *
  * Outside the dashboard shell for the same reason as /setup: somebody setting
  * up has one job, and eleven sidebar links are eleven ways of not doing it.
+ * Opened from a setup step with ?step=, Belle starts on that step and the way
+ * back goes to it.
  */
 export default async function SetupAssistantPage({
   searchParams,
 }: {
-  searchParams: Promise<{ loc?: string }>;
+  searchParams: Promise<{ loc?: string; step?: string }>;
 }) {
   seedIfEmpty();
   const user = await requireUser();
-  const { loc } = await searchParams;
+  const { loc, step: rawStep } = await searchParams;
   const venues = listLocationsFor(user.tenantId);
   const venue = venues.find((v) => v.id === loc) ?? venues[0];
   if (!venue || !canEditAgent(user, venue.id)) redirect("/");
+  const step = rawStep && isStepId(rawStep) ? rawStep : undefined;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -44,7 +48,7 @@ export default async function SetupAssistantPage({
       >
         <Brand size={24} />
         <span className="muted" style={{ fontSize: 12.5, marginLeft: "auto" }}>
-          {venue.name} · <a href="/">Dashboard</a>
+          {venue.name} · <a href={step ? `/setup/${step}` : "/setup"}>Back to setup</a>
         </span>
       </header>
       <main style={{ maxWidth: 980, margin: "0 auto", padding: "36px 22px 80px" }}>
@@ -52,11 +56,12 @@ export default async function SetupAssistantPage({
           Set up with Belle
         </h1>
         <p className="muted" style={{ fontSize: 14.5, margin: "0 0 22px", maxWidth: "60ch", lineHeight: 1.6 }}>
-          Answer in your own words. Belle saves each answer as you go and tells you what she saved.
+          Answer in your own words, or tell Belle where you are stuck. She saves each answer as you go and tells you what she saved.
         </p>
         <SetupAssistant
           locationId={venue.id}
-          greeting={setupGreeting(venue)}
+          step={step}
+          greeting={setupGreeting(venue, step)}
           initialMissing={readiness(venue).missing.map((m) => m.label)}
         />
       </main>

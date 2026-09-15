@@ -64,6 +64,9 @@ export default async function InternalLayout({ children }: { children: React.Rea
     // The only page that is ever urgent: nothing leaves the building until
     // someone clears this.
     { href: "/sales/approvals", label: "Approvals" },
+    // Customers a person has to help: every one is a gap in self-serve, and
+    // the minutes spent clearing them are the number to drive to zero.
+    { href: "/sales/exceptions", label: "Exceptions" },
     { href: "/sales/activity", label: "Agent activity" },
   ];
 

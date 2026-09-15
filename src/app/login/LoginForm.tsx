@@ -103,6 +103,11 @@ export default function LoginForm({ firstRun, initialEmail = "" }: { firstRun: b
       >
         {busy ? "…" : firstRun ? "Create account" : "Sign in"}
       </button>
+      {!firstRun && (
+        <p style={{ textAlign: "center", fontSize: 12.5, margin: "14px 0 0" }}>
+          <a href={`/login/forgot${email ? `?email=${encodeURIComponent(email)}` : ""}`}>Forgot your password?</a>
+        </p>
+      )}
     </form>
   );
 }

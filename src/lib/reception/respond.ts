@@ -27,6 +27,8 @@ import {
   transition,
 } from "./repo";
 import { track, newTraceId } from "./events";
+import { openException } from "../exceptions";
+import { BELLINE_TENANT_ID } from "../tenancy";
 import type { Accepted } from "./inbound";
 import type { ChannelAdapter } from "./channel";
 
@@ -299,6 +301,18 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
       name: "handoff.requested",
       payload: { reason: handoff.reason },
     });
+    // On Belline's own line the person asking is a prospect or a customer
+    // asking us, and nobody watches that inbox the way an owner watches theirs.
+    if (location.tenantId === BELLINE_TENANT_ID) {
+      openException({
+        tenantId: location.tenantId,
+        locationId: location.id,
+        kind: "handoff_requested",
+        reason: handoff.reason,
+        context: { conversationId, channel: conversation.channel, summary: handoff.summary.slice(0, 500) },
+        source: "system",
+      });
+    }
   }
 
   if (!committed.messageId || !reply.trim()) {

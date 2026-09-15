@@ -275,6 +275,72 @@ export function consumeLoginToken(token: string | undefined, now = Date.now()): 
   return user;
 }
 
+// --- password reset links --------------------------------------------------
+
+export const RESET_LINK_MINUTES = 30;
+
+function resetMac(payload: string): string {
+  return crypto.createHmac("sha256", streamSecret()).update(`reset:${payload}`).digest("base64url");
+}
+
+/**
+ * A link that lets one person set a new password, once, within 30 minutes.
+ *
+ * Signed under a different prefix from sign-in links, so neither can be used
+ * as the other. Single use by a nonce on the user, like `signLoginToken`:
+ * asking again replaces it, so only the latest link works.
+ */
+export function signResetToken(user: User, now = Date.now()): string {
+  const nonce = crypto.randomBytes(12).toString("base64url");
+  saveUser({ ...user, resetNonce: nonce });
+  const payload = `${user.id}.${now + RESET_LINK_MINUTES * 60_000}.${nonce}`;
+  return `${payload}.${resetMac(payload)}`;
+}
+
+/**
+ * The person a reset link names, if it is genuine, unexpired and unused.
+ * Does not use it up: the page that asks for the new password reads it, and
+ * email scanners that open links must not burn it.
+ */
+export function peekResetToken(token: string | undefined, now = Date.now()): User | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 4) return null;
+  const [userId, expires, nonce, mac] = parts;
+  const a = Buffer.from(mac);
+  const b = Buffer.from(resetMac(`${userId}.${expires}.${nonce}`));
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  if (!(Number(expires) >= now)) return null;
+  const user = getUser(userId);
+  if (!user || user.disabled || !user.resetNonce || user.resetNonce !== nonce) return null;
+  return user;
+}
+
+/**
+ * Set the new password and use the link up. A password the rule refuses
+ * leaves the link working, so a typo does not cost the owner another email.
+ * Every existing session is signed out (`setPassword`), outstanding sign-in
+ * links stop working, and a fresh session is started for this browser.
+ */
+export function consumeResetToken(
+  token: string | undefined,
+  password: string,
+  userAgent?: string,
+  now = Date.now(),
+): { ok: true; user: User; session: Session } | { ok: false; field: "token" | "password"; error: string } {
+  const user = peekResetToken(token, now);
+  if (!user) {
+    return { ok: false, field: "token", error: "This link has expired or has already been used. Ask for a new one." };
+  }
+  const problem = passwordProblem(password);
+  if (problem) return { ok: false, field: "password", error: problem };
+  const set = setPassword({ ...user, resetNonce: undefined, loginNonce: undefined }, password);
+  if (!set.ok) return { ok: false, field: "password", error: set.error ?? "Choose a different password." };
+  clearFailures(user.email);
+  const fresh = getUser(user.id)!;
+  return { ok: true, user: fresh, session: startSession(fresh, userAgent) };
+}
+
 /** Pull the session cookie out of a raw `Cookie:` header, for the WS bridge. */
 export function sessionIdFromCookieHeader(header: string | undefined): string | undefined {
   if (!header) return undefined;

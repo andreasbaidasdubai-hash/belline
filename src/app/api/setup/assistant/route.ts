@@ -3,6 +3,7 @@ import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { listLocationsFor } from "@/lib/store";
 import { runSetupTurn, type SetupMessage } from "@/lib/onboarding/assistant";
+import { isStepId } from "@/lib/onboarding/journey";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
   if (auth.response) return auth.response;
   const user = auth.user;
 
-  let body: { locationId?: unknown; messages?: unknown };
+  let body: { locationId?: unknown; messages?: unknown; step?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -51,7 +52,9 @@ export async function POST(req: Request) {
   while (messages.length && messages[0].role !== "user") messages.shift();
 
   try {
-    const result = await runSetupTurn(locationId, { id: user.id, name: user.name }, messages);
+    // The setup step Belle was opened from, so her fallback help is for that step.
+    const step = typeof body.step === "string" && isStepId(body.step) ? body.step : undefined;
+    const result = await runSetupTurn(locationId, { id: user.id, name: user.name }, messages, { step });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error("[setup assistant]", err);

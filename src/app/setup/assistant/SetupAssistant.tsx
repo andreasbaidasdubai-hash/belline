@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { HelpCard } from "@/lib/onboarding/assistant";
 
 /**
  * Setting up by talking to Belle.
@@ -8,20 +9,25 @@ import { useEffect, useRef, useState } from "react";
  * A plain chat, deliberately. The owner answers in their own words; Belle
  * saves each answer as she goes and says what she saved. What is still
  * missing is always visible beside the conversation, so nobody has to ask
- * "are we done?".
+ * "are we done?". When Belle cannot answer, her reply carries the next step's
+ * button and help, and a ticket for the team shows its number.
  */
 
 interface Line {
   role: "user" | "assistant";
   content: string;
+  help?: HelpCard;
+  ticket?: string;
 }
 
 export default function SetupAssistant({
   locationId,
+  step,
   greeting,
   initialMissing,
 }: {
   locationId: string;
+  step?: string;
   greeting: string;
   initialMissing: string[];
 }) {
@@ -48,13 +54,13 @@ export default function SetupAssistant({
       const res = await fetch("/api/setup/assistant", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ locationId, messages: next }),
+        body: JSON.stringify({ locationId, step, messages: next.map(({ role, content }) => ({ role, content })) }),
       });
-      const body = (await res.json().catch(() => ({}))) as { reply?: string; missing?: string[]; error?: string };
+      const body = (await res.json().catch(() => ({}))) as { reply?: string; missing?: string[]; error?: string; help?: HelpCard; ticket?: string };
       if (!res.ok || !body.reply) {
         setError(body.error ?? "Belle could not answer just then.");
       } else {
-        setLines([...next, { role: "assistant", content: body.reply }]);
+        setLines([...next, { role: "assistant", content: body.reply, help: body.help, ticket: body.ticket }]);
         if (body.missing) setMissing(body.missing);
       }
     } catch {
@@ -86,6 +92,16 @@ export default function SetupAssistant({
                 }}
               >
                 {line.content}
+                {line.ticket && (
+                  <span style={{ display: "block", marginTop: 8, fontWeight: 600 }}>Ticket {line.ticket}</span>
+                )}
+                {line.help && (
+                  <span style={{ display: "block", marginTop: 10 }}>
+                    <a href={line.help.fix} className="btn btn-accent" style={{ display: "inline-block" }}>
+                      {line.help.title.replace(/^Step \d+ · /, "Go to ")}
+                    </a>
+                  </span>
+                )}
               </p>
             </div>
           ))}

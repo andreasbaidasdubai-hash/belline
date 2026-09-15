@@ -4,6 +4,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import { listCalls } from "@/lib/store";
 import { readiness } from "@/lib/onboarding";
 import { raiseException } from "@/lib/errors/customer";
+import { openException } from "@/lib/exceptions";
 import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -62,7 +63,17 @@ export default async function GoLivePage({
   // Numbers are assigned by the Belline team until the number pool is switched
   // on. Said as it is, and the team is told, instead of a mailto the owner has
   // to remember to send.
-  if (!number) raiseException(`numbers:unassigned:${location.id}`, `venue ${location.id} opened Go live without a number`);
+  if (!number) {
+    raiseException(`numbers:unassigned:${location.id}`, `venue ${location.id} opened Go live without a number`);
+    // One open row per venue: opening this page again only counts it.
+    openException({
+      tenantId: location.tenantId,
+      locationId: location.id,
+      kind: "pool_empty",
+      reason: "Opened Go live without a Belline number. Numbers are assigned by hand until the pool is switched on.",
+      source: "system",
+    });
+  }
 
   return (
     <>

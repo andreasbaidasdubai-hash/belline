@@ -7,6 +7,7 @@ import type {
   Call,
   Location,
   Session,
+  SupportException,
   Tenant,
   User,
   WaitlistEntry,
@@ -45,6 +46,8 @@ interface Db {
   leads: Lead[];
   /** What each call and conversation cost to run. See billing/cost.ts. */
   costs: CostEvent[];
+  /** Things a person at Belline has to step in on. See exceptions.ts. */
+  exceptions: SupportException[];
 }
 
 const EMPTY: Db = {
@@ -58,6 +61,7 @@ const EMPTY: Db = {
   sessions: [],
   leads: [],
   costs: [],
+  exceptions: [],
 };
 
 // Next's dev server re-evaluates modules on edit; the custom server holds the
@@ -426,6 +430,26 @@ export function saveCall(call: Call): Call {
   else db.calls[idx] = call;
   persist("calls");
   return call;
+}
+
+/** Where the collections are written. The mail outbox sits beside them. */
+export function dataDir(): string {
+  return DATA_DIR;
+}
+
+// --- support exceptions ----------------------------------------------------
+
+export function listExceptionRows(): SupportException[] {
+  return load().exceptions;
+}
+
+export function saveExceptionRow(row: SupportException): SupportException {
+  const db = load();
+  const idx = db.exceptions.findIndex((e) => e.id === row.id);
+  if (idx === -1) db.exceptions.push(row);
+  else db.exceptions[idx] = row;
+  persist("exceptions");
+  return row;
 }
 
 // --- costs -----------------------------------------------------------------
