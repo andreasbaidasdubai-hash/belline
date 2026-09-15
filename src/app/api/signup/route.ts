@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { signUp } from "@/lib/onboarding";
+import { clientKey, createSignupLimiter } from "@/lib/onboarding/limit";
 import { seedIfEmpty } from "@/lib/seed";
 import { SESSION_COOKIE, login } from "@/lib/auth";
 import { sessionCookieOptions } from "@/lib/auth-server";
 import type { Vertical } from "@/lib/types";
-import { isMarket } from "@/lib/markets";
 
 export const dynamic = "force-dynamic";
 
@@ -18,55 +18,30 @@ export const dynamic = "force-dynamic";
  *
  * Being public is the whole point and also the whole risk, so:
  *
- *   Rate limited by address. Not to stop a determined attacker, who will use
- *   more than one, but to stop the ordinary case: a script that finds the
- *   endpoint and creates ten thousand tenants overnight.
+ *   Rate limited by address (onboarding/limit.ts). Accounts created are
+ *   counted strictly; refused attempts get a far higher ceiling, so a person
+ *   fighting the password rule is never locked out by it.
  *
  *   Validated in the library, not here. `signUp` checks every field and
  *   returns which one failed, so the browser can put the message next to the
  *   right input rather than at the top of the page.
  *
+ *   Terms recorded. The box on the form is required here too, and `signUp`
+ *   stores the versions it agreed to.
+ *
  *   Signed in on success. A customer who has just typed a password should not
  *   be asked for it again on the next screen.
  */
 
-/**
- * A small, deliberately leaky bucket.
- *
- * In memory, per process, and reset by a redeploy — which is fine for what it
- * is defending against. Something stronger belongs in front of the whole
- * service rather than inside one route handler, and pretending otherwise
- * would be security theatre with a Map in it.
- */
-const RECENT = new Map<string, number[]>();
-const WINDOW_MS = 60 * 60 * 1000;
-const MAX_PER_WINDOW = 5;
-
-function tooMany(ip: string): boolean {
-  const now = Date.now();
-  const hits = (RECENT.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
-  hits.push(now);
-  RECENT.set(ip, hits);
-  // Keep the map from growing without bound on a long-lived process.
-  if (RECENT.size > 5000) {
-    for (const [key, times] of RECENT) {
-      if (!times.some((t) => now - t < WINDOW_MS)) RECENT.delete(key);
-    }
-  }
-  return hits.length > MAX_PER_WINDOW;
-}
-
-function clientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for") ?? "";
-  return forwarded.split(",")[0]?.trim() || "unknown";
-}
+const limiter = createSignupLimiter();
 
 export async function POST(req: Request) {
   seedIfEmpty();
 
-  if (tooMany(clientIp(req))) {
+  const key = clientKey(req.headers);
+  if (limiter.blocked(key)) {
     return NextResponse.json(
-      { error: "Too many accounts from here just now. Try again in an hour." },
+      { error: "Too many signups from here just now. Try again in an hour." },
       { status: 429 },
     );
   }
@@ -78,22 +53,48 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Send JSON." }, { status: 400 });
   }
 
-  const result = await signUp({
-    businessName: String(body.businessName ?? ""),
-    email: String(body.email ?? ""),
-    password: String(body.password ?? ""),
-    vertical: String(body.vertical ?? "") as Vertical,
-    timezone: body.timezone ? String(body.timezone) : undefined,
-    // What they had picked on the checkout page. Validated against the
-    // catalogue in signUp; anything else falls back to the trial's own bundle.
-    products: Array.isArray(body.products) ? body.products : undefined,
-    market: isMarket(body.market) ? body.market : undefined,
-  });
+  if (body.acceptTerms !== true) {
+    limiter.record(key, false);
+    return NextResponse.json(
+      { field: "terms", error: "Tick the box to agree to the Terms and Privacy policy." },
+      { status: 422 },
+    );
+  }
+
+  let result: Awaited<ReturnType<typeof signUp>>;
+  try {
+    result = await signUp({
+      businessName: String(body.businessName ?? ""),
+      email: String(body.email ?? ""),
+      password: String(body.password ?? ""),
+      vertical: String(body.vertical ?? "") as Vertical | "",
+      // No timezone from the browser: the market decides it.
+      // What they had picked on the checkout page. Validated against the
+      // catalogue in signUp; anything else falls back to the trial's own bundle.
+      products: Array.isArray(body.products) ? body.products : undefined,
+      market: body.market ? String(body.market) : undefined,
+      emailConfirmed: body.emailConfirmed === true,
+      acceptedTerms: true,
+    });
+  } catch (err) {
+    // signUp has already removed anything it wrote. The detail is for us.
+    console.error("[signup] failed:", err);
+    limiter.record(key, false);
+    return NextResponse.json(
+      { error: "We could not set up your account. Nothing was saved. Try again in a minute." },
+      { status: 500 },
+    );
+  }
 
   if (!result.ok) {
+    limiter.record(key, false);
     // 422 rather than 400: the request was well formed, the contents were not.
-    return NextResponse.json({ field: result.field, error: result.error }, { status: 422 });
+    return NextResponse.json(
+      { field: result.field, error: result.error, didYouMean: result.didYouMean, signIn: result.signIn },
+      { status: 422 },
+    );
   }
+  limiter.record(key, true);
 
   // Straight in. No confirmation email standing between somebody who has just
   // paid us attention and the thing they came for.

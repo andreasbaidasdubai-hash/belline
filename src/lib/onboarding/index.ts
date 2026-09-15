@@ -1,11 +1,23 @@
 import type { Location, Subscription, User, Vertical, WeeklyHours } from "../types";
-import { id, saveBusiness, saveTenant, upsertLocation, findUserByEmail } from "../store";
+import {
+  id,
+  saveBusiness,
+  saveTenant,
+  upsertLocation,
+  findUserByEmail,
+  deleteUser,
+  removeBusiness,
+  removeLocation,
+  removeTenant,
+} from "../store";
 import { createUser } from "../auth";
 import { ensureBaseline } from "../brain";
 import { checkShape } from "../leads/email";
 import { extractFromSources, readSite, type Extracted, type ModelCall, type SourceFile } from "../prospect";
 import { TRIAL, checkSelection } from "../billing/plans";
-import { marketOf, type Market } from "../markets";
+import { MARKETS, isMarket, marketDefaults, marketOf, type Market } from "../markets";
+import { passwordProblem } from "../signup-rules";
+import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
 
 /**
@@ -47,26 +59,53 @@ export interface SignupInput {
   businessName: string;
   email: string;
   password: string;
-  /** What they do. Picks the engine: a table is not an appointment. */
-  vertical: Vertical;
-  /** Where they are, so "tomorrow at four" means their four. */
+  /**
+   * What they do, if they said. Picks the engine: a table is not an
+   * appointment. Optional — empty gets the appointment diary.
+   */
+  vertical?: Vertical | "";
+  /**
+   * The venue's clock. `signUp` ignores it and uses the market's, because a
+   * browser's zone says where the owner is sitting, not where the business
+   * is. Adding a location to an existing account (locations.ts) still sets it.
+   */
   timezone?: string;
   /** What they picked on the checkout page, remembered as what the trial is trialling. */
   products?: unknown[];
-  /** Which market's prices they were shown. */
-  market?: Market;
+  /** The country the business is in. Currency and timezone follow from it. Unset is the UAE. */
+  market?: Market | string;
+  /** The owner confirmed an email the typo check queried ("did you mean …?"). */
+  emailConfirmed?: boolean;
+  /** Ticked the Terms box. Recorded with the versions (legal.ts) when true. */
+  acceptedTerms?: boolean;
 }
+
+export type SignupField = "businessName" | "email" | "password" | "vertical" | "market" | "terms";
 
 export type SignupResult =
   | { ok: true; user: User; location: Location }
-  | { ok: false; field: "businessName" | "email" | "password" | "vertical"; error: string };
+  | {
+      ok: false;
+      field: SignupField;
+      error: string;
+      /** A likely intended address, for a "Use …" button. */
+      didYouMean?: string;
+      /** Where to sign in instead, when the address already has an account. */
+      signIn?: string;
+    };
+
+/** Injectable for the checks, so a failure half way through can be forced. */
+export interface SignupDeps {
+  ensureBaseline?: typeof ensureBaseline;
+  createUser?: typeof createUser;
+}
 
 /**
  * Fourteen days, every channel on, no card, and a cap on voice minutes and
  * text conversations so an unattended trial cannot run up a bill
  * (billing/plans.ts `TRIAL`).
  */
-function trialSubscription(timezone: string, picked?: unknown[], market?: Market): Subscription {
+function trialSubscription(timezone: string, picked?: unknown[], market?: unknown): Subscription {
   const today = todayIn(timezone);
   const ends = new Date(`${today}T12:00:00Z`);
   ends.setUTCDate(ends.getUTCDate() + TRIAL.days);
@@ -100,7 +139,8 @@ function everyDay(start: number, end: number): WeeklyHours {
  * one is a support ticket.
  */
 export function blankVenue(input: SignupInput, tenantId: string, businessId: string): Location {
-  const timezone = input.timezone || "Asia/Dubai";
+  const defaults = marketDefaults(input.market);
+  const timezone = input.timezone || defaults.timezone;
   const name = input.businessName.trim();
   const isRestaurant = input.vertical === "restaurant";
 
@@ -109,11 +149,13 @@ export function blankVenue(input: SignupInput, tenantId: string, businessId: str
     tenantId,
     businessId,
     name,
-    vertical: input.vertical,
+    vertical: input.vertical || "salon",
     timezone,
     phone: "",
     address: "",
-    currency: timezone.startsWith("Europe") ? "GBP" : "AED",
+    // From the market, never guessed from the timezone: every Europe/* zone
+    // used to get pounds, including a UAE business set up from Zurich.
+    currency: defaults.currency,
     hours: everyDay(9 * 60, 18 * 60),
     closures: [],
     subscription: trialSubscription(timezone, input.products, input.market),
@@ -155,8 +197,14 @@ export function blankVenue(input: SignupInput, tenantId: string, businessId: str
  * goes through the same checker the website's form uses, because a customer
  * who mistypes their address at signup never receives anything and never
  * knows why.
+ *
+ * All or nothing. Every check runs before the first write — the password
+ * included, which used to be checked last, after a tenant, a business and a
+ * venue had already been saved for an account nobody could sign in to. And if
+ * a write itself fails part way, what was written is removed again before the
+ * error goes any further.
  */
-export async function signUp(input: SignupInput): Promise<SignupResult> {
+export async function signUp(input: SignupInput, deps: SignupDeps = {}): Promise<SignupResult> {
   const businessName = input.businessName.trim();
   if (businessName.length < 2) {
     return { ok: false, field: "businessName", error: "What is the business called?" };
@@ -168,59 +216,136 @@ export async function signUp(input: SignupInput): Promise<SignupResult> {
   const email = input.email.trim().toLowerCase();
   const shape = checkShape(email);
   if (!shape.valid) {
-    return { ok: false, field: "email", error: shape.reason ?? "That does not look like an email address." };
+    return {
+      ok: false,
+      field: "email",
+      error: shape.suggestion
+        ? `That does not look right. Did you mean ${shape.suggestion}?`
+        : (shape.reason ?? "That does not look like an email address."),
+      didYouMean: shape.suggestion,
+    };
+  }
+  // A well-formed address one letter away from a big provider ("gmial.com")
+  // is asked about once. It may be real, so "keep what I typed" is allowed.
+  if (shape.suggestion && !input.emailConfirmed) {
+    return {
+      ok: false,
+      field: "email",
+      error: `Did you mean ${shape.suggestion}?`,
+      didYouMean: shape.suggestion,
+    };
   }
   if (findUserByEmail(email)) {
     return {
       ok: false,
       field: "email",
       error: "There is already an account with that address. Sign in instead.",
+      signIn: `/login?email=${encodeURIComponent(email)}`,
     };
   }
 
-  if (!["restaurant", "salon", "clinic"].includes(input.vertical)) {
-    return { ok: false, field: "vertical", error: "Choose the kind of business." };
+  const problem = passwordProblem(input.password);
+  if (problem) return { ok: false, field: "password", error: problem };
+
+  const vertical = input.vertical || undefined;
+  if (vertical && !["restaurant", "salon", "clinic"].includes(vertical)) {
+    return { ok: false, field: "vertical", error: "Choose the kind of business, or leave it empty." };
   }
+
+  // The market is where the business is, and it has to be one we can serve.
+  if (input.market !== undefined && !(isMarket(input.market) && MARKETS[input.market].status === "live")) {
+    return { ok: false, field: "market", error: "Belline is not open in that country yet." };
+  }
+  const where = marketDefaults(input.market);
 
   // A tenant of their own, from the first second. Nothing about this account
   // shares a boundary with anybody else's.
   const tenantId = id("tnt");
   const businessId = id("biz");
   const now = new Date().toISOString();
+  const written: { user?: string; location?: string; business?: boolean; tenant?: boolean } = {};
 
-  saveTenant({ id: tenantId, name: businessName, status: "active", createdAt: now });
-  saveBusiness({
-    id: businessId,
-    tenantId,
-    name: businessName,
-    category:
-      input.vertical === "restaurant"
-        ? "Restaurant"
-        : input.vertical === "clinic"
-          ? "Clinic"
-          : "Salon & spa",
-    email,
-    // Never on by default. Appearing in a consumer search is a decision the
-    // merchant makes, not one they discover.
-    discoverable: false,
-    createdAt: now,
-  });
+  try {
+    saveTenant({
+      id: tenantId,
+      name: businessName,
+      status: "active",
+      createdAt: now,
+      ...(input.acceptedTerms
+        ? { onboarding: { terms: { tosVersion: TOS_VERSION, dpaVersion: DPA_VERSION, acceptedAt: now, acceptedBy: email } } }
+        : {}),
+    });
+    written.tenant = true;
+    saveBusiness({
+      id: businessId,
+      tenantId,
+      name: businessName,
+      // Only when they said. An unnamed trade is filled in from their website
+      // at the next step rather than guessed here.
+      category:
+        vertical === "restaurant"
+          ? "Restaurant"
+          : vertical === "clinic"
+            ? "Clinic"
+            : vertical === "salon"
+              ? "Salon & spa"
+              : undefined,
+      email,
+      // Never on by default. Appearing in a consumer search is a decision the
+      // merchant makes, not one they discover.
+      discoverable: false,
+      createdAt: now,
+    });
+    written.business = true;
 
-  const location = upsertLocation(blankVenue(input, tenantId, businessId));
-  ensureBaseline(location);
+    const location = upsertLocation(
+      blankVenue({ ...input, vertical, market: where.market, timezone: where.timezone }, tenantId, businessId),
+    );
+    written.location = location.id;
+    (deps.ensureBaseline ?? ensureBaseline)(location);
 
-  const created = createUser({
-    email,
-    name: businessName,
-    password: input.password,
-    role: "owner",
-    tenantId,
-  });
-  if (!created.ok) {
-    return { ok: false, field: "password", error: created.error };
+    const created = (deps.createUser ?? createUser)({
+      email,
+      name: businessName,
+      password: input.password,
+      role: "owner",
+      tenantId,
+    });
+    if (!created.ok) {
+      // Only reachable in a race: somebody took the address between the check
+      // above and here.
+      rollback(tenantId, businessId, written);
+      return { ok: false, field: "email", error: created.error };
+    }
+    written.user = created.user.id;
+
+    return { ok: true, user: created.user, location };
+  } catch (err) {
+    rollback(tenantId, businessId, written);
+    throw err;
   }
+}
 
-  return { ok: true, user: created.user, location };
+/** Undo a signup that failed part way, newest write first. */
+function rollback(
+  tenantId: string,
+  businessId: string,
+  written: { user?: string; location?: string; business?: boolean; tenant?: boolean },
+): void {
+  const steps: (() => void)[] = [
+    () => written.user && deleteUser(written.user),
+    () => written.location && removeLocation(written.location),
+    () => written.business && removeBusiness(businessId),
+    () => written.tenant && removeTenant(tenantId),
+  ];
+  for (const step of steps) {
+    try {
+      step();
+    } catch (err) {
+      // Keep undoing the rest. What is left is what scripts/orphans.ts lists.
+      console.error(`[signup] rollback step failed for ${tenantId}:`, err);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

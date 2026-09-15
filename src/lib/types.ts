@@ -68,6 +68,19 @@ export interface Tenant {
    * same engine as everybody else's and must never appear in anybody's data.
    */
   internal?: boolean;
+  /** What happened when the account was opened. */
+  onboarding?: {
+    /** The legal versions the owner agreed to at signup (legal.ts). */
+    terms?: TermsAcceptance;
+  };
+}
+
+export interface TermsAcceptance {
+  tosVersion: string;
+  dpaVersion: string;
+  acceptedAt: string;
+  /** The email address that ticked the box. */
+  acceptedBy: string;
 }
 
 /**

@@ -210,6 +210,204 @@ await test("every account that exists has exactly one owner and one tenant", () 
   assert.equal(tenants.size, owners.length, "two accounts share a tenant");
 });
 
+console.log("\n\x1b[1mAll or nothing, and the right defaults (P0-2)\x1b[0m\n");
+
+const { PASSWORD_HINT, PASSWORD_MIN_LENGTH, PASSWORD_COMMON_WORDS, passwordProblem, tradeFromParam } =
+  await import("../src/lib/signup-rules");
+const auth = await import("../src/lib/auth");
+const { listLocations, getTenant } = await import("../src/lib/store");
+const { TOS_VERSION, DPA_VERSION } = await import("../src/lib/legal");
+const { createSignupLimiter, clientKey, PEER_HEADER } = await import("../src/lib/onboarding/limit");
+const { findOrphans } = await import("../src/lib/onboarding/orphans");
+
+const counts = () => ({
+  tenants: listTenants().length,
+  locations: listLocations({ includeInternal: true, includeArchived: true }).length,
+  users: listUsers().length,
+});
+
+for (const bad of ["short", "Belline-is-great-2026", "1234567890123"]) {
+  await test(`a rejected password (${JSON.stringify(bad)}) writes nothing at all`, async () => {
+    const before = counts();
+    const result = await signUp({
+      businessName: "Orphan Candidate Salon",
+      email: `orphan-${bad.length}@example.test`,
+      password: bad,
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.field, "password");
+    assert.deepEqual(counts(), before, "a rejected password left rows behind");
+  });
+}
+
+await test("a write that fails half way is rolled back before the error escapes", async () => {
+  const before = counts();
+  let seen: { tenantId: string; businessId: string; locationId: string } | null = null;
+  await assert.rejects(
+    signUp(
+      { businessName: "Half Way Salon", email: "halfway@example.test", password: PASSWORD, acceptedTerms: true },
+      {
+        ensureBaseline: (loc) => {
+          seen = { tenantId: loc.tenantId, businessId: loc.businessId, locationId: loc.id };
+          throw new Error("disk full");
+        },
+      },
+    ),
+    /disk full/,
+  );
+  assert.ok(seen, "the failure was never reached");
+  const s = seen as { tenantId: string; businessId: string; locationId: string };
+  assert.equal(getTenant(s.tenantId), undefined, "tenant left behind");
+  assert.equal(getBusiness(s.tenantId, s.businessId), undefined, "business left behind");
+  assert.equal(getLocation(s.locationId), undefined, "venue left behind");
+  assert.deepEqual(counts(), before);
+});
+
+await test("a failed owner creation removes the tenant, business and venue too", async () => {
+  const before = counts();
+  const result = await signUp(
+    { businessName: "Race Salon", email: "race@example.test", password: PASSWORD },
+    { createUser: () => ({ ok: false, error: "There is already an account with that address." }) },
+  );
+  assert.equal(result.ok, false);
+  assert.deepEqual(counts(), before);
+});
+
+await test("the password hint, minLength and server rule come from one constant", async () => {
+  assert.equal(auth.passwordProblem, passwordProblem, "auth.ts has its own copy of the rule");
+  assert.ok(PASSWORD_HINT.includes(String(PASSWORD_MIN_LENGTH)), "hint does not state the length");
+  for (const word of PASSWORD_COMMON_WORDS.filter((w) => /[a-z]/.test(w))) {
+    assert.ok(passwordProblem(`xx-${word}-Correct-9`), `"${word}" is not refused`);
+  }
+  assert.ok(passwordProblem("a1-B".padEnd(PASSWORD_MIN_LENGTH - 1, "x")), "one short is accepted");
+  assert.equal(passwordProblem("a1-B".padEnd(PASSWORD_MIN_LENGTH, "x")), null, "exact length refused");
+  const form = fs.readFileSync(path.join(import.meta.dirname, "../src/app/checkout/CheckoutForm.tsx"), "utf8");
+  assert.ok(form.includes("minLength={PASSWORD_MIN_LENGTH}"), "the input's minLength is typed by hand");
+  assert.ok(form.includes("{PASSWORD_HINT}"), "the hint is typed by hand");
+  assert.ok(!/twelve|minLength=\{\d+\}/i.test(form), "a hand-typed length is still in the form");
+});
+
+const matrix: { market?: string; browserZone?: string; currency: string; timezone: string }[] = [
+  { market: "AE", browserZone: "Asia/Dubai", currency: "AED", timezone: "Asia/Dubai" },
+  { market: "AE", browserZone: "Europe/Zurich", currency: "AED", timezone: "Asia/Dubai" },
+  { market: "AE", browserZone: "Europe/London", currency: "AED", timezone: "Asia/Dubai" },
+  { browserZone: "Europe/Berlin", currency: "AED", timezone: "Asia/Dubai" },
+];
+for (const [i, row] of matrix.entries()) {
+  await test(`market ${row.market ?? "(unset)"} from a ${row.browserZone} browser gets ${row.currency} and ${row.timezone}`, async () => {
+    const made = await signUp({
+      businessName: `Matrix Venue ${i}`,
+      email: `matrix${i}@example.test`,
+      password: PASSWORD,
+      market: row.market,
+      timezone: row.browserZone,
+    });
+    assert.ok(made.ok, made.ok ? "" : made.error);
+    if (!made.ok) return;
+    assert.equal(made.location.currency, row.currency);
+    assert.equal(made.location.timezone, row.timezone);
+    assert.equal(made.location.subscription?.market ?? row.market ?? "AE", row.market ?? "AE");
+  });
+}
+
+await test("a market we do not serve yet, or a made-up one, is refused before any write", async () => {
+  for (const market of ["GB", "XX"]) {
+    const before = counts();
+    const result = await signUp({ businessName: "Far Away", email: `far-${market}@example.test`, password: PASSWORD, market });
+    assert.equal(result.ok, false, `${market} was accepted`);
+    if (!result.ok) assert.equal(result.field, "market");
+    assert.deepEqual(counts(), before);
+  }
+});
+
+await test("the kind of business is optional, and ?trade= only prefills", async () => {
+  const made = await signUp({ businessName: "Any Business Co", email: "any@example.test", password: PASSWORD, vertical: "" });
+  assert.ok(made.ok, made.ok ? "" : made.error);
+  if (made.ok) assert.equal(getBusiness(made.user.tenantId, made.location.businessId)?.category, undefined);
+  assert.equal(tradeFromParam("restaurants"), "restaurant");
+  assert.equal(tradeFromParam("Salon"), "salon");
+  assert.equal(tradeFromParam("plumber"), "");
+  assert.equal(tradeFromParam(undefined), "");
+  const bogus = await signUp({ businessName: "Bogus", email: "bogus@example.test", password: PASSWORD, vertical: "garage" as never });
+  assert.equal(bogus.ok, false);
+});
+
+await test("a likely typo in the email is suggested, and can be kept on purpose", async () => {
+  const before = counts();
+  const typo = await signUp({ businessName: "Typo Two", email: "owner@gmial.com", password: PASSWORD });
+  assert.equal(typo.ok, false);
+  if (!typo.ok) {
+    assert.equal(typo.field, "email");
+    assert.equal(typo.didYouMean, "owner@gmail.com");
+  }
+  assert.deepEqual(counts(), before);
+  const kept = await signUp({ businessName: "Typo Two", email: "owner@gmial.com", password: PASSWORD, emailConfirmed: true });
+  assert.ok(kept.ok, kept.ok ? "" : kept.error);
+});
+
+await test("an address that already has an account gets a sign-in link", async () => {
+  const again = await signUp({ businessName: "Again", email: "Owner@MarinaHair.test", password: PASSWORD });
+  assert.equal(again.ok, false);
+  if (!again.ok) assert.equal(again.signIn, "/login?email=owner%40marinahair.test");
+});
+
+await test("the terms versions and the time they were accepted are stored", async () => {
+  const t0 = Date.now();
+  const made = await signUp({ businessName: "Terms Salon", email: "terms@example.test", password: PASSWORD, acceptedTerms: true });
+  assert.ok(made.ok);
+  if (!made.ok) return;
+  const terms = getTenant(made.user.tenantId)?.onboarding?.terms;
+  assert.equal(terms?.tosVersion, TOS_VERSION);
+  assert.equal(terms?.dpaVersion, DPA_VERSION);
+  assert.equal(terms?.acceptedBy, "terms@example.test");
+  assert.ok(terms && Date.parse(terms.acceptedAt) >= t0 - 1000, "no acceptance time");
+});
+
+await test("five refused attempts do not block the sixth, valid one", () => {
+  const limiter = createSignupLimiter();
+  for (let i = 0; i < 5; i++) {
+    assert.equal(limiter.blocked("1.2.3.4"), false);
+    limiter.record("1.2.3.4", false);
+  }
+  assert.equal(limiter.blocked("1.2.3.4"), false, "a person fighting the password rule was locked out");
+});
+
+await test("accounts created are capped, and refused attempts have their own higher ceiling", () => {
+  const limiter = createSignupLimiter({ maxAccounts: 2, maxRefused: 10, windowMs: 1000 });
+  limiter.record("a", true, 0);
+  limiter.record("a", true, 1);
+  assert.equal(limiter.blocked("a", 2), true);
+  assert.equal(limiter.blocked("b", 2), false, "one address blocked another");
+  assert.equal(limiter.blocked("a", 1500), false, "the window never ends");
+  for (let i = 0; i < 10; i++) limiter.record("c", false, 0);
+  assert.equal(limiter.blocked("c", 1), true);
+});
+
+await test("the limit's key falls back to x-real-ip, then the socket, never one shared bucket", () => {
+  assert.equal(clientKey(new Headers({ "x-forwarded-for": "9.9.9.9, 10.0.0.1" })), "9.9.9.9");
+  assert.equal(clientKey(new Headers({ "x-real-ip": "8.8.8.8" })), "8.8.8.8");
+  assert.equal(clientKey(new Headers({ [PEER_HEADER]: "::1" })), "::1");
+  const server = fs.readFileSync(path.join(import.meta.dirname, "../server.ts"), "utf8");
+  assert.ok(server.includes("req.headers[PEER_HEADER] = req.socket.remoteAddress"), "server.ts no longer stamps the socket");
+});
+
+await test("no signup in this run left an orphan, and the finder spots a planted one", () => {
+  const mine = new Set(listUsers().filter((u) => u.email.endsWith(".test") || u.email.endsWith(".com")).map((u) => u.tenantId));
+  const dir = process.env.DATA_DIR!;
+  const read = (k: string) => JSON.parse(fs.readFileSync(path.join(dir, `${k}.json`), "utf8"));
+  const db = { tenants: read("tenants"), businesses: read("businesses"), locations: read("locations"), users: read("users") };
+  const report = findOrphans(db);
+  assert.equal(report.tenants.filter((t) => mine.has(t.id)).length, 0);
+  assert.equal(report.tenants.some((t) => t.name.includes("Orphan") || t.name.includes("Half Way") || t.name.includes("Race")), false);
+  const planted = findOrphans({
+    ...db,
+    tenants: [...db.tenants, { id: "tnt_planted", name: "Planted", status: "active", createdAt: "" }],
+    businesses: [...db.businesses, { id: "biz_planted", tenantId: "tnt_planted", name: "Planted", createdAt: "" }],
+  });
+  assert.ok(planted.tenants.some((t) => t.id === "tnt_planted"));
+  assert.ok(planted.businesses.some((b) => b.id === "biz_planted"));
+});
+
 console.log("\n\x1b[1mThe draft is a proposal, not a configuration\x1b[0m\n");
 
 await test("applying a confirmed draft fills the venue", () => {

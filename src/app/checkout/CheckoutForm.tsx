@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import type { ProductId } from "@/lib/billing/plans";
-import type { Market } from "@/lib/markets";
+import { MARKETS, type Market } from "@/lib/markets";
+import { PASSWORD_HINT, PASSWORD_MIN_LENGTH, TRADES, passwordProblem } from "@/lib/signup-rules";
+import type { Vertical } from "@/lib/types";
 
 /**
- * Four fields, on the same page as the price.
+ * A few fields, on the same page as the price.
  *
  * Everything else a signup form might ask for is something the next screen
  * reads off the business's own website, so asking here would be asking
@@ -15,39 +17,63 @@ import type { Market } from "@/lib/markets";
  * before Stripe goes live): the card is asked for when somebody chooses a
  * plan from their dashboard, never here. What they picked on this page is
  * remembered on the trial, so the end of it can offer the same thing back.
+ *
+ * The country decides the currency and the clock, not the browser. The kind
+ * of business is optional: a landing page's `?trade=` prefills it, and empty
+ * is a fine answer.
  */
 
-const TRADES = [
-  { value: "salon", label: "Salon or spa" },
-  { value: "clinic", label: "Clinic or dental practice" },
-  { value: "restaurant", label: "Restaurant" },
-] as const;
+interface Failure {
+  field?: string;
+  message: string;
+  didYouMean?: string;
+  signIn?: string;
+}
 
-export default function CheckoutForm({ products, market }: { products: ProductId[]; market: Market }) {
+export default function CheckoutForm({
+  products,
+  market,
+  markets,
+  trade,
+}: {
+  products: ProductId[];
+  market: Market;
+  /** The countries a business can sign up in today. */
+  markets: Market[];
+  trade: Vertical | "";
+}) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<{ field?: string; message: string } | null>(null);
+  const [error, setError] = useState<Failure | null>(null);
+  const [email, setEmail] = useState("");
+  const [emailConfirmed, setEmailConfirmed] = useState(false);
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submit(element: HTMLFormElement, confirmed = emailConfirmed) {
     if (busy) return;
+    const form = new FormData(element);
+
+    // The same rule the server holds, checked here so a short password costs
+    // a round trip to nobody.
+    const problem = passwordProblem(String(form.get("password") ?? ""));
+    if (problem) {
+      setError({ field: "password", message: problem });
+      return;
+    }
+
     setBusy(true);
     setError(null);
-
-    const form = new FormData(event.currentTarget);
     try {
       const signup = await fetch("/api/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           businessName: form.get("businessName"),
-          vertical: form.get("vertical"),
-          email: form.get("email"),
+          vertical: form.get("vertical") ?? "",
+          email,
+          emailConfirmed: confirmed,
           password: form.get("password"),
-          // Their clock, not the server's. "Tomorrow at four" has to mean
-          // their four, and this is the only moment we can ask for free.
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          market: form.get("market") ?? market,
+          acceptTerms: form.get("acceptTerms") === "on",
           products,
-          market,
         }),
       });
 
@@ -56,10 +82,17 @@ export default function CheckoutForm({ products, market }: { products: ProductId
         next?: string;
         field?: string;
         error?: string;
+        didYouMean?: string;
+        signIn?: string;
       };
 
       if (!signup.ok || !body.ok) {
-        setError({ field: body.field, message: body.error ?? "Something went wrong." });
+        setError({
+          field: body.field,
+          message: body.error ?? "Something went wrong.",
+          didYouMean: body.didYouMean,
+          signIn: body.signIn,
+        });
         setBusy(false);
         return;
       }
@@ -74,7 +107,13 @@ export default function CheckoutForm({ products, market }: { products: ProductId
   const bad = (name: string) => (error?.field === name ? { borderColor: "var(--bad)" } : {});
 
   return (
-    <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit(e.currentTarget);
+      }}
+      style={{ display: "grid", gap: 14 }}
+    >
       <div>
         <label htmlFor="businessName">Business name</label>
         <input
@@ -90,8 +129,20 @@ export default function CheckoutForm({ products, market }: { products: ProductId
       </div>
 
       <div>
-        <label htmlFor="vertical">What do you do?</label>
-        <select id="vertical" name="vertical" defaultValue="salon" style={bad("vertical")}>
+        <label htmlFor="market">Where is the business?</label>
+        <select id="market" name="market" defaultValue={market} style={bad("market")}>
+          {markets.map((m) => (
+            <option key={m} value={m}>
+              {MARKETS[m].name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label htmlFor="vertical">What kind of business? (optional)</label>
+        <select id="vertical" name="vertical" defaultValue={trade} style={bad("vertical")}>
+          <option value="">Something else, or skip</option>
           {TRADES.map((t) => (
             <option key={t.value} value={t.value}>
               {t.label}
@@ -111,6 +162,11 @@ export default function CheckoutForm({ products, market }: { products: ProductId
           autoComplete="email"
           inputMode="email"
           spellCheck={false}
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            setEmailConfirmed(false);
+          }}
           style={bad("email")}
         />
       </div>
@@ -123,16 +179,28 @@ export default function CheckoutForm({ products, market }: { products: ProductId
           type="password"
           required
           autoComplete="new-password"
-          minLength={12}
+          minLength={PASSWORD_MIN_LENGTH}
           style={bad("password")}
         />
         <p className="muted" style={{ fontSize: 10.5, margin: "6px 0 0" }}>
-          At least twelve characters. A short sentence works well.
+          {PASSWORD_HINT}
         </p>
       </div>
 
+      <label
+        htmlFor="acceptTerms"
+        style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 11.5, lineHeight: 1.5 }}
+      >
+        <input id="acceptTerms" name="acceptTerms" type="checkbox" required style={{ width: "auto", marginTop: 2 }} />
+        <span>
+          I agree to the{" "}
+          <a href="https://belline.ai/terms" target="_blank" rel="noopener">Terms</a> and{" "}
+          <a href="https://belline.ai/privacy" target="_blank" rel="noopener">Privacy policy</a>.
+        </span>
+      </label>
+
       {error && (
-        <p
+        <div
           role="alert"
           style={{
             margin: 0,
@@ -145,7 +213,43 @@ export default function CheckoutForm({ products, market }: { products: ProductId
           }}
         >
           {error.message}
-        </p>
+          {error.signIn && (
+            <>
+              {" "}
+              <a href={error.signIn} style={{ color: "inherit", textDecoration: "underline" }}>
+                Sign in
+              </a>
+            </>
+          )}
+          {error.didYouMean && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setEmail(error.didYouMean!);
+                  setEmailConfirmed(false);
+                  setError(null);
+                }}
+              >
+                Use {error.didYouMean}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={(e) => {
+                  setEmailConfirmed(true);
+                  // Resubmit as typed, with the address confirmed. Passed
+                  // directly because the state above lands after this call.
+                  const form = e.currentTarget.form;
+                  if (form) void submit(form, true);
+                }}
+              >
+                Keep what I typed
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       <button
@@ -159,10 +263,6 @@ export default function CheckoutForm({ products, market }: { products: ProductId
 
       <p className="muted" style={{ fontSize: 10.5, margin: 0, textAlign: "center", lineHeight: 1.6 }}>
         No card. Next: paste your website and Belline reads your business off it.
-        <br />
-        By continuing you agree to the{" "}
-        <a href="https://belline.ai/terms" target="_blank" rel="noopener">Terms</a> and{" "}
-        <a href="https://belline.ai/privacy" target="_blank" rel="noopener">Privacy policy</a>.
       </p>
     </form>
   );

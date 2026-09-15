@@ -223,6 +223,23 @@ export function saveTenant(tenant: Tenant): Tenant {
 }
 
 /**
+ * Remove a tenant row outright. Only for undoing a signup that failed half
+ * way (onboarding/index.ts), before anybody could have used the account.
+ */
+export function removeTenant(tenantId: string): void {
+  const db = load();
+  db.tenants = db.tenants.filter((t) => t.id !== tenantId);
+  persist("tenants");
+}
+
+/** As `removeTenant`: only for rolling back a failed signup. */
+export function removeBusiness(businessId: string): void {
+  const db = load();
+  db.businesses = db.businesses.filter((b) => b.id !== businessId);
+  persist("businesses");
+}
+
+/**
  * The businesses in one tenant.
  *
  * The tenant id is the first argument and there is no overload without it.

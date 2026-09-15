@@ -75,6 +75,7 @@
     "check:whatsapp": "node --import tsx scripts/check-whatsapp.ts",
     "whatsapp": "node --import tsx --env-file-if-exists=.env scripts/whatsapp-connect.ts",
     "check:signup": "node --import tsx scripts/check-signup.ts",
+    "orphans": "node --import tsx scripts/orphans.ts --dry-run",
     "check:checkout": "node --import tsx scripts/check-checkout.ts",
     "check:embed": "node --import tsx scripts/check-embed.ts",
     "check:webchat": "node --import tsx scripts/check-webchat.ts",

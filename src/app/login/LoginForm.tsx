@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 
-export default function LoginForm({ firstRun }: { firstRun: boolean }) {
-  const [email, setEmail] = useState("");
+export default function LoginForm({ firstRun, initialEmail = "" }: { firstRun: boolean; initialEmail?: string }) {
+  const [email, setEmail] = useState(initialEmail);
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);

@@ -25,6 +25,7 @@ import { ensureOwnWhatsAppAccount, ensureTwilioSandboxAccount } from "./src/lib/
 import { BrowserTransport, TwilioTransport, publicEvent } from "./src/lib/voice/transports";
 import { sendDueReminders } from "./src/lib/reminders";
 import { stubsRequested } from "./src/lib/flags";
+import { PEER_HEADER } from "./src/lib/onboarding/limit";
 
 /**
  * Custom server.
@@ -94,6 +95,9 @@ setTimeout(sweepReminders, 30_000).unref?.();
 setInterval(sweepReminders, REMINDER_SWEEP_MS).unref?.();
 
 const server = createServer((req, res) => {
+  // The socket address, for the signup rate limit when no proxy header is
+  // present. Always overwritten, so a client cannot choose its own bucket.
+  req.headers[PEER_HEADER] = req.socket.remoteAddress ?? "";
   // The website and the product share this process, chosen by hostname. See
   // marketing.ts — anything that is not `app.` is the website, and a request
   // it does not recognise falls through to Next rather than 404ing.

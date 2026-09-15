@@ -28,6 +28,13 @@ export interface MarketInfo {
   status: "live" | "not-yet";
   gap?: string;
   /**
+   * The timezone a new account in this market starts in. Signup takes it from
+   * here, never from the browser: a UAE business whose owner happens to be
+   * in Zurich still opens at nine in Dubai. Owners in a second zone of a large
+   * country (Perth, Vancouver) change it in their settings.
+   */
+  timezone: string;
+  /**
    * US dollars per one unit of the currency, for internal arithmetic only:
    * margins, and the client book's totals. Never used to price anything a
    * customer sees — prices are set per market, not converted.
@@ -47,6 +54,7 @@ export const MARKETS: Record<Market, MarketInfo> = {
     code: "AE",
     name: "United Arab Emirates",
     currency: "AED",
+    timezone: "Asia/Dubai",
     prefix: "AED ",
     spoken: { one: "dirham", many: "dirhams" },
     status: "live",
@@ -57,6 +65,7 @@ export const MARKETS: Record<Market, MarketInfo> = {
     code: "GB",
     name: "United Kingdom",
     currency: "GBP",
+    timezone: "Europe/London",
     prefix: "£",
     spoken: { one: "pound", many: "pounds" },
     status: "not-yet",
@@ -67,6 +76,7 @@ export const MARKETS: Record<Market, MarketInfo> = {
     code: "AU",
     name: "Australia",
     currency: "AUD",
+    timezone: "Australia/Sydney",
     prefix: "A$",
     spoken: { one: "Australian dollar", many: "Australian dollars" },
     status: "not-yet",
@@ -77,6 +87,7 @@ export const MARKETS: Record<Market, MarketInfo> = {
     code: "CA",
     name: "Canada",
     currency: "CAD",
+    timezone: "America/Toronto",
     prefix: "C$",
     spoken: { one: "Canadian dollar", many: "Canadian dollars" },
     status: "not-yet",
@@ -87,6 +98,7 @@ export const MARKETS: Record<Market, MarketInfo> = {
     code: "US",
     name: "United States",
     currency: "USD",
+    timezone: "America/New_York",
     prefix: "$",
     spoken: { one: "dollar", many: "dollars" },
     status: "not-yet",
@@ -97,6 +109,7 @@ export const MARKETS: Record<Market, MarketInfo> = {
     code: "SG",
     name: "Singapore",
     currency: "SGD",
+    timezone: "Asia/Singapore",
     prefix: "S$",
     spoken: { one: "Singapore dollar", many: "Singapore dollars" },
     status: "not-yet",
@@ -107,6 +120,7 @@ export const MARKETS: Record<Market, MarketInfo> = {
     code: "IE",
     name: "Ireland",
     currency: "EUR",
+    timezone: "Europe/Dublin",
     prefix: "€",
     spoken: { one: "euro", many: "euros" },
     status: "not-yet",
@@ -117,6 +131,7 @@ export const MARKETS: Record<Market, MarketInfo> = {
     code: "NZ",
     name: "New Zealand",
     currency: "NZD",
+    timezone: "Pacific/Auckland",
     prefix: "NZ$",
     spoken: { one: "New Zealand dollar", many: "New Zealand dollars" },
     status: "not-yet",
@@ -127,6 +142,7 @@ export const MARKETS: Record<Market, MarketInfo> = {
     code: "CH",
     name: "Switzerland",
     currency: "CHF",
+    timezone: "Europe/Zurich",
     prefix: "CHF ",
     spoken: { one: "franc", many: "francs" },
     status: "not-yet",
@@ -146,6 +162,16 @@ export function isMarket(value: unknown): value is Market {
 /** The market a subscription or a query string names, or the UAE. */
 export function marketOf(value: unknown): Market {
   return isMarket(value) ? value : "AE";
+}
+
+/**
+ * What a new account in a market starts with: its currency and its clock.
+ * The one place signup reads them from, so a country site added later changes
+ * this table and nothing else.
+ */
+export function marketDefaults(market: unknown): { market: Market; currency: MarketInfo["currency"]; timezone: string } {
+  const code = marketOf(market);
+  return { market: code, currency: MARKETS[code].currency, timezone: MARKETS[code].timezone };
 }
 
 export function liveMarkets(): Market[] {

@@ -14,6 +14,7 @@ import {
   saveUser,
 } from "./store";
 import { BELLINE_TENANT_ID, DEFAULT_TENANT_ID, userCanSeeLocation } from "./tenancy";
+import { passwordProblem } from "./signup-rules";
 
 /**
  * Authentication.
@@ -71,16 +72,9 @@ export function verifyPassword(password: string, stored: string): boolean {
   }
 }
 
-/** Rejects the passwords that make a breach inevitable, and nothing more. */
-export function passwordProblem(password: string): string | null {
-  if (password.length < 10) return "Use at least 10 characters.";
-  if (/^\d+$/.test(password)) return "Digits alone are too easy to guess.";
-  const common = ["password", "12345678", "qwerty", "belline", "letmein"];
-  if (common.some((c) => password.toLowerCase().includes(c))) {
-    return "That contains a very common word. Pick something else.";
-  }
-  return null;
-}
+// The rule lives in signup-rules.ts so the signup form's hint reads the same
+// constant the server checks. Re-exported here, where callers expect it.
+export { passwordProblem };
 
 // --- login throttling ------------------------------------------------------
 

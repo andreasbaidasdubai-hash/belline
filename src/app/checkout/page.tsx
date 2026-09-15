@@ -4,7 +4,8 @@ import { listLocationsFor } from "@/lib/store";
 import { seedIfEmpty } from "@/lib/seed";
 import { LEGACY_TO_BUNDLE, checkSelection, recommendedPlan, type BillingCycle } from "@/lib/billing/plans";
 import { productsOf, subscriptionMarket } from "@/lib/billing/usage";
-import { MARKETS, marketOf } from "@/lib/markets";
+import { MARKETS, liveMarkets, marketOf } from "@/lib/markets";
+import { tradeFromParam } from "@/lib/signup-rules";
 import { stripeEnabled } from "@/lib/billing/stripe";
 import Order from "./Order";
 
@@ -42,6 +43,7 @@ export default async function CheckoutPage({
     cycle?: string;
     market?: string;
     cancelled?: string;
+    trade?: string;
   }>;
 }) {
   seedIfEmpty();
@@ -84,6 +86,8 @@ export default async function CheckoutPage({
           venueName={venue?.name ?? "your venue"}
           stripe={stripeEnabled()}
           cancelled={Boolean(params.cancelled)}
+          markets={liveMarkets()}
+          trade={tradeFromParam(params.trade)}
         />
       </main>
     </div>
