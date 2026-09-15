@@ -113,207 +113,181 @@
 <main>
 
   <!--
-    Der Hero.
-
-    Links die Behauptung, rechts der Beleg. Der Beleg ist ein gesetztes
-    Gespräch, kein Screenshot einer dunklen Box: dieselbe Sache, die das
-    Produkt tut, in derselben Sprache wie der Rest der Seite. Ein Interview in
-    einer Zeitschrift, nicht ein Chatfenster.
+    The hero. Claim on the left; on the right, the two conversations Belline
+    actually has, drawn in HTML and clearly labelled as examples. Neither ends
+    in a booked time: the chat hands the request to the team, the call arrives
+    as a summary. That is what the product does today.
   -->
   <section class="hero">
-    <div class="wrap hero-in">
+    <div class="wrap hero-in hero-demo">
       <div class="hero-copy">
-        <p class="eyebrow rise">AI reception for businesses across the UAE</p>
+        <p class="eyebrow rise">AI voice and chat reception</p>
         <h1 class="display rise rise-1">Someone always answers.</h1>
-        <!--
-          Der Satz des Käufers, nicht der des Produkts. Vorher stand hier eine
-          Funktionsliste, die in "you never miss another customer" endete —
-          ein Absolutum, das niemand belegen kann. Was der Inhaber tatsächlich
-          verliert, ist der Anruf, den er gerade nicht annehmen konnte.
-        -->
         <p class="lead rise rise-2">
-          The calls your team can’t reach — mid-treatment, mid-service, nine at
-          night — Belline picks up. It answers from your own hours, prices and
-          rules, books straight into your diary, and takes a message on
-          anything it shouldn’t decide.
+          Belline answers the calls and website chats your team can’t get to.
+          It answers from your own information, and passes everything else to
+          your team with a summary.
         </p>
 
         <div class="cta-row rise rise-3">
-          <a class="btn" href="https://app.belline.ai/checkout">Get Belline</a>
+          <a class="btn" href="https://app.belline.ai/checkout" data-cta="hero">Connect your business</a>
+          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Speak to Belline</a>
         </div>
 
         <p class="hero-note rise rise-4">
-          Fourteen days free, no card. Keep your number — nothing changes for
-          your callers. Answers in English.
+          Keep your number. Answers in English.
+          <span class="gen" data-gen="trial-short">14 days free, no card.</span>
         </p>
       </div>
 
-      <!--
-        Rechts vom Anspruch: kein abgetipptes Gespräch mehr. Ein Transkript,
-        das sich Zeile für Zeile aufbaut, sah nach Software aus, die sich
-        selbst vorführt — und ein Empfang wird nicht an seinem Protokoll
-        gemessen, sondern daran, ob jemand da ist. Also das Bild der Sache
-        selbst: eine Messingglocke auf einem leeren Tresen, das Licht dahinter.
-        Niemand steht da. Genau das ist der Satz links.
+      <div class="demo" aria-label="Two example conversations" role="group">
+        <!-- Website chat -->
+        <figure class="demo-card demo-chat">
+          <figcaption class="demo-head">
+            <span class="demo-badge" aria-hidden="true">
+              <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" fill="#AD8639"/><g fill="#111111" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>
+            </span>
+            <span class="demo-title">Website chat</span>
+            <span class="demo-example">Example conversation</span>
+          </figcaption>
+          <ol class="chat-thread">
+            <li class="msg msg-visitor"><span class="vh">Visitor: </span>Do you do Invisalign consultations?</li>
+            <li class="msg msg-belline">
+              <span class="vh">Belline: </span>Yes. A first Invisalign consultation takes 45 minutes and costs AED 250, with a scan included.
+              <span class="msg-source">From your price list</span>
+            </li>
+            <li class="msg msg-visitor"><span class="vh">Visitor: </span>Could I come on Thursday after 6?</li>
+            <li class="msg msg-belline">
+              <span class="vh">Belline: </span>I’ll pass that to the team with your details, and they’ll confirm a time with you. What name should they use?
+            </li>
+          </ol>
+          <div class="chat-compose" aria-hidden="true">
+            <span>Write a message</span>
+            <i></i>
+          </div>
+        </figure>
 
-        Der Beleg ist nicht das Bild, sondern die Zeile darunter: sie ist
-        live. Wer sie antippt, spricht mit demselben Empfang, den seine Anrufer
-        erreichen würden. Die Gespräche selbst — "Books it", "Hands it over" —
-        stehen weiter auf den Gewerbeseiten, wo sie gelesen werden, weil man
-        sie dort sucht.
-      -->
-      <figure class="hero-plate rise rise-2">
-        <img src="/img/bell.jpg" width="1200" height="1800" fetchpriority="high"
-             alt="A brass bell on an empty reception counter, the lobby lights soft behind it.">
-        <figcaption>
-          <span class="hero-plate-k">Nobody at the desk. Someone on the line.</span>
-          <a class="hero-plate-try" href="https://app.belline.ai/call?start=1" data-call>
-            Speak to Belle — the receptionist your callers reach
-          </a>
-        </figcaption>
-      </figure>
+        <!-- Phone call -->
+        <figure class="demo-card demo-call">
+          <figcaption class="demo-head demo-head-ink">
+            <span class="demo-title">Phone call</span>
+            <span class="demo-example">Example conversation</span>
+          </figcaption>
+          <div class="call-bar">
+            <span class="call-who">
+              <span class="call-k">Caller</span>
+              <span class="call-num">+971 50 ••• 4417</span>
+            </span>
+            <span class="call-level" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="call-time"><span class="vh">Call length </span>01:12</span>
+          </div>
+          <ol class="call-lines">
+            <li><span class="call-said-k">Caller</span> Hi, I’d like a whitening appointment next week.</li>
+            <li><span class="call-said-k">Belline</span> I can take that for the team. Can I have your name?</li>
+            <li><span class="call-said-k">Caller</span> Maryam Haddad.</li>
+            <li><span class="call-said-k">Belline</span> Thank you, Maryam. The team will call you back to confirm a time.</li>
+          </ol>
+          <div class="call-sent">
+            <p class="call-sent-head">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Sent to your team
+            </p>
+            <dl>
+              <div><dt>Name</dt><dd>Maryam Haddad</dd></div>
+              <div><dt>Request</dt><dd>Whitening appointment, next week</dd></div>
+              <div><dt>Call back</dt><dd>+971 50 ••• 4417</dd></div>
+            </dl>
+          </div>
+        </figure>
+      </div>
     </div>
 
     <div class="wrap">
-      <div class="facts facts-3">
-        <!--
-          "Never a caller sent to voicemail" war ein Zuverlässigkeitsversprechen
-          ohne Ausfallsicherung dahinter, und "it books into the real one" ließ
-          jeden Fresha-Kunden sein eigenes System vermuten. Beides ersetzt durch
-          das, was tatsächlich stimmt — und durch die eine Zeile, die Retell
-          und Vapi nicht sagen können.
-        -->
-        <div class="fact"><div class="n">24/7</div><div class="k">including after you close</div></div>
-        <div class="fact"><div class="n">No voicemail</div><div class="k">every call is answered, or a message taken with a number to ring back</div></div>
-        <div class="fact"><div class="n">Your rules</div><div class="k">it knows a colour needs a patch test and a six-top needs two hours</div></div>
-      </div>
+      <ul class="plain-facts">
+        <li><strong>Keep your number</strong> Forward calls to Belline from the line you already have.</li>
+        <li><strong>Your own information</strong> It answers from your services, prices, hours and rules.</li>
+        <li><strong>Your team gets the hard ones</strong> Anything it shouldn’t answer goes to a person, with a summary.</li>
+      </ul>
     </div>
   </section>
 
-  <section class="rule">
+  <section class="rule problem">
     <div class="wrap">
-      <div class="sec-head">
+      <h2 class="display problem-h">The customer who can’t get through goes to the next place.</h2>
+      <div class="problem-grid">
         <div>
-          <p class="eyebrow">The problem</p>
-          <h2 class="display">Your customers don't stop<br>when you're busy.</h2>
-        </div>
-        <p class="sec-lead lead">
-          You're with a client. Your team is on the floor. It's nine at night.
-          The phone rings anyway — and a caller who reaches voicemail rings the
-          next place on the list.
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <section id="what" class="rule">
-    <div class="wrap">
-      <p class="eyebrow">What it does</p>
-      <h2 class="display">One receptionist. Every conversation.</h2>
-
-      <div class="does">
-        <div>
-          <h3>Answers 24/7</h3>
-          <p>Even when you're closed, or already on the line with somebody else.</p>
+          <h3>On the phone</h3>
+          <p>
+            The phone rings while you’re with a client, in the middle of a busy
+            service, or after you’ve closed. A caller who gets no answer can ring
+            the next place on the list just as easily.
+          </p>
         </div>
         <div>
-          <h3>Books customers</h3>
-          <p>Checks what is genuinely free, then takes the appointment. Belline keeps the diary — you and your team work in it, and it never offers a time that isn’t there.</p>
-        </div>
-        <div>
-          <h3>Knows your business</h3>
-          <p>Your hours, services, prices and policies — answered in your own words.</p>
-        </div>
-        <!--
-          Kein "hands over": es gibt keine Live-Weiterleitung. Was es gibt —
-          Nummer, Wortlaut, markiert, Rückruf — ist stark genug, um es genau so
-          zu sagen.
-        -->
-        <div>
-          <h3>Puts people through, or takes a message</h3>
-          <p>An urgent call goes straight to your team, live. A complaint, anything clinical, anything it shouldn’t decide: it takes the number and what was said, flags it, and you ring back. It does not guess.</p>
+          <h3>On your website</h3>
+          <p>
+            Someone reads your services late at night and has one question
+            before they book. They type it into your chat, nobody replies, and
+            the next website is one tap away.
+          </p>
         </div>
       </div>
+      <p class="problem-coda">You don’t see the enquiries you missed. You only see the ones that got through.</p>
     </div>
   </section>
 
   <section id="channels" class="rule">
     <div class="wrap">
       <div class="sec-head">
-        <div>
-          <p class="eyebrow">Where it answers</p>
-          <h2 class="display">Your phone, your website<br>and WhatsApp.</h2>
-        </div>
+        <h2 class="display">Where Belline answers.</h2>
         <p class="sec-lead lead">
-          The same receptionist in every one — the same diary, the same prices,
-          the same things it will not decide on its own.
-          WhatsApp is not connected yet: it switches on the day Meta’s verification clears.
+          Your phone and your website, with the same information and the same
+          rules in each. WhatsApp for your business is coming soon.
         </p>
       </div>
 
-      <div class="channels">
-        <div>
+      <ul class="channels channels-4">
+        <li>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16.4v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 1.1 3.7 2 2 0 0 1 3.1 1.5h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L7.1 9.3a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.8 2Z" transform="translate(1 1) scale(.92)"/></svg>
           <div class="channel-head">
-            <h3>Your telephone</h3>
+            <h3>Your phone</h3>
             <span class="state state-available">Available</span>
           </div>
-          <p>
-            Keep the number on your signage. Set call forwarding so that when
-            nobody picks up, or the line is engaged, it rolls to Belline. Your
-            team always gets first refusal; it takes the ones that would have
-            gone to voicemail.
-          </p>
+          <p>Keep your number. Forward calls to Belline when nobody answers or the line is busy. Your phone provider may charge for forwarded calls.</p>
           <p class="channel-how">One setting on the line you already have.</p>
-        </div>
-        <div>
+        </li>
+        <li>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="M2.5 8.5h19"/><rect x="10" y="11" width="4" height="6" rx="2"/></svg>
           <div class="channel-head">
-            <h3>A bell on your website</h3>
+            <h3>A voice button on your website</h3>
             <span class="state state-available">Available</span>
           </div>
-          <p>
-            A visitor taps it and is talking — out loud, straight away — to the
-            same receptionist. No form, no ticket, nobody waiting on an email.
-          </p>
-          <p class="channel-how">One line of HTML, pasted once.</p>
-        </div>
-        <div>
+          <p>Visitors tap it and speak to Belline straight away, in their browser.</p>
+          <p class="channel-how">One line of HTML.</p>
+        </li>
+        <li>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1.5 1.5 0 0 1 1.5 1.5v10A1.5 1.5 0 0 1 20 17h-9l-5 4v-4H4a1.5 1.5 0 0 1-1.5-1.5v-10A1.5 1.5 0 0 1 4 4Z"/><path d="M7 9h10M7 12.5h6"/></svg>
           <div class="channel-head">
             <h3>Chat on your website</h3>
             <span class="state state-available">Available</span>
           </div>
-          <p>
-            Because half the people on your site are on a train, at a desk with
-            other people, or beside a sleeping child, and will not talk out
-            loud. They type instead, and the same receptionist books them.
-          </p>
-          <p class="channel-how">Same line of HTML. Your choice which appears.</p>
-        </div>
-        <div>
+          <p>For visitors who would rather type. Your team can take over any conversation from the inbox.</p>
+          <p class="channel-how">The same line of HTML.</p>
+        </li>
+        <li>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.2A8.5 8.5 0 1 1 21 11.5Z"/><path d="M12 7.5v4l2.5 1.5"/></svg>
           <div class="channel-head">
-            <h3>WhatsApp</h3>
+            <h3>WhatsApp for your business</h3>
             <span class="state state-soon">Coming soon</span>
           </div>
-          <p>
-            Most of your customers would rather send a message than ring. Belline
-            answers a WhatsApp number for your business — questions, bookings,
-            changes, voice notes — and your own WhatsApp stays exactly as it is.
-          </p>
-          <p class="channel-how">Switching on as soon as Meta’s business verification clears.</p>
-        </div>
-      </div>
+          <p>Belline will answer WhatsApp for your business once Meta approves our business account. It isn’t available yet.</p>
+          <p class="channel-how">You can <a href="https://app.belline.ai/whatsapp">message Belle</a>, Belline’s own receptionist, on WhatsApp today.</p>
+        </li>
+      </ul>
 
-      <!--
-        Die ehrliche Zeile. WhatsApp ist gebaut und getestet, aber ohne
-        verbundene Nummer ist es nicht live — und etwas zu verkaufen, das ein
-        Kunde am ersten Tag nicht einschalten kann, ist genau der Vertrauens-
-        bruch, den dieses Produkt sich nicht leisten kann.
-      -->
-      <p class="channel-note">
-        WhatsApp is built on the same receptionist and waits only on Meta’s
-        business verification. The <em>WhatsApp Belle</em> button on this page
-        takes you straight to her the day it clears, and says so plainly until
-        then.
-      </p>
+      <div class="cta-row">
+        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Speak to Belline</a>
+      </div>
     </div>
   </section>
 

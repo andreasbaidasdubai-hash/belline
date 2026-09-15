@@ -168,9 +168,32 @@ function renderOffers(market: Market): string {
     .join(",\n");
 }
 
+/**
+ * Short generated phrases that sit outside the pricing block: the trial line
+ * under the hero and in the closer, for example. Each appears in the page as
+ * `<span class="gen" data-gen="KEY">…</span>` (or a `<p>`), and its text is
+ * rewritten from the catalogue on every build, so nobody types it.
+ */
+export function generatedPhrases(): Record<string, string> {
+  return {
+    "trial-short": `${TRIAL.days} days free, no card.`,
+  };
+}
+
+function applyGenerated(html: string): string {
+  for (const [key, text] of Object.entries(generatedPhrases())) {
+    const slot = new RegExp(`(<(span|p) class="gen" data-gen="${key}">)[^<]*(</\\2>)`, "g");
+    if (!slot.test(html)) throw new Error(`landing.html has lost its generated "${key}" text.`);
+    html = html.replace(slot, (_m, open: string, _tag: string, close: string) => `${open}${esc(text)}${close}`);
+  }
+  return html;
+}
+
 /** Put the generated pricing into a copy of landing.html. Throws if a marker has gone missing. */
 export function applyPricing(html: string): string {
   const home = liveMarkets()[0] ?? "AE";
+
+  html = applyGenerated(html);
 
   const block = /<!-- pricing:start[\s\S]*?<!-- pricing:end -->/;
   if (!block.test(html)) throw new Error("landing.html has lost its <!-- pricing:start --> / <!-- pricing:end --> markers.");
