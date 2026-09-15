@@ -29,7 +29,7 @@ export const EMBED_PALETTE: Record<string, string> = {
 };
 
 const PAPER = "#FFFFFF";
-const INK = "#111827";
+const INK = "#1B2735";
 
 /** Guidelines, in numbers. */
 export const APPEARANCE_RULES = {
