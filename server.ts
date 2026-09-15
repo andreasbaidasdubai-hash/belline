@@ -28,6 +28,8 @@ import { flag, stubsRequested } from "./src/lib/flags";
 import { graphClient } from "./src/lib/whatsapp-provision";
 import { runWhatsAppChecks } from "./src/lib/whatsapp-selfserve";
 import { PEER_HEADER } from "./src/lib/onboarding/limit";
+import { sweepTrialEnds } from "./src/lib/billing/trial-end";
+import { retryPendingAlerts } from "./src/lib/billing/usage-policy";
 
 /**
  * Custom server.
@@ -111,6 +113,20 @@ async function checkWhatsAppNames(): Promise<void> {
   if (r.moved) console.log(`[whatsapp] name reviews: ${r.checked} checked, ${r.moved} moved on`);
 }
 setInterval(() => void checkWhatsAppNames().catch((err) => console.error("[whatsapp] name check failed:", err)), WHATSAPP_CHECK_MS).unref?.();
+
+// Billing, once a day and shortly after boot: trials that reach their end while
+// card payments are closed are extended once (billing/trial-end.ts), and usage
+// alerts whose email did not go are tried again (billing/usage-policy.ts).
+const BILLING_SWEEP_MS = 24 * 60 * 60 * 1000;
+async function sweepBilling(): Promise<void> {
+  const trials = sweepTrialEnds();
+  const alerts = await retryPendingAlerts();
+  if (trials.extended || trials.raised || alerts.sent || alerts.pending) {
+    console.log(`[billing] trials ${trials.extended} extended, ${trials.raised} raised; alerts ${alerts.sent} sent, ${alerts.pending} still pending`);
+  }
+}
+setTimeout(() => void sweepBilling().catch((err) => console.error("[billing] sweep failed:", err)), 60_000).unref?.();
+setInterval(() => void sweepBilling().catch((err) => console.error("[billing] sweep failed:", err)), BILLING_SWEEP_MS).unref?.();
 
 const server = createServer((req, res) => {
   // The socket address, for the signup rate limit when no proxy header is

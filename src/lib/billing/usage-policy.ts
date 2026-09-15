@@ -1,8 +1,9 @@
 import type { Location, Subscription, UsageAlertThreshold, UsagePack, UsagePolicy, User } from "../types";
-import { getLocation, getTenant, listLocationsFor, listUsersFor, upsertLocation } from "../store";
+import { getLocation, getTenant, listLocations as listAllLocations, listLocationsFor, listUsersFor, upsertLocation } from "../store";
 import { canManageUsers } from "../auth";
 import { MARKETS } from "../markets";
-import { sendEmail } from "../providers/email";
+import { deliverEmail } from "../mailer";
+import { todayIn } from "../time";
 import {
   ALERT_THRESHOLDS,
   POOL_ORDER,
@@ -109,7 +110,12 @@ export function decide(location: Location, today: string, opts: { stripe?: boole
   const periodStart = account.usage.period.start;
   const thisPeriod = packsIn(sub, periodStart);
   const policy = sub.usagePolicy;
-  const sent = sub.alerts?.periodStart === periodStart ? sub.alerts.sent : {};
+  // Already sent, or raised and waiting to be sent: neither is raised again.
+  const record = sub.alerts?.periodStart === periodStart ? sub.alerts : undefined;
+  const sent: Partial<Record<Pool, UsageAlertThreshold[]>> = {};
+  for (const pool of POOL_ORDER) {
+    sent[pool] = [...(record?.sent[pool] ?? []), ...(record?.pending?.[pool] ?? [])];
+  }
   const chargeable = opts.stripe ?? stripeEnabled();
 
   let spent = thisPeriod.reduce((sum, p) => sum + p.priceMinor, 0);
@@ -193,14 +199,39 @@ export function poolExhausted(location: Location, today: string, pool: Pool): bo
 export interface Applied {
   location: Location;
   decision: Decision;
-  /** Alerts raised by this call (already recorded as sent). */
+  /** Alerts raised by this call, recorded as pending until `markAlertsSent`. */
   alerts: Alert[];
   /** Packs added by this call. */
   added: UsagePack[];
 }
 
-/** Record what `decide` decided: alerts as sent, packs as added. Idempotent. */
-export function applyUsagePolicy(location: Location, today: string, opts: { stripe?: boolean } = {}): Applied {
+type Thresholds = Partial<Record<Pool, UsageAlertThreshold[]>>;
+
+function withAlerts(into: Thresholds, alerts: Alert[]): Thresholds {
+  const out: Thresholds = { ...into };
+  for (const { pool, threshold } of alerts) {
+    out[pool] = [...new Set([...(out[pool] ?? []), threshold])].sort((a, b) => a - b) as UsageAlertThreshold[];
+  }
+  return out;
+}
+
+function withoutAlerts(from: Thresholds, alerts: Alert[]): Thresholds {
+  const out: Thresholds = {};
+  for (const pool of POOL_ORDER) {
+    const left = (from[pool] ?? []).filter((t) => !alerts.some((a) => a.pool === pool && a.threshold === t));
+    if (left.length) out[pool] = left;
+  }
+  return out;
+}
+
+/**
+ * Record what `decide` decided: alerts as pending, packs as added. Idempotent.
+ *
+ * An alert is not "sent" until the email went. It used to be recorded as sent
+ * before anything was tried, so with email off or failing the owner was never
+ * told and never would be.
+ */
+export function applyUsagePolicy(location: Location, today: string, opts: { stripe?: boolean; now?: Date } = {}): Applied {
   const decision = decide(location, today, opts);
   if (!decision.applies || (decision.alerts.length === 0 && decision.packs.length === 0)) {
     return { location, decision, alerts: [], added: [] };
@@ -209,11 +240,13 @@ export function applyUsagePolicy(location: Location, today: string, opts: { stri
   const next: Subscription = { ...sub };
 
   if (decision.alerts.length) {
-    const sent = sub.alerts?.periodStart === decision.periodStart ? { ...sub.alerts.sent } : {};
-    for (const { pool, threshold } of decision.alerts) {
-      sent[pool] = [...new Set([...(sent[pool] ?? []), threshold])].sort((a, b) => a - b) as UsageAlertThreshold[];
-    }
-    next.alerts = { periodStart: decision.periodStart, sent };
+    const same = sub.alerts?.periodStart === decision.periodStart ? sub.alerts : undefined;
+    next.alerts = {
+      periodStart: decision.periodStart,
+      sent: { ...(same?.sent ?? {}) },
+      pending: withAlerts(same?.pending ?? {}, decision.alerts),
+      pendingSince: same?.pendingSince ?? (opts.now ?? new Date()).toISOString(),
+    };
   }
 
   const keys = new Set((sub.packs ?? []).map((p) => p.key));
@@ -265,12 +298,74 @@ export async function settlePacks(locationId: string): Promise<number> {
   return settled;
 }
 
+/** The alerts waiting to be sent for this venue's current record. */
+export function pendingAlerts(location: Location): { periodStart: string; alerts: Alert[] } | null {
+  const record = location.subscription?.alerts;
+  if (!record?.pending) return null;
+  const alerts = POOL_ORDER.flatMap((pool) => (record.pending?.[pool] ?? []).map((threshold) => ({ pool, threshold })));
+  return alerts.length ? { periodStart: record.periodStart, alerts } : null;
+}
+
+/**
+ * Move alerts from pending to sent, once the email actually went. Re-reads the
+ * venue, so a call that raced it is not overwritten; does nothing if the
+ * period has moved on since.
+ */
+export function markAlertsSent(locationId: string, periodStart: string, alerts: Alert[]): Location | undefined {
+  const fresh = getLocation(locationId);
+  const record = fresh?.subscription?.alerts;
+  if (!fresh?.subscription || !record || record.periodStart !== periodStart || alerts.length === 0) return fresh;
+  const pending = withoutAlerts(record.pending ?? {}, alerts);
+  const still = Object.keys(pending).length > 0;
+  return upsertLocation({
+    ...fresh,
+    subscription: {
+      ...fresh.subscription,
+      alerts: {
+        periodStart,
+        sent: withAlerts(record.sent, alerts),
+        ...(still ? { pending, pendingSince: record.pendingSince } : {}),
+      },
+    },
+  });
+}
+
+/**
+ * Try every pending alert again. The billing sweep calls this; an alert whose
+ * period has ended is dropped with the period's record, not sent late.
+ */
+export async function retryPendingAlerts(
+  send: (location: Location, alerts: Alert[]) => Promise<boolean> = notifyAlerts,
+  opts: { today?: string } = {},
+): Promise<{ sent: number; pending: number }> {
+  let sent = 0;
+  let pending = 0;
+  for (const venue of listAllLocations()) {
+    const waiting = pendingAlerts(venue);
+    if (!waiting || !governs(venue)) continue;
+    const account = accountFor(venue, opts.today ?? todayIn(venue.timezone));
+    if (!account || account.usage.period.start !== waiting.periodStart) continue;
+    const ok = await send(venue, waiting.alerts).catch(() => false);
+    if (ok) {
+      markAlertsSent(venue.id, waiting.periodStart, waiting.alerts);
+      sent += waiting.alerts.length;
+    } else {
+      pending += waiting.alerts.length;
+    }
+  }
+  return { sent, pending };
+}
+
 const POOL_WORDS: Record<Pool, string> = { minutes: "voice minutes", conversations: "text conversations" };
 
-/** Tell the owner, by email where email is configured. The dashboard notes say the same thing regardless. */
-export async function notifyAlerts(location: Location, alerts: Alert[]): Promise<void> {
+/**
+ * Tell the owner by email. True only when the email went: the caller marks
+ * the alerts sent on true and leaves them pending otherwise. The dashboard
+ * notes say the same thing regardless.
+ */
+export async function notifyAlerts(location: Location, alerts: Alert[]): Promise<boolean> {
   const owner = listUsersFor(location.tenantId).find((u) => u.role === "owner");
-  if (!owner || alerts.length === 0) return;
+  if (!owner || alerts.length === 0) return false;
   const lines = alerts.map((a) => `${a.threshold}% of this period's ${POOL_WORDS[a.pool]} used at ${location.name}.`);
   const mode = location.subscription?.usagePolicy?.mode;
   const next =
@@ -281,12 +376,13 @@ export async function notifyAlerts(location: Location, alerts: Alert[]): Promise
         : mode === "cap"
           ? "At 100% Belline stops at the allowance, as you chose."
           : "You have not chosen what happens at 100% yet — until you do, Belline stops at the allowance.";
-  await sendEmail({
+  const delivery = await deliverEmail({
     to: owner.email,
     subject: `Belline usage at ${location.name}`,
     text: `${lines.join("\n")}\n\n${next}\n\nNothing is added to your bill unless you chose it.`,
     html: `<p>${lines.join("<br>")}</p><p>${next}</p><p>Nothing is added to your bill unless you chose it.</p>`,
   });
+  return delivery.delivered;
 }
 
 // ---------------------------------------------------------------------------

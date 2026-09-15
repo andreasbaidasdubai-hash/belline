@@ -412,6 +412,13 @@ export interface Subscription {
     minutes: number;
     /** Text conversations (catalogue 2026-10 onwards). */
     conversations?: number;
+    /**
+     * The original end date, when the trial reached it while card payments
+     * were closed and was extended once (billing/trial-end.ts). Present means
+     * the one extension has been used.
+     */
+    extendedFrom?: DateStr;
+    extendedAt?: string;
   };
   /**
    * What one billing period was sold at, in the market's minor unit — the
@@ -427,10 +434,17 @@ export interface Subscription {
    * Absent: nothing chosen yet, which behaves as `cap` and is never charged.
    */
   usagePolicy?: UsagePolicy;
-  /** Usage alerts already raised this period, per pool, so each goes once. */
+  /**
+   * Usage alerts this period, per pool, so each goes once. `sent` only once
+   * the email actually went; `pending` while it has not (email off, or it
+   * failed), retried by the billing sweep.
+   */
   alerts?: {
     periodStart: DateStr;
     sent: Partial<Record<"minutes" | "conversations", UsageAlertThreshold[]>>;
+    pending?: Partial<Record<"minutes" | "conversations", UsageAlertThreshold[]>>;
+    /** When the oldest pending alert was raised. Absent when nothing is pending. */
+    pendingSince?: string;
   };
   /** Packs added under a `packs` policy. Never written without one. */
   packs?: UsagePack[];

@@ -576,6 +576,235 @@ test("the gaps are written down rather than merely absent", () => {
   for (const gap of gaps) assert.ok(gap.gap.length > 40, `${gap.feature}: the reason is too thin to act on`);
 });
 
+console.log("\n[1mThe Stripe webhook: once, in order, and retried when it fails[0m\n");
+
+{
+  const { signUp } = await import("../src/lib/onboarding");
+  const { applyStripeEvent, createCheckout, stripeEnabled } = await import("../src/lib/billing/stripe");
+  const { handleStripeWebhook } = await import("../src/lib/billing/webhook");
+  const { readStubCheckoutSession, signWebhook, stubCheckoutSession, stubCompletedEvent } = await import("../src/lib/testing/stubs");
+  const { setUsagePolicyRequest } = await import("../src/lib/billing/usage-policy");
+
+  const SECRET = "whsec_check_billing";
+  delete process.env.STRIPE_SECRET_KEY;
+  process.env.STRIPE_WEBHOOK_SECRET = SECRET;
+
+  let n = 0;
+  async function payer() {
+    n++;
+    const out = await signUp({ businessName: `Webhook Venue ${n}`, email: `owner${n}@webhook.test`, password: "Correct-Horse-Battery-9", vertical: "salon", timezone: "Asia/Dubai" });
+    assert.ok(out.ok, "signup failed");
+    return out as Extract<typeof out, { ok: true }>;
+  }
+
+  const T = (minutes: number) => Math.floor(Date.parse("2026-09-15T08:00:00Z") / 1000) + minutes * 60;
+  const completed = (locationId: string, eventId: string, sub: string, created: number) => ({
+    id: eventId,
+    object: "event",
+    type: "checkout.session.completed",
+    created,
+    data: {
+      object: {
+        id: `cs_${eventId}`,
+        object: "checkout.session",
+        mode: "subscription",
+        customer: `cus_${locationId}`,
+        subscription: sub,
+        client_reference_id: locationId,
+        metadata: { belline_location: locationId, belline_products: "v2_growth", belline_market: "AE", belline_cycle: "monthly" },
+      },
+    },
+  });
+  const deleted = (locationId: string, eventId: string, sub: string, created: number) => ({
+    id: eventId,
+    object: "event",
+    type: "customer.subscription.deleted",
+    created,
+    data: { object: { id: sub, object: "subscription", metadata: { belline_location: locationId } } },
+  });
+  const post = (event: object, secret = SECRET) => {
+    const payload = JSON.stringify(event);
+    return handleStripeWebhook(payload, signWebhook(payload, secret));
+  };
+  const snapshot = (id: string) => JSON.stringify(getLocation(id));
+
+  const a = await payer();
+  const b = await payer();
+  const c = await payer();
+  const d = await payer();
+  const e = await payer();
+  const f = await payer();
+
+  test("the same event delivered three times gives identical state, and is applied once", () => {
+    const event = completed(a.location.id, "evt_a1", "sub_a", T(0));
+    const first = post(event);
+    assert.equal(first.status, 200);
+    assert.equal(first.applied, "subscription active");
+    const after = snapshot(a.location.id);
+    for (let i = 0; i < 2; i++) {
+      const again = post(event);
+      assert.equal(again.status, 200, "a redelivery was refused, so Stripe would keep sending it");
+      assert.match(again.applied, /already applied/);
+      assert.equal(snapshot(a.location.id), after, `delivery ${i + 2} changed the venue`);
+    }
+  });
+
+  test("with the record of applied events lost, repeating the checkout still changes nothing", () => {
+    const event = completed(a.location.id, "evt_a_lost", "sub_a", T(0)) as never;
+    const before = snapshot(a.location.id);
+    for (let i = 0; i < 3; i++) assert.match(applyStripeEvent(event).applied, /already active/);
+    assert.equal(snapshot(a.location.id), before);
+  });
+
+  test("a checkout older than the cancellation does not reactivate it, whatever its event id", () => {
+    const id = b.location.id;
+    post(completed(id, "evt_b1", "sub_b", T(0)));
+    post(deleted(id, "evt_b2", "sub_b", T(20)));
+    assert.equal(getLocation(id)!.subscription!.status, "cancelled");
+    assert.equal(getLocation(id)!.subscription!.cancelledAt, new Date(T(20) * 1000).toISOString(), "not Stripe's cancellation time");
+    // Delivered late, under a new event id: the same subscription, and a
+    // different one created before the cancellation.
+    assert.match(post(completed(id, "evt_b3", "sub_b", T(10))).applied, /older than the cancellation/);
+    assert.match(post(completed(id, "evt_b4", "sub_b_other", T(15))).applied, /older than the cancellation/);
+    assert.equal(getLocation(id)!.subscription!.status, "cancelled");
+  });
+
+  test("a new checkout after the cancellation does start a new subscription", () => {
+    const id = b.location.id;
+    assert.equal(post(completed(id, "evt_b5", "sub_b_new", T(30))).applied, "subscription active");
+    assert.equal(getLocation(id)!.subscription!.status, "active");
+    assert.equal(getLocation(id)!.stripe!.subscriptionId, "sub_b_new");
+  });
+
+  test("a cancellation delivered twice keeps the first date; one for an earlier subscription is ignored", () => {
+    const id = c.location.id;
+    post(completed(id, "evt_c1", "sub_c1", T(0)));
+    post(completed(id, "evt_c2", "sub_c2", T(5)));
+    assert.match(post(deleted(id, "evt_c3", "sub_c1", T(6))).applied, /earlier subscription/);
+    assert.equal(getLocation(id)!.subscription!.status, "active");
+    post(deleted(id, "evt_c4", "sub_c2", T(10)));
+    const first = getLocation(id)!.subscription!.cancelledAt;
+    assert.match(post(deleted(id, "evt_c5", "sub_c2", T(40))).applied, /already cancelled/);
+    assert.equal(getLocation(id)!.subscription!.cancelledAt, first);
+  });
+
+  test("a handler that throws gets a 500 and is not recorded, so Stripe's retry applies it", () => {
+    const id = d.location.id;
+    const event = completed(id, "evt_d1", "sub_d", T(0));
+    const payload = JSON.stringify(event);
+    const failed = handleStripeWebhook(payload, signWebhook(payload, SECRET), () => {
+      throw new Error("disk full");
+    });
+    assert.equal(failed.status, 500);
+    assert.equal(getLocation(id)!.subscription!.status, "trialing");
+    const retry = post(event);
+    assert.equal(retry.status, 200);
+    assert.equal(retry.applied, "subscription active");
+  });
+
+  test("a bad signature is a 400 that changes nothing; no webhook secret at all is acknowledged", () => {
+    const before = snapshot(e.location.id);
+    assert.equal(post(completed(e.location.id, "evt_e1", "sub_e", T(0)), "whsec_somebody_else").status, 400);
+    assert.equal(snapshot(e.location.id), before);
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    const out = post(completed(e.location.id, "evt_e2", "sub_e", T(0)));
+    process.env.STRIPE_WEBHOOK_SECRET = SECRET;
+    assert.equal(out.status, 200);
+    assert.equal(snapshot(e.location.id), before);
+  });
+
+  test("what the owner chose during the trial for 100% carries on to the plan", () => {
+    const id = e.location.id;
+    assert.equal(setUsagePolicyRequest(e.user, { locationId: id, mode: "cap" }).status, 200);
+    post(completed(id, "evt_e3", "sub_e", T(0)));
+    assert.equal(getLocation(id)!.subscription!.status, "active");
+    assert.equal(getLocation(id)!.subscription!.usagePolicy?.mode, "cap");
+  });
+
+  test("card payments open only with billing.stripe: a secret key without the webhook secret does not count", () => {
+    const saved = { ...process.env };
+    process.env.STRIPE_SECRET_KEY = "sk_test_not_real";
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    assert.equal(stripeEnabled(), false);
+    process.env.STRIPE_WEBHOOK_SECRET = SECRET;
+    assert.equal(stripeEnabled(), true);
+    process.env.FLAG_BILLING_STRIPE = "off";
+    assert.equal(stripeEnabled(), false);
+    for (const k of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "FLAG_BILLING_STRIPE"]) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  // Self-serve checkout against the fake Stripe: no network, and the webhook
+  // it sends arrives twice.
+  let fetches = 0;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    fetches++;
+    throw new Error("no network in check:billing");
+  }) as typeof fetch;
+  process.env.FLAG_STUBS = "on";
+  process.env.FLAG_BILLING_STRIPE = "on";
+  let checkoutError: unknown = null;
+  let url = "";
+  try {
+    assert.equal(stripeEnabled(), true);
+    url = (
+      await createCheckout({
+        location: getLocation(f.location.id)!,
+        products: ["v2_growth"],
+        market: "AE",
+        cycle: "monthly",
+        email: f.user.email,
+        successUrl: "http://localhost:3117/billing?paid=1",
+        cancelUrl: "http://localhost:3117/checkout?cancelled=1",
+      })
+    ).url;
+  } catch (err) {
+    checkoutError = err;
+  }
+  delete process.env.FLAG_STUBS;
+  delete process.env.FLAG_BILLING_STRIPE;
+  globalThis.fetch = realFetch;
+
+  test("with billing.stripe on under stubs, Choose plan opens the fake Stripe, and two deliveries give one subscription", () => {
+    assert.equal(checkoutError, null, String(checkoutError));
+    assert.equal(fetches, 0, "checkout reached the network");
+    assert.match(url, /^http:\/\/localhost:3117\/__stub\/stripe\/checkout\?session=cs_test_stub_/);
+    const session = readStubCheckoutSession(new URL(url).searchParams.get("session")!);
+    assert.ok(session, "the stub session was not saved");
+    assert.equal((session!.params as { success_url?: string }).success_url, "http://localhost:3117/billing?paid=1");
+    const payload = stubCompletedEvent(session!);
+    const first = handleStripeWebhook(payload, signWebhook(payload, SECRET));
+    const started = getLocation(f.location.id)!.subscription!.startedOn;
+    const second = handleStripeWebhook(payload, signWebhook(payload, SECRET));
+    assert.equal(first.applied, "subscription active");
+    assert.match(second.applied, /already applied/);
+    const sub = getLocation(f.location.id)!.subscription!;
+    assert.equal(sub.status, "active");
+    assert.deepEqual(sub.products, ["v2_growth"]);
+    assert.equal(sub.startedOn, started);
+    assert.ok(stubCheckoutSession, "stub helper missing");
+  });
+
+  test("no owner sees an email address or a pretend payment where checkout cannot open", () => {
+    const button = fs.readFileSync(path.join(ROOT, "src/app/checkout/PayButton.tsx"), "utf8");
+    assert.doesNotMatch(button, /hello@|mailto:/);
+    assert.doesNotMatch(button, /Pay and go live/);
+    assert.match(button, /"Choose plan"/);
+    assert.match(button, /Payments open soon/);
+    const route = fs.readFileSync(path.join(ROOT, "src/app/api/checkout/route.ts"), "utf8");
+    assert.doesNotMatch(route, /hello@/);
+    const hook = fs.readFileSync(path.join(ROOT, "src/app/api/stripe/webhook/route.ts"), "utf8");
+    assert.match(hook, /status: 500/);
+    const stub = fs.readFileSync(path.join(ROOT, "src/app/%5F%5Fstub/stripe/checkout/route.ts"), "utf8");
+    assert.match(stub, /if \(!flag\("stubs"\)\) return new NextResponse\("Not found", \{ status: 404 \}\)/);
+  });
+
+  delete process.env.STRIPE_WEBHOOK_SECRET;
+}
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 if (pendingCopy.length) {

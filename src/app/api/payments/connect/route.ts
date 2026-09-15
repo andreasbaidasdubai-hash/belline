@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { getLocation } from "@/lib/store";
-import { stripeEnabled } from "@/lib/billing/stripe";
+import { stripeConfigured } from "@/lib/billing/stripe";
 import { connectOnboardingUrl } from "@/lib/billing/deposits";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const origin = (process.env.PUBLIC_ORIGIN || url.origin).replace(/\/$/, "");
   const back = `${origin}/integrations?loc=${encodeURIComponent(location.id)}&payments=1`;
 
-  if (!stripeEnabled()) {
+  if (!stripeConfigured()) {
     return NextResponse.redirect(`${back}&error=payments_off`);
   }
   try {

@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { Booking, Location } from "../types";
 import { getBooking, getLocation, listLocations, saveBooking, upsertLocation } from "../store";
 import { sendSms, smsEnabled } from "../providers/sms";
-import { stripe, stripeEnabled } from "./stripe";
+import { stripe, stripeConfigured } from "./stripe";
 
 /**
  * Deposits, taken by card, paid to the venue.
@@ -30,7 +30,7 @@ import { stripe, stripeEnabled } from "./stripe";
 
 export function depositsReady(location: Location): boolean {
   return (
-    stripeEnabled() &&
+    stripeConfigured() &&
     Boolean(location.payments?.stripeAccountId) &&
     Boolean(location.payments?.chargesEnabled)
   );
@@ -170,7 +170,7 @@ export async function connectOnboardingUrl(location: Location, returnUrl: string
 /** Ask Stripe whether the venue can take a card yet. Called when the owner comes back. */
 export async function refreshConnectedAccount(location: Location): Promise<Location> {
   const accountId = location.payments?.stripeAccountId;
-  if (!accountId || !stripeEnabled()) return location;
+  if (!accountId || !stripeConfigured()) return location;
   const account = await stripe().accounts.retrieve(accountId);
   return upsertLocation({
     ...location,

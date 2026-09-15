@@ -21,7 +21,10 @@ const { seedIfEmpty } = await import("../src/lib/seed");
 const { signUp } = await import("../src/lib/onboarding");
 const { getLocation, upsertLocation, saveCall, listLocations } = await import("../src/lib/store");
 const { startCall } = await import("../src/lib/calls");
-const { lapseOf, serviceState } = await import("../src/lib/billing/entitlement");
+const { lapseOf, lapseSentence, serviceState } = await import("../src/lib/billing/entitlement");
+const { extendTrialIfPaymentsClosed, paymentsSoonSentence, sweepTrialEnds, TRIAL_EXTENSION_DAYS } = await import("../src/lib/billing/trial-end");
+const { listExceptions } = await import("../src/lib/exceptions");
+const { accountFor } = await import("../src/lib/billing/usage");
 const { checkEmbedGate } = await import("../src/lib/embed");
 const { mayStreamTo } = await import("../src/lib/voice/entitlement");
 const { todayIn } = await import("../src/lib/time");
@@ -86,6 +89,78 @@ function chats(venue: () => ReturnType<typeof fresh>, n: number) {
     saveCall(call);
   }
 }
+
+console.log("\n\x1b[1mA trial ends while card payments are closed\x1b[0m\n");
+
+delete process.env.STRIPE_WEBHOOK_SECRET;
+delete process.env.FLAG_BILLING_STRIPE;
+
+async function trialVenue(name: string, email: string) {
+  const out = await signUp({ businessName: name, email, password: "Correct-Horse-Battery-9", vertical: "salon", timezone: "Asia/Dubai" });
+  assert.ok(out.ok, "signup failed");
+  const id = out.ok ? out.location.id : "";
+  return { id, get: () => getLocation(id)!, endsOn: getLocation(id)!.subscription!.trial!.endsOn };
+}
+
+const closed = await trialVenue("Marina Nails", "owner@marina-nails.test");
+const openPay = await trialVenue("Creek Barbers", "owner@creek-barbers.test");
+const tickets = (id: string) => listExceptions({ kind: "stripe_off_trial_end", locationId: id });
+
+test("the day before a trial's last day, nothing is extended or raised", () => {
+  const out = extendTrialIfPaymentsClosed(closed.get(), addDays(closed.endsOn, -1), { payments: false });
+  assert.equal(out.action, "none");
+  assert.equal(closed.get().subscription!.trial!.endsOn, closed.endsOn);
+  assert.equal(tickets(closed.id).length, 0);
+});
+
+test("on day 14 with payments closed, the trial ends 14 days later and one exception is opened", () => {
+  const out = extendTrialIfPaymentsClosed(closed.get(), closed.endsOn, { payments: false });
+  assert.equal(out.action, "extended");
+  const trial = closed.get().subscription!.trial!;
+  assert.equal(TRIAL_EXTENSION_DAYS, 14);
+  assert.equal(trial.endsOn, addDays(closed.endsOn, 14));
+  assert.equal(trial.extendedFrom, closed.endsOn);
+  assert.equal(tickets(closed.id).length, 1);
+  assert.equal(tickets(closed.id)[0].count, 1);
+});
+
+test("running it again the same day, or the whole sweep, changes nothing more", () => {
+  assert.equal(extendTrialIfPaymentsClosed(closed.get(), closed.endsOn, { payments: false }).action, "none");
+  sweepTrialEnds();
+  assert.equal(closed.get().subscription!.trial!.endsOn, addDays(closed.endsOn, 14));
+  assert.equal(tickets(closed.id).length, 1);
+  assert.equal(tickets(closed.id)[0].count, 1);
+});
+
+test("the owner is told the new date, and never given an email address or a plan they cannot buy", () => {
+  const notes = accountFor(closed.get(), closed.endsOn)!.notes;
+  const date = new Date(`${addDays(closed.endsOn, 14)}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+  assert.equal(notes[0], `Payments open soon — you're covered until ${date}.`);
+  assert.equal(paymentsSoonSentence(closed.get()), notes[0]);
+  for (const line of [...notes, lapseSentence("trial_ended", false), paymentsSoonSentence(undefined)]) {
+    assert.doesNotMatch(line, /@|mailto|email us/i, line);
+  }
+  assert.doesNotMatch(lapseSentence("trial_ended", false), /Choose a plan/);
+});
+
+test("past the extension with payments still closed: not extended again, still answered, raised once more that day", () => {
+  const ended = addDays(closed.endsOn, 15);
+  assert.equal(extendTrialIfPaymentsClosed(closed.get(), ended, { payments: false }).action, "raised");
+  assert.equal(extendTrialIfPaymentsClosed(closed.get(), ended, { payments: false }).action, "none");
+  assert.equal(closed.get().subscription!.trial!.endsOn, addDays(closed.endsOn, 14), "extended twice");
+  assert.equal(tickets(closed.id).length, 1);
+  assert.equal(tickets(closed.id)[0].count, 2);
+  const state = serviceState(closed.get(), ended);
+  assert.equal(state.answering, true);
+  assert.equal(state.lapsed, "trial_ended");
+});
+
+test("with card payments open, nothing is extended and the ended trial stops", () => {
+  assert.equal(extendTrialIfPaymentsClosed(openPay.get(), openPay.endsOn, { payments: true }).action, "none");
+  assert.equal(openPay.get().subscription!.trial!.extendedFrom, undefined);
+  assert.equal(tickets(openPay.id).length, 0);
+  assert.equal(serviceState(openPay.get(), addDays(openPay.endsOn, 1), { enforce: true }).refused, "trial_ended");
+});
 
 console.log("\n\x1b[1mA trial ends\x1b[0m\n");
 

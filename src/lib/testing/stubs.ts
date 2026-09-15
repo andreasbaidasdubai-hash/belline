@@ -420,3 +420,74 @@ export function stubMailer(dataDir: string) {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Stripe checkout, across the app
+// ---------------------------------------------------------------------------
+
+/**
+ * The checkout route and /__stub/stripe/checkout run in different module
+ * graphs under Next, so a stubbed session is written beside the data rather
+ * than held in memory.
+ */
+function stubDataDir(): string {
+  // Read at call time, not import time: a check sets DATA_DIR after importing this.
+  return path.resolve(process.env.DATA_DIR ?? path.join(process.cwd(), "data"));
+}
+
+function stubSessionsFile(): string {
+  return path.join(stubDataDir(), "stub-stripe-sessions.json");
+}
+
+export interface StubCheckoutSession {
+  id: string;
+  url: string;
+  params: Record<string, unknown>;
+}
+
+export function stubCheckoutSession(origin: string, params: Record<string, unknown>): StubCheckoutSession {
+  const stripe = fakeStripe(origin);
+  const id = `cs_test_stub_${randomUUID().replace(/-/g, "")}`;
+  const session = { id, url: `${origin.replace(/\/+$/, "")}/__stub/stripe/checkout?session=${id}`, params };
+  stripe.sessions.push(session);
+  let all: StubCheckoutSession[] = [];
+  try {
+    all = JSON.parse(fs.readFileSync(stubSessionsFile(), "utf8")) as StubCheckoutSession[];
+  } catch {
+    all = [];
+  }
+  fs.mkdirSync(stubDataDir(), { recursive: true });
+  fs.writeFileSync(stubSessionsFile(), JSON.stringify([...all, session], null, 2));
+  return session;
+}
+
+export function readStubCheckoutSession(id: string): StubCheckoutSession | undefined {
+  try {
+    return (JSON.parse(fs.readFileSync(stubSessionsFile(), "utf8")) as StubCheckoutSession[]).find((s) => s.id === id);
+  } catch {
+    return undefined;
+  }
+}
+
+/** The `checkout.session.completed` event Stripe would send for a paid stub session. */
+export function stubCompletedEvent(session: StubCheckoutSession, created = Math.floor(Date.now() / 1000)): string {
+  const suffix = session.id.slice(-12);
+  const params = session.params as { metadata?: Record<string, string>; client_reference_id?: string; success_url?: string };
+  return JSON.stringify({
+    id: `evt_stub_${suffix}`,
+    object: "event",
+    type: "checkout.session.completed",
+    created,
+    data: {
+      object: {
+        id: session.id,
+        object: "checkout.session",
+        mode: "subscription",
+        customer: `cus_stub_${suffix}`,
+        subscription: `sub_stub_${suffix}`,
+        client_reference_id: params.client_reference_id ?? null,
+        metadata: params.metadata ?? {},
+      },
+    },
+  });
+}

@@ -70,6 +70,7 @@ export default function Order({
   signedIn,
   venueName,
   stripe,
+  coveredNote,
   cancelled,
   markets,
   trade,
@@ -80,6 +81,7 @@ export default function Order({
   signedIn: boolean;
   venueName: string;
   stripe: boolean;
+  coveredNote?: string;
   cancelled: boolean;
   markets: Market[];
   trade: Vertical | "";
@@ -209,7 +211,7 @@ export default function Order({
             <p className="muted" style={{ fontSize: 13, margin: "0 0 22px", lineHeight: 1.55 }}>
               For {venueName}.
             </p>
-            <PayButton products={ids} cycle={cycle} enabled={stripe} venueName={venueName} />
+            <PayButton products={ids} cycle={cycle} enabled={stripe} venueName={venueName} coveredNote={coveredNote} />
           </>
         ) : (
           <>

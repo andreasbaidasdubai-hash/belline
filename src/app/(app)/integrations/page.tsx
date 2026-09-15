@@ -15,7 +15,7 @@ import WhatsAppCard from "./WhatsAppCard";
 import RemindersForm from "./RemindersForm";
 import { smsEnabled } from "@/lib/providers/sms";
 import { reminderHours, remindersEnabled } from "@/lib/reminders";
-import { stripeEnabled } from "@/lib/billing/stripe";
+import { stripeConfigured } from "@/lib/billing/stripe";
 import { depositsReady, refreshConnectedAccount } from "@/lib/billing/deposits";
 
 export const dynamic = "force-dynamic";
@@ -134,13 +134,13 @@ export default async function IntegrationsPage({
           <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
             {!location.policy?.deposit
               ? "No deposit rule is set. Add one under How it works — who pays, how much, on which days — and Belline tells callers about it when they book."
-              : !stripeEnabled()
+              : !stripeConfigured()
                 ? "Belline tells callers about your deposit when they book, and the booking is marked as owing it. Card payments are not switched on yet, so your team sends the link and marks it paid in Bookings."
                 : depositsReady(paymentsVenue)
                   ? "Connected. When a booking needs a deposit, the guest is texted a Stripe link straight away, and the money goes to your own Stripe account. Paid deposits are marked in Bookings on their own."
                   : "Connect your own Stripe account and guests are texted a link to pay the deposit the moment they book. The money goes to your account, not ours — Stripe checks who you are and where to pay out."}
           </p>
-          {location.policy?.deposit && stripeEnabled() && !depositsReady(paymentsVenue) && (
+          {location.policy?.deposit && stripeConfigured() && !depositsReady(paymentsVenue) && (
             <a className="btn btn-accent" href={`/api/payments/connect?locationId=${location.id}`} style={{ display: "inline-block", marginTop: 14 }}>
               {paymentsVenue.payments?.stripeAccountId ? "Finish setting up Stripe" : "Set up card payments with Stripe"}
             </a>

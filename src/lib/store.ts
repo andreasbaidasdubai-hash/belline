@@ -51,9 +51,25 @@ interface Db {
   exceptions: SupportException[];
   /** Pre-bought Belline numbers. See telephony/pool.ts. */
   numberPool: PoolNumber[];
+  /** Stripe webhook events already applied, so a redelivery changes nothing. See billing/stripe.ts. */
+  stripeEvents: StripeEventRow[];
 }
 
+/** One Stripe event we have applied. Kept for the newest `STRIPE_EVENTS_KEPT`. */
+export interface StripeEventRow {
+  id: string;
+  type: string;
+  /** When Stripe created the event, ISO. */
+  createdAt?: string;
+  appliedAt: string;
+  applied: string;
+}
+
+/** Stripe stops redelivering after three days; a few thousand ids covers that many times over. */
+const STRIPE_EVENTS_KEPT = 5000;
+
 const EMPTY: Db = {
+  stripeEvents: [],
   numberPool: [],
   tenants: [],
   businesses: [],
@@ -471,6 +487,20 @@ export function mutatePool<T>(fn: (rows: PoolNumber[]) => T): T {
   const out = fn(db.numberPool);
   persist("numberPool");
   return out;
+}
+
+// --- stripe events ---------------------------------------------------------
+
+export function stripeEventSeen(id: string): StripeEventRow | undefined {
+  return load().stripeEvents.find((e) => e.id === id);
+}
+
+export function recordStripeEvent(row: StripeEventRow): void {
+  const db = load();
+  if (db.stripeEvents.some((e) => e.id === row.id)) return;
+  db.stripeEvents.push(row);
+  if (db.stripeEvents.length > STRIPE_EVENTS_KEPT) db.stripeEvents.splice(0, db.stripeEvents.length - STRIPE_EVENTS_KEPT);
+  persist("stripeEvents");
 }
 
 // --- support exceptions ----------------------------------------------------
