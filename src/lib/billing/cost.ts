@@ -23,7 +23,8 @@ import { appendCosts, getCall, listCosts } from "../store";
  * the invoice arrives, and the thing to reconcile the invoice against.
  */
 
-export type CostChannel = "phone" | "embed_voice" | "webchat" | "whatsapp";
+/** `test` is the setup checks (onboarding/selftest.ts): spend, but never a customer's usage. */
+export type CostChannel = "phone" | "embed_voice" | "webchat" | "whatsapp" | "test";
 export type CostVendor = "twilio" | "deepgram" | "elevenlabs" | "anthropic" | "meta" | "openai";
 export type CostUnit =
   | "min"
@@ -464,6 +465,8 @@ export const PLANNING_USD_PER_UNIT: Record<CostChannel, number> = {
   embed_voice: 0.06,
   webchat: 0.031,
   whatsapp: 0.049,
+  // Not a unit anybody sells; kept out of CHANNELS below.
+  test: 0,
 };
 
 export interface UnitCost {

@@ -3,6 +3,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import { listLocations } from "@/lib/store";
 import { widgetConfig } from "@/lib/embed";
 import { venueWhatsApp, whatsappLink } from "@/lib/whatsapp";
+import { isActivated } from "@/lib/onboarding/journey";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   );
   if (!location?.embed) {
     return NextResponse.json({ error: "Not found" }, { status: 404, headers: cors() });
+  }
+
+  // Installed but not live: the script stays on the page (its install ping is
+  // how Go live knows it is there) and shows nothing to visitors.
+  if (!isActivated(location)) {
+    return NextResponse.json({ live: false }, { headers: { ...cors(), "cache-control": "no-store" } });
   }
 
   const account = await venueWhatsApp(location).catch(() => null);

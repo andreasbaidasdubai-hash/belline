@@ -296,9 +296,11 @@ await test("the diary is offered to accounts already on it, or by FLAG_BELLINE_D
   assert.equal(recordStep(withDestination(clinic, undefined), { kind: "destination", destination: "belline" }, NO_FACTS, now).ok, false);
 });
 
-await test("a clinic can set up and test, but Go live waits for the clinic flag", () => {
-  const venue = withDestination(clinic, { kind: "requests" }, { reviewedAt: at, rulesConfirmedAt: at });
-  const facts = { ...NO_FACTS, phoneCalls: 1, testConversations: 1 };
+await test("a clinic can set up and test, but Go live waits for the clinic flag", async () => {
+  const { configDigest } = await import("../src/lib/onboarding/selftest-state");
+  const untested = withDestination(clinic, { kind: "requests" }, { reviewedAt: at, rulesConfirmedAt: at });
+  const venue = { ...untested, onboarding: { ...untested.onboarding!, tests: { runId: "run_1", at, results: [], passed: true, digest: configDigest(untested) } } };
+  const facts = { ...NO_FACTS, phoneCalls: 1 };
   const off = journey(venue, facts, now, { clinicSelfServe: false });
   assert.equal(off.canGoLive, false);
   assert.ok(off.blockers.some((b) => b.step === "golive" && /preview/.test(b.label)));

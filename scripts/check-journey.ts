@@ -32,6 +32,7 @@ const {
   navCollapsed,
   recordStep,
 } = await import("../src/lib/onboarding/journey");
+const { configDigest } = await import("../src/lib/onboarding/selftest-state");
 type Loc = import("../src/lib/types").Location;
 
 let passed = 0;
@@ -86,6 +87,9 @@ await test("a new signup starts on reading the business, with a record and no ac
   assert.equal(j.activated, false);
 });
 
+/** The venue with a checks run recorded against it exactly as it is. */
+const tested = (l: Loc, ok = true): Loc => withState(l, { tests: { runId: "run_1", at, results: [], passed: ok, digest: configDigest(l) } });
+
 const reviewed = withState(complete(fresh), { reviewedAt: at });
 const table: { name: string; venue: Loc; facts?: typeof NO_FACTS; next: string | null; canGoLive: boolean }[] = [
   { name: "imported, not reviewed", venue: withState(fresh, { importedAt: at }), next: "review", canGoLive: false },
@@ -112,16 +116,40 @@ const table: { name: string; venue: Loc; facts?: typeof NO_FACTS; next: string |
     canGoLive: false,
   },
   {
-    name: "tested in the console: Go live is offered",
+    name: "talked to it in the console, no checks run: the checks still block",
     venue: withState(reviewed, { destination: { kind: "belline", setAt: at }, rulesConfirmedAt: at }),
-    facts: { ...NO_FACTS, phoneCalls: 1, testConversations: 1 },
+    facts: { ...NO_FACTS, phoneCalls: 1, testConversations: 3 },
+    next: "test",
+    canGoLive: false,
+  },
+  {
+    name: "checks passed: Go live is offered",
+    venue: tested(withState(reviewed, { destination: { kind: "belline", setAt: at }, rulesConfirmedAt: at })),
+    facts: { ...NO_FACTS, phoneCalls: 1 },
     next: "golive",
     canGoLive: true,
   },
   {
+    name: "checks failed: back to the checks",
+    venue: tested(withState(reviewed, { destination: { kind: "belline", setAt: at }, rulesConfirmedAt: at }), false),
+    facts: { ...NO_FACTS, phoneCalls: 1 },
+    next: "test",
+    canGoLive: false,
+  },
+  {
+    name: "checks passed, then the setup changed: the checks are stale",
+    venue: (() => {
+      const l = tested(withState(reviewed, { destination: { kind: "belline", setAt: at }, rulesConfirmedAt: at }));
+      return { ...l, agent: { ...l.agent, greeting: "A different greeting." } };
+    })(),
+    facts: { ...NO_FACTS, phoneCalls: 1 },
+    next: "test",
+    canGoLive: false,
+  },
+  {
     name: "every step done but no services: Go live is not offered",
-    venue: withState(fresh, { reviewedAt: at, destination: { kind: "belline", setAt: at }, rulesConfirmedAt: at }),
-    facts: { ...NO_FACTS, phoneCalls: 1, testConversations: 1 },
+    venue: tested(withState(fresh, { reviewedAt: at, destination: { kind: "belline", setAt: at }, rulesConfirmedAt: at })),
+    facts: { ...NO_FACTS, phoneCalls: 1 },
     next: "golive",
     canGoLive: false,
   },
@@ -152,6 +180,13 @@ await test("for any state short of finished, next is exactly one step with a URL
     // Everything before the next step is done: there is never a skipped hole.
     assert.ok(j.steps.slice(0, j.next!.n - 1).every((s) => s.done), row.name);
   }
+});
+
+await test("a stale or failed run says why in the first blocker", () => {
+  const stale = table.find((r) => r.name.includes("the checks are stale"))!;
+  assert.match(journey(stale.venue, stale.facts, now).blockers[0].label, /changed your setup after the last checks/);
+  const bad = table.find((r) => r.name.startsWith("checks failed"))!;
+  assert.match(journey(bad.venue, bad.facts, now).blockers[0].label, /did not pass/);
 });
 
 await test("a blocker from readiness links to its editor with the way back to setup", () => {

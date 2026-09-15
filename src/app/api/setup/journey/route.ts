@@ -6,6 +6,7 @@ import { factsFrom, journey, recordStep, type StepAction } from "@/lib/onboardin
 import type { DestinationKind } from "@/lib/types";
 import type { RulesInput } from "@/lib/onboarding/rules";
 import { track } from "@/lib/reception/events";
+import { activateVenue } from "@/lib/onboarding/activate";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,13 @@ export async function POST(req: Request) {
     action = { kind: "rules", rules: { askFor: r.askFor, transferNumber: r.transferNumber, notify: r.notify, afterHours: r.afterHours, neverSay: r.neverSay } };
   } else if (body.action === "activate") action = { kind: "activate", by: user.id };
   else return NextResponse.json({ error: "Unknown step." }, { status: 400 });
+
+  // Going live has one implementation, shared with /api/setup/activate.
+  if (action.kind === "activate") {
+    const live = await activateVenue(location.id, user);
+    if (!live.ok) return NextResponse.json({ error: live.error, fix: live.fix, blockers: live.blockers }, { status: live.status });
+    return NextResponse.json({ ok: true, next: live.next });
+  }
 
   const facts = factsFrom(location, listCalls(location.id));
   const out = recordStep(location, action, facts);

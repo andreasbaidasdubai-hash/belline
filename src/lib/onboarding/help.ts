@@ -118,7 +118,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: "Trying it before you go live",
     step: "test",
     keywords: ["test", "try", "talk", "console"],
-    body: "Open Talk to it and ask for a booking and one question you get every day. If an answer is wrong, fix it on the review form or tell Belle, then try again.",
+    body: "On Try it, press Run the checks. Belline has eight conversations your customers really have and checks each reply. If one does not pass, you see what it said and why: press Fix this or Fix with Belle, then run the checks again.",
   },
   {
     id: "go-live",

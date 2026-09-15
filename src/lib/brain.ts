@@ -195,6 +195,7 @@ export function publish(
   locationId: string,
   by: Pick<User, "id" | "name"> | null,
   note: string,
+  opts: { force?: boolean } = {},
 ): PublishResult | null {
   const location = getLocation(locationId);
   if (!location) return null;
@@ -206,8 +207,9 @@ export function publish(
 
   // An identical republish is not a change. Recording it would fill the
   // history with entries that say nothing, and a history nobody reads is not
-  // an audit trail.
-  if (latest?.digest === digest) return { version: latest, changed: false };
+  // an audit trail. `force` is for the few events that are worth a line with
+  // no content change, such as going live.
+  if (latest?.digest === digest && !opts.force) return { version: latest, changed: false };
 
   const version: BrainVersion = {
     id: id("brain"),

@@ -17,7 +17,10 @@ import { whatsappStatus } from "@/lib/whatsapp";
 import { whatsappCard, type WhatsAppCard as WhatsAppCardState } from "@/lib/whatsapp-selfserve";
 import { seedIfEmpty } from "@/lib/seed";
 import type { Location } from "@/lib/types";
+import { SCENARIO_ORDER, scenarioTitle } from "@/lib/onboarding/selftest";
+import { selftestAvailable, testsPassed, testsStale } from "@/lib/onboarding/selftest-state";
 import SetupWizard from "../SetupWizard";
+import SelftestPanel from "../SelftestPanel";
 import { ActionButton, DestinationPicker, RulesForm, type DestinationOption } from "../StepActions";
 
 export const dynamic = "force-dynamic";
@@ -392,23 +395,29 @@ function Body({
       );
     }
 
-    case "test":
+    case "test": {
+      const tests = venue.onboarding?.tests;
       return (
         <>
-          <Heading step={step} title="Talk to it before your customers do." />
+          <Heading step={step} title="Check it before your customers do." />
           <p style={lede}>
-            Ask for a booking and a question you get every day. Automatic checks are being prepared; until they are
-            ready, one conversation of your own in the test console completes this step.
+            Belline has eight conversations your customers really have, from a booking to a question it cannot answer,
+            and checks every reply. It takes about a minute.
           </p>
-          {step.done ? (
-            cont
-          ) : (
-            <Link href="/test?from=setup" className="btn btn-accent" style={primary}>
-              Talk to it
-            </Link>
-          )}
+          <SelftestPanel
+            checks={SCENARIO_ORDER.map((id) => ({ id, title: scenarioTitle(id) }))}
+            initial={tests?.results ?? null}
+            stale={testsStale(venue)}
+            available={selftestAvailable()}
+            done={testsPassed(venue)}
+            next={onward?.url ?? (j.activated ? "/" : null)}
+          />
+          <p className="muted" style={{ fontSize: 13, margin: "18px 0 0" }}>
+            You can also <Link href="/test?from=setup">talk to it yourself</Link>.
+          </p>
         </>
       );
+    }
 
     case "golive": {
       if (j.activated) {

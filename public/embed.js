@@ -195,6 +195,12 @@
 
   function dress(cfg) {
     if (!cfg || typeof cfg !== "object") return;
+    // The business has not gone live yet. Installed is enough to be detected;
+    // visitors see nothing until it is switched on.
+    if (cfg.live === false) {
+      dock.remove();
+      return;
+    }
     // No attribute on the tag means the dashboard decides what is offered —
     // so switching chat on in Belline reaches the site without a re-paste.
     if (!attrMode && (cfg.mode === "voice" || cfg.mode === "chat" || cfg.mode === "both") && cfg.mode !== mode) {

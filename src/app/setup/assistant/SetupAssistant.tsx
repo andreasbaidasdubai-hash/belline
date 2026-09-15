@@ -25,14 +25,17 @@ export default function SetupAssistant({
   step,
   greeting,
   initialMissing,
+  initialDraft,
 }: {
   locationId: string;
   step?: string;
   greeting: string;
   initialMissing: string[];
+  /** A message written for the owner, e.g. from a failed check. They still press send. */
+  initialDraft?: string;
 }) {
   const [lines, setLines] = useState<Line[]>([{ role: "assistant", content: greeting }]);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft ?? "");
   const [busy, setBusy] = useState(false);
   const [missing, setMissing] = useState(initialMissing);
   const [error, setError] = useState<string | null>(null);

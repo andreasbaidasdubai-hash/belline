@@ -4,6 +4,7 @@ import { listCalls } from "../store";
 import { flag } from "../flags";
 import { googleUsable } from "../booking/destination";
 import { applyRules, type RulesInput } from "./rules";
+import { testsCurrent, testsPassed } from "./selftest-state";
 
 /**
  * From signup to answering real calls, as one ordered list.
@@ -73,7 +74,7 @@ const META: Record<StepId, { title: string; action: string }> = {
   bookings: { title: "Where bookings go", action: "Use this" },
   rules: { title: "Your rules", action: "Confirm these rules" },
   channels: { title: "Phone and website", action: "Continue" },
-  test: { title: "Try it", action: "Talk to it" },
+  test: { title: "Try it", action: "Run the checks" },
   golive: { title: "Go live", action: "Go live" },
   "first-week": { title: "Your first week", action: "Open the dashboard" },
 };
@@ -130,9 +131,10 @@ export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now:
     channels: Boolean(
       o.channels.web?.detectedAt || o.channels.phone?.forwardingVerifiedAt || facts.phoneCalls > 0 || facts.webConversations > 0,
     ),
-    // Until the automatic checks exist, the owner having talked to it in the
-    // test console is the evidence. A recorded run replaces it when it lands.
-    test: Boolean(o.tests?.passed || facts.testConversations > 0),
+    // The automatic checks, passed, against the setup as it is now. Talking to
+    // it in the test console is useful, and proves nothing about the eight
+    // conversations the checks grade.
+    test: testsPassed(location),
   };
 
   // A venue that went live already did everything before it, whatever the
@@ -152,7 +154,13 @@ export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now:
   const blockers: Blocker[] = [];
   if (!activated) {
     for (const step of steps.filter((s) => BEFORE_LIVE.includes(s.id) && !s.done)) {
-      blockers.push({ step: step.id, label: `${step.title} is not finished yet`, fix: step.url });
+      const label =
+        step.id === "test" && o.tests && !testsCurrent(location)
+          ? "You changed your setup after the last checks. Run the checks again"
+          : step.id === "test" && o.tests && !o.tests.passed
+            ? "Some checks did not pass. Fix them and run the checks again"
+            : `${step.title} is not finished yet`;
+      blockers.push({ step: step.id, label, fix: step.url });
     }
     for (const m of readiness(location).missing) {
       blockers.push({ step: "review", label: `${m.label} is still missing`, fix: `${m.where}?from=setup` });
@@ -162,7 +170,7 @@ export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now:
     if (location.vertical === "clinic" && !clinicSelfServe) {
       blockers.push({
         step: "golive",
-        label: "Clinics are in a requests-only preview, and going live opens when clinics open. We will tell you when it does",
+        label: "Clinics open soon. Until then clinics are in a requests-only preview: you can set up and run the checks, and we will tell you when going live opens",
         fix: "/setup/test",
       });
     }

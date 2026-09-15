@@ -5,6 +5,7 @@ import { overviewFor, summarise, visibleHealth } from "@/lib/overview";
 import { isBellineStaff } from "@/lib/auth";
 import { readiness } from "@/lib/onboarding";
 import { isActivated, journeyFor } from "@/lib/onboarding/journey";
+import { testsStale } from "@/lib/onboarding/selftest-state";
 import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
 import { callDurationSeconds } from "@/lib/calls";
@@ -96,6 +97,16 @@ export default async function OverviewPage({
               Go live
             </Link>
           </div>
+        </div>
+      )}
+
+      {/* Live, and the setup changed after the checks. Worth a look, never a block. */}
+      {!path && testsStale(location) && (
+        <div className="panel" role="status" style={{ padding: "13px 18px", marginBottom: 14, fontSize: 13.5, lineHeight: 1.5 }}>
+          You changed your setup since the last checks.{" "}
+          <Link href="/setup/test" style={{ color: "var(--accent)", textDecoration: "underline" }}>
+            Re-run checks
+          </Link>
         </div>
       )}
 

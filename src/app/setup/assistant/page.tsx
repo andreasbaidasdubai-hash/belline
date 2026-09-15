@@ -24,15 +24,21 @@ export const metadata = { title: "Set up with Belle" };
 export default async function SetupAssistantPage({
   searchParams,
 }: {
-  searchParams: Promise<{ loc?: string; step?: string }>;
+  searchParams: Promise<{ loc?: string; step?: string; check?: string }>;
 }) {
   seedIfEmpty();
   const user = await requireUser();
-  const { loc, step: rawStep } = await searchParams;
+  const { loc, step: rawStep, check } = await searchParams;
   const venues = listLocationsFor(user.tenantId);
   const venue = venues.find((v) => v.id === loc) ?? venues[0];
   if (!venue || !canEditAgent(user, venue.id)) redirect("/");
   const step = rawStep && isStepId(rawStep) ? rawStep : undefined;
+  // "Fix with Belle" from a failed check: the owner's first message is written
+  // for them, from the stored result, never from the URL.
+  const failure = check ? venue.onboarding?.tests?.results.find((r) => r.scenario === check && !r.passed) : undefined;
+  const draft = failure
+    ? `The check "${failure.title}" did not pass. ${failure.detail ?? ""} Belline replied: "${(failure.reply ?? "").slice(0, 200)}". What should I change?`
+    : undefined;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -63,6 +69,7 @@ export default async function SetupAssistantPage({
           step={step}
           greeting={setupGreeting(venue, step)}
           initialMissing={readiness(venue).missing.map((m) => m.label)}
+          initialDraft={draft}
         />
       </main>
     </div>

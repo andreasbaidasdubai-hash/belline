@@ -275,6 +275,21 @@ export interface BookingRequest {
   notes?: string;
 }
 
+/** One automatic check, as the owner sees it. */
+export interface SelftestResult {
+  scenario: string;
+  title: string;
+  passed: boolean;
+  /** What the check said, as a customer would. */
+  prompt?: string;
+  /** Belline's exact reply, with any card number taken out. */
+  reply?: string;
+  /** The likely cause, in the owner's words. Failures only. */
+  detail?: string;
+  /** Where to fix it. */
+  fix?: string;
+}
+
 export interface OnboardingState {
   version: 1;
   importedAt?: string;
@@ -319,7 +334,17 @@ export interface OnboardingState {
       checkedAt?: string;
     };
   };
-  tests?: { runId: string; at: string; results: { scenario: string; passed: boolean; detail?: string }[]; passed: boolean };
+  /** The last run of the automatic checks. See onboarding/selftest.ts. */
+  tests?: {
+    runId: string;
+    at: string;
+    /** configDigest() of the venue the checks ran against. A different digest now means stale. */
+    digest?: string;
+    results: SelftestResult[];
+    passed: boolean;
+  };
+  /** Runs today, for the daily limit. `date` is the venue's local date. */
+  selftestRuns?: { date: string; count: number };
   activatedAt?: string;
   /** A user id, or "backfill" for a venue that was live before the journey existed. */
   activatedBy?: string;
