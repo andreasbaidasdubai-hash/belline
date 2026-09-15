@@ -2938,6 +2938,18 @@ footer a { color: var(--bl-ink-900); }
 .call-tab[aria-selected="true"],
 .call-status { color: var(--bl-accent-text); }
 .call-tab[aria-selected="true"] { border-bottom-color: var(--bl-blue); }
+/* Sentence case, like the homepage: the trade pages' tabs and call labels
+   were still small uppercase with wide tracking. */
+.call-tab,
+.call-status,
+.call-body .who,
+.call-out .tag { text-transform: none; letter-spacing: 0; }
+.call-tab { font-size: 0.9rem; font-weight: 600; }
+.call-status { font-size: 0.82rem; font-weight: 600; }
+.call-body .who { font-size: 0.8rem; font-weight: 600; }
+.call-out .tag { font-size: 0.78rem; font-weight: 600; }
+.call-listen:disabled { opacity: 0.5; cursor: default; }
+.call-listen:disabled:hover { border-color: var(--rule); color: var(--ink-2); }
 .call-body .agent { border-left-color: var(--bl-blue); }
 .call-out .tag { color: var(--bl-accent-text); border-color: var(--card-line); }
 .terms { border-top-color: var(--card-line); }

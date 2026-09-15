@@ -90,6 +90,27 @@
     return wrap;
   }
 
+  /**
+   * What the panel says when a call has finished. Belline books nothing into
+   * a calendar today: it takes the request for the team to confirm, or hands
+   * the call to a person. check-webchat pins these words.
+   */
+  function doneStatus(scene) {
+    return scene.outcome.human ? "Passed to the team" : "Request taken";
+  }
+
+  /**
+   * A scene only plays aloud if every line has a recording (build-site.ts
+   * withAudio). On a page where some scenes have one and some do not, Listen
+   * is disabled for the silent scene rather than left to throw on a missing
+   * clip.
+   */
+  function syncListen(scene) {
+    if (!listenBtn) return;
+    listenBtn.disabled = !scene.audio;
+    listenBtn.title = scene.audio ? "" : "No recording for this call yet";
+  }
+
   /** The whole scene at once — the resting state, and the reduced-motion one. */
   function paintAll(scene) {
     body.textContent = "";
@@ -97,8 +118,9 @@
       body.appendChild(turnEl(t[0], t[1]));
     });
     body.appendChild(outcomeEl(scene.outcome));
-    statusEl.textContent = scene.outcome.human ? "Transferred" : "Booked";
+    statusEl.textContent = doneStatus(scene);
     call.setAttribute("data-speaking", "false");
+    syncListen(scene);
   }
 
   /**
@@ -121,7 +143,7 @@
     function next() {
       if (i >= scene.turns.length) {
         call.setAttribute("data-speaking", "false");
-        statusEl.textContent = scene.outcome.human ? "Transferred" : "Booked";
+        statusEl.textContent = doneStatus(scene);
         body.appendChild(outcomeEl(scene.outcome));
         setListening(false);
         return;
@@ -129,11 +151,7 @@
       var turn = scene.turns[i];
       var isAgent = turn[0] === "agent";
       call.setAttribute("data-speaking", String(isAgent));
-      statusEl.textContent = isAgent
-        ? i > 0 && !scene.outcome.human
-          ? "Checking the book"
-          : "Answered"
-        : "Listening";
+      statusEl.textContent = isAgent ? "Answered" : "Listening";
       body.appendChild(turnEl(turn[0], turn[1]));
 
       player.onended = function () {
@@ -169,9 +187,16 @@
   }
 
   function play(scene) {
+    syncListen(scene);
     if (audible && scene.audio) {
       playAudible(scene);
       return;
+    }
+    // Listening, then switching to a scene with no recording: stop the sound
+    // and show that scene as text rather than half-playing it.
+    if (audible) {
+      player.pause();
+      setListening(false);
     }
     clearTimers();
     current = scene;
@@ -201,10 +226,9 @@
           if (i === 0) body.textContent = "";
           if (t[0] === "agent") {
             call.setAttribute("data-speaking", "true");
-            // A caller who has just named a date hears a real pause while the
-            // book is checked. Saying so is more honest than a spinner, and
-            // it is the step this category tends to skip.
-            statusEl.textContent = i > 0 && !scene.outcome.human ? "Checking the book" : "Answered";
+            // "Answered", never "Checking the book": Belline does not look
+            // into a calendar on these calls, it takes the request.
+            statusEl.textContent = "Answered";
           } else {
             call.setAttribute("data-speaking", "false");
             statusEl.textContent = "Listening";
@@ -220,7 +244,7 @@
     timers.push(
       setTimeout(function () {
         call.setAttribute("data-speaking", "false");
-        statusEl.textContent = scene.outcome.human ? "Transferred" : "Booked";
+        statusEl.textContent = doneStatus(scene);
         body.appendChild(outcomeEl(scene.outcome));
       }, at),
     );
@@ -281,6 +305,7 @@
       listenBtn = null;
     } else {
       listenBtn.addEventListener("click", function () {
+        if (!current.audio) return;
         if (audible) {
           player.pause();
           setListening(false);

@@ -581,6 +581,78 @@ await test("no public page claims a business's existing WhatsApp is answered, or
   }
 });
 
+/**
+ * The four trade pages. They are data (scripts/site-content.ts) poured into
+ * one template (verticalPage in scripts/build-site.ts), so both are read: the
+ * data for what the agent says, the template's visible markup for the rest.
+ * Comments are stripped — they explain decisions, they are not the claim.
+ */
+const verticalTemplate = () => {
+  const src = fs.readFileSync(path.join(process.cwd(), "scripts", "build-site.ts"), "utf8");
+  const body = src.slice(src.indexOf("function verticalPage("), src.indexOf("for (const v of VERTICALS)"));
+  return body.replace(/<!--[\s\S]*?-->/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+};
+
+const TRADE_FORBIDDEN: [RegExp, string][] = [
+  [/\b(?:books?|booking|booked) (?:straight |directly )?(?:into|against|in) (?:your|the|their) (?:real |existing )?(?:diary|calendar|book)\b/i, "books into / against a diary or calendar"],
+  [/Get Belline/, "the retired CTA 'Get Belline'"],
+  [/\b24\s?\/\s?7\b/, "24/7"],
+  [/inside out/i, "inside out"],
+  [/Nothing you book is real/i, "Nothing you book is real"],
+  [/reminder texts?/i, "reminder texts"],
+  [/genuinely free|real (?:table |practitioner )?availability|first refusal/i, "availability or first-refusal claims"],
+];
+
+await test("no trade page claims booking into a diary, or uses the retired lines", async () => {
+  const { VERTICALS } = await import("./site-content");
+  const sources = [
+    { file: "scripts/site-content.ts (data)", text: JSON.stringify(VERTICALS) },
+    { file: "scripts/build-site.ts (verticalPage)", text: verticalTemplate() },
+  ];
+  for (const { file, text } of sources) {
+    for (const [pattern, what] of TRADE_FORBIDDEN) assert.doesNotMatch(text, pattern, `${file}: ${what}`);
+  }
+});
+
+await test("no trade-page scene ends 'Booked' or has the agent commit to a time", async () => {
+  const { VERTICALS } = await import("./site-content");
+  for (const v of VERTICALS) {
+    for (const scene of v.scenes) {
+      assert.doesNotMatch(`${scene.label} ${scene.outcome.tag} ${scene.outcome.what}`, /\bbook(?:ed|s)?\b/i, `${v.slug} "${scene.label}" outcome says it booked`);
+      for (const [who, said] of scene.turns) {
+        if (who !== "agent") continue;
+        assert.doesNotMatch(said, /\b(?:I've got|I can do|There's) (?:\w+day|\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|quarter|half)|\b(?:Done|Booked)\.|\bI can book\b/i, `${v.slug}: the agent offers or confirms a time — "${said}"`);
+      }
+    }
+  }
+});
+
+await test("the trade pages label the demo number as international and state the real call length", () => {
+  // Whitespace collapsed: the template wraps sentences across source lines.
+  const html = verticalTemplate().replace(/\s+/g, " ");
+  for (const at of [...html.matchAll(/tel:\+15717785920/g)].map((m) => m.index!)) {
+    assert.match(html.slice(at, at + 260), /international call from the UAE/, "the +1 number is shown without saying it is an international call");
+  }
+  const seed = fs.readFileSync(path.join(process.cwd(), "src", "lib", "seed-belline.ts"), "utf8");
+  const seconds = Number(/demo:\s*\{[\s\S]*?maxCallSeconds:\s*(\d+)/.exec(seed)![1]);
+  assert.equal(seconds, 600, "the demo cap changed — update the trade pages' call length");
+  assert.match(html, /up to ten minutes/, "the trade pages do not say calls last up to ten minutes");
+  assert.match(html, /Connect your business/);
+});
+
+await test("the call panel's status words say request and handover, never booked", () => {
+  const js = fs.readFileSync(path.join(process.cwd(), "public", "site.js"), "utf8");
+  // Every assignment to the status line, plus what doneStatus() returns.
+  const done = /function doneStatus\(scene\) \{([\s\S]*?)\n  \}/.exec(js);
+  assert.ok(done, "site.js no longer has doneStatus()");
+  const statuses = [...js.matchAll(/statusEl\.textContent = ([^;]+);/g)].map((m) => m[1]).join(" ") + " " + done[1];
+  assert.doesNotMatch(statuses, /Booked|Checking the book|Transferred/, "a status still says Booked / Checking the book / Transferred");
+  assert.match(statuses, /Request taken/);
+  assert.match(statuses, /Passed to the team/);
+  // A scene without recordings must not leave a Listen button that throws.
+  assert.match(js, /listenBtn\.disabled = !/, "Listen is not disabled for a scene without audio");
+});
+
 // ---------------------------------------------------------------------------
 // The database half.
 // ---------------------------------------------------------------------------

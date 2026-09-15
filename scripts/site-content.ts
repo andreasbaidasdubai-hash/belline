@@ -9,8 +9,18 @@
  * actually says on that trade's line — the same register, the same refusal,
  * the same read-back — because the page's whole claim is that you are hearing
  * the product rather than a script written about it. Each vertical shows two:
- * one where Belline handles the call, and one where it declines to. An
- * operator deciding whether to trust this is buying the second one.
+ * one where Belline takes the request, and one where it declines or hands it
+ * over. An operator deciding whether to trust this is buying the second one.
+ *
+ * Belline does not book into any calendar or booking system today, so no
+ * scene offers or confirms a time: the agent takes the details and the time
+ * the caller would like, and the team confirms. When a calendar connection is
+ * Available, a scene may say "Booked in your calendar" — not before.
+ * check-webchat pins this.
+ *
+ * Changing an agent line drops its recorded clip (public/audio/manifest.json
+ * is keyed by the exact text) and that scene falls back to the silent timed
+ * transcript until `npm run voices` is run with a speech key.
  */
 
 export interface Scene {
@@ -31,7 +41,7 @@ export interface Vertical {
   lead: string;
   image: string;
   imageAlt: string;
-  /** What this trade's diary is actually made of. */
+  /** The rules Belline follows in conversation for this trade. */
   constraints: { head: string; body: string }[];
   /** The line the agent must not cross, stated plainly. */
   boundary: string;
@@ -40,15 +50,15 @@ export interface Vertical {
 
 const DENTAL_SCENES: Scene[] = [
   {
-    label: "Books it",
+    label: "Takes the request",
     when: "Tuesday, 19:47",
     turns: [
       ["caller", "Hi — I need to get my daughter in for a check-up. After school if you can."],
-      ["agent", "Of course. I've got Thursday at quarter past four with Dr Reid, or Friday at half four."],
-      ["caller", "Thursday's better."],
-      ["agent", "Thursday at four fifteen, then. Can I take her name and a mobile number?"],
+      ["agent", "Of course. I'll take her details and the time you'd like, and the team will confirm it with you."],
+      ["caller", "Thursday after four would be best."],
+      ["agent", "Thursday after four. Can I take her name and a mobile number?"],
     ],
-    outcome: { tag: "Booked", what: "Thu 16:15 · Dr Reid · Check-up" },
+    outcome: { tag: "Request taken", what: "Check-up · Thu after 16:00 · your team confirms" },
   },
   {
     label: "Hands it over",
@@ -61,24 +71,24 @@ const DENTAL_SCENES: Scene[] = [
         "Let me take your number and exactly what you've told me — the clinical team will ring you back, and I'm marking it urgent.",
       ],
     ],
-    // Kein "ich stelle Sie durch". Belline legt keine Anrufe zusammen; das ist
-    // nicht gebaut. Die Seite darf nur behaupten, was die Leitung tut — sonst
-    // erfährt es der Kunde beim ersten echten Anruf statt hier.
-    outcome: { tag: "Flagged urgent", what: "Clinical team · callback · nothing booked", human: true },
+    // A callback rather than "I'm putting you through": this is the practice
+    // with no team number set, or nobody free to pick up. Where a team number
+    // is set, Belline does put urgent calls through live.
+    outcome: { tag: "Flagged urgent", what: "Clinical team · callback · no appointment made", human: true },
   },
 ];
 
 const CLINIC_SCENES: Scene[] = [
   {
-    label: "Books it",
+    label: "Takes the request",
     when: "Monday, 07:54",
     turns: [
       ["caller", "I'd like to come in about a mole on my shoulder I'm not happy with."],
       ["agent", "That would start as a consultation with one of the dermatologists — about twenty minutes."],
-      ["agent", "There's Thursday at nine, or Friday at half eleven."],
-      ["caller", "Friday, please."],
+      ["agent", "I'll take your name and number and the day you'd prefer, and the team will confirm a time."],
+      ["caller", "Friday morning, if possible."],
     ],
-    outcome: { tag: "Booked", what: "Fri 11:30 · Consultation · 20 min" },
+    outcome: { tag: "Request taken", what: "Consultation · Fri morning · your team confirms" },
   },
   {
     label: "Hands it over",
@@ -90,61 +100,55 @@ const CLINIC_SCENES: Scene[] = [
       // line on the call (EMERGENCY_ADVICE in authority.ts) — change both.
       ["agent", "Please call 998 for an ambulance, or go to the nearest emergency department. I'm not the right place for this."],
     ],
-    outcome: { tag: "Escalated", what: "Directed to emergency care · no booking taken", human: true },
+    outcome: { tag: "Escalated", what: "Directed to emergency care · no request taken", human: true },
   },
 ];
 
 const SALON_SCENES: Scene[] = [
   {
-    label: "Books it",
+    label: "Takes the request",
     when: "Saturday, 17:31",
     turns: [
       ["caller", "Could I get a cut and colour with Marta sometime next week?"],
-      [
-        "agent",
-        "Marta's in Tuesday and Thursday. Ten o'clock Tuesday, or two on Thursday — the two together run about three hours.",
-      ],
-      ["caller", "Tuesday at ten, please."],
-      ["agent", "Done. That's Tuesday the fourteenth at ten, with Marta."],
+      ["agent", "I can take that for Marta. The two together run about three hours. Which day would suit you?"],
+      ["caller", "Tuesday morning, ideally."],
+      ["agent", "Tuesday morning with Marta. I'll pass that to the team and they'll confirm a time with you. What name should they use?"],
     ],
-    outcome: { tag: "Booked", what: "Tue 10:00 · Marta · Cut + colour · 3h" },
+    outcome: { tag: "Request taken", what: "Cut + colour · Marta · Tue morning · your team confirms" },
   },
   {
     label: "Holds the line",
     when: "Friday, 18:40",
     turns: [
       ["caller", "I want the full head of bleach tomorrow morning, first thing."],
-      [
-        "agent",
-        "I can get you in — but bleach needs a patch test forty-eight hours before, and we haven't done one for you.",
-      ],
-      ["agent", "I can book the patch test tomorrow and the colour for Monday. Would that work?"],
+      ["agent", "Bleach needs a patch test forty-eight hours before a first colour, so it can't be tomorrow morning."],
+      ["agent", "I'll ask the team for a patch test first and the colour after it. They'll confirm both times with you."],
     ],
-    outcome: { tag: "Policy held", what: "Patch test Sat 09:00 · Colour Mon 10:00" },
+    outcome: { tag: "Policy held", what: "Patch test first · colour after · your team confirms" },
   },
 ];
 
 const RESTAURANT_SCENES: Scene[] = [
   {
-    label: "Books it",
+    label: "Takes the request",
     when: "Friday, 19:47",
     turns: [
       ["caller", "Have you got anything Friday around eight? There'll be six of us."],
-      ["agent", "Let me look. Eight fifteen I can do six on the terrace, or quarter to nine inside."],
+      ["agent", "I can take a request for six on Friday around eight. Inside, or on the terrace?"],
       ["caller", "Terrace, if it's not too cold."],
-      ["agent", "Terrace it is — Friday at eight fifteen, table for six. And a name?"],
+      ["agent", "Terrace, Friday around eight, for six. The team will confirm the table with you. And a name?"],
     ],
-    outcome: { tag: "Booked", what: "Fri 20:15 · 6 covers · Terrace" },
+    outcome: { tag: "Request taken", what: "Fri around 20:00 · 6 guests · terrace · your team confirms" },
   },
   {
     label: "Hands it over",
     when: "Tuesday, 11:02",
     turns: [
       ["caller", "We're looking at a corporate dinner — twenty-two people, private if possible."],
-      ["agent", "That's past what I can book myself, and a party that size wants a person on it."],
-      ["agent", "I've taken your number and the date — events will call you back this morning."],
+      ["agent", "A party that size wants a person on it, so I'll pass it to the events team."],
+      ["agent", "I've taken your number and the date. The events team will call you back."],
     ],
-    outcome: { tag: "Message taken", what: "Events callback · 22 covers · flagged", human: true },
+    outcome: { tag: "Message taken", what: "Events callback · 22 guests · flagged", human: true },
   },
 ];
 
@@ -154,32 +158,32 @@ export const VERTICALS: Vertical[] = [
     name: "Dental",
     title: "Belline for dental practices — Someone always answers",
     description:
-      "An AI receptionist for dental practices. It books check-ups and hygiene appointments against your real diary, and hands anything clinical straight to your team.",
+      "An AI receptionist for dental practices. It answers patients' questions from your information, takes appointment requests, and hands anything clinical to your team.",
     headline: "The practice is with a patient. The phone still rings.",
     lead:
-      "Belline answers when the chair is occupied and after you close. It books against the real diary — the right surgery, the right clinician, the right length — and it does not answer a clinical question, ever.",
+      "Belline answers when the chair is occupied and after you close. It answers from your information, takes the patient's details and request, and never answers a clinical question.",
     image: "/img/dental.jpg",
     imageAlt: "A dental treatment room between patients — the chair empty, the light off.",
     constraints: [
       {
-        head: "Clinicians, not slots",
-        body: "A hygienist's diary is not a dentist's. Belline only offers a clinician qualified for the appointment being asked for.",
-      },
-      {
-        head: "Surgeries as a separate constraint",
-        body: "Two clinicians free does not mean two surgeries free. Rooms and equipment are booked alongside people, not assumed.",
-      },
-      {
         head: "A first visit is a consultation",
-        body: "New patients book an assessment, never the treatment itself — no matter how confidently they ask for it.",
+        body: "New patients are asked in for an assessment, never the treatment itself, however confidently they ask for it. Your team confirms the time.",
       },
       {
-        head: "The cleanup buffer is held, not quoted",
-        body: "Turnaround sits in the diary after the appointment. The patient hears their time; the practice keeps its margin.",
+        head: "Nothing clinical, ever",
+        body: "Belline won't interpret a symptom or advise on pain or medication. It takes the patient's number and what they said, and marks it urgent for your team.",
+      },
+      {
+        head: "Emergencies are not appointments",
+        body: "A patient describing an emergency hears the instructions you've given for emergencies, and the call goes to your team as urgent.",
+      },
+      {
+        head: "Your words, not its own",
+        body: "Prices, preparation and aftercare come from what you wrote. If the answer isn't there, Belline says a colleague will confirm and takes a message.",
       },
     ],
     boundary:
-      "Belline will not discuss a diagnosis, interpret a symptom, or advise on medication. Anything clinical, anything urgent, and anything it is unsure of goes to a person immediately — and it says so plainly rather than hedging.",
+      "Belline will not discuss a diagnosis, interpret a symptom, or advise on medication. Anything clinical, urgent or unclear goes to your team: put through, if you've given Belline a team number, or as an urgent message with the patient's number and what they said.",
     scenes: DENTAL_SCENES,
   },
   {
@@ -187,32 +191,32 @@ export const VERTICALS: Vertical[] = [
     name: "Clinics",
     title: "Belline for private clinics — Someone always answers",
     description:
-      "An AI receptionist for private and aesthetic clinics. It books consultations against real practitioner and room availability, and escalates anything clinical to a human.",
+      "An AI receptionist for private and aesthetic clinics. It answers patients' questions, takes consultation requests and escalates anything clinical to a person.",
     headline: "Patients ring at eight in the evening. Reception closed at five.",
     lead:
-      "Belline answers out of hours and while your team is with patients. It books consultations against the practitioners and rooms that are genuinely free — and it knows the difference between an enquiry and an emergency.",
+      "Belline answers out of hours and while your team is with patients. It takes consultation requests with the patient's details, and knows an enquiry from an emergency.",
     image: "/img/clinics.jpg",
     imageAlt: "A reception sign and a service bell on a counter, nobody behind it.",
     constraints: [
       {
-        head: "Practitioners and rooms, separately",
-        body: "A treatment room, a laser, a surgery — each is booked in its own right. A free practitioner with no room is not an appointment.",
-      },
-      {
         head: "Consultation before treatment",
-        body: "A caller asking for injectables gets a consultation. The treatment is booked by a clinician, after an assessment.",
+        body: "A caller asking for injectables is offered a consultation. The treatment is decided by a clinician, after an assessment.",
       },
       {
         head: "Preparation instructions, in your words",
         body: "Approved pre-appointment information only — what you wrote, read back as you wrote it. Nothing generated on the spot.",
       },
       {
-        head: "Minimum notice and horizon",
-        body: "It will not book tomorrow morning if you need two days, and it will not book eleven months out because someone asked.",
+        head: "Emergencies are not appointments",
+        body: "Anything that sounds urgent is directed to 998 or the nearest emergency department, and no request is taken.",
+      },
+      {
+        head: "Your team confirms every time",
+        body: "Belline takes the treatment, the patient's name and number, and when they'd like to come. Your team books it in your own system and confirms.",
       },
     ],
     boundary:
-      "Belline is reception, not a clinician. It gives no diagnosis, no symptom interpretation and no medical advice. Anything that sounds urgent is directed to emergency care and no appointment is taken — a booking would be the wrong answer at that moment.",
+      "Belline is reception, not a clinician. It gives no diagnosis, no symptom interpretation and no medical advice. Anything that sounds urgent is directed to emergency care and no request is taken — an appointment would be the wrong answer at that moment.",
     scenes: CLINIC_SCENES,
   },
   {
@@ -220,28 +224,28 @@ export const VERTICALS: Vertical[] = [
     name: "Salons",
     title: "Belline for salons and spas — Someone always answers",
     description:
-      "An AI receptionist for salons and spas. It books the right stylist for the service, chains treatments correctly, and holds your patch-test and deposit policies.",
+      "An AI receptionist for salons and spas. It answers from your price list, takes booking requests and holds your patch-test and deposit rules.",
     headline: "Both hands are in someone's hair. The phone rings anyway.",
     lead:
-      "Belline answers mid-service and after close. It knows which stylist can do which service, how long the chain actually takes, and which policies it is not allowed to bend.",
+      "Belline answers mid-service and after close, from your services and prices, and it won't bend the rules you give it.",
     image: "/img/salons.jpg",
     imageAlt: "A brass service bell on a wooden reception counter.",
     constraints: [
       {
-        head: "Only stylists qualified for the service",
-        body: "A colour goes to a colourist. If a caller asks for someone who cannot do it, Belline says so and offers who can.",
-      },
-      {
-        head: "Chains run back to back",
-        body: "A cut and colour is one continuous appointment of the right length, not two bookings that happen to be adjacent.",
-      },
-      {
-        head: "Shared stations and rooms",
-        body: "Colour stations and treatment rooms are finite. Two colourists free and one station is one appointment.",
-      },
-      {
         head: "Patch tests and deposits are not negotiable",
-        body: "If your policy needs forty-eight hours, Belline holds it — politely, with an alternative, and without being talked out of it.",
+        body: "If your policy needs a patch test forty-eight hours before, Belline says so — politely, with the request taken on that basis, and without being talked out of it.",
+      },
+      {
+        head: "Prices only from your list",
+        body: "Belline quotes what your price list says and nothing else. A service that isn't on it is a question for your team.",
+      },
+      {
+        head: "Complaints go to a person",
+        body: "Anything about a previous visit goes to your team as a message, with the client's number and what they said.",
+      },
+      {
+        head: "Your team confirms the time",
+        body: "Belline takes the service, the stylist they'd like and when suits them. Your team books it where you always do and confirms.",
       },
     ],
     boundary:
@@ -253,32 +257,32 @@ export const VERTICALS: Vertical[] = [
     name: "Restaurants",
     title: "Belline for restaurants — Someone always answers",
     description:
-      "An AI receptionist for restaurants. It takes reservations against real table availability, respects turn times and kitchen pacing, and escalates large parties.",
+      "An AI receptionist for restaurants. It answers guests' questions, takes reservation requests and passes large parties to your team.",
     headline: "Friday, half past seven, and nobody can reach the phone.",
     lead:
-      "Belline answers through service. It holds the same constraints your host holds — turn times, pacing, which table actually fits — so it can commit to a time without anyone checking it afterwards.",
+      "Belline answers through service, takes the guest's details and request, and hands events and large parties to a person.",
     image: "/img/restaurants.jpg",
     imageAlt: "A restaurant counter being laid before service, the room still dark.",
     constraints: [
       {
-        head: "Turn times grow with the party",
-        body: "A deuce is ninety minutes; a six-top is two hours. The table is held for as long as the party will really take.",
+        head: "Large parties go to a person",
+        body: "Past the party size you set, Belline takes a name, number and date for your team to call back.",
       },
       {
-        head: "Kitchen pacing beats an empty floor",
-        body: "Covers seated per quarter hour are capped however many tables look free. A full diary the kitchen cannot serve is not a win.",
+        head: "No invented dishes or allergens",
+        body: "It answers from your menu and the allergen notes you gave it. Anything else goes to the team, because a guess about nuts is not an answer.",
       },
       {
-        head: "The tightest table that fits",
-        body: "Two people take the deuce, not the six-top you will want at nine. Combinations only within the same section.",
+        head: "Your hours, your words",
+        body: "Opening times, last orders, dress code and parking come from what you wrote, read back as you wrote it.",
       },
       {
-        head: "Last seating is respected",
-        body: "It will not seat a table the kitchen cannot finish, and it will not quietly book past the close you set.",
+        head: "Your team confirms the table",
+        body: "Belline takes the date, the time, the party size and any seating wish. Your team confirms it in your reservation system.",
       },
     ],
     boundary:
-      "Large parties, private dining and events are taken as a message with a callback, not booked. Complaints go to a person. Belline will not invent a dish, an allergen answer or a policy you have not given it.",
+      "Large parties, private dining and events are taken as a message for a callback. Complaints go to a person. Belline will not invent a dish, an allergen answer or a policy you have not given it.",
     scenes: RESTAURANT_SCENES,
   },
 ];
