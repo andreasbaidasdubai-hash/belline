@@ -433,6 +433,37 @@ await test("a visitor on the public call never sees a vendor's raw error, and th
   assert.match(session, /console\.error\(\s*"\[voice\] text-to-speech failed/, "a text-to-speech failure never reaches the server log");
 });
 
+await test("a public voice socket never receives a vendor's raw error text; the operator's does", async () => {
+  // The friendly sentence on the call page was not enough: the raw ElevenLabs
+  // text still travelled over /ws/demo, where anyone can read it in devtools.
+  const { BrowserTransport } = await import("../src/lib/voice/transports");
+  const vendor = "ElevenLabs 401: quota_exceeded, 12 credits remaining on key sk_live_abc";
+  const socketFor = () => {
+    const sent: string[] = [];
+    return { sent, socket: { OPEN: 1, readyState: 1, send: (d: string) => sent.push(d), close() {} } };
+  };
+  const pub = socketFor();
+  const op = socketFor();
+  const publicT = new BrowserTransport(pub.socket as never, true);
+  const operatorT = new BrowserTransport(op.socket as never);
+  for (const type of ["tts_error", "stt_error", "error"]) {
+    publicT.sendEvent({ type, message: vendor });
+    operatorT.sendEvent({ type, message: vendor });
+  }
+  publicT.sendEvent({ type: "transcript", role: "agent", text: "Hello" });
+  assert.equal(pub.sent.length, 4);
+  for (const frame of pub.sent) {
+    assert.ok(!frame.includes("ElevenLabs") && !frame.includes("quota") && !frame.includes("sk_live"), `a public socket saw vendor text: ${frame}`);
+  }
+  assert.equal(JSON.parse(pub.sent[0]).message, "voice unavailable");
+  assert.equal(JSON.parse(pub.sent[3]).text, "Hello", "ordinary events changed on the public socket");
+  for (const frame of op.sent) assert.equal(JSON.parse(frame).message, vendor, "the operator console lost the full error");
+  // And server.ts marks the socket public exactly when nobody is signed in.
+  const server = fs.readFileSync(path.join(process.cwd(), "server.ts"), "utf8");
+  assert.match(server, /new BrowserTransport\(ws, !user\)/, "server.ts no longer marks the demo socket public");
+  assert.match(server, /user \? event : publicEvent\(event\)/, "a failed session start sends raw error text to a public socket");
+});
+
 // ---------------------------------------------------------------------------
 head("Voice notes");
 
