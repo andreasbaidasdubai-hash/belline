@@ -52,7 +52,7 @@ const GOOD = {
   observation: "You run thirteen clinics across Dubai and take bookings through a request form.",
   problem: "Which means a patient who rings after eight waits until someone gets to the form.",
   solution:
-    "Belline answers those calls, books into the same diary, and works alongside your front desk rather than replacing anyone.",
+    "Belline answers those calls, takes the details for your team, and works alongside your front desk rather than replacing anyone.",
   cta: "Worth forty seconds of your time?",
 };
 
@@ -135,7 +135,7 @@ test("naming the technology is refused", () => {
 
 test("describing the outcome passes", () => {
   const r = checkDraft(
-    { ...GOOD, solution: "Belline picks up when the desk is busy and books the patient in." },
+    { ...GOOD, solution: "Belline picks up when the desk is busy and takes the patient's details for your team." },
     CTX,
   );
   assert.deepStrictEqual(r.problems, []);
@@ -199,7 +199,7 @@ test("the same skeleton with a different business is still caught", () => {
   const other =
     "You run eleven clinics across Dubai and take bookings through a request form. " +
     "Which means a patient who rings after eight waits until someone gets to the form. " +
-    "Belline answers those calls, books into the same diary, and works alongside your front desk rather than replacing anyone. " +
+    "Belline answers those calls, takes the details for your team, and works alongside your front desk rather than replacing anyone. " +
     "Worth forty seconds of your time?";
   const r = checkDraft(GOOD, { ...CTX, recentBodies: [other] });
   assert.ok(r.problems.some((p) => /similar/.test(p)), `similarity was ${r.similarity}`);
@@ -291,15 +291,109 @@ test("the real draft that promised Arabic is refused", () => {
   assert.ok(r.problems.some((p) => p.includes("English only")), JSON.stringify(r.problems));
 });
 
-test("live transfer, WhatsApp, integrations and reminders are refused in the solution", () => {
+test("WhatsApp, integrations and reminders are refused in the solution", () => {
   for (const [solution, why] of [
-    ["Belline answers and puts the patient through to your team when it matters.", "no live transfer"],
     ["Belline answers on the phone and on WhatsApp, alongside your front desk.", "WhatsApp"],
     ["Belline answers after hours and books straight into Fresha.", "integrations"],
     ["Belline answers after hours and sends patients a reminder the day before.", "reminders"],
   ] as const) {
     const r = checkDraft({ ...GOOD, solution }, CTX);
     assert.ok(r.problems.some((p) => p.includes(why)), `${solution} → ${JSON.stringify(r.problems)}`);
+  }
+});
+
+test("live transfer is no longer refused: it works where a team number is set", () => {
+  const r = checkDraft(
+    { ...GOOD, solution: "Belline answers and puts the patient through to your team when it matters, alongside your front desk." },
+    CTX,
+  );
+  assert.ok(!r.problems.some((p) => p.includes("not live")), JSON.stringify(r.problems));
+});
+
+test("every calendar, booking-system, confirmation, deposit and voice-note claim is refused", () => {
+  for (const [solution, why] of [
+    // Calendars by name.
+    ["Belline answers after hours and checks your Google Calendar.", "no calendar integration live"],
+    ["Belline answers and keeps Outlook up to date for the front desk.", "no calendar integration live"],
+    ["Belline works with Microsoft 365 alongside your front desk.", "no calendar integration live"],
+    ["Belline answers and adds the visit to iCal for your team.", "no calendar integration live"],
+    // Booking into a system.
+    ["Belline answers those calls, books into the same diary, and works alongside your front desk.", "no booking into external systems"],
+    ["Belline answers and books straight into your calendar.", "no booking into external systems"],
+    ["Belline answers and syncs with your booking system.", "no booking into external systems"],
+    ["Belline picks up when the desk is busy and books the patient in.", "no booking into external systems"],
+    // Platform-route claims.
+    ["Belline answers the phone, with no migration for your team.", "platform-route claim"],
+    ["Belline answers the phone, and there is no second calendar to keep.", "platform-route claim"],
+    ["Belline answers and you keep your booking system.", "platform-route claim"],
+    // Integrations.
+    ["Belline integrates with the tools your front desk uses.", "no integrations live"],
+    ["Belline connects to your booking software and answers after hours.", "no integrations live"],
+    // Confirmations.
+    ["Belline answers and sends confirmation texts to every patient.", "no confirmations sent"],
+    ["Belline answers after hours and confirms by email.", "no confirmations sent"],
+    // Deposits and payment.
+    ["Belline answers and takes deposits for your team.", "deposits not live"],
+    ["Belline answers and sends payment links after hours.", "deposits not live"],
+    // Voice notes.
+    ["Belline answers calls and voice notes after hours.", "voice notes refused on WhatsApp"],
+  ] as const) {
+    const r = checkDraft({ ...GOOD, solution }, CTX);
+    assert.ok(r.problems.some((p) => p.includes(why)), `${solution} → ${JSON.stringify(r.problems)}`);
+  }
+});
+
+test("every hype pattern is refused, in the subject as well as the body", () => {
+  for (const line of [
+    "Answering 24/7 for your clinics",
+    "Belline is live in minutes",
+    "Belline is live in 2 days",
+    "You can be set up in minutes",
+    "up and running in 30 min",
+    "ready in 10 minutes",
+    "a 30-minute setup",
+    "a thirty minute setup",
+    "a human-like receptionist",
+    "it sounds just like a real person",
+    "the #1 answering service",
+    "the number one answering service",
+    "unlimited calls every month",
+    "no extra charges, ever",
+    "never any surprise fees",
+    "no per-minute billing",
+    "no per conversation charges",
+    "replies in milliseconds",
+    "near-zero latency",
+  ]) {
+    const inBody = checkDraft({ ...GOOD, cta: line }, CTX);
+    assert.ok(inBody.problems.some((p) => /hype/.test(p)), `body: "${line}" → ${JSON.stringify(inBody.problems)}`);
+    const inSubject = checkDraft({ ...GOOD, subject: line }, CTX);
+    assert.ok(inSubject.problems.some((p) => /hype/.test(p)), `subject: "${line}" → ${JSON.stringify(inSubject.problems)}`);
+  }
+});
+
+test("the strategy's today templates pass the guards", () => {
+  // 8.1 fallback and 8.3, with the {placeholders} filled for Dr. Joy.
+  for (const draft of [
+    {
+      subject: "the calls that don't reach Dr. Joy's online booking",
+      observation: "You take appointment requests through a form, and your site also lists a phone number.",
+      problem: "Online booking is covered, but the phone still rings while the team is busy.",
+      solution:
+        "Belline answers those calls from your own information, takes the patient's details and request, and hands your team a ready summary to book as usual. Nothing about your booking system changes.",
+      cta: "Worth a listen?",
+    },
+    {
+      subject: "when Dr. Joy's phone rings after hours",
+      observation: "Dr. Joy asks patients to request an appointment through a form.",
+      problem: "When the team is busy or the doors are closed, those calls go unanswered.",
+      solution:
+        "Belline answers them from your own information, takes the patient's name, number and request, and makes sure your team knows what to do next. It works alongside your front desk.",
+      cta: "Worth forty seconds?",
+    },
+  ]) {
+    const r = checkDraft(draft, CTX);
+    assert.deepStrictEqual(r.problems, [], `${draft.subject} → ${r.problems.join("; ")}`);
   }
 });
 

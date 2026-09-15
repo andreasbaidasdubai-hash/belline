@@ -10,7 +10,9 @@ import { signUp } from "../onboarding";
 import { sendEmail } from "../providers/email";
 import { sendSms, smsEnabled } from "../providers/sms";
 import {
+  SERVICES,
   TRIAL,
+  annualMonthsSaved,
   annualPerMonth,
   checkSelection,
   money,
@@ -21,6 +23,7 @@ import {
   type ProductId,
 } from "../billing/plans";
 import { overLimitSentence, volumeSentence } from "../billing/speak";
+import { stripeEnabled } from "../billing/stripe";
 import type { ToolContext, ToolOutcome } from "./tools";
 
 /**
@@ -31,8 +34,9 @@ import type { ToolContext, ToolOutcome } from "./tools";
  * returns a sentence she can say, the same as the booking tools, and each
  * guards the thing a salesperson is most tempted to get wrong:
  *
- *   `quote` reads prices from the catalogue and refuses discounts, contracts
- *   and guarantees in code, so no prompt can talk her into one.
+ *   `quote` reads prices, the trial, packs, setup and volume terms from the
+ *   catalogue and refuses discounts, contracts and guarantees in code, so no
+ *   prompt can talk her into one.
  *
  *   `start_trial` refuses an address she has not read back and had confirmed,
  *   and sends the sign-in link by email only — never into the chat, because
@@ -40,6 +44,10 @@ import type { ToolContext, ToolOutcome } from "./tools";
  *
  *   `build_demo` goes through the same public-URL guard as the dashboard, and
  *   is rate-limited per conversation because each one costs a model call.
+ *
+ *   `send_checkout` exists only while card payments are configured. Without
+ *   Stripe the link would open a checkout that cannot take a card, so the tool
+ *   is neither offered nor run.
  */
 
 export const SALES_TOOL_NAMES = ["record_lead", "quote", "build_demo", "start_trial", "send_checkout"] as const;
@@ -48,8 +56,9 @@ const HELLO = "hello@belline.ai";
 const DEMOS_PER_CONVERSATION = 2;
 const demosBuilt = new Map<string, number>();
 
+/** The tools Belle is offered right now: checkout only while card payments work. */
 export function salesTools(): Anthropic.Tool[] {
-  return [
+  const tools: Anthropic.Tool[] = [
     {
       name: "record_lead",
       description:
@@ -64,6 +73,10 @@ export function salesTools(): Anthropic.Tool[] {
           website: { type: "string" },
           vertical: { type: "string", description: "What the business does, e.g. dental clinic, salon, restaurant." },
           venues: { type: "string", description: "How many locations." },
+          booking_system: {
+            type: "string",
+            description: "The booking system or calendar they use today, in their words, e.g. Fresha, SevenRooms, OpenTable, Google Calendar, Outlook, paper diary, none.",
+          },
           pain: { type: "string", description: "How they lose calls or bookings today, in their words." },
           stage: { type: "string", enum: ["curious", "interested", "wants_demo", "wants_trial", "ready_to_buy", "wants_person"] },
         },
@@ -73,7 +86,7 @@ export function salesTools(): Anthropic.Tool[] {
     {
       name: "quote",
       description:
-        "The only source of prices. Call it before saying any price, allowance or what a plan includes. If they ask for a discount, a contract, a guarantee or a price for several venues, pass that in asks_for.",
+        "The only source of prices, allowances, the trial, extra usage, setup fees and volume terms. Call it before saying any of those. If they ask for a discount, a contract, a guarantee or a price for several locations, pass that in asks_for.",
       input_schema: {
         type: "object",
         properties: {
@@ -84,7 +97,7 @@ export function salesTools(): Anthropic.Tool[] {
     {
       name: "build_demo",
       description:
-        "Build the prospect's own demo from their website: their receptionist, with their name, services and hours, to chat with or call. Takes about a minute. Returns a link.",
+        "Build the prospect's own demo from their website: their receptionist, with their name, services and hours, to chat with or call. Returns a link when it is ready.",
       input_schema: {
         type: "object",
         properties: {
@@ -125,6 +138,7 @@ export function salesTools(): Anthropic.Tool[] {
       },
     },
   ];
+  return stripeEnabled() ? tools : tools.filter((t) => t.name !== "send_checkout");
 }
 
 function channelOf(ctx: ToolContext): string {
@@ -162,6 +176,16 @@ export async function executeSalesTool(
 
 // ---------------------------------------------------------------------------
 
+/**
+ * The booking system is part of the lead, but `Lead` has no column for it and
+ * the dashboard's enquiry page (not this module's to change) shows `notes`. So
+ * it is written into the notes, labelled, where the team will actually see it.
+ */
+export function leadNotes(pain: string, bookingSystem: string): string | undefined {
+  const parts = [pain, bookingSystem ? `Booking system: ${bookingSystem}` : ""].filter(Boolean);
+  return parts.length ? parts.join("\n") : undefined;
+}
+
 function recordLead(input: Record<string, unknown>, ctx: ToolContext) {
   const str = (v: unknown, max = 200) => String(v ?? "").trim().slice(0, max);
   const email = str(input.email, 254);
@@ -182,7 +206,7 @@ function recordLead(input: Record<string, unknown>, ctx: ToolContext) {
     intent: str(input.stage, 40) || undefined,
     vertical: str(input.vertical, 60) || undefined,
     venues: str(input.venues, 40) || undefined,
-    notes: str(input.pain, 800) || undefined,
+    notes: leadNotes(str(input.pain, 800), str(input.booking_system, 80)),
     source: `belle:${channelOf(ctx)}`,
     emailCheck: checkShape(email),
     status: "new",
@@ -190,9 +214,24 @@ function recordLead(input: Record<string, unknown>, ctx: ToolContext) {
 
   // One row per prospect: a second call to this tool updates the first.
   const previous = email ? findRecentDuplicate(listLeads(), lead) : undefined;
+  if (previous && lead.notes && previous.notes && !lead.notes.includes("Booking system:")) {
+    // A later call that repeats only the pain must not wipe the booking system
+    // an earlier call recorded.
+    const kept = previous.notes.split("\n").find((line) => line.startsWith("Booking system:"));
+    if (kept) lead.notes = `${lead.notes}\n${kept}`;
+  }
   saveLead(previous ? { ...previous, ...Object.fromEntries(Object.entries(lead).filter(([, v]) => v)), id: previous.id, createdAt: previous.createdAt } as Lead : lead);
   if (input.stage === "wants_person") flag(ctx, `Wants a person: ${business}`);
   return { saved: true };
+}
+
+/** "Setting it up yourself is free", plus assisted setup only while it can actually be bought. */
+function setupLine(): string {
+  const assisted = SERVICES.find((s) => s.id === "assisted_setup");
+  const price = assisted?.prices.AE;
+  return assisted && assisted.status === "live" && price !== undefined
+    ? `Setting it up yourself is free; assisted setup is ${money(price, "AE")} once.`
+    : "Setting it up yourself is free.";
 }
 
 function quote(input: Record<string, unknown>, ctx: ToolContext) {
@@ -205,11 +244,15 @@ function quote(input: Record<string, unknown>, ctx: ToolContext) {
     includes: publicLines(p),
     most_popular: Boolean(p.recommended),
   }));
+  const recommended = sellable("AE").find((p) => p.recommended) ?? sellable("AE")[0];
+  const monthsFree = recommended ? annualMonthsSaved([recommended.id], "AE") : 0;
   const base = {
     plans,
-    trial: `${TRIAL.days} days free, ${TRIAL.minutes} voice minutes and ${TRIAL.conversations} text conversations, every channel on, no card`,
-    always: `Priced per location. Setting up is free. ${overLimitSentence()} Cancel any time.`,
+    trial: `${TRIAL.days} days free, ${TRIAL.minutes} voice minutes and ${TRIAL.conversations} text conversations, no card`,
+    always: `Priced per location. ${setupLine()} ${overLimitSentence()} Monthly plans cancel any time; annual plans are paid up front.`,
     several_locations: volumeSentence(),
+    annual_months_free: monthsFree,
+    card_payments_open: stripeEnabled(),
   };
 
   if (asks === "discount" || asks === "contract" || asks === "guarantee") {
@@ -219,21 +262,21 @@ function quote(input: Record<string, unknown>, ctx: ToolContext) {
       refused: asks,
       say:
         asks === "discount"
-          ? "Say plainly that the prices are the same for everyone and you cannot change them, that paying yearly is two months free, and that the trial costs nothing. Offer to have a person get back to them if price is the only thing in the way."
-          : "Say there are no contracts to sign and no guarantees you can promise beyond what the plans include — it is monthly, cancel any time. Offer a person if they need it in writing.",
+          ? `Say plainly that the prices are the same for every business of the same size and you cannot change them. If they have several locations, give the several_locations terms exactly as given. Paying yearly is ${monthsFree} months free, and the trial costs nothing. Offer to have a person get back to them if price is the only thing in the way.`
+          : "Say there are no contracts to sign and no guarantees you can promise beyond what the plans include: monthly plans cancel any time, and annual plans are paid up front. Offer a person if they need it in writing.",
     };
   }
   if (asks === "several_venues") {
     flag(ctx, "Group with several venues — wants pricing");
     return {
       ...base,
-      say: "Give the per-location prices and the several_locations terms exactly as given, then say a person applies the discount and prices twenty or more, and offer to set that up. Record the lead with stage wants_person.",
+      say: "Give the per-location prices and the several_locations terms exactly as given, then say a person applies the discount and prices the largest groups, and offer to set that up. Record the lead with stage wants_person.",
     };
   }
   return {
     ...base,
     say: spoken(ctx)
-      ? "Say the three plans briefly in words — name, price, phone minutes — mention the most popular one, then ask which fits their volume. Do not read every feature."
+      ? "Say the three plans briefly in words — name, price, voice minutes — mention the most popular one, then ask which fits their volume. Do not read every feature."
       : "Give the three plans in a short list with price and what each includes at a glance, mark the most popular, then ask a question about their volume.",
   };
 }
@@ -253,7 +296,7 @@ async function buildDemo(input: Record<string, unknown>, ctx: ToolContext) {
     return {
       built: false,
       reason: err instanceof Error ? err.message : String(err),
-      say: "Say you could not read that website, and offer to start their trial instead — setup works from answers as well as from a site.",
+      say: "Say you could not read that website, and offer to start their trial instead — setup also works from a price list or brochure they upload, or from their answers.",
     };
   }
   demosBuilt.set(ctx.call.id, count + 1);
@@ -288,6 +331,10 @@ async function buildDemo(input: Record<string, unknown>, ctx: ToolContext) {
   };
 }
 
+/** What the trial email says about setup: what it reads, what the owner checks, and no time. */
+const SETUP_STEPS =
+  "Give Belline your website, or upload your price lists or brochures, or both. It drafts your information from them, and you check it and fill the gaps. Customers only reach Belline once you forward your line or add the chat to your website.";
+
 async function startTrial(input: Record<string, unknown>, ctx: ToolContext) {
   if (input.email_confirmed !== true) {
     return { started: false, say: "Spell the email address back letter by letter and get a yes before starting the trial." };
@@ -315,8 +362,8 @@ async function startTrial(input: Record<string, unknown>, ctx: ToolContext) {
   const mail = await sendEmail({
     to: shape.email,
     subject: `Your Belline trial for ${signed.location.name} is ready`,
-    text: `Your ${TRIAL.days}-day trial has started — no card, nothing charged.\n\nSign in here (the link works once, for 24 hours): ${link}\n\nPaste your website and Belline sets itself up from it; it asks only about what the site does not say.\n\nBelle, Belline`,
-    html: `<p>Your ${TRIAL.days}-day trial has started — no card, nothing charged.</p><p><a href="${link}">Sign in and set up ${escapeHtml(signed.location.name)}</a><br><small>The link works once, for 24 hours.</small></p><p>Paste your website and Belline sets itself up from it; it asks only about what the site does not say.</p><p>Belle, Belline</p>`,
+    text: `Your ${TRIAL.days}-day trial has started — no card, nothing charged.\n\nSign in here (the link works once, for 24 hours): ${link}\n\n${SETUP_STEPS}\n\nBelle, Belline`,
+    html: `<p>Your ${TRIAL.days}-day trial has started — no card, nothing charged.</p><p><a href="${link}">Sign in and set up ${escapeHtml(signed.location.name)}</a><br><small>The link works once, for 24 hours.</small></p><p>${SETUP_STEPS}</p><p>Belle, Belline</p>`,
     replyTo: HELLO,
   });
   await sendEmail({
@@ -330,12 +377,20 @@ async function startTrial(input: Record<string, unknown>, ctx: ToolContext) {
     started: true,
     emailed: mail.sent,
     say: mail.sent
-      ? "Tell them the trial is live and a sign-in link is in their inbox now — it works once, for a day. Suggest they open it and paste their website; setup takes minutes."
+      ? "Tell them the trial is live and a sign-in link is in their inbox now — it works once, for a day. Suggest they open it and give Belline their website or a price list to start setup. Do not say how long setup takes."
       : "Tell them the account is created and the team will email their sign-in link shortly. Do not read out any link.",
   };
 }
 
 async function sendCheckout(input: Record<string, unknown>) {
+  // The tool is not offered without Stripe, but a model can still name a tool
+  // it saw earlier in the conversation. Refused here too, in code.
+  if (!stripeEnabled()) {
+    return {
+      sent: false,
+      say: "Say card payments are not open yet, so there is no checkout link to send. Their free trial carries on, and the team will follow up about paying: save them with record_lead at stage ready_to_buy.",
+    };
+  }
   const shape = checkShape(String(input.email ?? ""));
   if (!shape.valid || !shape.email) return { sent: false, say: "Ask for an email address to send the link to, and read it back." };
   const selection = checkSelection([input.plan], "AE");
@@ -346,14 +401,14 @@ async function sendCheckout(input: Record<string, unknown>) {
   const mail = await sendEmail({
     to: shape.email,
     subject: "Your Belline plan",
-    text: `Here is the link to choose your plan and pay securely by card: ${url}\n\nSetting up is free, and you can cancel any time.\n\nBelle, Belline`,
-    html: `<p><a href="${url}">Choose your plan and pay securely</a></p><p>Setting up is free, and you can cancel any time.</p><p>Belle, Belline</p>`,
+    text: `Here is the link to choose your plan and pay securely by card: ${url}\n\nNothing is added to your bill unless you choose it.\n\nBelle, Belline`,
+    html: `<p><a href="${url}">Choose your plan and pay securely</a></p><p>Nothing is added to your bill unless you choose it.</p><p>Belle, Belline</p>`,
     replyTo: HELLO,
   });
   return {
     sent: mail.sent,
     say: mail.sent
-      ? "Tell them the checkout link is in their inbox, card details go straight to Stripe, and they can start today."
+      ? "Tell them the checkout link is in their inbox, and card details go straight to Stripe, never through you."
       : "Say the link could not be emailed right now and the team will send it shortly.",
   };
 }

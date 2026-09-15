@@ -723,13 +723,20 @@ function refreshOurOwnKnowledge(): void {
   if (!stored) return;
   // The persona too, since she became a salesperson: how she sells is sales
   // copy reviewed in the same commit as the tools she sells with.
+  // And the diary: Belle books nothing now, so a stored copy still carrying the
+  // old demo-call service, sales director and Zoom line is dropped on boot
+  // rather than lingering behind a line that no longer offers it.
   const same =
     JSON.stringify(stored.agent.faqs) === JSON.stringify(bellineVenue.agent.faqs) &&
     JSON.stringify(stored.agent.policies) === JSON.stringify(bellineVenue.agent.policies) &&
-    stored.agent.persona === bellineVenue.agent.persona;
+    stored.agent.persona === bellineVenue.agent.persona &&
+    JSON.stringify(stored.salon) === JSON.stringify(bellineVenue.salon) &&
+    stored.requiresEmail === bellineVenue.requiresEmail;
   if (same) return;
   upsertLocation({
     ...stored,
+    salon: bellineVenue.salon,
+    requiresEmail: bellineVenue.requiresEmail,
     agent: {
       ...stored.agent,
       faqs: bellineVenue.agent.faqs,
