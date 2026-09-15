@@ -147,6 +147,23 @@ await test("a booking Belle took is reported; one taken at the desk is not", () 
   assert.equal(liveStamp([venue()]).latestFromBelle?.id, desk.id);
 });
 
+console.log("\n\x1b[1mThe signed-in header on a phone\x1b[0m\n");
+
+// Below 860px the sidebar becomes one row: brand, search, Menu, sign out. The
+// search button kept its desktop `width: 100%` and `.sidebar > *` forbids
+// shrinking, so it claimed the whole row and pushed Menu and Sign out off the
+// screen — every signed-in page scrolled 313px sideways at 375px and at 768px.
+await test("below 860px the search button shrinks instead of pushing Menu off the screen", () => {
+  const css = fs.readFileSync(path.join(process.cwd(), "src", "app", "globals.css"), "utf8");
+  const phone = [...css.matchAll(/@media \(max-width: 860px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join("\n");
+  const rule = phone.match(/\.sidebar > \.palette-trigger\s*\{([^}]*)\}/);
+  assert.ok(rule, "no phone rule for the search button in the 860px blocks");
+  assert.match(rule[1], /width:\s*auto/);
+  assert.match(rule[1], /flex:\s*1 1 auto/);
+  assert.match(rule[1], /min-width:\s*0/);
+  assert.match(rule[1], /margin:\s*0/);
+});
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 console.log(
