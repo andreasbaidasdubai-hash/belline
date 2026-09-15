@@ -118,7 +118,7 @@ ${picker}      <div class="cycle" role="group" aria-label="Billing period">
 
 ${markets.map((m, i) => renderMarket(m, i > 0)).join("\n\n")}
 
-      <p class="compare">An answering service takes a message. Belline takes the booking — and answers at three in the morning.</p>
+      <p class="compare">An answering service takes a message. Belline answers the question, takes the details and tells your team what to do next.</p>
 
       <div class="terms terms-4">
         <div>
@@ -141,8 +141,13 @@ ${markets.map((m, i) => renderMarket(m, i > 0)).join("\n\n")}
 <!-- pricing:end -->`;
 }
 
-/** The ROI calculator's "Compare with" list, and the sentence it shows before any typing. */
-function renderRoi(market: Market): { options: string; sentence: string } {
+/**
+ * The ROI calculator's "Compared with" list, and what it shows before any
+ * typing: the monthly worth in large type (`sentence`), and the bookings and
+ * plan comparison under it (`detail`). public/site.js writes the same two
+ * lines in the same words when the visitor changes a number.
+ */
+export function renderRoi(market: Market): { options: string; sentence: string; detail: string } {
   const plans = sellable(market);
   const chosen = plans.find((b) => b.recommended) ?? plans[0];
   const options = plans
@@ -153,9 +158,12 @@ function renderRoi(market: Market): { options: string; sentence: string } {
     .join("\n");
   // The markup's own example numbers: 10 missed a week, 30%, 250 a booking.
   const bookings = (10 * 0.3 * 52) / 12;
-  const worth = Math.round(bookings * 250).toLocaleString("en-AE");
-  const sentence = `About ${Math.round(bookings)} bookings a month, worth roughly AED ${worth}. ${chosen.name} is ${formatMoney(priceOf(chosen.id, market), market)} a month.`;
-  return { options, sentence };
+  const worthMinor = Math.round(bookings * 250) * 100;
+  const sentence = `About ${formatMoney(worthMinor, market)} a month`;
+  const n = Math.round(bookings);
+  const side = worthMinor >= priceOf(chosen.id, market) ? "more" : "less";
+  const detail = `That’s about ${n} booking${n === 1 ? "" : "s"} a month, ${side} than ${chosen.name} costs.`;
+  return { options, sentence, detail };
 }
 
 function renderOffers(market: Market): string {
@@ -168,9 +176,57 @@ function renderOffers(market: Market): string {
     .join(",\n");
 }
 
+/**
+ * Short generated phrases that sit outside the pricing block: the trial line
+ * under the hero and in the closer, for example. Each appears in the page as
+ * `<span class="gen" data-gen="KEY">…</span>` (or a `<p>`), and its text is
+ * rewritten from the catalogue on every build, so nobody types it.
+ */
+export function generatedPhrases(market: Market = liveMarkets()[0] ?? "AE"): Record<string, string> {
+  const saved = Math.min(...sellable(market).map((p) => annualMonthsSaved([p.id], market)));
+  return {
+    "trial-short": `${TRIAL.days} days free, no card.`,
+    "roi-detail": renderRoi(market).detail,
+    "faq-allowance": overLimitSentence(),
+    "faq-tied-in":
+      "No. Monthly plans cancel any time and run to the end of the paid period. " +
+      (saved > 0
+        ? `Annual plans are paid up front and include ${saved} month${saved === 1 ? "" : "s"} free.`
+        : "Annual plans are paid up front."),
+  };
+}
+
+/**
+ * FAQ answers that name packs, caps or annual terms. They are generated, and
+ * they appear twice: in the visible FAQ (by data-gen) and in the FAQPage
+ * structured data (by question), so both say the same words.
+ */
+const GENERATED_FAQ: Record<string, string> = {
+  "What happens if we use up our allowance?": "faq-allowance",
+  "Are we tied in?": "faq-tied-in",
+};
+
+function applyGenerated(html: string): string {
+  const phrases = generatedPhrases();
+  for (const [key, text] of Object.entries(phrases)) {
+    const slot = new RegExp(`(<(span|p) class="gen" data-gen="${key}">)[^<]*(</\\2>)`, "g");
+    if (!slot.test(html)) throw new Error(`landing.html has lost its generated "${key}" text.`);
+    html = html.replace(slot, (_m, open: string, _tag: string, close: string) => `${open}${esc(text)}${close}`);
+  }
+  for (const [question, key] of Object.entries(GENERATED_FAQ)) {
+    const name = JSON.stringify(question).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const answer = new RegExp(`("name": ${name}, "acceptedAnswer": \\{ "@type": "Answer", "text": )"(?:[^"\\\\]|\\\\.)*"`);
+    if (!answer.test(html)) throw new Error(`landing.html's structured data has lost the answer to "${question}".`);
+    html = html.replace(answer, (_m, open: string) => `${open}${JSON.stringify(phrases[key])}`);
+  }
+  return html;
+}
+
 /** Put the generated pricing into a copy of landing.html. Throws if a marker has gone missing. */
 export function applyPricing(html: string): string {
   const home = liveMarkets()[0] ?? "AE";
+
+  html = applyGenerated(html);
 
   const block = /<!-- pricing:start[\s\S]*?<!-- pricing:end -->/;
   if (!block.test(html)) throw new Error("landing.html has lost its <!-- pricing:start --> / <!-- pricing:end --> markers.");

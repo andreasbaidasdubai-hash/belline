@@ -861,6 +861,10 @@
     return "AED " + Math.round(n).toLocaleString("en-AE");
   }
 
+  // The line under the big number: bookings, and the comparison with the
+  // chosen plan. Same words as renderRoi() in scripts/site-pricing.ts.
+  var detail = form.querySelector('[data-gen="roi-detail"]');
+
   function render() {
     var missed = num("missed");
     var share = Math.min(num("share"), 100) / 100;
@@ -869,14 +873,20 @@
     var price = parseFloat(plan.value) || 0;
     var planName = plan.options[plan.selectedIndex].getAttribute("data-name");
     if (!missed || !share || !value) {
-      out.textContent = "Fill in all three to see what they add up to.";
+      out.textContent = "Fill in all three numbers";
+      if (detail) detail.textContent = "";
       return;
     }
     // 52 weeks over 12 months, not four weeks a month.
     var bookings = (missed * share * 52) / 12;
-    out.textContent =
-      "About " + Math.round(bookings) + " bookings a month, worth roughly " +
-      aed(bookings * value) + ". " + planName + " is " + aed(price) + " a month.";
+    var worth = Math.round(bookings * value);
+    var n = Math.round(bookings);
+    out.textContent = "About " + aed(worth) + " a month";
+    if (detail) {
+      detail.textContent =
+        "That’s about " + n + " booking" + (n === 1 ? "" : "s") + " a month, " +
+        (worth >= price ? "more" : "less") + " than " + planName + " costs.";
+    }
   }
 
   form.addEventListener("input", render);
@@ -888,3 +898,20 @@
 /* The buy bar that used to replace the three buttons on a phone once the hero
    was scrolled past is gone: the three ways to reach Belle stay where they
    are at every height of the page. */
+
+/* --- floating buttons wait for the hero -----------------------------------
+   The hero has its own "Speak to Belline" button, and the floating three sat
+   on top of its example conversation. While the hero is on screen they stay
+   out of the way; they come back as soon as it scrolls off. Without
+   IntersectionObserver the class is never added and nothing changes. */
+(function () {
+  var hero = document.querySelector(".hero");
+  if (!hero || !("IntersectionObserver" in window)) return;
+  var root = document.documentElement;
+  new IntersectionObserver(
+    function (entries) {
+      root.classList.toggle("fabs-waiting", entries[0].isIntersecting);
+    },
+    { threshold: 0.35 },
+  ).observe(hero);
+})();

@@ -43,6 +43,27 @@
      Stylesheet; ein Wechsel war eine Suche, bei der man eine übersieht. */
   --serif: var(--bl-font-display); /* Bricolage Grotesque since Direction C; the name stays so every rule follows */
 
+  /* Semantic roles, so a palette change is a token change, not a hunt.
+     Each points at a brand token today; none carries a colour of its own
+     except the shadows, which the tokens only offer in one size. */
+  --btn-primary-bg: var(--bl-brass);
+  --btn-primary-text: var(--bl-ink);
+  --btn-primary-hover-bg: var(--bl-ink);
+  --btn-primary-hover-text: var(--bl-ivory);
+  --btn-primary-mark: url("/brand/belline-mark-inverse.svg");
+  --btn-primary-hover-mark: url("/brand/belline-mark.svg");
+  --mark-ground: var(--bl-brass);     /* the bell button's badge */
+  --mark-glyph: var(--bl-ink);        /* the bell inside it */
+  --accent-line: var(--bl-brass);     /* decorative rules and dots, never text */
+  --surface-dark: var(--bl-ink);      /* the call card's header bar */
+  --on-dark: var(--bl-ivory);         /* text on --surface-dark */
+  --on-dark-accent: var(--bl-brass-lit); /* labels and the level meter on --surface-dark */
+  --site-shadow-sheet: 0 18px 34px -22px rgba(17, 17, 17, 0.5);
+  --site-shadow-fab: 0 14px 34px -14px rgba(17, 17, 17, 0.5);
+  --site-shadow-fab-soft: 0 12px 28px -14px rgba(17, 17, 17, 0.42);
+  --site-shadow-chat-dock: 0 24px 60px -20px rgba(17, 17, 17, 0.55);
+  --site-shadow-call-dock: 0 20px 46px -16px rgba(17, 17, 17, 0.4);
+
   color-scheme: light;
 }
 
@@ -180,7 +201,7 @@ footer .brand span { font-size: 1.55rem; }
   border-bottom: 0;
   box-shadow: inset 0 0 0 1px var(--ink);
 }
-.top nav .nav-cta:hover { background: var(--brass-fill); color: var(--ink); box-shadow: inset 0 0 0 1px var(--brass-fill); }
+.top nav .nav-cta:hover { background: var(--btn-primary-bg); color: var(--btn-primary-text); box-shadow: inset 0 0 0 1px var(--btn-primary-bg); }
 /* Sichtbar neben "Get Belline", wie gewünscht — aber als Textzeile, nicht als
    zweite Pille. Zwei gleich schwere Pillen nebeneinander sind zwei
    Hauptknöpfe, und die Seite hat genau einen. */
@@ -236,9 +257,9 @@ footer .brand span { font-size: 1.55rem; }
   gap: 10px;
   padding: 15px 28px;
   border-radius: 999px;
-  border: 1px solid var(--brass-fill);
-  background: var(--brass-fill);
-  color: var(--ink);
+  border: 1px solid var(--btn-primary-bg);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font: inherit;
   font-size: 0.98rem;
   font-weight: 600;
@@ -253,10 +274,10 @@ footer .brand span { font-size: 1.55rem; }
   width: 38px;
   height: 38px;
   margin-block: -9px;
-  background: url("/brand/belline-mark-inverse.svg") center / contain no-repeat;
+  background: var(--btn-primary-mark) center / contain no-repeat;
 }
-.btn:hover { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-.btn:not(.line):not(:has(svg)):hover::before { background-image: url("/brand/belline-mark.svg"); }
+.btn:hover { background: var(--btn-primary-hover-bg); border-color: var(--btn-primary-hover-bg); color: var(--btn-primary-hover-text); }
+.btn:not(.line):not(:has(svg)):hover::before { background-image: var(--btn-primary-hover-mark); }
 .btn.line { background: transparent; color: var(--ink); border-color: var(--ink); }
 .btn.line:hover { background: var(--ink); color: var(--paper); }
 .btn svg { width: 17px; height: 17px; }
@@ -393,7 +414,7 @@ section { padding: 110px 0; }
     padding: 4px 22px calc(22px + env(safe-area-inset-bottom, 0px));
     background: var(--paper);
     border-bottom: 1px solid var(--rule);
-    box-shadow: 0 18px 34px -22px rgba(20, 17, 13, 0.5);
+    box-shadow: var(--site-shadow-sheet);
 
     /* Zu, und zwar so, dass es für Tastatur und Vorleseprogramm auch zu ist:
        visibility, nicht nur opacity. Ein unsichtbarer Link, den man antabben
@@ -485,45 +506,6 @@ section { padding: 110px 0; }
    drei Zeilen aus je einem Wort lesen als Gedicht, nicht als Aussage. */
 .hero h1 { max-width: 15ch; }
 .hero .lead { max-width: 42ch; }
-
-/* Das Bild im Hero.
- *
- * Hochkant, 4:5, oben bündig mit der Kopfzeile links — eine Zeitschriften-
- * Doppelseite, Text und Tafel. Keine Rundung, kein Schatten: ein Bild, das
- * allein stehen darf, steht allein. Die Bildunterschrift ist die einzige
- * Stelle im Hero, die nicht "Get Belline" ist, und sie ist absichtlich leise:
- * eine Zeile, ein Link, Messing statt Tinte. */
-.hero-plate { margin: 6px 0 0; }
-.hero-plate img {
-  width: 100%;
-  aspect-ratio: 4 / 5;
-  height: auto;
-  object-fit: cover;
-  object-position: 50% 62%;
-  display: block;
-}
-.hero-plate figcaption {
-  display: grid;
-  gap: 6px;
-  margin-top: 16px;
-  padding-left: 12px;
-  border-left: 2px solid var(--brass);
-}
-.hero-plate-k {
-  font-family: var(--serif);
-  font-size: 1.12rem;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.hero-plate-try {
-  font-size: 0.9rem;
-  color: var(--brass);
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
-  width: fit-content;
-}
-.hero-plate-try:hover,
-.hero-plate-try:focus-visible { border-bottom-color: var(--brass); }
 
 /* --- Das gesetzte Gespräch -------------------------------------------------
    Der Beleg im Hero. Ein Interview in einer Zeitschrift, kein Chatfenster:
@@ -939,6 +921,23 @@ footer { border-top: 1px solid var(--rule); padding: 44px 0 60px; }
 footer p { font-size: 0.86rem; color: var(--ink-3); margin: 0; line-height: 1.7; }
 footer a { color: var(--ink-2); text-underline-offset: 3px; }
 
+/* --- Floating buttons wait for the hero ------------------------------------
+   The hero already offers "Speak to Belline", and the three floating buttons
+   sat on top of its example conversation. site.js adds .fabs-waiting while the
+   hero is on screen; without JavaScript the class never appears. */
+.fabs-waiting .bell-fab,
+.fabs-waiting .chat-fab,
+.fabs-waiting .wa-fab {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.bell-fab,
+.chat-fab,
+.wa-fab {
+  transition: opacity 0.2s ease, visibility 0.2s, transform 0.16s ease;
+}
+
 /* --- Die Glocke ------------------------------------------------------------ */
 
 .bell-fab {
@@ -952,18 +951,18 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   padding: 16px 26px 16px 22px;
   border-radius: 999px;
   /* The floating bell is the bell button: brass with ink, as on the canvas. */
-  background: var(--brass-fill);
-  color: var(--ink);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-weight: 600;
   text-decoration: none;
   font-size: 0.98rem;
   font-weight: 500;
-  box-shadow: 0 0 0 4px var(--paper), 0 14px 34px -14px rgba(20, 17, 13, 0.5);
+  box-shadow: 0 0 0 4px var(--paper), var(--site-shadow-fab);
   transition: transform 0.16s ease;
 }
 .bell-fab { isolation: isolate; }
 .bell-fab[hidden] { display: none; }
-.bell-fab svg { width: 27px; height: 27px; display: block; color: var(--ink); }
+.bell-fab svg { width: 27px; height: 27px; display: block; color: var(--btn-primary-text); }
 
 /* Ein Telefon, das klingelt.
  *
@@ -1055,7 +1054,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   font-size: 0.94rem;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 0 0 4px var(--paper), 0 12px 28px -14px rgba(20, 17, 13, 0.42);
+  box-shadow: 0 0 0 4px var(--paper), var(--site-shadow-fab-soft);
   transition: transform 0.16s ease;
 }
 .chat-fab[hidden] { display: none; }
@@ -1085,7 +1084,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   text-decoration: none;
   font-size: 0.94rem;
   font-weight: 500;
-  box-shadow: 0 0 0 4px var(--paper), 0 12px 28px -14px rgba(20, 17, 13, 0.42);
+  box-shadow: 0 0 0 4px var(--paper), var(--site-shadow-fab-soft);
   transition: transform 0.16s ease;
 }
 .wa-fab svg { width: 23px; height: 23px; display: block; color: var(--brass); }
@@ -1151,7 +1150,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   background: var(--paper);
   border: 1px solid var(--rule);
   border-radius: 14px;
-  box-shadow: 0 24px 60px -20px rgba(20, 17, 13, 0.55);
+  box-shadow: var(--site-shadow-chat-dock);
 }
 /* Die Ecke rundet der Rahmen selbst, nicht der Behälter: mit overflow:hidden
    würde der Schließknopf, der zehn Pixel außerhalb sitzt, weggeschnitten. */
@@ -1222,7 +1221,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   background: var(--paper);
   border: 1px solid var(--ink);
   border-radius: 14px;
-  box-shadow: 0 20px 46px -16px rgba(20, 17, 13, 0.4);
+  box-shadow: var(--site-shadow-call-dock);
 }
 .call-frame { width: 100%; height: 76px; border: 0; display: block; }
 .call-shut {
@@ -1254,7 +1253,6 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   .hero-in { grid-template-columns: 1fr; gap: 46px; }
   /* Unter dem Text, und nicht mehr hochkant: bei 4:5 wäre das Bild auf einem
      Telefon anderthalb Bildschirme hoch, bevor die drei Zahlen kommen. */
-  .hero-plate img { aspect-ratio: 4 / 3; object-position: 50% 68%; }
   .hero h1 { max-width: 16ch; }
   .book-grid { grid-template-columns: 1fr; gap: 34px; }
   .f-row { grid-template-columns: 1fr; }
@@ -1627,7 +1625,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .trade-cards a:first-child { padding-left: 0; }
 .trade-cards a:last-child { border-right: 0; padding-right: 0; }
 .trade-cards a:hover,
-.trade-cards a:focus-visible { background: var(--paper-2, rgba(20, 17, 13, 0.025)); }
+.trade-cards a:focus-visible { background: var(--paper-2); }
 
 /* Unter den vier Karten: die Zeile für alle anderen. Gedämpft, damit die
    Karten die Bühne behalten, aber ein ganzer Satz — nicht eine Fußnote. */
@@ -1978,3 +1976,475 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   padding-bottom: 3px;
 }
 .plan-pick:hover { border-bottom-color: var(--brass); }
+
+/* ===========================================================================
+   Homepage, September 2026: "works with the tools you already use".
+   Everything below is the landing page only. Tokens from brand/tokens.css;
+   no new colours. Panels are flat (no shadows), as the brand asks.
+   =========================================================================== */
+
+.vh {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* --- Hero with the two example conversations ------------------------------ */
+.hero-demo {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 48px;
+  align-items: center;
+}
+.hero-demo .cta-row { gap: 12px 14px; }
+
+.demo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+.demo-card {
+  margin: 0;
+  background: var(--bl-white);
+  border: 1px solid var(--bl-rule);
+  border-radius: var(--bl-radius-panel);
+  overflow: hidden;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.demo-call { margin-top: 64px; }
+
+.demo-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 14px;
+  background: var(--bl-ivory);
+  border-bottom: 1px solid var(--bl-rule-soft);
+}
+.demo-badge svg { width: 30px; height: 30px; display: block; }
+.mark-ground { fill: var(--mark-ground); }
+.mark-glyph { fill: var(--mark-glyph); }
+.demo-title { font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
+.demo-example { margin-left: auto; font-size: 0.75rem; color: var(--bl-stone); white-space: nowrap; }
+.demo-head-ink { background: var(--surface-dark); border-bottom-color: transparent; }
+.demo-head-ink .demo-title { color: var(--on-dark); }
+.demo-head-ink .demo-example { color: var(--on-dark-accent); }
+
+.chat-thread {
+  list-style: none;
+  margin: 0;
+  padding: 16px 14px 12px;
+  display: grid;
+  gap: 10px;
+}
+.msg { max-width: 90%; padding: 9px 13px; border-radius: 16px; }
+.msg-visitor {
+  justify-self: end;
+  background: var(--bl-ink);
+  color: var(--bl-ivory);
+  border-bottom-right-radius: 5px;
+}
+.msg-belline {
+  justify-self: start;
+  background: var(--bl-sand);
+  color: var(--bl-ink);
+  border-bottom-left-radius: 5px;
+}
+.msg-source { display: block; margin-top: 6px; font-size: 0.75rem; color: var(--bl-stone); }
+.chat-compose {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 2px 14px 14px;
+  padding: 6px 6px 6px 14px;
+  border: 1px solid var(--bl-rule-strong);
+  border-radius: var(--bl-radius-pill);
+  font-size: 0.8rem;
+  color: var(--bl-stone);
+}
+.chat-compose i { width: 28px; height: 28px; border-radius: 50%; background: var(--btn-primary-bg); }
+
+.call-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 14px 14px;
+  background: var(--surface-dark);
+  color: var(--on-dark);
+}
+.call-who { display: grid; gap: 1px; min-width: 0; }
+.call-k { font-size: 0.75rem; color: var(--on-dark-accent); }
+.call-num { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.call-level { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; height: 20px; }
+.call-level i { display: block; width: 3px; border-radius: 2px; background: var(--on-dark-accent); }
+.call-level i:nth-child(1) { height: 6px; }
+.call-level i:nth-child(2) { height: 13px; }
+.call-level i:nth-child(3) { height: 9px; }
+.call-level i:nth-child(4) { height: 18px; }
+.call-level i:nth-child(5) { height: 8px; }
+.call-level i:nth-child(6) { height: 12px; }
+.call-level i:nth-child(7) { height: 5px; }
+.call-time { font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+
+.call-lines {
+  list-style: none;
+  margin: 0;
+  padding: 16px 14px 12px;
+  display: grid;
+  gap: 11px;
+  color: var(--bl-graphite);
+}
+.call-lines li:nth-child(even) { color: var(--bl-ink); padding-left: 11px; border-left: 2px solid var(--accent-line); }
+.call-said-k { display: block; font-size: 0.75rem; font-weight: 600; color: var(--bl-stone); }
+
+.call-sent { margin: 2px 14px 14px; padding: 12px; background: var(--bl-sand); border-radius: var(--bl-radius-input); }
+.call-sent-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 4px 10px 4px 8px;
+  border-radius: var(--bl-radius-pill);
+  background: var(--bl-lagoon-tint);
+  color: var(--bl-lagoon);
+  font-size: 0.8rem;
+  font-weight: 600;
+  max-width: none;
+}
+.call-sent-head svg { width: 15px; height: 15px; }
+.call-sent dl { margin: 0; display: grid; gap: 5px; }
+.call-sent dl div { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); gap: 8px; }
+.call-sent dt { font-size: 0.78rem; color: var(--bl-stone); }
+.call-sent dd { margin: 0; font-size: 0.84rem; color: var(--bl-ink); }
+
+/* The one orchestrated moment: the cards arrive, then each conversation plays
+   out once and rests in its finished state. Reduced motion shows the finished
+   state straight away (block at the end of this section). */
+@keyframes demo-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes demo-level {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.35); }
+}
+.demo-card { animation: demo-in 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.demo-call { animation-delay: 0.15s; }
+.chat-thread .msg,
+.call-lines li,
+.call-sent { animation: demo-in 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.chat-thread .msg:nth-child(1) { animation-delay: 0.5s; }
+.chat-thread .msg:nth-child(2) { animation-delay: 1.1s; }
+.chat-thread .msg:nth-child(3) { animation-delay: 1.9s; }
+.chat-thread .msg:nth-child(4) { animation-delay: 2.5s; }
+.call-lines li:nth-child(1) { animation-delay: 0.9s; }
+.call-lines li:nth-child(2) { animation-delay: 1.5s; }
+.call-lines li:nth-child(3) { animation-delay: 2.2s; }
+.call-lines li:nth-child(4) { animation-delay: 2.8s; }
+.call-sent { animation-delay: 3.3s; }
+.call-level i { animation: demo-level 0.6s ease-in-out 0.6s 5; transform-origin: center; }
+.call-level i:nth-child(2n) { animation-delay: 0.75s; }
+.call-level i:nth-child(3n) { animation-delay: 0.9s; }
+
+/* Three plain facts under the hero. */
+.plain-facts {
+  list-style: none;
+  margin: 88px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--rule);
+}
+.plain-facts li {
+  padding: 26px 28px 0;
+  border-right: 1px solid var(--rule-soft);
+  font-size: 0.94rem;
+  color: var(--ink-3);
+}
+.plain-facts li:first-child { padding-left: 0; }
+.plain-facts li:last-child { padding-right: 0; border-right: 0; }
+.plain-facts strong {
+  display: block;
+  margin-bottom: 6px;
+  font-family: var(--bl-font-display);
+  font-size: 1.4rem;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: var(--bl-track-h2);
+  color: var(--ink);
+}
+
+/* --- The problem ------------------------------------------------------------ */
+.problem .problem-h {
+  font-size: clamp(2.1rem, 1.2rem + 3vw, 3.7rem);
+  max-width: 19ch;
+}
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 64px;
+  margin-top: 56px;
+  border-top: 1px solid var(--rule);
+}
+.problem-grid > div { padding-top: 26px; }
+.problem-grid h3,
+.stop h3,
+.works h3 {
+  margin: 0 0 10px;
+  font-family: var(--bl-font-display);
+  font-size: 1.3rem;
+  font-weight: 650;
+  letter-spacing: var(--bl-track-h2);
+}
+.problem-grid p { margin: 0; }
+.problem-coda {
+  margin: 48px 0 0;
+  max-width: 44ch;
+  font-family: var(--bl-font-display);
+  font-size: clamp(1.3rem, 1rem + 1vw, 1.7rem);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+/* --- Where it answers: four channels with icons ----------------------------- */
+.channels-4 {
+  list-style: none;
+  padding: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+.channels-4 > li {
+  display: flex;
+  flex-direction: column;
+  padding: 30px 24px 32px;
+  border-right: 1px solid var(--rule-soft);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.channels-4 > li:first-child { padding-left: 0; }
+.channels-4 > li:last-child { padding-right: 0; border-right: 0; }
+.channels-4 h3 { font-size: 1.22rem; }
+.channels-4 .channel-how { margin-top: auto !important; padding-top: 6px; }
+.channels-4 .channel-how a { color: var(--ink); text-underline-offset: 3px; }
+.ico {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 18px;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#channels .cta-row { margin-top: 36px; }
+
+@media (max-width: 1100px) {
+  .hero-demo { grid-template-columns: minmax(0, 1fr); gap: 52px; }
+  .hero-demo .demo { max-width: 780px; }
+  .channels-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .channels-4 > li,
+  .channels-4 > li:first-child,
+  .channels-4 > li:last-child { padding: 28px 24px 30px; border-right: 1px solid var(--rule-soft); }
+  .channels-4 > li:nth-child(2n) { padding-right: 0; border-right: 0; }
+  .channels-4 > li:nth-child(2n + 1) { padding-left: 0; }
+}
+@media (max-width: 760px) {
+  .demo { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .demo-call { margin-top: 0; }
+  .plain-facts { grid-template-columns: 1fr; margin-top: 56px; }
+  .plain-facts li,
+  .plain-facts li:first-child,
+  .plain-facts li:last-child { padding: 20px 0; border-right: 0; border-bottom: 1px solid var(--rule-soft); }
+  .plain-facts li:last-child { border-bottom: 0; }
+  .problem-grid { grid-template-columns: 1fr; margin-top: 40px; }
+  .channels-4 { grid-template-columns: 1fr; }
+  .channels-4 > li,
+  .channels-4 > li:first-child,
+  .channels-4 > li:last-child,
+  .channels-4 > li:nth-child(2n),
+  .channels-4 > li:nth-child(2n + 1) { padding: 26px 0 28px; border-right: 0; }
+}
+
+/* --- Works with how you already work -------------------------------------- */
+.works-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 48px;
+  margin-top: 52px;
+  border-top: 1px solid var(--rule);
+}
+.works-grid > div { padding-top: 26px; }
+.works-grid p { margin: 0; font-size: 0.98rem; }
+.works .routes-h {
+  margin: 64px 0 0;
+  font-family: inherit;
+  letter-spacing: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.routes { margin: 16px 0 0; border-top: 1px solid var(--rule); }
+.routes > div {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 8px 48px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.routes dt {
+  font-family: var(--bl-font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.routes dd { margin: 0; font-size: 0.96rem; color: var(--ink-2); max-width: 62ch; }
+
+/* --- It knows when to stop ------------------------------------------------- */
+.stop-rows { margin-top: 52px; border-top: 1px solid var(--rule); }
+.stop-rows > div {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 8px 48px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.stop-rows h3 { margin: 0; }
+.stop-rows p { margin: 0; font-size: 0.98rem; }
+.stop-small { margin: 20px 0 0; font-size: 0.86rem; color: var(--ink-3); }
+.cta-aside { align-self: center; font-size: 0.92rem; color: var(--ink-3); }
+
+/* --- Three steps: a real sequence, so real numbers ------------------------- */
+.steps-home { list-style: none; padding: 0; margin-top: 52px; }
+.steps-home .num {
+  font-family: var(--bl-font-display);
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+}
+.steps-home h3 {
+  font-family: var(--bl-font-display);
+  font-size: 1.3rem;
+  font-weight: 650;
+  letter-spacing: var(--bl-track-h2);
+  line-height: 1.2;
+}
+.steps-home p { font-size: 0.98rem; }
+#how .cta-row { margin-top: 44px; }
+
+/* --- The calculator as one sentence --------------------------------------- */
+.roi.roi-sentence-form {
+  max-width: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 32px 64px;
+  align-items: end;
+  margin-top: 52px;
+  padding-top: 40px;
+  border-top: 1px solid var(--rule);
+}
+.roi-sentence {
+  margin: 0;
+  max-width: 26ch;
+  font-family: var(--bl-font-display);
+  font-size: clamp(1.55rem, 1rem + 1.9vw, 2.4rem);
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.roi-field { display: inline-block; }
+.roi-field input {
+  width: calc(3ch + 0.7em);
+  min-height: 44px;
+  padding: 0 0.3em;
+  font: inherit;
+  font-size: max(1em, 16px);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--ink);
+  background: var(--bl-white);
+  border: 1px solid var(--bl-rule-strong);
+  border-radius: var(--bl-radius-input);
+  line-height: 1.2;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.roi-field-wide input { width: calc(4ch + 0.7em); }
+.roi-field input::-webkit-outer-spin-button,
+.roi-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.roi-field input:focus-visible,
+.roi-pick select:focus-visible {
+  outline: var(--bl-focus);
+  outline-offset: var(--bl-focus-offset);
+  border-color: var(--bl-lagoon);
+}
+.roi-result { min-width: 0; }
+.roi-sentence-form .roi-out {
+  margin: 0 0 14px;
+  max-width: none;
+  font-family: var(--bl-font-display);
+  font-size: clamp(2.4rem, 1.3rem + 3.6vw, 4.6rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: var(--bl-track-h1);
+  color: var(--ink);
+}
+.roi-detail { margin: 0 0 18px; font-size: 1rem; color: var(--ink-2); }
+.roi-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 0.95rem; color: var(--ink-2); }
+.roi-pick select {
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: var(--bl-white);
+  border: 1px solid var(--bl-rule-strong);
+  border-radius: var(--bl-radius-input);
+}
+#worth .roi-fine { margin-top: 28px; }
+
+/* --- FAQ note and closer ------------------------------------------------------ */
+#faq .fine { margin-top: 28px; }
+#faq .fine a { color: var(--ink-2); text-underline-offset: 3px; }
+.closer-in {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 48px 72px;
+  align-items: start;
+}
+.closer .lead { margin: 20px 0 0; }
+.closer .cta-row { margin-top: 32px; }
+.closer .proof {
+  margin-top: 0;
+  padding: 4px 0 0 48px;
+  border-top: 0;
+  border-left: 1px solid var(--rule);
+}
+.closer .proof .fine { margin-top: 18px; }
+.closer .proof .dial-inline { color: var(--ink-2); text-underline-offset: 3px; }
+.closer-more { margin-top: 56px; }
+
+@media (max-width: 900px) {
+  .closer-in { grid-template-columns: 1fr; }
+  .closer .proof { padding: 30px 0 0; border-left: 0; border-top: 1px solid var(--rule); }
+  .works-grid { grid-template-columns: 1fr; margin-top: 40px; }
+  .works-grid > div { padding: 22px 0; border-bottom: 1px solid var(--rule-soft); }
+  .routes > div,
+  .stop-rows > div { grid-template-columns: 1fr; }
+  .roi.roi-sentence-form { grid-template-columns: 1fr; }
+  .roi-sentence { max-width: 30ch; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-card,
+  .chat-thread .msg,
+  .call-lines li,
+  .call-sent,
+  .call-level i { animation: none; }
+}
