@@ -1,12 +1,12 @@
 # Belline brand guidelines
 
-Direction C, "The Bell Button". Approved September 2026.
+"The Bell Button", recoloured **Ink + Indigo**. Shape approved September 2026 as Direction C; palette changed from brass to indigo on 15 September 2026.
 
-The front-desk bell becomes a button you press: one solid brass badge that is the logo, the app icon, the avatar and the shape of every primary action. Brass is a confident surface, set against oversized Bricolage Grotesque, so Belline looks sure of itself without raising its voice.
+The front-desk bell becomes a button you press: one solid indigo badge with a white bell that is the logo, the app icon, the avatar and the shape of every primary action. White grounds, ink type and a single indigo accent give Belline the calm, dependable look of business software an owner can trust with their phone line.
 
-**Personality.** The calm, competent front-of-house professional who is always there and never oversteps. Belline is for the owner of a clinic, salon or restaurant in the UAE who wants their phone, website and messages answered properly, in the tools they already use.
+**Personality.** The calm, competent front-of-house professional who is always there and never oversteps. Belline is for the owner of a clinic, salon or restaurant in the UAE who wants their phone and website chat answered properly, with their team told what to do next.
 
-**Fixed:** a bell mark, the name Belline, a light interface, English copy, and no gradients, glows, orbs or sound waves.
+**Fixed:** a bell mark inside a round badge, the name Belline in Bricolage Grotesque, a light interface, English copy, and no gradients, glows, orbs or sound waves in the brand marks.
 
 Source of truth for every value below: `public/brand/tokens.css`. The marketing site (`public/site.css`, inlined at build) and the dashboard (`src/app/globals.css`) both read it.
 
@@ -18,23 +18,24 @@ Source of truth for every value below: `public/brand/tokens.css`. The marketing 
 
 | Asset | File | Use |
 |---|---|---|
-| Primary lockup | `public/brand/belline-lockup.svg` | Headers, documents, anywhere the name is introduced |
+| Primary lockup | `public/brand/belline-lockup.svg` | Headers, documents, anywhere the name is introduced. Indigo badge, ink name |
 | Stacked lockup | `public/brand/belline-lockup-stacked.svg` | Square or narrow spaces, sign-in screens |
-| Lockup on brass | `public/brand/belline-lockup-on-brass.svg` | On a Bell Brass ground only (ink badge, brass bell) |
-| Bell button (mark) | `public/brand/belline-mark.svg` | App icon, avatar, favicon source, the leading edge of the primary button |
-| Bell button, inverse | `public/brand/belline-mark-inverse.svg` | Inside brass buttons and on brass grounds |
-| Bare bell | `public/brand/belline-bell.svg` | Inline icon beside text, in `currentColor`; never as the logo |
-| Wordmark | `public/brand/belline-wordmark.svg`, `-ivory.svg` | Only where the bell button already appears nearby |
-| Mono, dark on light | `public/brand/belline-lockup-mono-ink.svg`, `belline-mark-mono-ink.svg` | One-colour printing, fax, embossing, stamps |
-| Mono, light on dark | `public/brand/belline-lockup-mono-ivory.svg`, `belline-mark-mono-ivory.svg` | Photography and dark grounds |
-| Favicon drawing | `public/brand/belline-favicon.svg` | 16 and 32 px only |
+| Lockup on indigo | `public/brand/belline-lockup-on-brass.svg` | On an indigo ground only: white badge, indigo bell, white name. The file name is kept from Direction C so links do not break |
+| Bell button (mark) | `public/brand/belline-mark.svg` | App icon, avatar, favicon source. White bell on indigo |
+| Bell button, inverse | `public/brand/belline-mark-inverse.svg` | Inside indigo buttons and on indigo grounds. Indigo bell on white |
+| Bare bell | `public/brand/belline-bell.svg`, `public/mark.svg` | Inline icon beside text, in `currentColor`; never as the logo |
+| Bare bell, fixed colour | `public/logo.svg` (ink), `public/logo-dark.svg` (white) | Emails and places that cannot set `currentColor` |
+| Wordmark | `public/brand/belline-wordmark.svg` (ink), `-ivory.svg` (white) | Only where the bell button already appears nearby |
+| Mono, ink | `public/brand/belline-lockup-mono-ink.svg`, `belline-mark-mono-ink.svg` | One-colour printing, fax, embossing, stamps |
+| Mono, white | `public/brand/belline-lockup-mono-ivory.svg`, `belline-mark-mono-ivory.svg` | Photography and dark grounds (file names kept; the colour is now white) |
+| Favicon drawing | `public/brand/belline-favicon.svg`, `public/icon.svg` | 16 and 32 px, and the SVG favicon |
 
 Raster files: `public/brand/png/belline-mark-{16,32,48,180,512,1024}.png`, `public/favicon.ico` (16/32/48), `public/apple-touch-icon.png` (180), `public/brand/png/belline-whatsapp-avatar-640.png`, `public/brand/png/belline-social-avatar-1080.png`, `public/brand/belline-og.png` (1200 × 630).
 
 ### Construction
 
-- Badge: a circle of diameter **D**, Bell Brass `#AD8639`.
-- Bell, ink `#111111`, drawn in a 48-unit box and seated at 60% of the badge: knob radius 4.2, dome radius 15.5, base 38 × 7 with fully round ends.
+- Badge: a circle of diameter **D**, Indigo `#4F46E5`.
+- Bell, white `#FFFFFF`, drawn in a 48-unit box and seated at 60% of the badge: knob radius 4.2, dome radius 15.5, base 38 × 7 with fully round ends.
 - In the favicon drawing (16 px) the knob is squared to 2 px, with 1 px gaps and a 2 px base, so it stays crisp on a pixel grid.
 
 ### Clear space and proportions
@@ -56,93 +57,101 @@ Raster files: `public/brand/png/belline-mark-{16,32,48,180,512,1024}.png`, `publ
 
 ### Do not
 
-- Recolour the badge or the bell outside the pairs above. Never put white on brass (3.36:1).
+- Recolour the badge or the bell outside the pairs above. Words and bells on indigo are white; never ink on indigo (2.82:1).
 - Add gradients, shadows, glows, outlines, sound waves or motion lines.
 - Put the bell outside its badge in a lockup, or rotate, stretch or re-space it.
 - Set "Belline" in another typeface or weight, or track it looser than −0.045em.
-- Place the primary lockup on photography without a solid ground; use the mono ivory version on dark, even images.
+- Place the primary lockup on photography without a solid ground; use the mono white version on dark, even images.
 
 ### Avatars
 
-- **WhatsApp profile (640 × 640) and social avatar (1080 × 1080):** full-bleed Bell Brass square, bare ink bell inside the central 50%, so a circular crop never touches the knob or the base (checked at 192 and 40 px).
+- **WhatsApp profile (640 × 640) and social avatar (1080 × 1080):** full-bleed indigo square, white bell inside the central 50%, so a circular crop never touches the knob or the base (checked at 160 and 40 px).
 - WhatsApp is **coming soon**. Any mock-up, preview or caption that shows the WhatsApp avatar must say so. Never caption it as a live business account.
 - **App icon and apple-touch-icon:** the same full-bleed square; the platform rounds the corners.
+- **OG image:** white ground, ink headline, indigo mark. It names phone and website chat only.
 
 ---
 
 ## 2. Colour
 
-Contrast is WCAG 2.x, computed from the hex values. AA means 4.5:1 for body text, 3:1 for large text (24 px+, or 19 px bold+) and for UI parts.
+Contrast is WCAG 2.x, computed from the hex values. AA means 4.5:1 for body text, 3:1 for large text (24 px+, or 19 px bold+) and for UI parts such as focus rings and input borders.
 
 ### Palette
 
 | Token | Hex | Role |
 |---|---|---|
-| `--bl-ivory` | `#FCFAF6` | Page ground |
-| `--bl-white` | `#FFFFFF` | Panels, cards, inputs |
-| `--bl-sand` | `#F6F2EA` | Sunk rows, hovers, table heads |
-| `--bl-brass-tint` | `#F3EAD8` | Pills, selected rows, Beta badge |
-| `--bl-ink` | `#111111` | Headings, primary text, the bell |
-| `--bl-graphite` | `#55504A` | Body text |
-| `--bl-stone` | `#6E6961` | Meta text, Coming soon |
-| `--bl-brass` | `#AD8639` | Bell Brass: the badge, primary buttons, fills |
-| `--bl-brass-desk` | `#7E5E28` | Desk Brass: small brass text and links |
-| `--bl-brass-lit` | `#C9A45E` | Brass on ink surfaces |
-| `--bl-lagoon` | `#0B6B7A` | States only: Available, success, focus ring |
-| `--bl-lagoon-tint` | `#E3F0F1` | Available badge ground |
-| `--bl-alert` | `#A33327` | Errors |
-| `--bl-alert-tint` | `#F6E4E0` | Error ground |
-| `--bl-rule` | ink at 12% | Hairlines |
-| `--bl-rule-soft` | ink at 7% | Inner dividers |
-| `--bl-rule-strong` | ink at 18% | Outlined badges, quiet inputs |
+| `--bl-ground` | `#FFFFFF` | Page ground, panels, cards, inputs |
+| `--bl-surface` | `#F6F7FB` | Soft panels, table heads, the chat's business bubble |
+| `--bl-sunken` | `#EEF0F6` | Hover and pressed rows |
+| `--bl-border` / `--bl-rule` | `#E5E7EB` / ink at 12% | Hairlines |
+| `--bl-rule-soft` / `--bl-rule-strong` | ink at 7% / 18% | Inner dividers / outlined badges |
+| `--bl-ink-900` | `#111827` | Headings, primary text, mono marks |
+| `--bl-text-2` | `#374151` | Body and secondary text |
+| `--bl-muted` | `#636A77` | Meta text, Coming soon |
+| `--bl-indigo` | `#4F46E5` | Accent: primary buttons, links, the badge, focus ring |
+| `--bl-indigo-hover` | `#4338CA` | Primary hover; indigo text on the tint (Beta) |
+| `--bl-indigo-pressed` | `#3730A3` | Primary pressed |
+| `--bl-indigo-tint` | `#EEF2FF` | Selected rows, current nav item, Beta badge |
+| `--bl-indigo-line` | `#C7D2FE` | Decorative indigo hairline; never text |
+| `--bl-indigo-lit` | `#A5B4FC` | Indigo on ink surfaces (call screen, sales console) |
+| `--bl-success` / `-tint` | `#047857` / `#ECFDF5` | Available, confirmed |
+| `--bl-warning` / `-tint` | `#B45309` / `#FFFBEB` | Deposits due, handovers waiting |
+| `--bl-danger` / `-tint` | `#B91C1C` / `#FEF2F2` | Errors, destructive actions |
+
+**Muted was adjusted.** The brief's `#6B7280` passes on white (4.83) and only just on the soft panel (4.52), but fails on the hover surface (4.24) and the indigo tint (4.32). `#636A77` is a step darker and passes on all four (5.44 / 5.08 / 4.78 / 4.87).
+
+The Direction C names (`--bl-ivory`, `--bl-sand`, `--bl-brass`, `--bl-brass-desk`, `--bl-brass-tint`, `--bl-brass-lit`, `--bl-lagoon`, `--bl-alert`, `--bl-stone`, `--bl-graphite`, `--bl-rule-brass`) remain in `tokens.css` as aliases of the values above, so older CSS keeps working. New code uses the new names.
 
 ### Text pairings (all pass AA)
 
 | Text | On | Ratio | Passes for |
 |---|---|---|---|
-| Ink `#111111` | Ivory | 18.11 | All text |
-| Ink | White | 18.88 | All text |
-| Ink | Sand | 16.91 | All text |
-| Ink | Brass Tint | 15.80 | All text |
-| Ink | Bell Brass | 5.62 | All text (primary buttons) |
-| Ink | Lagoon Tint | 16.19 | All text |
-| Graphite `#55504A` | Ivory | 7.65 | All text |
-| Graphite | White | 7.98 | All text |
-| Graphite | Sand | 7.14 | All text |
-| Graphite | Brass Tint | 6.67 | All text |
-| Stone `#6E6961` | Ivory | 5.22 | All text |
-| Stone | White | 5.45 | All text |
-| Stone | Sand | 4.88 | All text |
-| Stone | Brass Tint | 4.56 | All text; keep at 12 px or larger |
-| Stone | Lagoon Tint | 4.67 | All text |
-| Desk Brass `#7E5E28` | Ivory | 5.72 | All text |
-| Desk Brass | White | 5.97 | All text |
-| Desk Brass | Sand | 5.34 | All text |
-| Desk Brass | Brass Tint | 4.99 | All text (Beta badge) |
-| Lagoon `#0B6B7A` | Ivory | 5.93 | All text |
-| Lagoon | White | 6.18 | All text |
-| Lagoon | Lagoon Tint | 5.30 | All text (Available badge) |
-| Alert `#A33327` | Ivory | 6.58 | All text |
-| Alert | White | 6.86 | All text |
-| Alert | Alert Tint | 5.59 | All text |
-| Ivory | Ink | 18.11 | All text (visitor chat bubble) |
-| Brass Lit `#C9A45E` | Ink | 8.05 | All text (brass on the call bar) |
+| Ink `#111827` | Ground `#FFFFFF` | 17.74 | All text |
+| Ink | Surface `#F6F7FB` | 16.57 | All text |
+| Ink | Sunken `#EEF0F6` | 15.57 | All text |
+| Ink | Indigo tint `#EEF2FF` | 15.86 | All text |
+| Text 2 `#374151` | Ground | 10.31 | All text |
+| Text 2 | Surface | 9.63 | All text |
+| Text 2 | Sunken | 9.05 | All text |
+| Text 2 | Indigo tint | 9.22 | All text |
+| Muted `#636A77` | Ground | 5.44 | All text |
+| Muted | Surface | 5.08 | All text |
+| Muted | Sunken | 4.78 | All text |
+| Muted | Indigo tint | 4.87 | All text |
+| White | Indigo `#4F46E5` | 6.29 | All text (primary buttons, visitor chat bubble) |
+| White | Indigo hover `#4338CA` | 7.90 | All text |
+| White | Indigo pressed `#3730A3` | 9.93 | All text |
+| Indigo `#4F46E5` | Ground | 6.29 | All text (links) |
+| Indigo | Surface | 5.87 | All text |
+| Indigo | Sunken | 5.52 | All text |
+| Indigo | Indigo tint | 5.62 | All text |
+| Indigo hover `#4338CA` | Indigo tint | 7.07 | All text (Beta badge, current nav item) |
+| Success `#047857` | Ground | 5.48 | All text |
+| Success | Success tint `#ECFDF5` | 5.21 | All text (Available badge) |
+| Warning `#B45309` | Ground | 5.02 | All text |
+| Warning | Warning tint `#FFFBEB` | 4.84 | All text |
+| Danger `#B91C1C` | Ground | 6.47 | All text |
+| Danger | Danger tint `#FEF2F2` | 5.91 | All text |
+| White | Danger | 6.47 | All text (counts, destructive fills) |
+| White | Ink | 17.74 | All text (call screen, sales console) |
+| Indigo lit `#A5B4FC` | Ink | 8.90 | All text |
 
 ### Non-text pairings
 
 | Part | On | Ratio | Note |
 |---|---|---|---|
-| Bell Brass badge | Ivory | 3.23 | Passes 3:1 for a graphic |
-| Bell Brass badge | Ink | 5.62 | Inverse mark |
-| Lagoon focus ring | Ivory / White | 5.93 / 6.18 | Passes 3:1 |
-| Lagoon focus ring | Ink | 3.06 | Passes 3:1, barely; on ink surfaces prefer Brass Lit (8.05) |
+| Indigo badge | Ground / Surface | 6.29 / 5.87 | Passes 3:1 |
+| White bell | Indigo badge | 6.29 | Passes 3:1 |
+| Indigo focus ring | Ground / Surface / Sunken | 6.29 / 5.87 / 5.52 | Passes 3:1 |
+| Indigo focus ring | Ink | 2.82 | Fails; on ink surfaces use Indigo lit (8.90) |
+| Indigo line `#C7D2FE` | Ground | 1.49 | Decorative only; never the only sign of state |
 
 ### Rules
 
-- **White never sits on brass** (3.36:1). Words on brass are ink.
-- **Lagoon is for states only**: Available, success, focus. It is never decoration or a second brand colour.
-- One brass for text: Desk Brass. The old near-duplicates (`#8A672E`, `#8A6432`) are retired.
-- No gradients. No shadows on panels; one soft lift (`--bl-elev-float`) only for things that float over content.
+- **Words on indigo are white.** Ink on indigo is 2.82:1 and is never used.
+- **Indigo is the one accent.** Status colours (success, warning, danger) are separate and only mean status; indigo never means "Available".
+- One primary per view. Links are indigo; everything else stays ink, text 2 or muted.
+- No gradients in the marks or UI chrome. No shadows on panels; one soft lift (`--bl-elev-float`) only for things that float over content.
 
 ---
 
@@ -153,7 +162,7 @@ Contrast is WCAG 2.x, computed from the hex values. AA means 4.5:1 for body text
 | **Bricolage Grotesque** | 700 (650 for H2) | Display, headings, big numbers, the wordmark | Google Fonts, `opsz,wght@12..96,400..800`, `display=swap` |
 | **Instrument Sans** | 400, 500, 600 | Body, UI, labels | Google Fonts, `wght@400;500;600;700` |
 
-Why Bricolage Grotesque: its optical-size axis gives big headlines a warm, slightly inky character and settles into a plain grotesk at small sizes, and it is not the default AI-startup face. Fallbacks: `ui-sans-serif, "Segoe UI", Arial, sans-serif`.
+Bricolage Grotesque's optical-size axis gives big headlines character and settles into a plain grotesk at small sizes. Fallbacks: `ui-sans-serif, "Segoe UI", Arial, sans-serif`.
 
 The embeddable widget button (`public/embed.js`) runs on customers' own websites and uses the system font on purpose; it loads no fonts.
 
@@ -168,25 +177,24 @@ The embeddable widget button (`public/embed.js`) runs on customers' own websites
 | Small | 14 / 1.5 | 13 / 1.45 | 0 |
 | Label | 12 / 1.2, 600, uppercase | 11 / 1.2, 600, uppercase | +0.08em |
 
-The site's fluid headline sizes (`clamp()`) sit inside this scale. Keep line length under about 70 characters for body text.
+Keep line length under about 70 characters for body text.
 
 ---
 
 ## 4. Iconography
 
-- **Line icons** on a 24-unit grid, 2 px stroke, round caps and joins, no fills (phone, calendar, chat, close, send, plus). Ink by default, graphite for secondary rows, stone at 14 px for meta.
+- **Line icons** on a 24-unit grid, 2 px stroke, round caps and joins, no fills (phone, calendar, chat, close, send, plus). Ink by default, text 2 for secondary rows, muted at 14 px for meta.
 - **The bell is the only filled pictogram**, and it only appears as the brand mark or inside the bell button. Do not use it as a generic "notification" icon.
-- The chat and WhatsApp buttons on the website use icons drawn in the same hand as the bell (1.5 px stroke at 24 units).
 - No sound waves, robots, sparkles, orbs or circuit motifs.
 - Third-party logos (Google, Microsoft, Fresha, SevenRooms, OpenTable, Meta) only for integrations that are live, and only as the owner's guidelines allow.
 
 ## 5. Photography
 
-- **Real front-of-house moments**: reception counters, a salon chair between clients, a host stand before service, a clinic waiting area in daylight. Warm natural light; brass, wood, stone and linen.
-- People are **customers and staff**, busy and at ease, never looking at the camera while wearing a headset. Get written consent; record credits in `public/img/CREDITS.md`.
+- **Real front-of-house moments**: reception counters, a salon chair between clients, a host stand before service, a clinic waiting area in daylight. Natural light.
+- People are **customers and staff**, busy and at ease. Get written consent; record credits in `public/img/CREDITS.md`.
 - Crop so there is calm negative space for a headline; do not put type over busy detail.
 - No stock "AI" imagery, no glowing screens, no robots, no dark neon.
-- When a photo carries the logo, use the mono ivory lockup on a dark, even area, or put the primary lockup on a solid Ivory band.
+- When a photo carries the logo, use the mono white lockup on a dark, even area, or put the primary lockup on a solid white band.
 
 ---
 
@@ -200,13 +208,14 @@ The site's fluid headline sizes (`clamp()`) sit inside this scale. Keep line len
 | Spacing | 4 px base: 4, 8, 12, 16, 24, 32, 48, 64 |
 | Hairline | 1 px at ink 12% |
 | Elevation | None on panels. `--bl-elev-float` for menus and the chat dock only |
-| Focus ring | Lagoon, 2 px, 2 px offset. Brass Lit on ink surfaces |
+| Focus ring | Indigo, 2 px, 2 px offset (`--bl-focus`). Indigo lit on ink surfaces |
 
 ### Buttons
 
-- **Primary:** Bell Brass pill, ink words, 600. On the website it carries the bell button (inverse mark) at its leading edge. Hover: ink with ivory words. One primary per view.
-- **Secondary:** 1 px ink outline, ink words. Hover fills ink.
-- **Quiet:** text in graphite or Desk Brass, underline on hover.
+- **Primary:** indigo pill, white words, 600. Hover `#4338CA`, pressed `#3730A3`. One primary per view.
+- **Secondary:** white with a 1 px hairline, ink words. Hover fills the sunken surface.
+- **Quiet:** indigo link text, underline on hover.
+- **Destructive:** danger text on white; hover fills the danger tint.
 - Rows of buttons and badges **wrap** at narrow widths; they never shrink text or scroll sideways (checked at 375 px).
 - Minimum touch target 44 px on touch screens.
 
@@ -216,26 +225,26 @@ Use these words and only these meanings. Never show a channel or integration as 
 
 | Badge | Class | Look | Meaning |
 |---|---|---|---|
-| Available | `.state .state-available` | Lagoon on Lagoon Tint, dot | Live and switched on |
-| Beta | `.state .state-beta` | Desk Brass on Brass Tint | Works, still being tested with real customers |
-| Coming soon | `.state .state-soon` | Stone text, 18% ink outline | Not live. Today this includes WhatsApp |
-| Request this integration | `.state .state-request` | Ink outline | Invites the owner to ask for it |
+| Available | `.state .state-available` | Success green on success tint, dot (5.21:1) | Live and switched on |
+| Beta | `.state .state-beta` | Indigo hover on indigo tint (7.07:1) | Works, still being tested with real customers |
+| Coming soon | `.state .state-soon` | Muted text, 18% ink outline (5.44:1) | Not live. Today this includes WhatsApp |
+| Request this integration | `.state .state-request` | Ink outline, ink words (17.74:1) | Invites the owner to ask for it |
 
 ### Inputs
 
-White field, 1 px rule, 10 px radius, 13–15 px text. Focus: Lagoon border plus 1 px Lagoon ring. Errors: Alert text under the field saying what to fix.
+White field, 1 px rule, 10 px radius, 13–15 px text. Focus: indigo border plus 1 px indigo ring. Errors: danger text under the field saying what to fix.
 
 ### Website chat widget
 
-- Header: Ivory, the bell button at 36 px, business name in Instrument Sans 600, "Answered by Belline, AI receptionist"-style meta in stone.
-- The business speaks on Sand; the visitor speaks in ink with ivory words.
-- Send is a round Bell Brass button with an ink arrow. The microphone is white with an 18% outline.
-- Focus ring Lagoon. No shadows inside the panel.
-- The floating button on customers' sites defaults to ink with a Brass Lit bell; a venue may choose another colour only if its words reach 4.5:1.
+- Header: white, the bell button at 36 px, business name in Instrument Sans 600, "Answered by Belline, AI receptionist"-style meta in muted.
+- The business speaks on the soft surface `#F6F7FB` with ink words; the visitor speaks on indigo with white words.
+- Send is a round indigo button with a white arrow. The microphone is white with an 18% outline.
+- Focus ring indigo. No shadows inside the panel.
+- The floating buttons on customers' sites default to indigo with white words and a white bell; the second button is white with an indigo icon. A venue may choose another colour only if its words reach 4.5:1, and the bell then takes the words' colour.
 
 ### Dashboard
 
-Ivory ground, white panels with 14 px radius and hairlines, page titles in Bricolage Grotesque. Numbers that are estimates are labelled **Estimate** and never styled like measured results. Sample data is labelled **Sample data**, and its numbers must agree with each other.
+White ground, soft `#F6F7FB` panels for table heads and side areas, hairlines, page titles in Bricolage Grotesque, the current page marked in indigo on the indigo tint. Numbers that are estimates are labelled **Estimate** and never styled like measured results. Sample data is labelled **Sample data**, and its numbers must agree with each other.
 
 ---
 
@@ -256,8 +265,8 @@ What Belline is not: an "AI from the future", a developer platform, cute or cart
 ### Writing rules
 
 - Sentence case everywhere, including buttons. Actions say what happens: "Connect your business", "Speak to Belline", "Call back".
-- Name what the owner cares about (calls, bookings, follow-ups), not how the system works.
-- **Honesty is the brand.** Never say or imply that WhatsApp or any integration is live before it is. Use Available / Beta / Coming soon exactly as defined above.
+- Name what the owner cares about (calls, enquiries, follow-ups), not how the system works.
+- **Honesty is the brand.** Never say or imply that WhatsApp, a calendar or any integration is live before it is. Use Available / Beta / Coming soon exactly as defined above.
 - Estimates are called estimates. "About 3 hours of desk time, assuming 4 minutes a call" is right; "Saved 3 hours" is not.
 - Errors say what happened and what to do next, without apology or blame.
 - No exclamation marks in product copy. No "revolutionary", "seamless", "magic" or "never miss a call again".

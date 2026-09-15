@@ -1,10 +1,11 @@
 /**
  * Die Marke, an einer Stelle.
  *
- * Direction C, "The Bell Button" (15.09.2026): the bell sits in a solid Bell
- * Brass badge, ink on brass, and the name is set in Bricolage Grotesque 700.
- * The badge is the logo, the app icon, the avatar and the shape of the primary
- * button, so it looks the same here as on belline.ai and in public/brand/.
+ * "The Bell Button", recoloured Ink + Indigo (15.09.2026): the bell sits in a
+ * solid indigo badge, white on indigo, and the name is set in Bricolage
+ * Grotesque 700. The badge is the logo, the app icon, the avatar and the shape
+ * of the primary button, so it looks the same here as on belline.ai and in
+ * public/brand/.
  *
  * The wordmark inherits the text colour of the page, so the same markup reads
  * on light and dark grounds.
@@ -13,13 +14,16 @@ export default function Brand({
   size = 26,
   words = true,
   tone,
+  bell,
 }: {
   /** Nominal size in pixels. The badge is 1.15x, the name 0.9x (canvas: 28 badge, 21 name at 24). */
   size?: number;
   /** false: the badge alone, where the name already stands beside it. */
   words?: boolean;
-  /** Badge colour. Unset: Bell Brass. The bell stays ink, so pass a colour ink reads on. */
+  /** Badge colour. Unset: indigo. */
   tone?: string;
+  /** Bell colour. Unset: white, which reads on indigo at 6.29:1. */
+  bell?: string;
 }) {
   const badge = Math.round(size * 1.15);
   return (
@@ -41,8 +45,8 @@ export default function Brand({
         aria-label={words ? undefined : "Belline"}
         style={{ display: "block", flexShrink: 0 }}
       >
-        <circle cx="24" cy="24" r="24" fill={tone ?? "var(--bl-brass)"} />
-        <g fill="#111111" transform="matrix(0.6 0 0 0.6 9.6 9.81)">
+        <circle cx="24" cy="24" r="24" fill={tone ?? "var(--bl-indigo, #4F46E5)"} />
+        <g fill={bell ?? "#FFFFFF"} transform="matrix(0.6 0 0 0.6 9.6 9.81)">
           <circle cx="24" cy="10" r="4.2" />
           <path d="M8.5 32a15.5 15.5 0 0 1 31 0Z" />
           <rect x="5" y="34.5" width="38" height="7" rx="3.5" />

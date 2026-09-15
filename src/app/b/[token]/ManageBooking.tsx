@@ -11,15 +11,15 @@ const day = (d: string) =>
 const primary: React.CSSProperties = {
   padding: "12px 20px",
   borderRadius: 999,
-  background: "#111111",
-  color: "#FCFAF6",
+  background: "var(--bl-ink-900)",
+  color: "var(--bl-ground)",
   border: 0,
   fontWeight: 600,
   fontSize: 14,
   cursor: "pointer",
   textDecoration: "none",
 };
-const secondary: React.CSSProperties = { ...primary, background: "transparent", color: "#111111", border: "1px solid #D8D1C4" };
+const secondary: React.CSSProperties = { ...primary, background: "transparent", color: "var(--bl-ink-900)", border: "1px solid var(--bl-rule-strong)" };
 
 export default function ManageBooking({
   token,
@@ -111,15 +111,15 @@ export default function ManageBooking({
       {mode === "change" && (
         <div>
           <p style={{ fontSize: 15, margin: "0 0 12px" }}>Pick a new time. Your current one stays until you do.</p>
-          {busy && !slots && <p style={{ color: "#6E6961" }}>Finding free times…</p>}
+          {busy && !slots && <p style={{ color: "var(--bl-muted)" }}>Finding free times…</p>}
           {slots && slots.length === 0 && (
-            <p style={{ color: "#55504A" }}>
+            <p style={{ color: "var(--bl-text-2)" }}>
               Nothing free in the next two weeks online. {phone ? `Call ${venueName} on ${phone}.` : ""}
             </p>
           )}
           {Object.entries(byDay).map(([d, list]) => (
             <div key={d} style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 13, color: "#6E6961", marginBottom: 6 }}>{day(d)}</div>
+              <div style={{ fontSize: 13, color: "var(--bl-muted)", marginBottom: 6 }}>{day(d)}</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {list.map((s) => (
                   <button key={`${s.date}-${s.startMin}`} style={secondary} disabled={busy} onClick={() => move(s)}>
@@ -137,9 +137,9 @@ export default function ManageBooking({
       {mode === "cancel" && (
         <div>
           <p style={{ fontSize: 15, margin: "0 0 12px" }}>Cancel this booking?</p>
-          {policy && <p style={{ fontSize: 14, color: "#55504A", margin: "0 0 14px" }}>{policy}</p>}
+          {policy && <p style={{ fontSize: 14, color: "var(--bl-text-2)", margin: "0 0 14px" }}>{policy}</p>}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button style={{ ...primary, background: "#A33327" }} onClick={cancel} disabled={busy}>
+            <button style={{ ...primary, background: "var(--bl-danger)" }} onClick={cancel} disabled={busy}>
               {busy ? "Cancelling…" : "Yes, cancel it"}
             </button>
             <button style={secondary} onClick={() => setMode("idle")} disabled={busy}>Keep it</button>
@@ -147,7 +147,7 @@ export default function ManageBooking({
         </div>
       )}
 
-      {message && <p style={{ marginTop: 16, fontSize: 15, color: mode === "done" ? "#2F6B4F" : "#A33327" }}>{message}</p>}
+      {message && <p style={{ marginTop: 16, fontSize: 15, color: mode === "done" ? "var(--bl-success)" : "var(--bl-danger)" }}>{message}</p>}
     </div>
   );
 }

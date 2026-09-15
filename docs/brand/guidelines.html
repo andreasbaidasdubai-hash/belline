@@ -1,39 +1,42 @@
 <title>Belline Brand Guidelines</title>
-<meta name="description" content="Direction C, The Bell Button: logo, colour, type, iconography, photography, UI foundations and voice for Belline.">
+<meta name="description" content="The Bell Button in Ink + Indigo: logo, colour, type, iconography, photography, UI foundations and voice for Belline.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400;500;600;700&display=swap">
 <style>
   /* Brand palette: fixed values, the same in every theme (swatches and marks). */
   :root {
-    --ivory: #FCFAF6; --white: #FFFFFF; --sand: #F6F2EA; --tint: #F3EAD8;
-    --ink: #111111; --graphite: #55504A; --stone: #6E6961;
-    --brass: #AD8639; --desk: #7E5E28; --lit: #C9A45E;
-    --lagoon: #0B6B7A; --lagoon-tint: #E3F0F1; --alert: #A33327; --alert-tint: #F6E4E0;
+    --ground: #FFFFFF; --surface: #F6F7FB; --sunken: #EEF0F6;
+    --ink: #111827; --text2: #374151; --muted-fixed: #636A77;
+    --indigo: #4F46E5; --indigo-hover: #4338CA; --indigo-pressed: #3730A3;
+    --tint: #EEF2FF; --line: #C7D2FE; --lit: #A5B4FC;
+    --success: #047857; --success-tint: #ECFDF5;
+    --warning: #B45309; --warning-tint: #FFFBEB;
+    --danger: #B91C1C; --danger-tint: #FEF2F2;
 
     /* Page chrome: light theme tokens. */
-    --bg: #FCFAF6; --surface: #FFFFFF; --sunk: #F6F2EA;
-    --text: #111111; --text-2: #55504A; --muted: #6E6961;
-    --accent-text: #7E5E28; --rule: rgba(17,17,17,.12); --rule-strong: rgba(17,17,17,.18);
-    --focus: #0B6B7A;
+    --bg: #FFFFFF; --panel: #F6F7FB; --card: #FFFFFF;
+    --text: #111827; --text-2: #374151; --muted: #636A77;
+    --accent-text: #4F46E5; --rule: rgba(17,24,39,.12); --rule-strong: rgba(17,24,39,.18);
+    --focus: #4F46E5;
     --display: "Bricolage Grotesque", ui-sans-serif, "Segoe UI", Arial, sans-serif;
     --sans: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #111111; --surface: #1A1918; --sunk: #211F1D;
-      --text: #FCFAF6; --text-2: #D9D3CA; --muted: #B3ACA2;
-      --accent-text: #C9A45E; --rule: rgba(252,250,246,.14); --rule-strong: rgba(252,250,246,.24);
-      --focus: #C9A45E;
+      --bg: #111827; --panel: #1F2937; --card: #182131;
+      --text: #FFFFFF; --text-2: #D1D5DB; --muted: #A1A8B5;
+      --accent-text: #A5B4FC; --rule: rgba(255,255,255,.14); --rule-strong: rgba(255,255,255,.24);
+      --focus: #A5B4FC;
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #111111; --surface: #1A1918; --sunk: #211F1D;
-    --text: #FCFAF6; --text-2: #D9D3CA; --muted: #B3ACA2;
-    --accent-text: #C9A45E; --rule: rgba(252,250,246,.14); --rule-strong: rgba(252,250,246,.24);
-    --focus: #C9A45E;
+    --bg: #111827; --panel: #1F2937; --card: #182131;
+    --text: #FFFFFF; --text-2: #D1D5DB; --muted: #A1A8B5;
+    --accent-text: #A5B4FC; --rule: rgba(255,255,255,.14); --rule-strong: rgba(255,255,255,.24);
+    --focus: #A5B4FC;
     color-scheme: dark;
   }
 
@@ -43,7 +46,7 @@
   a { color: var(--accent-text); text-underline-offset: 3px; }
   a:hover { color: var(--text); }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  code { font: 500 .88em/1.4 ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--sunk); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+  code { font: 500 .88em/1.4 ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--panel); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
 
   h1, h2, h3 { font-family: var(--display); color: var(--text); margin: 0; }
   h1 { font-weight: 700; font-size: clamp(2.6rem, 1.4rem + 5.4vw, 5.6rem); line-height: .94; letter-spacing: -.045em; }
@@ -52,7 +55,6 @@
   p { margin: 0 0 14px; color: var(--text-2); max-width: 68ch; }
   .label { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-text); margin: 0 0 12px; }
 
-  /* Header */
   .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 20px; border-bottom: 1px solid var(--rule); }
   .lockup { display: inline-flex; align-items: center; gap: 10px; }
   .lockup svg { display: block; flex: none; }
@@ -74,36 +76,36 @@
   .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; min-width: 0; }
+  .card { background: var(--card); border: 1px solid var(--rule); border-radius: 14px; padding: 18px; min-width: 0; }
   .card p:last-child { margin-bottom: 0; }
   .tile { border-radius: 14px; border: 1px solid var(--rule); min-height: 150px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
   .tile .cap { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
   .tile .show { flex: 1; display: flex; align-items: center; justify-content: center; }
-  .on-ivory { background: var(--ivory); color: var(--ink); }
-  .on-ivory .cap { color: var(--stone); }
-  .on-brass { background: var(--brass); color: var(--ink); border-color: transparent; }
-  .on-ink { background: var(--ink); color: var(--ivory); border-color: var(--rule); }
-  .on-ink .cap { color: #B3ACA2; }
+  .on-ground { background: var(--ground); color: var(--ink); }
+  .on-ground .cap { color: var(--muted-fixed); }
+  .on-indigo { background: var(--indigo); color: #FFFFFF; border-color: transparent; }
+  .on-ink { background: var(--ink); color: #FFFFFF; border-color: var(--rule); }
+  .on-ink .cap { color: #D1D5DB; }
 
-  .clear { position: relative; display: inline-flex; align-items: center; gap: 16px; padding: 16px; border: 1px dashed var(--brass); background: var(--ivory); color: var(--ink); max-width: 100%; }
-  .clear .x { position: absolute; width: 16px; height: 16px; background: var(--tint); color: var(--desk); font-size: 10px; font-weight: 600; display: grid; place-items: center; }
+  .clear { position: relative; display: inline-flex; align-items: center; gap: 16px; padding: 16px; border: 1px dashed var(--indigo); background: var(--ground); color: var(--ink); max-width: 100%; }
+  .clear .x { position: absolute; width: 16px; height: 16px; background: var(--tint); color: var(--indigo-hover); font-size: 10px; font-weight: 600; display: grid; place-items: center; }
 
   .dont { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
   .dont li { padding-left: 22px; position: relative; color: var(--text-2); }
-  .dont li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 10px; height: 2px; background: var(--alert); transform: rotate(45deg); }
-  .dont li::after { content: ""; position: absolute; left: 2px; top: .62em; width: 10px; height: 2px; background: var(--alert); transform: rotate(-45deg); }
+  .dont li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 10px; height: 2px; background: var(--danger); transform: rotate(45deg); }
+  .dont li::after { content: ""; position: absolute; left: 2px; top: .62em; width: 10px; height: 2px; background: var(--danger); transform: rotate(-45deg); }
 
   .swatch { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .chip { height: 76px; border-radius: 14px; border: 1px solid var(--rule); display: flex; align-items: flex-end; padding: 8px 10px; font-size: 12px; font-weight: 600; }
   .swatch b { font-size: 14px; }
   .swatch span { font-size: 13px; color: var(--muted); line-height: 1.4; }
 
-  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 14px; background: var(--surface); }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 14px; background: var(--card); }
   table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
   th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
-  th { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); background: var(--sunk); }
+  th { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); background: var(--panel); }
   tr:last-child td { border-bottom: 0; }
-  td .pair { display: inline-flex; align-items: center; justify-content: center; min-width: 88px; height: 30px; padding: 0 10px; border-radius: 8px; font-weight: 600; font-size: 13px; border: 1px solid rgba(17,17,17,.12); }
+  td .pair { display: inline-flex; align-items: center; justify-content: center; min-width: 88px; height: 30px; padding: 0 10px; border-radius: 8px; font-weight: 600; font-size: 13px; border: 1px solid rgba(17,24,39,.12); }
   .num { font-variant-numeric: tabular-nums; font-weight: 600; }
 
   .spec { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 8px 24px; align-items: center; padding: 12px 0; border-top: 1px solid var(--rule); }
@@ -111,32 +113,37 @@
   .spec .meta b { color: var(--text); }
 
   .btn { display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 20px; border-radius: 999px; font: 600 15px/1 var(--sans); text-decoration: none; white-space: nowrap; cursor: pointer; }
-  .btn-primary { background: var(--brass); color: var(--ink); border: 1px solid var(--brass); padding-left: 6px; }
-  .btn-secondary { background: transparent; color: var(--text); border: 1px solid var(--text); }
+  .btn-primary { background: var(--indigo); color: #FFFFFF; border: 1px solid var(--indigo); padding-left: 6px; }
+  .btn-primary:hover { background: var(--indigo-hover); border-color: var(--indigo-hover); color: #FFFFFF; }
+  .btn-primary:focus-visible { outline-color: var(--indigo); }
+  .btn-secondary { background: var(--ground); color: var(--ink); border: 1px solid rgba(17,24,39,.18); }
+  .btn-secondary:hover { background: var(--sunken); color: var(--ink); }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .state { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
-  .state-available { background: var(--lagoon-tint); color: var(--lagoon); }
+  .state-available { background: var(--success-tint); color: var(--success); }
   .state-available::before { content: ""; width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
-  .state-beta { background: var(--tint); color: var(--desk); }
-  .state-soon { border-color: rgba(17,17,17,.18); color: var(--stone); font-weight: 500; background: var(--ivory); }
-  .state-request { border-color: var(--ink); color: var(--ink); background: var(--ivory); }
-  .demo { background: var(--ivory); color: var(--ink); border-radius: 14px; border: 1px solid var(--rule); padding: 18px; }
+  .state-beta { background: var(--tint); color: var(--indigo-hover); }
+  .state-soon { border-color: rgba(17,24,39,.18); color: var(--muted-fixed); font-weight: 500; background: var(--ground); }
+  .state-request { border-color: var(--ink); color: var(--ink); background: var(--ground); }
+  .demo { background: var(--ground); color: var(--ink); border-radius: 14px; border: 1px solid var(--rule); padding: 18px; }
+  .demo p { color: var(--text2); }
+  .demo .label { color: var(--indigo); }
   .field { display: grid; gap: 6px; }
   .field label { font-size: 13px; font-weight: 600; }
-  .field .input { height: 46px; border-radius: 10px; border: 2px solid var(--lagoon); background: #fff; padding: 0 14px; display: flex; align-items: center; font-size: 15px; }
-  .field small { font-size: 12px; color: var(--stone); }
+  .field .input { height: 46px; border-radius: 10px; border: 2px solid var(--indigo); background: #fff; padding: 0 14px; display: flex; align-items: center; font-size: 15px; }
+  .field small { font-size: 12px; color: var(--muted-fixed); }
 
-  .chat { background: #fff; color: var(--ink); border: 1px solid rgba(17,17,17,.12); border-radius: 14px; overflow: hidden; max-width: 380px; }
-  .chat header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--ivory); border-bottom: 1px solid rgba(17,17,17,.12); }
+  .chat { background: #fff; color: var(--ink); border: 1px solid rgba(17,24,39,.12); border-radius: 14px; overflow: hidden; max-width: 380px; }
+  .chat header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #fff; border-bottom: 1px solid rgba(17,24,39,.12); }
   .chat header b { display: block; font-size: 15px; }
-  .chat header span { font-size: 12px; color: var(--stone); }
+  .chat header span { font-size: 12px; color: var(--muted-fixed); }
   .chat .log { padding: 14px; display: grid; gap: 10px; }
   .bubble { max-width: 82%; padding: 9px 12px; border-radius: 14px; font-size: 14px; line-height: 1.45; }
-  .them { background: var(--sand); border-bottom-left-radius: 4px; justify-self: start; }
-  .you { background: var(--ink); color: var(--ivory); border-bottom-right-radius: 4px; justify-self: end; }
-  .chat footer { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid rgba(17,17,17,.12); }
-  .chat footer .type { flex: 1; height: 40px; border-radius: 999px; border: 1px solid rgba(17,17,17,.18); display: flex; align-items: center; padding: 0 14px; font-size: 14px; color: var(--stone); }
-  .chat footer .send { width: 40px; height: 40px; border-radius: 999px; background: var(--brass); display: grid; place-items: center; flex: none; }
+  .them { background: var(--surface); color: var(--ink); border-bottom-left-radius: 4px; justify-self: start; }
+  .you { background: var(--indigo); color: #FFFFFF; border-bottom-right-radius: 4px; justify-self: end; }
+  .chat footer { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid rgba(17,24,39,.12); }
+  .chat footer .type { flex: 1; height: 40px; border-radius: 999px; border: 1px solid rgba(17,24,39,.18); display: flex; align-items: center; padding: 0 14px; font-size: 14px; color: var(--muted-fixed); }
+  .chat footer .send { width: 40px; height: 40px; border-radius: 999px; background: var(--indigo); display: grid; place-items: center; flex: none; }
 
   .voice-attr { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 4px 16px; padding: 12px 0; border-top: 1px solid var(--rule); }
   .voice-attr b { font-family: var(--display); font-weight: 650; font-size: 1.1rem; letter-spacing: -.02em; }
@@ -166,8 +173,8 @@
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <g id="bell"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g>
-    <g id="badge"><circle cx="24" cy="24" r="24" fill="#AD8639"/><g fill="#111111" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></g>
-    <g id="badge-inv"><circle cx="24" cy="24" r="24" fill="#111111"/><g fill="#AD8639" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></g>
+    <g id="badge"><circle cx="24" cy="24" r="24" fill="#4F46E5"/><g fill="#FFFFFF" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></g>
+    <g id="badge-inv"><circle cx="24" cy="24" r="24" fill="#FFFFFF"/><g fill="#4F46E5" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></g>
   </defs>
 </svg>
 
@@ -184,10 +191,10 @@
 
   <div class="hero">
     <div>
-      <p class="label">Brand guidelines · Direction C</p>
+      <p class="label">Brand guidelines · Ink + Indigo</p>
       <h1>The bell button.</h1>
-      <p>The front-desk bell becomes a button you press: one solid brass badge that is the logo, the app icon, the avatar and the shape of every primary action. Brass carries the surface, oversized Bricolage Grotesque carries the voice, and Belline looks sure of itself without raising it.</p>
-      <p>The calm, competent front-of-house professional who is always there and never oversteps. For owners of clinics, salons and restaurants in the UAE who want every enquiry answered in the tools they already use.</p>
+      <p>The front-desk bell becomes a button you press: one solid indigo badge with a white bell that is the logo, the app icon, the avatar and the shape of every primary action. White grounds, ink type and a single indigo accent give Belline the calm look of business software an owner can trust with their phone line.</p>
+      <p>The calm, competent front-of-house professional who is always there and never oversteps. For owners of clinics, salons and restaurants in the UAE who want their phone and website chat answered properly, with the team told what to do next.</p>
     </div>
     <div class="hero-mark"><svg viewBox="0 0 48 48" role="img" aria-label="The Belline bell button"><use href="#badge"/></svg></div>
   </div>
@@ -195,14 +202,14 @@
   <section id="logo">
     <div class="sec-head">
       <h2>Logo</h2>
-      <p>Ink bell on Bell Brass, brass bell on ink. The bell never leaves its badge in a lockup, and the badge never takes a colour outside these pairs. Files live in <code>public/brand/</code>.</p>
+      <p>White bell on indigo; indigo bell on white for indigo grounds. The bell never leaves its badge in a lockup, and the badge never takes a colour outside these pairs. Files live in <code>public/brand/</code> with the same names and URLs as before.</p>
     </div>
 
     <div class="grid g4">
-      <div class="tile on-ivory"><div class="cap">Primary lockup</div><div class="show"><span class="lockup"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge"/></svg><span class="wordmark" style="font-size:32px">Belline</span></span></div></div>
-      <div class="tile on-brass"><div class="cap">On brass</div><div class="show"><span class="lockup"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge-inv"/></svg><span class="wordmark" style="font-size:32px">Belline</span></span></div></div>
-      <div class="tile on-ink"><div class="cap">Mono ivory</div><div class="show"><span class="lockup"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><mask id="ko"><rect width="48" height="48" fill="#fff"/><g fill="#000" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></mask><circle cx="24" cy="24" r="24" fill="#FCFAF6" mask="url(#ko)"/></svg><span class="wordmark" style="font-size:32px;color:#FCFAF6">Belline</span></span></div></div>
-      <div class="tile on-ivory"><div class="cap">Stacked</div><div class="show" style="flex-direction:column;gap:8px"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge"/></svg><span class="wordmark" style="font-size:28px">Belline</span></div></div>
+      <div class="tile on-ground"><div class="cap">Primary lockup</div><div class="show"><span class="lockup"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge"/></svg><span class="wordmark" style="font-size:32px">Belline</span></span></div></div>
+      <div class="tile on-indigo"><div class="cap">On indigo</div><div class="show"><span class="lockup"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge-inv"/></svg><span class="wordmark" style="font-size:32px">Belline</span></span></div></div>
+      <div class="tile on-ink"><div class="cap">Mono white</div><div class="show"><span class="lockup"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><mask id="ko"><rect width="48" height="48" fill="#fff"/><g fill="#000" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></mask><circle cx="24" cy="24" r="24" fill="#FFFFFF" mask="url(#ko)"/></svg><span class="wordmark" style="font-size:32px;color:#FFFFFF">Belline</span></span></div></div>
+      <div class="tile on-ground"><div class="cap">Stacked</div><div class="show" style="flex-direction:column;gap:8px"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge"/></svg><span class="wordmark" style="font-size:28px">Belline</span></div></div>
     </div>
 
     <div class="grid g2" style="margin-top:16px">
@@ -235,7 +242,7 @@
       <div class="card">
         <h3>Do not</h3>
         <ul class="dont">
-          <li>Put white on brass (3.36:1). Words on brass are always ink.</li>
+          <li>Put ink on indigo (2.82:1). Words and bells on indigo are always white.</li>
           <li>Add gradients, shadows, glows, outlines, sound waves or motion lines.</li>
           <li>Take the bell out of its badge in a lockup, or rotate, stretch or re-space it.</li>
           <li>Set "Belline" in another face or weight, or track it looser than −0.045em.</li>
@@ -245,11 +252,11 @@
       <div class="card">
         <h3>Avatars and icons</h3>
         <div class="row" style="gap:18px;margin-bottom:12px">
-          <svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Avatar, circular crop"><circle cx="48" cy="48" r="48" fill="#AD8639"/><g fill="#111111" transform="translate(24 24) scale(1)"><use href="#bell"/></g></svg>
-          <svg width="40" height="40" viewBox="0 0 96 96" role="img" aria-label="Avatar at 40 pixels"><circle cx="48" cy="48" r="48" fill="#AD8639"/><g fill="#111111" transform="translate(24 24)"><use href="#bell"/></g></svg>
-          <svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Favicon at 16 pixels"><circle cx="8" cy="8" r="8" fill="#AD8639"/><g fill="#111111"><rect x="7" y="3" width="2" height="2" rx="1"/><path d="M3.5 10.5a4.5 4.5 0 0 1 9 0Z"/><rect x="3" y="11.5" width="10" height="2" rx="1"/></g></svg>
+          <svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Avatar, circular crop"><circle cx="48" cy="48" r="48" fill="#4F46E5"/><g fill="#FFFFFF" transform="translate(24 24) scale(1)"><use href="#bell"/></g></svg>
+          <svg width="40" height="40" viewBox="0 0 96 96" role="img" aria-label="Avatar at 40 pixels"><circle cx="48" cy="48" r="48" fill="#4F46E5"/><g fill="#FFFFFF" transform="translate(24 24)"><use href="#bell"/></g></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Favicon at 16 pixels"><circle cx="8" cy="8" r="8" fill="#4F46E5"/><g fill="#FFFFFF"><rect x="7" y="3" width="2" height="2" rx="1"/><path d="M3.5 10.5a4.5 4.5 0 0 1 9 0Z"/><rect x="3" y="11.5" width="10" height="2" rx="1"/></g></svg>
         </div>
-        <p>Full-bleed brass square with the bell inside the central 50%, so any circular crop is safe. WhatsApp is <b style="color:var(--text)">coming soon</b>: every WhatsApp avatar preview or caption must say so.</p>
+        <p>Full-bleed indigo square with the white bell inside the central 50%, so any circular crop is safe. WhatsApp is <b style="color:var(--text)">coming soon</b>: every WhatsApp avatar preview or caption must say so. The OG image names phone and website chat only.</p>
       </div>
     </div>
   </section>
@@ -257,54 +264,69 @@
   <section id="colour">
     <div class="sec-head">
       <h2>Colour</h2>
-      <p>Warm ivory grounds, ink type, and brass as a confident surface. Lagoon is for states only. Every text pairing below meets WCAG AA; ratios are computed from the hex values.</p>
+      <p>White grounds, soft cool panels, ink type and one indigo accent. Success, warning and danger are separate from the accent and only mean status. Every text pairing below meets WCAG AA; ratios are computed from the hex values.</p>
     </div>
     <div class="grid g4">
-      <div class="swatch"><div class="chip" style="background:#FCFAF6;color:#111">Ink 18.11</div><b>Ivory</b><span>#FCFAF6 · page ground</span></div>
-      <div class="swatch"><div class="chip" style="background:#FFFFFF;color:#111">Ink 18.88</div><b>Panel white</b><span>#FFFFFF · cards, inputs</span></div>
-      <div class="swatch"><div class="chip" style="background:#F6F2EA;color:#6E6961">Stone 4.88</div><b>Sand</b><span>#F6F2EA · sunk rows, hovers</span></div>
-      <div class="swatch"><div class="chip" style="background:#F3EAD8;color:#7E5E28">Desk 4.99</div><b>Brass Tint</b><span>#F3EAD8 · pills, Beta</span></div>
-      <div class="swatch"><div class="chip" style="background:#111111;color:#FCFAF6">Ivory 18.11</div><b>Ink</b><span>#111111 · text, the bell</span></div>
-      <div class="swatch"><div class="chip" style="background:#55504A;color:#FCFAF6">Ivory 7.65</div><b>Graphite</b><span>#55504A · body text</span></div>
-      <div class="swatch"><div class="chip" style="background:#6E6961;color:#FCFAF6">Ivory 5.22</div><b>Stone</b><span>#6E6961 · meta text</span></div>
-      <div class="swatch"><div class="chip" style="background:#AD8639;color:#111">Ink 5.62</div><b>Bell Brass</b><span>#AD8639 · badge, primary, fills</span></div>
-      <div class="swatch"><div class="chip" style="background:#7E5E28;color:#FCFAF6">Ivory 5.72</div><b>Desk Brass</b><span>#7E5E28 · small brass text</span></div>
-      <div class="swatch"><div class="chip" style="background:#C9A45E;color:#111">Ink 8.05</div><b>Brass Lit</b><span>#C9A45E · brass on ink</span></div>
-      <div class="swatch"><div class="chip" style="background:#0B6B7A;color:#FCFAF6">Ivory 5.93</div><b>Lagoon</b><span>#0B6B7A · states, focus</span></div>
-      <div class="swatch"><div class="chip" style="background:#A33327;color:#FCFAF6">Ivory 6.58</div><b>Alert</b><span>#A33327 · errors</span></div>
+      <div class="swatch"><div class="chip" style="background:#FFFFFF;color:#111827">Ink 17.74</div><b>Ground</b><span>#FFFFFF · page, panels, inputs</span></div>
+      <div class="swatch"><div class="chip" style="background:#F6F7FB;color:#636A77">Muted 5.08</div><b>Surface</b><span>#F6F7FB · soft panels, table heads</span></div>
+      <div class="swatch"><div class="chip" style="background:#EEF0F6;color:#636A77">Muted 4.78</div><b>Sunken</b><span>#EEF0F6 · hover, pressed rows</span></div>
+      <div class="swatch"><div class="chip" style="background:#EEF2FF;color:#4338CA">Indigo hover 7.07</div><b>Indigo tint</b><span>#EEF2FF · selected, Beta</span></div>
+      <div class="swatch"><div class="chip" style="background:#111827;color:#FFFFFF">White 17.74</div><b>Ink</b><span>#111827 · headings, text</span></div>
+      <div class="swatch"><div class="chip" style="background:#374151;color:#FFFFFF">White 10.31</div><b>Text 2</b><span>#374151 · body text</span></div>
+      <div class="swatch"><div class="chip" style="background:#636A77;color:#FFFFFF">White 5.44</div><b>Muted</b><span>#636A77 · meta text</span></div>
+      <div class="swatch"><div class="chip" style="background:#4F46E5;color:#FFFFFF">White 6.29</div><b>Indigo</b><span>#4F46E5 · primary, links, focus</span></div>
+      <div class="swatch"><div class="chip" style="background:#4338CA;color:#FFFFFF">White 7.90</div><b>Indigo hover</b><span>#4338CA · hover · pressed #3730A3</span></div>
+      <div class="swatch"><div class="chip" style="background:#047857;color:#FFFFFF">White 5.48</div><b>Success</b><span>#047857 · Available · tint #ECFDF5</span></div>
+      <div class="swatch"><div class="chip" style="background:#B45309;color:#FFFFFF">White 5.02</div><b>Warning</b><span>#B45309 · waiting, due · tint #FFFBEB</span></div>
+      <div class="swatch"><div class="chip" style="background:#B91C1C;color:#FFFFFF">White 6.47</div><b>Danger</b><span>#B91C1C · errors · tint #FEF2F2</span></div>
     </div>
 
-    <h3 style="margin-top:32px">Text pairings</h3>
+    <p style="margin-top:22px"><b style="color:var(--text)">Muted was adjusted.</b> The brief's #6B7280 passes on white (4.83) and only just on the soft panel (4.52), but fails on the hover surface (4.24) and the indigo tint (4.32). #636A77 is a step darker and passes on all four.</p>
+
+    <h3 style="margin-top:22px">Text pairings</h3>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Sample</th><th>Text</th><th>Ground</th><th>Ratio</th><th>Use</th></tr></thead>
         <tbody>
-          <tr><td><span class="pair" style="background:#FCFAF6;color:#111">Aa</span></td><td>Ink</td><td>Ivory</td><td class="num">18.11</td><td>All text</td></tr>
-          <tr><td><span class="pair" style="background:#AD8639;color:#111">Aa</span></td><td>Ink</td><td>Bell Brass</td><td class="num">5.62</td><td>Primary buttons</td></tr>
-          <tr><td><span class="pair" style="background:#F3EAD8;color:#111">Aa</span></td><td>Ink</td><td>Brass Tint</td><td class="num">15.80</td><td>Selected rows</td></tr>
-          <tr><td><span class="pair" style="background:#FCFAF6;color:#55504A">Aa</span></td><td>Graphite</td><td>Ivory</td><td class="num">7.65</td><td>Body</td></tr>
-          <tr><td><span class="pair" style="background:#FFFFFF;color:#55504A">Aa</span></td><td>Graphite</td><td>White</td><td class="num">7.98</td><td>Body in panels</td></tr>
-          <tr><td><span class="pair" style="background:#FCFAF6;color:#6E6961">Aa</span></td><td>Stone</td><td>Ivory</td><td class="num">5.22</td><td>Meta</td></tr>
-          <tr><td><span class="pair" style="background:#FFFFFF;color:#6E6961">Aa</span></td><td>Stone</td><td>White</td><td class="num">5.45</td><td>Meta in panels</td></tr>
-          <tr><td><span class="pair" style="background:#F6F2EA;color:#6E6961">Aa</span></td><td>Stone</td><td>Sand</td><td class="num">4.88</td><td>Table heads, hovers</td></tr>
-          <tr><td><span class="pair" style="background:#F3EAD8;color:#6E6961">Aa</span></td><td>Stone</td><td>Brass Tint</td><td class="num">4.56</td><td>12 px or larger only</td></tr>
-          <tr><td><span class="pair" style="background:#FCFAF6;color:#7E5E28">Aa</span></td><td>Desk Brass</td><td>Ivory</td><td class="num">5.72</td><td>Labels, links</td></tr>
-          <tr><td><span class="pair" style="background:#F3EAD8;color:#7E5E28">Aa</span></td><td>Desk Brass</td><td>Brass Tint</td><td class="num">4.99</td><td>Beta badge</td></tr>
-          <tr><td><span class="pair" style="background:#E3F0F1;color:#0B6B7A">Aa</span></td><td>Lagoon</td><td>Lagoon Tint</td><td class="num">5.30</td><td>Available badge</td></tr>
-          <tr><td><span class="pair" style="background:#FCFAF6;color:#0B6B7A">Aa</span></td><td>Lagoon</td><td>Ivory</td><td class="num">5.93</td><td>Success text</td></tr>
-          <tr><td><span class="pair" style="background:#F6E4E0;color:#A33327">Aa</span></td><td>Alert</td><td>Alert Tint</td><td class="num">5.59</td><td>Error panels</td></tr>
-          <tr><td><span class="pair" style="background:#FCFAF6;color:#A33327">Aa</span></td><td>Alert</td><td>Ivory</td><td class="num">6.58</td><td>Field errors</td></tr>
-          <tr><td><span class="pair" style="background:#111111;color:#C9A45E">Aa</span></td><td>Brass Lit</td><td>Ink</td><td class="num">8.05</td><td>Brass on the call bar</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#111827">Aa</span></td><td>Ink</td><td>Ground</td><td class="num">17.74</td><td>All text</td></tr>
+          <tr><td><span class="pair" style="background:#F6F7FB;color:#111827">Aa</span></td><td>Ink</td><td>Surface</td><td class="num">16.57</td><td>All text</td></tr>
+          <tr><td><span class="pair" style="background:#EEF0F6;color:#111827">Aa</span></td><td>Ink</td><td>Sunken</td><td class="num">15.57</td><td>Hovered rows</td></tr>
+          <tr><td><span class="pair" style="background:#EEF2FF;color:#111827">Aa</span></td><td>Ink</td><td>Indigo tint</td><td class="num">15.86</td><td>Selected rows</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#374151">Aa</span></td><td>Text 2</td><td>Ground</td><td class="num">10.31</td><td>Body</td></tr>
+          <tr><td><span class="pair" style="background:#F6F7FB;color:#374151">Aa</span></td><td>Text 2</td><td>Surface</td><td class="num">9.63</td><td>Table heads</td></tr>
+          <tr><td><span class="pair" style="background:#EEF0F6;color:#374151">Aa</span></td><td>Text 2</td><td>Sunken</td><td class="num">9.05</td><td>Hovered rows</td></tr>
+          <tr><td><span class="pair" style="background:#EEF2FF;color:#374151">Aa</span></td><td>Text 2</td><td>Indigo tint</td><td class="num">9.22</td><td>Selected rows</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#636A77">Aa</span></td><td>Muted</td><td>Ground</td><td class="num">5.44</td><td>Meta</td></tr>
+          <tr><td><span class="pair" style="background:#F6F7FB;color:#636A77">Aa</span></td><td>Muted</td><td>Surface</td><td class="num">5.08</td><td>Meta on panels</td></tr>
+          <tr><td><span class="pair" style="background:#EEF0F6;color:#636A77">Aa</span></td><td>Muted</td><td>Sunken</td><td class="num">4.78</td><td>Meta on hover</td></tr>
+          <tr><td><span class="pair" style="background:#EEF2FF;color:#636A77">Aa</span></td><td>Muted</td><td>Indigo tint</td><td class="num">4.87</td><td>Meta on selected</td></tr>
+          <tr><td><span class="pair" style="background:#4F46E5;color:#FFFFFF">Aa</span></td><td>White</td><td>Indigo</td><td class="num">6.29</td><td>Primary buttons, visitor bubble</td></tr>
+          <tr><td><span class="pair" style="background:#4338CA;color:#FFFFFF">Aa</span></td><td>White</td><td>Indigo hover</td><td class="num">7.90</td><td>Primary hover</td></tr>
+          <tr><td><span class="pair" style="background:#3730A3;color:#FFFFFF">Aa</span></td><td>White</td><td>Indigo pressed</td><td class="num">9.93</td><td>Primary pressed</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#4F46E5">Aa</span></td><td>Indigo</td><td>Ground</td><td class="num">6.29</td><td>Links</td></tr>
+          <tr><td><span class="pair" style="background:#F6F7FB;color:#4F46E5">Aa</span></td><td>Indigo</td><td>Surface</td><td class="num">5.87</td><td>Links on panels</td></tr>
+          <tr><td><span class="pair" style="background:#EEF0F6;color:#4F46E5">Aa</span></td><td>Indigo</td><td>Sunken</td><td class="num">5.52</td><td>Links on hover</td></tr>
+          <tr><td><span class="pair" style="background:#EEF2FF;color:#4F46E5">Aa</span></td><td>Indigo</td><td>Indigo tint</td><td class="num">5.62</td><td>Quiet counts</td></tr>
+          <tr><td><span class="pair" style="background:#EEF2FF;color:#4338CA">Aa</span></td><td>Indigo hover</td><td>Indigo tint</td><td class="num">7.07</td><td>Beta, current nav item</td></tr>
+          <tr><td><span class="pair" style="background:#ECFDF5;color:#047857">Aa</span></td><td>Success</td><td>Success tint</td><td class="num">5.21</td><td>Available badge</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#047857">Aa</span></td><td>Success</td><td>Ground</td><td class="num">5.48</td><td>Success text</td></tr>
+          <tr><td><span class="pair" style="background:#FFFBEB;color:#B45309">Aa</span></td><td>Warning</td><td>Warning tint</td><td class="num">4.84</td><td>Waiting panels</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#B45309">Aa</span></td><td>Warning</td><td>Ground</td><td class="num">5.02</td><td>Warning text</td></tr>
+          <tr><td><span class="pair" style="background:#FEF2F2;color:#B91C1C">Aa</span></td><td>Danger</td><td>Danger tint</td><td class="num">5.91</td><td>Error panels</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#B91C1C">Aa</span></td><td>Danger</td><td>Ground</td><td class="num">6.47</td><td>Field errors</td></tr>
+          <tr><td><span class="pair" style="background:#B91C1C;color:#FFFFFF">Aa</span></td><td>White</td><td>Danger</td><td class="num">6.47</td><td>Counts, destructive fills</td></tr>
+          <tr><td><span class="pair" style="background:#111827;color:#FFFFFF">Aa</span></td><td>White</td><td>Ink</td><td class="num">17.74</td><td>Call screen, sales console</td></tr>
+          <tr><td><span class="pair" style="background:#111827;color:#A5B4FC">Aa</span></td><td>Indigo lit</td><td>Ink</td><td class="num">8.90</td><td>Accent on ink</td></tr>
         </tbody>
       </table>
     </div>
-    <p style="margin-top:14px">Non-text: the Bell Brass badge is 3.23:1 on ivory (passes 3:1 for graphics). The Lagoon focus ring is 5.93:1 on ivory and 3.06:1 on ink, so ink surfaces use Brass Lit for focus. White on brass is 3.36:1 and is never used.</p>
+    <p style="margin-top:14px">Non-text: the indigo badge is 6.29:1 on white and 5.87:1 on the surface; the white bell is 6.29:1 on the badge. The indigo focus ring is 6.29 / 5.87 / 5.52 on ground, surface and sunken, and 2.82 on ink, so ink surfaces use Indigo lit (8.90) for focus. The indigo line #C7D2FE (1.49 on white) is decoration only. Ink on indigo is 2.82:1 and is never used.</p>
   </section>
 
   <section id="type">
     <div class="sec-head">
       <h2>Typography</h2>
-      <p><b style="color:var(--text)">Bricolage Grotesque 700</b> for display and headings: its optical-size axis inks up the big sizes and settles into a plain grotesk small. <b style="color:var(--text)">Instrument Sans 400–600</b> for everything you read. Both from Google Fonts, with system fallbacks.</p>
+      <p><b style="color:var(--text)">Bricolage Grotesque 700</b> for display and headings: its optical-size axis gives big sizes character and settles into a plain grotesk small. <b style="color:var(--text)">Instrument Sans 400–600</b> for everything you read. Both from Google Fonts, with system fallbacks.</p>
     </div>
     <div class="card">
       <div class="spec"><div class="meta"><b>Display</b><br>108/0.94 web · 40/1.0 app · −0.045em</div><div style="font-family:var(--display);font-weight:700;font-size:clamp(2.2rem,1.4rem + 3.4vw,3.6rem);line-height:.96;letter-spacing:-.045em">Someone always answers.</div></div>
@@ -312,7 +334,7 @@
       <div class="spec"><div class="meta"><b>H2</b><br>32/1.1 web · 22/1.2 app · −0.02em</div><div style="font-family:var(--display);font-weight:650;font-size:clamp(1.4rem,1.1rem + 1vw,1.8rem);line-height:1.1;letter-spacing:-.02em">Your team gets the hard ones</div></div>
       <div class="spec"><div class="meta"><b>Body</b> · Instrument Sans 400<br>18/1.55 web · 15/1.5 app</div><div style="font-size:18px;line-height:1.55;color:var(--text-2)">Belline answers from your own information and passes anything it should not decide to your team.</div></div>
       <div class="spec"><div class="meta"><b>Small</b> · 400<br>14/1.5 web · 13/1.45 app</div><div style="font-size:14px;color:var(--muted)">Handed to reception at 14:32 · caller asked for a named dentist.</div></div>
-      <div class="spec"><div class="meta"><b>Label</b> · 600 caps +0.08em<br>12/1.2 web · 11/1.2 app</div><div class="label" style="margin:0">Booking requests · waiting for your team</div></div>
+      <div class="spec"><div class="meta"><b>Label</b> · 600 caps +0.08em<br>12/1.2 web · 11/1.2 app</div><div class="label" style="margin:0">Enquiries · waiting for your team</div></div>
     </div>
   </section>
 
@@ -331,12 +353,12 @@
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-label="Add" role="img"><path d="M12 5v14M5 12h14"/></svg>
           <svg width="26" height="26" viewBox="0 0 48 48" fill="currentColor" aria-label="The bell, only as the mark" role="img"><use href="#bell"/></svg>
         </div>
-        <p>24-unit grid, 2 px stroke, round caps and joins, no fills. Ink by default, graphite on secondary rows. No sound waves, robots, sparkles, orbs or circuits. Third-party logos only for integrations that are live.</p>
+        <p>24-unit grid, 2 px stroke, round caps and joins, no fills. Ink by default, text 2 on secondary rows. No sound waves, robots, sparkles, orbs or circuits. Third-party logos only for integrations that are live.</p>
       </div>
       <div class="card">
         <h3>Photography</h3>
-        <p>Reception counters, a salon chair between clients, a host stand before service, a clinic waiting room in daylight. Warm natural light; brass, wood, stone and linen. People busy and at ease, with written consent, credited in <code>public/img/CREDITS.md</code>.</p>
-        <p>Leave calm space for a headline. No stock AI imagery, glowing screens or dark neon. On photographs use the mono ivory lockup on a dark, even area.</p>
+        <p>Reception counters, a salon chair between clients, a host stand before service, a clinic waiting room in daylight. Natural light. People busy and at ease, with written consent, credited in <code>public/img/CREDITS.md</code>.</p>
+        <p>Leave calm space for a headline. No stock AI imagery, glowing screens or dark neon. On photographs use the mono white lockup on a dark, even area.</p>
       </div>
     </div>
   </section>
@@ -344,27 +366,27 @@
   <section id="ui">
     <div class="sec-head">
       <h2>UI foundations</h2>
-      <p>Pills 999 px, panels 14 px, inputs 10 px, hairlines at ink 12%, a 4 px spacing base, no shadows on panels, and a 2 px Lagoon focus ring. The primary button carries the bell button at its leading edge.</p>
+      <p>Pills 999 px, panels 14 px, inputs 10 px, hairlines at ink 12%, a 4 px spacing base, no shadows on panels, and a 2 px indigo focus ring. The primary button is indigo with white words and may carry the inverse bell button at its leading edge.</p>
     </div>
     <div class="grid g2">
       <div class="demo">
-        <p class="label" style="color:var(--desk)">Buttons</p>
+        <p class="label">Buttons</p>
         <div class="row">
           <a class="btn btn-primary" href="#ui"><svg width="36" height="36" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge-inv"/></svg>Connect your business</a>
-          <a class="btn btn-secondary" href="#ui" style="color:var(--ink);border-color:var(--ink)">Speak to Belline</a>
+          <a class="btn btn-secondary" href="#ui">Speak to Belline</a>
         </div>
-        <p class="label" style="color:var(--desk);margin-top:22px">Status badges</p>
+        <p class="label" style="margin-top:22px">Status badges</p>
         <div class="row">
           <span class="state state-available">Available</span>
           <span class="state state-beta">Beta</span>
           <span class="state state-soon">Coming soon</span>
           <span class="state state-request">Request this integration</span>
         </div>
-        <p style="margin-top:14px;color:var(--graphite)">Never show a channel or integration as Available until it works end to end. Today WhatsApp is Coming soon.</p>
+        <p style="margin-top:14px">Never show a channel or integration as Available until it works end to end. Today WhatsApp is Coming soon.</p>
         <div class="field" style="margin-top:18px">
           <label for="demo-phone">Business phone number</label>
           <div class="input" id="demo-phone">+971 4 000 0000</div>
-          <small>Focus ring Lagoon 2 px. You keep this number; calls forward to Belline.</small>
+          <small>Focus ring indigo 2 px. You keep this number; calls forward to Belline.</small>
         </div>
       </div>
       <div>
@@ -375,36 +397,40 @@
           </header>
           <div class="log">
             <div class="bubble them">Hello, this is Luma Dental. How can I help today?</div>
-            <div class="bubble you">Can I book a cleaning on Thursday afternoon?</div>
-            <div class="bubble them">I can take that request. What name and number should the team use to confirm your time?</div>
+            <div class="bubble you">Can I come in for a cleaning on Thursday afternoon?</div>
+            <div class="bubble them">I'll pass that to the team. What name and number should they use to call you back about a time?</div>
           </div>
           <footer>
             <div class="type">Type a message</div>
-            <div class="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+            <div class="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
           </footer>
         </div>
-        <p style="margin-top:14px">Sample venue, for illustration. The business speaks on Sand, the visitor in ink. Send is Bell Brass with an ink arrow.</p>
+        <p style="margin-top:14px">Sample venue, for illustration. The business speaks on the soft surface, the visitor on indigo with white words. Send is indigo with a white arrow. On customers' sites the floating button defaults to indigo with a white bell.</p>
       </div>
     </div>
 
     <h3 style="margin-top:32px">Tokens</h3>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Token</th><th>Value</th><th>Mapped app and site names</th></tr></thead>
+        <thead><tr><th>Token</th><th>Value</th><th>Mapped app names and Direction C aliases</th></tr></thead>
         <tbody>
-          <tr><td><code>--bl-ivory</code></td><td>#FCFAF6</td><td><code>--bg</code>, <code>--paper</code></td></tr>
-          <tr><td><code>--bl-white</code></td><td>#FFFFFF</td><td><code>--panel</code></td></tr>
-          <tr><td><code>--bl-sand</code></td><td>#F6F2EA</td><td><code>--panel-2</code>, <code>--paper-2</code></td></tr>
-          <tr><td><code>--bl-ink</code></td><td>#111111</td><td><code>--text</code>, <code>--accent</code>, <code>--ink</code></td></tr>
-          <tr><td><code>--bl-graphite</code></td><td>#55504A</td><td><code>--text-2</code>, <code>--ink-2</code></td></tr>
-          <tr><td><code>--bl-stone</code></td><td>#6E6961</td><td><code>--muted</code>, <code>--ink-3</code></td></tr>
-          <tr><td><code>--bl-brass</code></td><td>#AD8639</td><td><code>--brass-fill</code></td></tr>
-          <tr><td><code>--bl-brass-desk</code></td><td>#7E5E28</td><td><code>--brass</code>, <code>--gold</code>, <code>--warn</code></td></tr>
-          <tr><td><code>--bl-brass-tint</code></td><td>#F3EAD8</td><td><code>--accent-soft</code>, <code>--warn-soft</code>, <code>--brass-soft</code></td></tr>
-          <tr><td><code>--bl-lagoon</code> / <code>-tint</code></td><td>#0B6B7A / #E3F0F1</td><td><code>--ok</code> / <code>--ok-soft</code></td></tr>
-          <tr><td><code>--bl-alert</code> / <code>-tint</code></td><td>#A33327 / #F6E4E0</td><td><code>--bad</code> / <code>--bad-soft</code></td></tr>
+          <tr><td><code>--bl-ground</code></td><td>#FFFFFF</td><td><code>--bg</code>, <code>--panel</code>; alias <code>--bl-ivory</code>, <code>--bl-white</code></td></tr>
+          <tr><td><code>--bl-surface</code></td><td>#F6F7FB</td><td><code>--panel-2</code>; alias <code>--bl-sand</code></td></tr>
+          <tr><td><code>--bl-sunken</code></td><td>#EEF0F6</td><td><code>--hover</code></td></tr>
+          <tr><td><code>--bl-border</code> / <code>--bl-rule</code></td><td>#E5E7EB / ink 12%</td><td><code>--border</code></td></tr>
+          <tr><td><code>--bl-ink-900</code></td><td>#111827</td><td><code>--text</code>; alias <code>--bl-ink</code></td></tr>
+          <tr><td><code>--bl-text-2</code></td><td>#374151</td><td><code>--text-2</code>; alias <code>--bl-graphite</code></td></tr>
+          <tr><td><code>--bl-muted</code></td><td>#636A77</td><td><code>--muted</code>; alias <code>--bl-stone</code></td></tr>
+          <tr><td><code>--bl-indigo</code></td><td>#4F46E5</td><td><code>--accent</code>, <code>--brass</code>, <code>--gold</code>, <code>--gold-ink</code>, <code>--brass-fill</code>; alias <code>--bl-brass</code>, <code>--bl-brass-desk</code></td></tr>
+          <tr><td><code>--bl-indigo-hover</code> / <code>-pressed</code></td><td>#4338CA / #3730A3</td><td><code>--accent-hover</code> / <code>--accent-pressed</code></td></tr>
+          <tr><td><code>--bl-indigo-tint</code></td><td>#EEF2FF</td><td><code>--accent-soft</code>; alias <code>--bl-brass-tint</code></td></tr>
+          <tr><td><code>--bl-indigo-line</code></td><td>#C7D2FE</td><td><code>--accent-line</code>; alias <code>--bl-rule-brass</code></td></tr>
+          <tr><td><code>--bl-indigo-lit</code></td><td>#A5B4FC</td><td><code>--gold-lit</code>; alias <code>--bl-brass-lit</code></td></tr>
+          <tr><td><code>--bl-success</code> / <code>-tint</code></td><td>#047857 / #ECFDF5</td><td><code>--ok</code> / <code>--ok-soft</code>; alias <code>--bl-lagoon</code></td></tr>
+          <tr><td><code>--bl-warning</code> / <code>-tint</code></td><td>#B45309 / #FFFBEB</td><td><code>--warn</code> / <code>--warn-soft</code></td></tr>
+          <tr><td><code>--bl-danger</code> / <code>-tint</code></td><td>#B91C1C / #FEF2F2</td><td><code>--bad</code> / <code>--bad-soft</code>; alias <code>--bl-alert</code></td></tr>
+          <tr><td><code>--bl-focus</code></td><td>2px solid indigo, 2px offset</td><td><code>--focus</code>; all focus rings</td></tr>
           <tr><td><code>--bl-radius-pill / panel / input</code></td><td>999 / 14 / 10 px</td><td>Buttons, panels, fields</td></tr>
-          <tr><td><code>--bl-focus</code></td><td>2px solid Lagoon</td><td>All focus rings</td></tr>
         </tbody>
       </table>
     </div>
@@ -444,5 +470,5 @@
     </div>
   </section>
 
-  <p class="foot">Source of truth: <code>public/brand/tokens.css</code> and <code>public/brand/</code>. Name and logo conflict notes: <code>docs/brand/conflict-check.md</code> (not legal advice). Direction C, September 2026.</p>
+  <p class="foot">Source of truth: <code>public/brand/tokens.css</code> and <code>public/brand/</code>. Name and logo conflict notes: <code>docs/brand/conflict-check.md</code> (not legal advice). The Bell Button, Ink + Indigo, September 2026.</p>
 </div>

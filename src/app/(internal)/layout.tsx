@@ -80,9 +80,9 @@ export default async function InternalLayout({ children }: { children: React.Rea
       */}
       <aside className="sidebar" style={{ background: "var(--text)" }}>
         <div className="brand">
-          {/* Brass is a 3.5:1 pairing against ink — fine for the mark, which is
-              a shape, and not for the label beside it. */}
-          <Brand size={22} tone="var(--gold-lit)" />
+          {/* The indigo badge reads on the ink sidebar; the label uses the lit
+              indigo (8.90:1 on ink). */}
+          <Brand size={22} />
           <div
             style={{
               fontSize: 10,
