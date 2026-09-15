@@ -83,8 +83,8 @@ const CLINIC_SCENES: Scene[] = [
     label: "Takes the request",
     when: "Monday, 07:54",
     turns: [
-      ["caller", "I'd like to come in about a mole on my shoulder I'm not happy with."],
-      ["agent", "That would start as a consultation with one of the dermatologists — about twenty minutes."],
+      ["caller", "I'd like to book a consultation for laser hair removal."],
+      ["agent", "That starts with a short consultation with one of the therapists — about twenty minutes."],
       ["agent", "I'll take your name and number and the day you'd prefer, and the team will confirm a time."],
       ["caller", "Friday morning, if possible."],
     ],
@@ -161,7 +161,7 @@ export const VERTICALS: Vertical[] = [
       "An AI receptionist for dental practices. It answers patients' questions from your information, takes appointment requests, and hands anything clinical to your team.",
     headline: "The practice is with a patient. The phone still rings.",
     lead:
-      "Belline answers when the chair is occupied and after you close. It answers from your information, takes the patient's details and request, and never answers a clinical question.",
+      "Belline answers when the chair is occupied and after you close. It takes appointment requests only — the patient's name, number and when they'd like to come — and never answers a clinical question. Please don't use it for medical details.",
     image: "/img/dental.jpg",
     imageAlt: "A dental treatment room between patients — the chair empty, the light off.",
     constraints: [
@@ -194,7 +194,7 @@ export const VERTICALS: Vertical[] = [
       "An AI receptionist for private and aesthetic clinics. It answers patients' questions, takes consultation requests and escalates anything clinical to a person.",
     headline: "Patients ring at eight in the evening. Reception closed at five.",
     lead:
-      "Belline answers out of hours and while your team is with patients. It takes consultation requests with the patient's details, and knows an enquiry from an emergency.",
+      "Belline answers out of hours and while your team is with patients. It takes appointment requests only, knows an enquiry from an emergency, and isn't for medical details.",
     image: "/img/clinics.jpg",
     imageAlt: "A reception sign and a service bell on a counter, nobody behind it.",
     constraints: [
