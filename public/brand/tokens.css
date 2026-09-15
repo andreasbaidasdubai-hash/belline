@@ -77,11 +77,12 @@
   --bl-alert: var(--bl-danger);
   --bl-alert-tint: var(--bl-danger-tint);
 
-  /* Type: Plus Jakarta Sans for display and headings (500 large, 600 small),
-     Inter for body and UI. Both from Google Fonts. */
+  /* Type: Plus Jakarta Sans for display and headings (600 throughout: the
+     owner found 500 too soft for the hero), Inter for body and UI. Both from
+     Google Fonts. */
   --bl-font-display: "Plus Jakarta Sans", ui-sans-serif, "Segoe UI", Arial, sans-serif;
   --bl-font-text: "Inter", ui-sans-serif, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --bl-weight-display: 500;
+  --bl-weight-display: 600;
   --bl-weight-heading: 600;
   --bl-track-display: -0.04em;
   --bl-track-h1: -0.035em;

@@ -1994,9 +1994,16 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .demo {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Chat above WhatsApp on the left, the taller call card on the right. */
+  grid-template-areas:
+    "chat call"
+    "wa   call";
   gap: 18px;
   align-items: start;
 }
+.demo-chat { grid-area: chat; }
+.demo-call { grid-area: call; }
+.demo-wa { grid-area: wa; }
 .demo-card {
   margin: 0;
   background: var(--bl-white);
@@ -2139,6 +2146,9 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .call-lines li:nth-child(3) { animation-delay: 2.2s; }
 .call-lines li:nth-child(4) { animation-delay: 2.8s; }
 .call-sent { animation-delay: 3.3s; }
+.demo-wa { animation-delay: 0.3s; }
+.wa-thread .msg:nth-child(1) { animation-delay: 3.7s; }
+.wa-thread .msg:nth-child(2) { animation-delay: 4.3s; }
 .call-level i { animation: demo-level 0.6s ease-in-out 0.6s 5; transform-origin: center; }
 .call-level i:nth-child(2n) { animation-delay: 0.75s; }
 .call-level i:nth-child(3n) { animation-delay: 0.9s; }
@@ -2247,7 +2257,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   .channels-4 > li:nth-child(2n + 1) { padding-left: 0; }
 }
 @media (max-width: 760px) {
-  .demo { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .demo { grid-template-columns: minmax(0, 1fr); grid-template-areas: "chat" "call" "wa"; gap: 16px; }
   .demo-call { margin-top: 0; }
   .plain-facts { grid-template-columns: 1fr; margin-top: 56px; }
   .plain-facts li,
@@ -2588,6 +2598,25 @@ h2.display {
 .call-lines li:nth-child(even) { border-left-color: var(--bl-blue); }
 .call-sent { background: var(--bl-surface); }
 .chat-compose { border-color: var(--card-line); }
+
+/* WhatsApp in the hero: visible so all three channels show, but plainly not
+   live — the Coming soon badge sits in the card header, and a dashed border
+   sets it apart from the two cards that work today. */
+.demo-wa { border-style: dashed; }
+.demo-head-wa { gap: 10px; }
+.demo-wa-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bl-success-tint, #ECFDF5);
+  color: var(--bl-success, #047857);
+  flex: none;
+}
+.demo-wa-icon svg { width: 16px; height: 16px; }
+.demo-soon { margin-left: auto; }
+.wa-thread { padding-bottom: 18px; }
 
 /* Three plain facts as a light strip, no numbers. */
 .plain-facts {
