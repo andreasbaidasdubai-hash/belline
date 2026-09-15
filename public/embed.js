@@ -69,7 +69,7 @@
   var css =
     ".belline-dock{position:fixed;bottom:24px;right:24px;z-index:2147483000;" +
     "display:flex;flex-direction:column;align-items:flex-end;gap:10px;" +
-    "--belline-accent:#111111;--belline-accent-text:#FCFAF6;--belline-accent-mark:#C9A45E}" +
+    "--belline-accent:#4F46E5;--belline-accent-text:#FFFFFF;--belline-accent-mark:#FFFFFF}" +
     ".belline-dock.belline-left{right:auto;left:24px;align-items:flex-start}" +
     ".belline-fab{display:inline-flex;align-items:center;gap:10px;text-decoration:none;" +
     "padding:14px 22px 14px 18px;border:0;border-radius:999px;" +
@@ -77,24 +77,24 @@
     "cursor:pointer;font:500 15px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;" +
     "box-shadow:0 14px 34px -14px rgba(0,0,0,.5);transition:transform .16s ease}" +
     ".belline-fab:hover{transform:translateY(-2px)}" +
-    // Belline's focus ring: Lagoon, 2px, visible on light and dark host pages.
-    ".belline-fab:focus-visible,.belline-shut:focus-visible{outline:2px solid #0B6B7A;outline-offset:3px}" +
+    // Belline's focus ring: indigo, 2px, offset 3px so it sits on the host page (6.29:1 on white).
+    ".belline-fab:focus-visible,.belline-shut:focus-visible{outline:2px solid #4F46E5;outline-offset:3px}" +
     ".belline-fab svg{width:24px;height:24px;color:var(--belline-accent-mark);display:block;flex:none}" +
     // The second and third buttons are the quieter ones: paper rather than
     // the accent, so the set reads as one offer with a primary in it.
-    ".belline-fab.belline-second{background:#FFFFFF;color:#111111;border:1px solid rgba(17,17,17,.18);" +
+    ".belline-fab.belline-second{background:#FFFFFF;color:#111827;border:1px solid rgba(17,24,39,.18);" +
     "box-shadow:0 10px 26px -14px rgba(0,0,0,.42)}" +
-    ".belline-fab.belline-second svg{color:#7E5E28}" +
+    ".belline-fab.belline-second svg{color:#4F46E5}" +
     // Round: the mark alone, as on a phone, at every width.
     ".belline-dock.belline-round .belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
     ".belline-dock.belline-round .belline-fab span{display:none}" +
     ".belline-panel{position:fixed;bottom:24px;right:24px;z-index:2147483001;" +
     "width:380px;max-width:calc(100vw - 32px);height:520px;max-height:calc(100vh - 48px);" +
-    "border:0;border-radius:14px;overflow:hidden;background:#111111;" +
+    "border:0;border-radius:14px;overflow:hidden;background:#111827;" +
     "box-shadow:0 24px 60px -20px rgba(0,0,0,.55)}" +
     ".belline-panel.belline-left{right:auto;left:24px}" +
     ".belline-shut{position:fixed;z-index:2147483002;width:32px;height:32px;border:0;" +
-    "border-radius:999px;background:rgba(252,250,246,.14);color:#FCFAF6;cursor:pointer;" +
+    "border-radius:999px;background:rgba(255,255,255,.14);color:#FFFFFF;cursor:pointer;" +
     "font:16px/1 sans-serif;display:grid;place-items:center}" +
     "@media (max-width:520px){.belline-panel,.belline-panel.belline-left{inset:0;width:100%;height:100%;" +
     "max-width:none;max-height:none;border-radius:0}" +
@@ -206,7 +206,7 @@
     if (cfg.accent && cfg.accentText) {
       dock.style.setProperty("--belline-accent", cfg.accent);
       dock.style.setProperty("--belline-accent-text", cfg.accentText);
-      dock.style.setProperty("--belline-accent-mark", cfg.accentMark || "#C9A45E");
+      dock.style.setProperty("--belline-accent-mark", cfg.accentMark || "#FFFFFF");
     }
     if (cfg.shape === "round") dock.classList.add("belline-round");
     if (!attrSide && cfg.corner === "left") {
@@ -259,7 +259,7 @@
     // The call is ink and the chat is paper, and the frame behind each has to
     // match — otherwise the wrong colour flashes for as long as the iframe
     // takes to paint, which on a slow connection is not a flash.
-    if (kind === "chat") panel.style.background = "#FCFAF6";
+    if (kind === "chat") panel.style.background = "#FFFFFF";
     panel.title = label;
     // The call needs the microphone from the first second and speakers to
     // answer. The chat needs the microphone too, but only for a voice note,

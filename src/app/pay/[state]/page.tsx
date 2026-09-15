@@ -25,9 +25,9 @@ export default async function PayPage({
   const reference = (ref ?? "").replace(/[^A-Za-z0-9-]/g, "").slice(0, 16);
 
   return (
-    <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: "#FBF9F5", color: "#14110D" }}>
+    <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: "var(--bl-ground)", color: "var(--bl-ink-900)" }}>
       <div style={{ maxWidth: 440 }}>
-        <p style={{ fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase", color: "#8A672E", margin: 0 }}>
+        <p style={{ fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--bl-indigo)", margin: 0 }}>
           Deposit{reference ? ` · ${reference}` : ""}
         </p>
         <h1 style={{ fontFamily: "var(--bl-font-display)", fontWeight: 700, fontSize: 34, lineHeight: 1.1, margin: "12px 0 16px" }}>

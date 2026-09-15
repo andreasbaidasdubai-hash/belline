@@ -79,10 +79,10 @@ export default function WidgetEditor({
   );
 
   // What the buttons will look like, resolved the way the widget resolves it.
-  const accent = accentHex(look.accent) ?? EMBED_PALETTE.ink;
+  const accent = accentHex(look.accent) ?? EMBED_PALETTE.indigo;
   const accentText = textOn(accent);
-  const accentMark = accentText === "#FCFAF6" ? "#C9A45E" : "#7E5E28";
-  const contrast = Math.max(contrastRatio(accent, "#FCFAF6"), contrastRatio(accent, "#111111"));
+  const accentMark = accentText;
+  const contrast = Math.max(contrastRatio(accent, "#FFFFFF"), contrastRatio(accent, "#111827"));
   const tooPale = contrast < APPEARANCE_RULES.minContrast;
 
   function setLabel(field: "voiceLabel" | "chatLabel" | "whatsappLabel", value: string) {
@@ -329,7 +329,7 @@ export default function WidgetEditor({
               <div style={{ fontSize: 11.5, marginTop: 6, color: tooPale ? "var(--bad)" : "var(--muted)" }}>
                 {tooPale
                   ? "Not enough contrast for the words to be read. Try a deeper or a lighter shade."
-                  : `Words in ${accentText === "#FCFAF6" ? "paper" : "ink"} on it — ${contrast.toFixed(1)}:1, readable.`}
+                  : `Words in ${accentText === "#FFFFFF" ? "white" : "ink"} on it — ${contrast.toFixed(1)}:1, readable.`}
               </div>
             </div>
 
@@ -505,9 +505,9 @@ function PreviewFab({
   mark: "bell" | "bubble" | "wa";
   accent?: { bg: string; fg: string; mark: string };
 }) {
-  const bg = quiet || !accent ? "#FCFAF6" : accent.bg;
-  const fg = quiet || !accent ? "#111111" : accent.fg;
-  const markColor = quiet || !accent ? "#7E5E28" : accent.mark;
+  const bg = quiet || !accent ? "#FFFFFF" : accent.bg;
+  const fg = quiet || !accent ? "#111827" : accent.fg;
+  const markColor = quiet || !accent ? "#4F46E5" : accent.mark;
   return (
     <span
       style={{

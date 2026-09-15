@@ -168,8 +168,8 @@ console.log("\n\x1b[1mText on tinted surfaces stays readable\x1b[0m\n");
 
 // axe measured the grey on the tinted surfaces at 4.34:1 (on --panel-2) and
 // 4.04:1 (on --accent-soft), and the venue-type label at 2.55:1 because of an
-// opacity. The fix is where the grey is used, never the tokens: brass and
-// --muted were darkened on purpose and must not be lightened back.
+// opacity. The fix is where the grey is used, never the tokens: --muted was
+// darkened on purpose (#636A77, not #6B7280) and must not be lightened back.
 const shellCss = fs.readFileSync(path.join(process.cwd(), "src", "app", "globals.css"), "utf8");
 function ruleBody(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
@@ -178,13 +178,13 @@ function ruleBody(selector: string): string {
 }
 
 await test("the text tokens keep their checked values", () => {
-  // Direction C: the app maps onto the shared brand tokens, whose values were
-  // checked for contrast (stone 4.56 on brass tint, desk brass 4.99 on it).
+  // Ink + Indigo: the app maps onto the shared brand tokens, whose values were
+  // checked for contrast (muted 4.87 on indigo tint, indigo 5.62 on it).
   const tokensCss = fs.readFileSync(path.join(process.cwd(), "public", "brand", "tokens.css"), "utf8");
-  assert.match(shellCss, /--muted:\s*var\(--bl-stone\);/);
-  assert.match(shellCss, /--brass:\s*var\(--bl-brass-desk\);/);
-  assert.match(tokensCss, /--bl-stone:\s*#6E6961;/);
-  assert.match(tokensCss, /--bl-brass-desk:\s*#7E5E28;/);
+  assert.match(shellCss, /--muted:\s*var\(--bl-muted\);/);
+  assert.match(shellCss, /--brass:\s*var\(--bl-indigo\);/);
+  assert.match(tokensCss, /--bl-muted:\s*#636A77;/);
+  assert.match(tokensCss, /--bl-indigo:\s*#4F46E5;/);
 });
 
 await test("pills, table headers and calendar headings use the darker text on tint", () => {
@@ -291,7 +291,11 @@ await test("the desktop sidebar marks the page you are on", () => {
   const sidebar = read("src", "components", "SidebarNav.tsx");
   assert.match(sidebar, /usePathname\(\)/);
   assert.match(sidebar, /aria-current=\{on \? "page" : undefined\}/);
-  assert.match(ruleBody('.navlink[aria-current="page"]'), /color:\s*var\(--text\)/, "the current page looks like every other link");
+  // Ink + Indigo: the current page is indigo on the indigo tint (7.07:1), where
+  // every other link is muted on white.
+  const current = ruleBody('.navlink[aria-current="page"]');
+  assert.match(current, /background:\s*var\(--accent-soft\)/, "the current page looks like every other link");
+  assert.match(current, /color:\s*var\(--accent-hover\)/, "the current page looks like every other link");
 });
 
 console.log("\n\x1b[1mWhen the database cannot be reached\x1b[0m\n");

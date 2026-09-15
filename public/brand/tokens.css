@@ -1,4 +1,4 @@
-/* Belline brand tokens: Direction C, "The Bell Button".
+/* Belline brand tokens: "The Bell Button", recoloured Ink + Indigo (15.09.2026).
    The one source for colour, type, radii, spacing, elevation and focus.
    Imported by public/site.css (inlined into it by scripts/build-site.ts)
    and by src/app/globals.css. Change a value here and both follow.
@@ -6,32 +6,59 @@
 
 :root {
   /* Colour: grounds */
-  --bl-ivory: #FCFAF6;        /* page ground. Ink 18.11, graphite 7.65, stone 5.22 */
-  --bl-white: #FFFFFF;        /* panels, cards, inputs. Ink 18.88 */
-  --bl-sand: #F6F2EA;         /* sunk rows, hovers, table heads. Stone 4.88 */
-  --bl-brass-tint: #F3EAD8;   /* pills, selected rows. Desk brass 4.99, stone 4.56 */
+  --bl-ground: #FFFFFF;       /* page ground, panels, inputs. Ink 17.74, text-2 10.31, muted 5.44, indigo 6.29 */
+  --bl-surface: #F6F7FB;      /* soft panels, table heads, sidebars. Ink 16.57, muted 5.08, indigo 5.87 */
+  --bl-sunken: #EEF0F6;       /* hover and pressed rows. Ink 15.57, muted 4.78, indigo 5.52 */
 
   /* Colour: text */
-  --bl-ink: #111111;          /* headings, marks, primary text */
-  --bl-graphite: #55504A;     /* body text */
-  --bl-stone: #6E6961;        /* meta text; never below 12px on brass tint */
+  --bl-ink-900: #111827;      /* headings, primary text, marks. 17.74 on ground */
+  --bl-text-2: #374151;       /* body and secondary text. 10.31 on ground, 9.05 on sunken */
+  --bl-muted: #636A77;        /* meta text. Brief asked #6B7280; darkened because #6B7280 is 4.24 on sunken and 4.32 on indigo tint. 4.78 / 4.87 here */
 
-  /* Colour: brass */
-  --bl-brass: #AD8639;        /* Bell Brass: badge, primary button, fills. Ink on it 5.62. Never white text on it (3.36) */
-  --bl-brass-desk: #7E5E28;   /* Desk Brass: small brass text and links. 5.72 on ivory */
-  --bl-brass-lit: #C9A45E;    /* brass on ink surfaces, 8.05 on ink */
+  /* Colour: accent (indigo). Primary buttons and links; words on indigo are white. */
+  --bl-indigo: #4F46E5;       /* primary fill, links, focus. White on it 6.29; as text 6.29 on ground, 5.87 on surface */
+  --bl-indigo-hover: #4338CA; /* hover fill; accent text on tint. White on it 7.90; 7.07 on tint */
+  --bl-indigo-pressed: #3730A3; /* pressed fill. White on it 9.93 */
+  --bl-indigo-tint: #EEF2FF;  /* selected rows, pills, Beta. Ink 15.86, indigo-hover 7.07, muted 4.87 */
+  --bl-indigo-line: #C7D2FE;  /* decorative indigo hairline, hover borders; not a text colour */
+  --bl-indigo-lit: #A5B4FC;   /* indigo on ink surfaces. 8.90 on ink */
 
-  /* Colour: states (Lagoon is for states only) */
-  --bl-lagoon: #0B6B7A;       /* available, success, focus ring. 5.93 on ivory */
-  --bl-lagoon-tint: #E3F0F1;  /* 5.30 under lagoon text */
-  --bl-alert: #A33327;        /* errors. 6.58 on ivory */
-  --bl-alert-tint: #F6E4E0;   /* 5.59 under alert text */
+  /* Colour: semantic states, separate from the accent */
+  --bl-success: #047857;      /* Available, confirmed. 5.48 on ground */
+  --bl-success-tint: #ECFDF5; /* 5.21 under success text */
+  --bl-warning: #B45309;      /* deposits due, handover waiting. 5.02 on ground */
+  --bl-warning-tint: #FFFBEB; /* 4.84 under warning text */
+  --bl-danger: #B91C1C;       /* errors, destructive. 6.47 on ground; white on it 6.47 */
+  --bl-danger-tint: #FEF2F2;  /* 5.91 under danger text */
 
   /* Lines. Hairlines, no shadows. */
-  --bl-rule: rgba(17, 17, 17, 0.12);
-  --bl-rule-soft: rgba(17, 17, 17, 0.07);
-  --bl-rule-strong: rgba(17, 17, 17, 0.18);
-  --bl-rule-brass: #D9C9A6;   /* decorative brass hairline, hover borders; not a text colour */
+  --bl-border: #E5E7EB;
+  --bl-rule: rgba(17, 24, 39, 0.12);
+  --bl-rule-soft: rgba(17, 24, 39, 0.07);
+  --bl-rule-strong: rgba(17, 24, 39, 0.18);
+
+  /* Focus ring: indigo 2px, offset 2px (6.29 on ground, 5.87 on surface). On ink surfaces use --bl-indigo-lit (8.90). */
+  --bl-focus-color: var(--bl-indigo);
+  --bl-focus: 2px solid var(--bl-focus-color);
+  --bl-focus-offset: 2px;
+
+  /* Direction C names, kept so site.css, globals.css and components need no
+     rename. They are aliases now; new code uses the names above. */
+  --bl-ivory: var(--bl-ground);
+  --bl-white: #FFFFFF;
+  --bl-sand: var(--bl-surface);
+  --bl-ink: var(--bl-ink-900);
+  --bl-graphite: var(--bl-text-2);
+  --bl-stone: var(--bl-muted);
+  --bl-brass: var(--bl-indigo);          /* was the brass fill; words on it must be white */
+  --bl-brass-desk: var(--bl-indigo);     /* was small brass text and links */
+  --bl-brass-lit: var(--bl-indigo-lit);  /* was brass on ink */
+  --bl-brass-tint: var(--bl-indigo-tint);
+  --bl-rule-brass: var(--bl-indigo-line);
+  --bl-lagoon: var(--bl-success);
+  --bl-lagoon-tint: var(--bl-success-tint);
+  --bl-alert: var(--bl-danger);
+  --bl-alert-tint: var(--bl-danger-tint);
 
   /* Type */
   --bl-font-display: "Bricolage Grotesque", ui-sans-serif, "Segoe UI", Arial, sans-serif;
@@ -58,9 +85,5 @@
 
   /* Elevation. Flat by rule; one lift for floating things only (menus, the chat dock). */
   --bl-elev-0: none;
-  --bl-elev-float: 0 12px 32px -16px rgba(17, 17, 17, 0.35);
-
-  /* Focus ring: Lagoon 2px, offset 2px. On ink surfaces use --bl-brass-lit. */
-  --bl-focus: 2px solid var(--bl-lagoon);
-  --bl-focus-offset: 2px;
+  --bl-elev-float: 0 12px 32px -16px rgba(17, 24, 39, 0.35);
 }

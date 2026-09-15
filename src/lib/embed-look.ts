@@ -13,20 +13,22 @@ import type { EmbedAppearance } from "./types";
 /**
  * The palette a venue may pick the filled button from, by name.
  *
- * Five, not a colour wheel: each pairs with paper or ink text at 4.5:1 and
- * sits well beside the brass mark. A venue with a brand colour outside these
+ * Six, not a colour wheel: each pairs with white or ink text at 4.5:1.
+ * Indigo is Belline's own and the default; "brass" stays a valid name because
+ * venues saved it before the recolour. A venue with a brand colour outside these
  * can give a hex, and the contrast rule below decides whether it is allowed.
  */
 export const EMBED_PALETTE: Record<string, string> = {
-  ink: "#111111",
+  indigo: "#4F46E5",
+  ink: "#111827",
   brass: "#7E5E28",
   forest: "#2F4A3A",
   navy: "#1F2E4A",
   wine: "#5E2434",
 };
 
-const PAPER = "#FCFAF6";
-const INK = "#111111";
+const PAPER = "#FFFFFF";
+const INK = "#111827";
 
 /** Guidelines, in numbers. */
 export const APPEARANCE_RULES = {
@@ -53,7 +55,7 @@ export function contrastRatio(a: string, b: string): number {
 
 /** The accent as a hex, whether it was given by name or by value. Null if neither. */
 export function accentHex(accent: string | undefined): string | null {
-  if (!accent) return EMBED_PALETTE.ink;
+  if (!accent) return EMBED_PALETTE.indigo;
   const named = EMBED_PALETTE[accent.toLowerCase()];
   if (named) return named;
   const hex = accent.trim();
@@ -126,7 +128,7 @@ export function parseAppearance(
 
 /** The appearance with every default filled in and the colours resolved — what the widget is told. */
 export function resolveAppearance(appearance: EmbedAppearance | undefined) {
-  const accent = accentHex(appearance?.accent) ?? EMBED_PALETTE.ink;
+  const accent = accentHex(appearance?.accent) ?? EMBED_PALETTE.indigo;
   const text = textOn(accent);
   return {
     voiceLabel: appearance?.voiceLabel ?? "Talk to us",
@@ -134,8 +136,9 @@ export function resolveAppearance(appearance: EmbedAppearance | undefined) {
     whatsappLabel: appearance?.whatsappLabel ?? "WhatsApp us",
     accent,
     accentText: text,
-    // The mark on the filled button: brass-soft on dark accents, brass on light ones.
-    accentMark: text === PAPER ? "#C9A45E" : "#7E5E28",
+    // The mark on the filled button takes the words' colour: white on indigo and
+    // other deep accents, ink on pale ones.
+    accentMark: text,
     shape: appearance?.shape ?? "pill",
     corner: appearance?.corner ?? "right",
     whatsapp: appearance?.whatsapp ?? true,

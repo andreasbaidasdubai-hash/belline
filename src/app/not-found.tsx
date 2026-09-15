@@ -15,12 +15,12 @@ export default function NotFound() {
         display: "grid",
         placeItems: "center",
         padding: 24,
-        background: "var(--bl-ivory)",
+        background: "var(--bl-ground)",
         color: "var(--bl-ink)",
       }}
     >
       <div style={{ maxWidth: 460 }}>
-        <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--bl-brass-desk)", margin: 0 }}>
+        <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--bl-indigo)", margin: 0 }}>
           Not found
         </p>
         <h1
@@ -42,7 +42,7 @@ export default function NotFound() {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 24 }}>
           <Link
             href="/"
-            style={{ padding: "13px 22px", borderRadius: 999, background: "var(--bl-brass)", color: "var(--bl-ink)", textDecoration: "none", fontWeight: 600 }}
+            style={{ padding: "13px 22px", borderRadius: 999, background: "var(--bl-indigo)", color: "#FFFFFF", textDecoration: "none", fontWeight: 600 }}
           >
             Open the dashboard
           </Link>
