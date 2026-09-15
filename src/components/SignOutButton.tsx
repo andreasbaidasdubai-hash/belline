@@ -25,7 +25,8 @@ export default function SignOutButton() {
         background: "none",
         border: "1px solid var(--border)",
         borderRadius: 8,
-        color: "var(--muted)",
+        // Not --muted: the signed-in panel is --panel-2, where it measured 4.34:1.
+        color: "var(--text-2)",
         cursor: "pointer",
         fontSize: 11,
         fontWeight: 500,

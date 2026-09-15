@@ -151,9 +151,10 @@ export default async function OverviewPage({
             {unwell.length === 1 ? "One thing needs fixing" : `${unwell.length} things need fixing`}
           </div>
           {unwell.map((h) => (
+            // --text-2, not .muted: grey on --bad-soft measured 4.15:1.
             <div key={h.label} style={{ fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>
-              <strong>{h.label}.</strong> <span className="muted">{h.detail}</span>
-              {h.fix && <span className="muted"> {h.fix}</span>}
+              <strong>{h.label}.</strong> <span style={{ color: "var(--text-2)" }}>{h.detail}</span>
+              {h.fix && <span style={{ color: "var(--text-2)" }}> {h.fix}</span>}
             </div>
           ))}
         </div>

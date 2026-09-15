@@ -113,7 +113,7 @@ details > summary::marker {
   letter-spacing: 0.01em;
   border: 1px solid var(--border);
   background: var(--panel-2);
-  color: var(--muted);
+  color: var(--text-2);
   white-space: nowrap;
 }
 
@@ -265,7 +265,7 @@ th {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text-2);
   padding: 11px 16px;
   border-bottom: 1px solid var(--border-soft);
   background: var(--panel-2);
@@ -349,6 +349,12 @@ tbody tr:hover {
   border-radius: 10px;
   background: var(--panel-2);
   border: 1px solid var(--border-soft);
+}
+
+/* The panel is --panel-2, where --muted measures 4.34:1. */
+.who .muted,
+.who button {
+  color: var(--text-2);
 }
 
 .sidebar {
@@ -462,7 +468,7 @@ tbody tr:hover {
 
 .cal-head-sub {
   font-size: 10.5px;
-  color: var(--muted);
+  color: var(--text-2);
   margin-top: 1px;
   min-height: 13px;
 }
@@ -675,6 +681,12 @@ tbody tr:hover {
 .cal-week-day.on {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+/* --muted measures 4.04:1 on --accent-soft; the darker text passes. */
+.cal-week-day.on .cal-week-name,
+.cal-week-day.on .cal-week-sub {
+  color: var(--text-2);
 }
 
 .cal-week-day.closed {

@@ -164,6 +164,52 @@ await test("below 860px the search button shrinks instead of pushing Menu off th
   assert.match(rule[1], /margin:\s*0/);
 });
 
+console.log("\n\x1b[1mText on tinted surfaces stays readable\x1b[0m\n");
+
+// axe measured the grey on the tinted surfaces at 4.34:1 (on --panel-2) and
+// 4.04:1 (on --accent-soft), and the venue-type label at 2.55:1 because of an
+// opacity. The fix is where the grey is used, never the tokens: brass and
+// --muted were darkened on purpose and must not be lightened back.
+const shellCss = fs.readFileSync(path.join(process.cwd(), "src", "app", "globals.css"), "utf8");
+function ruleBody(selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
+  const match = shellCss.match(new RegExp(`(^|\\n)\\s*${escaped}\\s*\\{([^}]*)\\}`));
+  return match ? match[2] : "";
+}
+
+await test("the tokens themselves are unchanged", () => {
+  assert.match(shellCss, /--muted:\s*#746C63;/);
+  assert.match(shellCss, /--brass:\s*#8A672E;/);
+});
+
+await test("pills, table headers and calendar headings use the darker text on tint", () => {
+  for (const selector of [".pill", "th", ".cal-head-sub"]) {
+    assert.match(ruleBody(selector), /color:\s*var\(--text-2\)/, `${selector} still uses --muted on a tinted background`);
+  }
+});
+
+await test("today's day in the week strip and the signed-in panel are readable on their tint", () => {
+  assert.match(
+    ruleBody(".cal-week-day.on .cal-week-name,\n.cal-week-day.on .cal-week-sub"),
+    /color:\s*var\(--text-2\)/,
+    "today's week-strip labels still use --muted on --accent-soft",
+  );
+  assert.match(ruleBody(".who .muted,\n.who button"), /color:\s*var\(--text-2\)/, "the signed-in panel still uses --muted on --panel-2");
+});
+
+await test("sign out and the 'needs fixing' details are not grey on a tint", () => {
+  const signOut = fs.readFileSync(path.join(process.cwd(), "src", "components", "SignOutButton.tsx"), "utf8");
+  assert.doesNotMatch(signOut, /color:\s*"var\(--muted\)"/, "Sign out is still --muted on --panel-2 (4.34:1)");
+  const home = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "page.tsx"), "utf8");
+  const unwell = home.slice(home.indexOf("{unwell.map("), home.indexOf("{unwell.map(") + 600);
+  assert.doesNotMatch(unwell, /className="muted"/, "the red 'needs fixing' panel still sets .muted text on --bad-soft (4.15:1)");
+});
+
+await test("the venue type in the location tabs is not faded below AA", () => {
+  const tabs = fs.readFileSync(path.join(process.cwd(), "src", "components", "LocationTabs.tsx"), "utf8");
+  assert.doesNotMatch(tabs, /opacity:\s*0\.65/, "inactive venue-type label is still at opacity 0.65 (2.55:1)");
+});
+
 console.log("\n\x1b[1mWhen the database cannot be reached\x1b[0m\n");
 
 // Inbox and Integrations used to throw straight out of the page on a

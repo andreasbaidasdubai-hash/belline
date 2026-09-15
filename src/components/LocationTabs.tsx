@@ -40,7 +40,9 @@ export async function LocationTabs({ base, active }: { base: string; active: str
             }}
           >
             {l.name}
-            <span style={{ opacity: 0.65, fontWeight: 500 }}>
+            {/* Faded only on the active ink tab: at 0.65 on paper the type label
+                measured 2.55:1, far below AA. */}
+            <span style={{ opacity: on ? 0.75 : 1, fontWeight: 500 }}>
               {l.vertical}
             </span>
           </Link>
