@@ -429,11 +429,13 @@ export const PRODUCTS: Product[] = [
     features: [
       { text: "500 phone minutes a month", status: "live" },
       {
-        text: "WhatsApp and website chat, fair use up to 2,000 conversations",
+        // Named without the channels: Belle's not-yet list is generated from
+        // these texts, and WhatsApp itself works.
+        text: "Fair use up to 2,000 text conversations a month",
         status: "not-yet",
         gap:
-          "Both channels work, but this is a managed-track allowance: the managed track is not public " +
-          "until its booking-system integration and Arabic exist.",
+          "Website chat and WhatsApp both work, but this is a managed-track allowance: the managed track " +
+          "is not public until its booking-system integration and Arabic exist.",
       },
       {
         text: "Connected to Fresha, Treatwell, SevenRooms or OpenTable",

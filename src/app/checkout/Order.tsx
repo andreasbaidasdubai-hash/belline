@@ -137,7 +137,7 @@ export default function Order({
 
         <h1 style={{ ...serif, fontSize: 25, letterSpacing: "-0.02em", margin: "0 0 4px" }}>Choose your plan</h1>
         <p className="muted" style={{ fontSize: 13, margin: "0 0 14px", lineHeight: 1.55 }}>
-          Phone, website voice button and website chat in every plan, per location. Pick how much.
+          Phone, website voice button, website chat and WhatsApp in every plan, per location. Pick how much.
         </p>
         <div style={{ display: "grid", gap: 8, marginBottom: 24 }} role="radiogroup" aria-label="Plan">
           {plans.map((p) => {

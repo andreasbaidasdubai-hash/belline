@@ -333,7 +333,7 @@ async function buildDemo(input: Record<string, unknown>, ctx: ToolContext) {
 
 /** What the trial email says about setup: what it reads, what the owner checks, and no time. */
 const SETUP_STEPS =
-  "Give Belline your website, or upload your price lists or brochures, or both. It drafts your information from them, and you check it and fill the gaps. Customers only reach Belline once you forward your line or add the chat to your website.";
+  "Give Belline your website, or upload your price lists or brochures, or both. It drafts your information from them, and you check it and fill the gaps. Customers only reach Belline once you forward your line, add the chat to your website or register a second WhatsApp number with it.";
 
 async function startTrial(input: Record<string, unknown>, ctx: ToolContext) {
   if (input.email_confirmed !== true) {
