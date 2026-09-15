@@ -184,36 +184,109 @@ const SCHEMA = {
   required: ["name", "vertical", "address", "timezone", "greeting", "services", "staff", "faqs"],
 };
 
-export async function extractBusiness(text: string, url: URL): Promise<Extracted> {
-  const client = new Anthropic();
-  const message = await client.messages.create({
+/**
+ * A document the owner handed over: a price list, a menu, a brochure.
+ *
+ * `mime` is what the bytes say, never what the browser or the file name
+ * claimed. `name` exists only so a refusal can say which file it means; it is
+ * never sent to the model and never stored.
+ */
+export interface SourceFile {
+  bytes: Buffer;
+  mime: "application/pdf" | "image/jpeg" | "image/png" | "image/webp";
+  name: string;
+}
+
+export interface Sources {
+  site?: { text: string; url: URL };
+  files?: SourceFile[];
+}
+
+/**
+ * The one model call the reader makes, injectable so the checks never touch
+ * the network. The default is the real Anthropic client.
+ */
+export type ModelCall = (
+  params: Anthropic.MessageCreateParamsNonStreaming,
+) => Promise<{ content: { type: string; input?: unknown }[] }>;
+
+const anthropicModel: ModelCall = (params) => new Anthropic().messages.create(params);
+
+const TAKE_ONLY_WHAT_IT_SAYS =
+  `Where it is silent, leave the field empty or zero — an invented price or a stylist who does ` +
+  `not work there is worse than a gap, because this is played back to the owner of the business.`;
+
+/** The request, built apart from the call so what is sent can be checked. */
+export function extractionRequest(sources: Sources): Anthropic.MessageCreateParamsNonStreaming {
+  const { site } = sources;
+  const files = sources.files ?? [];
+
+  let content: Anthropic.MessageCreateParamsNonStreaming["messages"][number]["content"];
+  if (!files.length) {
+    if (!site) throw new Error("Nothing to read.");
+    // Exactly the prompt the website reader has always sent.
+    content =
+      `This is the readable text of ${site.url.href}. Read the business off it and call the tool.\n\n` +
+      `Take only what the page actually says. ${TAKE_ONLY_WHAT_IT_SAYS}\n\n` +
+      site.text;
+  } else {
+    const blocks: Anthropic.ContentBlockParam[] = files.map((file) =>
+      file.mime === "application/pdf"
+        ? {
+            type: "document" as const,
+            source: { type: "base64" as const, media_type: "application/pdf" as const, data: file.bytes.toString("base64") },
+          }
+        : {
+            type: "image" as const,
+            source: { type: "base64" as const, media_type: file.mime, data: file.bytes.toString("base64") },
+          },
+    );
+    const count = files.length === 1 ? "The document above is" : `The ${files.length} documents above are`;
+    blocks.push({
+      type: "text",
+      text:
+        `${count} from the business itself — a price list, a menu or a brochure. ` +
+        (site
+          ? `Below is the readable text of its website, ${site.url.href}. Read the business off all of them ` +
+            `together and call the tool once. Where they disagree, prefer the documents for prices and services.\n\n`
+          : `Read the business off them and call the tool.\n\n`) +
+        `Take only what they actually say. ${TAKE_ONLY_WHAT_IT_SAYS}` +
+        (site ? `\n\n${site.text}` : ""),
+    });
+    content = blocks;
+  }
+
+  return {
     model: "claude-sonnet-5",
     max_tokens: 2000,
     output_config: { effort: "low" },
     tools: [
       {
         name: "describe_business",
-        description: "Record what this business is, from its own website.",
+        description: "Record what this business is, from its own website or documents.",
         input_schema: SCHEMA,
       },
     ],
     tool_choice: { type: "tool", name: "describe_business" },
-    messages: [
-      {
-        role: "user",
-        content:
-          `This is the readable text of ${url.href}. Read the business off it and call the tool.\n\n` +
-          `Take only what the page actually says. Where it is silent, leave the field empty or zero — ` +
-          `an invented price or a stylist who does not work there is worse than a gap, because this ` +
-          `is played back to the owner of the business.\n\n` +
-          text,
-      },
-    ],
-  });
+    messages: [{ role: "user", content }],
+  };
+}
 
+export async function extractFromSources(sources: Sources, model: ModelCall = anthropicModel): Promise<Extracted> {
+  const message = await model(extractionRequest(sources));
   const block = message.content.find((b) => b.type === "tool_use");
-  if (!block || block.type !== "tool_use") throw new Error("Could not read a business off that page.");
+  if (!block || !block.input) {
+    throw new Error(
+      sources.files?.length
+        ? "Could not read a business off those documents. Try a clearer copy, or add your website."
+        : "Could not read a business off that page.",
+    );
+  }
   return block.input as Extracted;
+}
+
+export async function extractBusiness(text: string, url: URL, model?: ModelCall): Promise<Extracted> {
+  return extractFromSources({ site: { text, url } }, model);
 }
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@ import { id, saveBusiness, saveTenant, upsertLocation, findUserByEmail } from ".
 import { createUser } from "../auth";
 import { ensureBaseline } from "../brain";
 import { checkShape } from "../leads/email";
-import { extractBusiness, readSite, type Extracted } from "../prospect";
+import { extractFromSources, readSite, type Extracted, type ModelCall, type SourceFile } from "../prospect";
 import { TRIAL, checkSelection } from "../billing/plans";
 import { marketOf, type Market } from "../markets";
 import { todayIn } from "../time";
@@ -236,7 +236,10 @@ export async function signUp(input: SignupInput): Promise<SignupResult> {
  */
 export interface Draft {
   found: Extracted;
+  /** The page that was read, or "" when the owner only handed over documents. */
   sourceUrl: string;
+  /** How many documents were read alongside (or instead of) the page. */
+  documents?: number;
   /** Fields the page did not answer, in the order worth asking about. */
   gaps: Gap[];
 }
@@ -248,9 +251,43 @@ export interface Gap {
   why: string;
 }
 
-export async function draftFromWebsite(rawUrl: string): Promise<Draft> {
-  const { url, text } = await readSite(rawUrl);
-  const found = await extractBusiness(text, url);
+/** What setup can be read from: a website, up to three documents, or both. */
+export interface SetupSources {
+  website?: string;
+  files?: SourceFile[];
+}
+
+/** Injectable for the checks, so no test fetches a page or calls a model. */
+export interface DraftDeps {
+  model?: ModelCall;
+  readSite?: typeof readSite;
+}
+
+export async function draftFromWebsite(rawUrl: string, deps: DraftDeps = {}): Promise<Draft> {
+  return draftFromSources({ website: rawUrl }, deps);
+}
+
+/**
+ * Read a business off its website and whatever documents the owner handed
+ * over, in one model call, into one draft. The documents are read and
+ * dropped: nothing here writes anything.
+ */
+export async function draftFromSources(sources: SetupSources, deps: DraftDeps = {}): Promise<Draft> {
+  const website = sources.website?.trim();
+  const files = sources.files ?? [];
+  if (!website && !files.length) {
+    throw new Error("Paste your website address, or add a price list or brochure.");
+  }
+
+  const site = website ? await (deps.readSite ?? readSite)(website) : undefined;
+  const found = await extractFromSources({ site, files }, deps.model);
+  const where = site
+    ? files.length
+      ? "your site or documents"
+      : "your site"
+    : files.length === 1
+      ? "your document"
+      : "your documents";
 
   const gaps: Gap[] = [];
 
@@ -273,7 +310,7 @@ export async function draftFromWebsite(rawUrl: string): Promise<Draft> {
   } else if (found.services.some((s) => !s.price)) {
     gaps.push({
       field: "services",
-      question: "A few of these have no price on your site. What should Belline say?",
+      question: `A few of these have no price on ${where}. What should Belline say?`,
       why: "It will never invent one — it will say it does not know, which sounds worse.",
     });
   }
@@ -295,7 +332,28 @@ export async function draftFromWebsite(rawUrl: string): Promise<Draft> {
     why: "Deposits, cancellation, lateness — the rules your team already follow.",
   });
 
-  return { found, sourceUrl: url.href, gaps };
+  return { found, sourceUrl: site?.url.href ?? "", documents: files.length, gaps };
+}
+
+/**
+ * The note on the published version: where this setup came from. Says how
+ * many documents, never which — their names are not kept.
+ */
+export function setupNote(website: string, documents = 0): string {
+  let host = "";
+  const raw = website.trim();
+  if (raw) {
+    try {
+      host = new URL(raw.includes("://") ? raw : `https://${raw}`).hostname;
+    } catch {
+      host = raw.slice(0, 120);
+    }
+  }
+  const count = Math.max(0, Math.min(3, Math.floor(Number(documents) || 0)));
+  const docs = count ? `${count} ${count === 1 ? "document" : "documents"}` : "";
+  if (host && docs) return `Set up from ${host} and ${docs}`;
+  if (host || docs) return `Set up from ${host || docs}`;
+  return "Set up by hand";
 }
 
 /**
