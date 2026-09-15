@@ -135,7 +135,7 @@ const INPUT_SCHEMA = {
   additionalProperties: false,
 };
 
-const SYSTEM = `You research service businesses for Belline, an AI phone receptionist sold to clinics, salons and restaurants.
+const SYSTEM = `You research service businesses for Belline, an AI phone and chat receptionist for UAE businesses that take calls, messages or bookings.
 
 You read a company's own website and record what it says. You are building evidence a salesperson will quote back to the business owner, so an invented detail is worse than a gap — it destroys the conversation it was meant to start.
 
