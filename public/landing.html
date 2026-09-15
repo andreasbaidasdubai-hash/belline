@@ -12,7 +12,7 @@
 <meta property="og:site_name" content="Belline">
 <meta property="og:url" content="https://belline.ai/">
 <meta property="og:title" content="Belline — Someone always answers">
-<meta property="og:description" content="An AI receptionist for UAE salons, restaurants and clinics. It answers your phone and website from your own information and passes the rest to your team.">
+<meta property="og:description" content="An AI receptionist for any UAE business that takes calls, messages or bookings. It answers your phone and website from your own information and passes the rest to your team.">
 <meta property="og:image" content="https://belline.ai/brand/belline-og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -22,8 +22,8 @@
 <meta name="twitter:title" content="Belline — Someone always answers">
 <meta name="twitter:description" content="Answers your phone and website from your own information. Passes the rest to your team.">
 <meta name="twitter:image" content="https://belline.ai/brand/belline-og.png">
-<title>Belline — AI receptionist for UAE businesses that take bookings</title>
-<meta name="description" content="Belline answers the calls and website enquiries your team can’t reach, from your own information, and makes sure the right person follows up. For salons, restaurants, clinics, dental practices and more in the UAE.">
+<title>Belline — AI receptionist for UAE businesses that take calls and messages</title>
+<meta name="description" content="Belline answers the calls and website enquiries your team can’t reach, from your own information, and makes sure the right person follows up. For any UAE business that takes calls, messages or bookings.">
 
 <!--
   Structured data. The FAQ below must match the visible FAQ word for word
@@ -42,7 +42,7 @@
       "email": "hello@belline.ai",
       "telephone": "+1-571-778-5920",
       "areaServed": "AE",
-      "description": "An AI receptionist for UAE businesses: salons, restaurants, clinics, dental practices and more. It answers your phone and website from your own information and passes the rest to your team."
+      "description": "An AI receptionist for UAE businesses that take calls, messages or bookings. It answers your phone and website from your own information and passes the rest to your team."
     },
     {
       "@type": "SoftwareApplication",
@@ -69,7 +69,7 @@
         { "@type": "Question", "name": "What happens if we use up our allowance?", "acceptedAnswer": { "@type": "Answer", "text": "When an allowance runs out, you choose what happens: add a pack automatically (100 extra voice minutes for AED 99, or 150 extra text conversations for AED 49), up to a monthly spending cap you set; move up to the next plan; or stop at the allowance. We tell you at 70%, 90% and 100%. Nothing is added to your bill unless you chose it." } },
         { "@type": "Question", "name": "Does call forwarding cost us anything?", "acceptedAnswer": { "@type": "Answer", "text": "It can, and your phone provider decides how much. Belline answers on a number of its own. If that number is outside the UAE, your provider may charge an international rate for each forwarded call. The dashboard shows the exact number." } },
         { "@type": "Question", "name": "Are we tied in?", "acceptedAnswer": { "@type": "Answer", "text": "No. Monthly plans cancel any time and run to the end of the paid period. Annual plans are paid up front and include 2 months free." } },
-        { "@type": "Question", "name": "We’re not a clinic, salon or restaurant. Can we still use it?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. If customers ring or message you with questions, Belline can answer from your information. Pick the closest trade when you sign up." } },
+        { "@type": "Question", "name": "Will it work for our kind of business?", "acceptedAnswer": { "@type": "Answer", "text": "Yes, if customers ring or message you with questions or requests. Belline answers from your own information and passes the rest to your team. Pick the closest business type when you sign up." } },
         { "@type": "Question", "name": "What do you do with our customers’ data?", "acceptedAnswer": { "@type": "Answer", "text": "Transcripts and messages are stored so you can check what was said. Call audio is not recorded. The data belongs to your business, and we hand it over if you leave." } },
         { "@type": "Question", "name": "Does it answer WhatsApp?", "acceptedAnswer": { "@type": "Answer", "text": "Yes, on a second number. You register a new WhatsApp number with Belline from your dashboard, and Belline answers it from your information and passes requests to your team. Your own WhatsApp stays as it is." } },
         { "@type": "Question", "name": "Does it speak Arabic?", "acceptedAnswer": { "@type": "Answer", "text": "Not yet. Belline answers in English." } }
@@ -115,11 +115,13 @@
 <main>
 
   <!--
-    The hero. Claim on the left; on the right, the three conversations Belline
-    actually has — website chat, a phone call and WhatsApp — drawn in HTML and
-    clearly labelled as examples. None ends in a booked time: the chats hand
-    the request to the team, the call arrives as a summary. That is what the
-    product does today.
+    The hero. Claim on the left; on the right, one example phone call and the
+    request it becomes in a calendar, drawn in HTML and labelled as examples.
+    Connecting Google Calendar or Outlook is not live yet, so the calendar
+    carries a "Coming soon" badge and the new entry is a request waiting for
+    the team, never a confirmed booking. The lead says "soon" for the same
+    reason. Chat and WhatsApp are not lost: the channels section below shows
+    all four channels.
   -->
   <section class="hero">
     <div class="wrap hero-in hero-demo">
@@ -131,6 +133,7 @@
           team can’t get to.
           It answers from your own information, and passes everything else to
           your team with a summary.
+          Soon, it will also book straight into the calendar you already use.
         </p>
 
         <div class="cta-row rise rise-3">
@@ -144,86 +147,45 @@
         </p>
       </div>
 
-      <div class="demo" aria-label="Three example conversations" role="group">
-        <!-- Website chat -->
-        <figure class="demo-card demo-chat">
-          <figcaption class="demo-head">
-            <span class="demo-badge" aria-hidden="true">
-              <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" class="mark-ground"/><g class="mark-glyph" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>
-            </span>
-            <span class="demo-title">Website chat</span>
-            <span class="demo-example">Example conversation</span>
+      <!--
+        One call, and the request it becomes. The calendar is neither Google's
+        nor Outlook's (no logos) and carries the Coming soon badge: connecting
+        one is not live. The new entry is a request waiting for the team, with
+        no fixed time, because Belline does not confirm bookings today.
+      -->
+      <div class="scene" role="group" aria-label="Example: a phone call becomes a request in your calendar">
+        <figure class="snip">
+          <figcaption class="snip-head">
+            <span class="snip-title">Phone call</span>
+            <span class="snip-example">Example conversation</span>
           </figcaption>
-          <ol class="chat-thread">
-            <li class="msg msg-visitor"><span class="vh">Visitor: </span>Do you do balayage?</li>
-            <li class="msg msg-belline">
-              <span class="vh">Belline: </span>Yes. Balayage starts at AED 650 and takes about three hours, with a short consultation first.
-              <span class="msg-source">From your price list</span>
-            </li>
-            <li class="msg msg-visitor"><span class="vh">Visitor: </span>Could I come on Thursday after 6?</li>
-            <li class="msg msg-belline">
-              <span class="vh">Belline: </span>I’ll pass that to the team with your details, and they’ll confirm a time with you. What name should they use?
-            </li>
-          </ol>
-          <div class="chat-compose" aria-hidden="true">
-            <span>Write a message</span>
-            <i></i>
-          </div>
+          <p class="snip-line"><span class="snip-k">Caller</span> Could I come in on Thursday, any time after six?</p>
+          <p class="snip-line"><span class="snip-k">Belline</span> I’ll pass that to the team with your details, and they’ll confirm a time with you.</p>
         </figure>
 
-        <!-- Phone call -->
-        <figure class="demo-card demo-call">
-          <figcaption class="demo-head demo-head-ink">
-            <span class="demo-title">Phone call</span>
-            <span class="demo-example">Example conversation</span>
-          </figcaption>
-          <div class="call-bar">
-            <span class="call-who">
-              <span class="call-k">Caller</span>
-              <span class="call-num">+971 50 ••• 4417</span>
+        <figure class="cal">
+          <figcaption class="cal-head">
+            <span class="cal-day">
+              <span class="cal-dow">Thursday</span>
+              <span class="cal-sub">Example calendar</span>
             </span>
-            <span class="call-level" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-            <span class="call-time"><span class="vh">Call length </span>01:12</span>
-          </div>
-          <ol class="call-lines">
-            <li><span class="call-said-k">Caller</span> Hi, I’d like a table for six on Friday, around eight.</li>
-            <li><span class="call-said-k">Belline</span> I can take that for the team. Can I have your name?</li>
-            <li><span class="call-said-k">Caller</span> Maryam Haddad.</li>
-            <li><span class="call-said-k">Belline</span> Thank you, Maryam. The team will call you back to confirm your table.</li>
-          </ol>
-          <div class="call-sent">
-            <p class="call-sent-head">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Sent to your team
-            </p>
-            <dl>
-              <div><dt>Name</dt><dd>Maryam Haddad</dd></div>
-              <div><dt>Request</dt><dd>Table for 6, Friday around 20:00</dd></div>
-              <div><dt>Call back</dt><dd>+971 50 ••• 4417</dd></div>
-            </dl>
-          </div>
-        </figure>
-
-        <!--
-          WhatsApp, labelled as an example like the other two. It is live on
-          the second-number model: the business registers a new number with
-          Belline, and its existing WhatsApp is left as it is. Like the chat,
-          it ends with the request passed to the team, never a booked time.
-        -->
-        <figure class="demo-card demo-wa">
-          <figcaption class="demo-head demo-head-wa">
-            <span class="demo-wa-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path fill="currentColor" d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z"/></svg>
-            </span>
-            <span class="demo-title">WhatsApp</span>
-            <span class="demo-example">Example conversation</span>
+            <span class="state state-soon cal-soon">Coming soon: books into your calendar</span>
           </figcaption>
-          <ol class="chat-thread wa-thread">
-            <li class="msg msg-visitor"><span class="vh">Customer: </span>Hi, can I book a manicure on Saturday morning?</li>
-            <li class="msg msg-belline">
-              <span class="vh">Belline: </span>I’ll pass that to the team, and they’ll confirm a time with you here. What name should they use?
-            </li>
-          </ol>
+          <div class="cal-body">
+            <ol class="cal-hours" aria-hidden="true">
+              <li>15:00</li><li>16:00</li><li>17:00</li><li>18:00</li><li>19:00</li>
+            </ol>
+            <ul class="cal-events">
+              <li class="cal-ev cal-ev-a"><span class="cal-time">15:00</span>Sara K.<span class="cal-what">Appointment</span></li>
+              <li class="cal-ev cal-ev-b"><span class="cal-time">16:30</span>Omar R.<span class="cal-what">Consultation</span></li>
+              <li class="cal-ev cal-ev-new">
+                <span class="cal-new-k">New request from Belline</span>
+                <span class="cal-new-what">Layla M., Thursday after 18:00</span>
+                <span class="cal-new-state">Waiting for your team</span>
+              </li>
+              <li class="cal-ev cal-ev-d"><span class="cal-time">19:30</span>Rami T., appointment</li>
+            </ul>
+          </div>
         </figure>
       </div>
     </div>
@@ -405,46 +367,43 @@
     </div>
   </section>
 
-  <section id="trade" class="rule">
+  <section id="for" class="rule audience">
     <div class="wrap">
       <div class="sec-head">
-        <h2 class="display">Salons, restaurants, clinics and dental practices.</h2>
-        <p class="sec-lead lead">Pick yours to see how Belline handles a typical call.</p>
+        <h2 class="display">For any business that takes calls, messages or bookings.</h2>
+        <p class="sec-lead lead">
+          If customers ring you, write to you or ask for a time, Belline can
+          answer from your own information and make sure your team follows up.
+        </p>
       </div>
 
       <!--
-        Salons and restaurants lead. Clinics and dental practices stay, toned
-        down: Belline takes appointment requests only, and a clinic must not
-        use it for medical details while UAE health-data processing rules
-        (Federal Law No. 2 of 2019) are confirmed with a lawyer.
+        Examples, not links: the trade pages (/salons, /restaurants, /clinics,
+        /dental) stay published but are no longer promoted from here. Clinics
+        and dental practices stay toned down: Belline takes appointment
+        requests only, and a clinic must not use it for medical details while
+        UAE health-data processing rules (Federal Law No. 2 of 2019) are
+        confirmed with a lawyer.
       -->
-      <div class="trade-cards">
-        <a href="/salons">
-          <h3>Salons &amp; spas</h3>
-          <p>Answers from your service list and your rules, like a patch test before a first colour.</p>
-          <span class="trade-go">See a salon call</span>
-        </a>
-        <a href="/restaurants">
-          <h3>Restaurants</h3>
-          <p>Answers questions and takes large-party requests for your team.</p>
-          <span class="trade-go">See a restaurant call</span>
-        </a>
-        <a href="/clinics">
-          <h3>Clinics</h3>
-          <p>Takes appointment requests only. Not for medical details, and never gives clinical advice.</p>
-          <span class="trade-go">See a clinic call</span>
-        </a>
-        <a href="/dental">
-          <h3>Dental practices</h3>
-          <p>Takes appointment requests only. Not for medical details; anything clinical goes to your team.</p>
-          <span class="trade-go">See a dental call</span>
-        </a>
-      </div>
+      <ul class="kinds" aria-label="Examples of businesses Belline can answer for">
+        <li>Salons &amp; spas</li>
+        <li>Restaurants &amp; cafés</li>
+        <li>Clinics</li>
+        <li>Dental practices</li>
+        <li>Gyms &amp; studios</li>
+        <li>Real estate</li>
+        <li>Garages &amp; car services</li>
+        <li>Tutors &amp; schools</li>
+        <li>Home services</li>
+        <li>Hotels</li>
+        <li>Pet care</li>
+        <li>Professional services</li>
+      </ul>
 
-      <p class="trade-more">
-        Not one of these? If customers ring or message you, Belline can answer.
-        Pick the closest trade when you sign up, or
-        <a href="mailto:hello@belline.ai">tell us what you do</a>.
+      <p class="kinds-note">
+        Clinics and dental practices: Belline takes appointment requests only,
+        never medical details.
+        Something else? <a href="mailto:hello@belline.ai">Tell us what you do</a>.
       </p>
     </div>
   </section>
@@ -697,8 +656,8 @@
           <div class="answer"><p class="gen" data-gen="faq-tied-in">No. Monthly plans cancel any time and run to the end of the paid period. Annual plans are paid up front and include 2 months free.</p></div>
         </details>
         <details>
-          <summary>We’re not a clinic, salon or restaurant. Can we still use it?</summary>
-          <div class="answer"><p>Yes. If customers ring or message you with questions, Belline can answer from your information. Pick the closest trade when you sign up.</p></div>
+          <summary>Will it work for our kind of business?</summary>
+          <div class="answer"><p>Yes, if customers ring or message you with questions or requests. Belline answers from your own information and passes the rest to your team. Pick the closest business type when you sign up.</p></div>
         </details>
         <details>
           <summary>What do you do with our customers’ data?</summary>
@@ -764,7 +723,7 @@
       <span>Belline</span>
     </a>
     <p>
-      AI voice and chat reception for UAE salons, restaurants, clinics, dental practices and more.<br>
+      AI voice and chat reception for UAE businesses that take calls, messages or bookings.<br>
       <a href="tel:+15717785920">+1 571 778 5920</a> ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
       <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a><br>
