@@ -325,6 +325,18 @@
     nav.setAttribute("data-open", String(open));
     toggle.setAttribute("aria-expanded", String(open));
     toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    // The nav comes before the toggle in the page, so Tab from the toggle went
+    // to the page behind the menu. Opening it puts the first link in reach —
+    // after the 0.18s fade, because a link still at visibility: hidden cannot
+    // take focus. A timer, not transitionend: with reduced motion there may be
+    // no transition to end.
+    if (open) {
+      setTimeout(function () {
+        if (nav.getAttribute("data-open") !== "true") return;
+        var first = nav.querySelector("a");
+        if (first) first.focus();
+      }, 200);
+    }
   }
 
   toggle.addEventListener("click", function () {
@@ -337,8 +349,13 @@
     if (e.target.tagName === "A") setOpen(false);
   });
 
+  // Only while it is open, and back to the toggle, so focus is not left on a
+  // link that has just been hidden.
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") setOpen(false);
+    if (e.key === "Escape" && nav.getAttribute("data-open") === "true") {
+      setOpen(false);
+      toggle.focus();
+    }
   });
 
   // Must track the CSS breakpoint, or the panel stays open and orphaned when
@@ -421,6 +438,8 @@
     dock.appendChild(frame);
     dock.appendChild(shut);
     document.body.appendChild(dock);
+    // Into the dock, so a keyboard is not left on the page behind it.
+    shut.focus();
     document.addEventListener("keydown", onKey);
   }
 
@@ -512,6 +531,8 @@
     dock.appendChild(frame);
     dock.appendChild(shut);
     document.body.appendChild(dock);
+    // Into the dock, so a keyboard is not left on the page behind it.
+    shut.focus();
     document.addEventListener("keydown", onKey);
   }
 

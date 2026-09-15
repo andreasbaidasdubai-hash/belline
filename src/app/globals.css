@@ -93,9 +93,16 @@ a {
   color: var(--muted);
 }
 
+.navlink { color: var(--muted); }
 .navlink:hover {
   background: var(--panel-2);
   color: var(--text);
+}
+/* The page you are on. The phone menu marks it; the sidebar did not. */
+.navlink[aria-current="page"] {
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 600;
 }
 
 details > summary::marker {

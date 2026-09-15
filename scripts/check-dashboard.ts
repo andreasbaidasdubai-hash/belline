@@ -273,6 +273,22 @@ await test("the Go live dial codes are not pushed off a phone screen by the 640p
   assert.match(shellCss, /\.table-wrap > table:not\(\.booking-table\):not\(\.forward-table\)/);
 });
 
+console.log("\n\x1b[1mKeyboard focus and the current page\x1b[0m\n");
+
+await test("closing the phone menu with Escape puts focus back on the Menu button, not the page top", () => {
+  const nav = read("src", "components", "MobileNav.tsx");
+  assert.match(nav, /ref=\{toggleRef\}/, "the toggle has no ref to return focus to");
+  assert.match(nav, /toggleRef\.current\?\.focus\(\)/, "Escape closes the menu and drops focus on <body>");
+});
+
+await test("the desktop sidebar marks the page you are on", () => {
+  assert.match(read("src", "app", "(app)", "layout.tsx"), /<SidebarNav\b/, "the sidebar links are rendered by the server layout, which cannot know the path");
+  const sidebar = read("src", "components", "SidebarNav.tsx");
+  assert.match(sidebar, /usePathname\(\)/);
+  assert.match(sidebar, /aria-current=\{on \? "page" : undefined\}/);
+  assert.match(ruleBody('.navlink[aria-current="page"]'), /color:\s*var\(--text\)/, "the current page looks like every other link");
+});
+
 console.log("\n\x1b[1mWhen the database cannot be reached\x1b[0m\n");
 
 // Inbox and Integrations used to throw straight out of the page on a

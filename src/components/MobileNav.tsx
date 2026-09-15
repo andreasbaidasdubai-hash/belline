@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 /**
@@ -33,10 +33,16 @@ export default function MobileNav({ items }: { items: NavItem[] }) {
   // an open menu.
   useEffect(() => setOpen(false), [pathname]);
 
+  // Escape used to close the menu and leave focus on <body>, so the next Tab
+  // started again from the top of the page.
+  const toggleRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      toggleRef.current?.focus();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -47,6 +53,7 @@ export default function MobileNav({ items }: { items: NavItem[] }) {
   return (
     <div className="mobile-nav">
       <button
+        ref={toggleRef}
         type="button"
         className="mobile-nav-toggle"
         aria-expanded={open}

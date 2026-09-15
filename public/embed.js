@@ -269,11 +269,17 @@
     shut = document.createElement("button");
     shut.type = "button";
     shut.className = "belline-shut";
-    shut.setAttribute("aria-label", "Close");
+    shut.setAttribute("aria-label", kind === "chat" ? "Close chat" : "Close call");
     shut.textContent = "×";
     position(shut);
     shut.addEventListener("click", close);
     document.body.appendChild(shut);
+    // Into the panel, so a keyboard is not left on the page behind it.
+    try {
+      shut.focus();
+    } catch (e) {
+      /* focus is a nicety, never a failure */
+    }
 
     dock.style.display = "none";
     document.addEventListener("keydown", onKey);

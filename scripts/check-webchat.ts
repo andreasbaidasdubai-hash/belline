@@ -395,6 +395,30 @@ await test("the landing page's button is inert without JavaScript", () => {
   assert.ok(js.includes('"?o=" + encodeURIComponent(location.origin)'), "no framing origin");
 });
 
+await test("the public phone menu takes keyboard focus in, and Escape gives it back to the toggle", () => {
+  const js = fs.readFileSync(path.join(process.cwd(), "public", "site.js"), "utf8");
+  // The file's contents list at the top names the call panel too, so look for
+  // the end marker after the menu's own.
+  const start = js.indexOf("/* --- mobile menu");
+  const menu = js.slice(start, js.indexOf("/* --- the call panel", start));
+  assert.match(menu, /nav\.querySelector\("a"\)/, "opening the menu leaves focus on the page behind it");
+  assert.match(menu, /e\.key === "Escape" && nav\.getAttribute\("data-open"\) === "true"/, "Escape acts even when the menu is shut");
+  assert.match(menu, /toggle\.focus\(\)/, "Escape drops focus instead of returning to the toggle");
+});
+
+await test("the call and chat docks move focus to their close button when they open", () => {
+  const js = fs.readFileSync(path.join(process.cwd(), "public", "site.js"), "utf8");
+  const opens = js.split("document.body.appendChild(dock);").slice(1);
+  assert.equal(opens.length, 2, "expected the call dock and the chat dock");
+  for (const after of opens) assert.match(after.slice(0, 200), /shut\.focus\(\)/, "a dock opened without moving focus into it");
+});
+
+await test("the widget's close button says what it closes and takes focus on opening", () => {
+  assert.doesNotMatch(widget, /shut\.setAttribute\("aria-label", "Close"\)/, "the close button is just 'Close'");
+  const after = widget.slice(widget.indexOf("document.body.appendChild(shut);"));
+  assert.match(after.slice(0, 300), /shut\.focus\(\)/, "opening the widget leaves focus on the page behind it");
+});
+
 // ---------------------------------------------------------------------------
 head("Voice notes");
 

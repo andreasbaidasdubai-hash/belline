@@ -7,6 +7,7 @@ import { attentionFor } from "@/lib/attention";
 import { recallSummary } from "@/lib/booking/recall";
 import SignOutButton from "@/components/SignOutButton";
 import MobileNav from "@/components/MobileNav";
+import SidebarNav from "@/components/SidebarNav";
 import CommandPalette from "@/components/CommandPalette";
 import LiveRefresh from "@/components/LiveRefresh";
 
@@ -105,52 +106,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <MobileNav items={nav} />
 
         <nav className="nav">
-          {nav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="navlink"
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                fontSize: 13,
-                color: "var(--muted)",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              {item.label}
-              {item.badge ? (
-                <span
-                  style={{
-                    marginLeft: "auto",
-                    minWidth: 19,
-                    height: 19,
-                    padding: "0 6px",
-                    borderRadius: 999,
-                    // Only one thing in this product is ever urgent. A recall
-                    // list is work to get through, not an alarm, and dressing
-                    // it as one is how a red dot stops meaning anything.
-                    background: "quiet" in item && item.quiet ? "var(--accent-soft)" : "var(--bad)",
-                    color: "quiet" in item && item.quiet ? "var(--accent)" : "#fff",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    display: "grid",
-                    placeItems: "center",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                  aria-label={
-                    "quiet" in item && item.quiet
-                      ? `${item.badge} due back`
-                      : `${item.badge} needing attention`
-                  }
-                >
-                  {item.badge}
-                </span>
-              ) : null}
-            </Link>
-          ))}
+          {/* A client component, so the page you are on can be marked. */}
+          <SidebarNav items={nav} />
 
           {/*
             The way into Belline's own sales console.
