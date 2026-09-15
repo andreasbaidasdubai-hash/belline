@@ -440,9 +440,10 @@ function verticalPage(v: Vertical): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/icon.svg">
-<meta name="theme-color" content="#FBF9F5">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#FCFAF6">
 <title>${esc(v.title)}</title>
 <meta name="description" content="${esc(v.description)}">
 <link rel="canonical" href="${ORIGIN}/${v.slug}">
@@ -451,14 +452,14 @@ function verticalPage(v: Vertical): string {
 <meta property="og:url" content="${ORIGIN}/${v.slug}">
 <meta property="og:title" content="${esc(v.title)}">
 <meta property="og:description" content="${esc(v.description)}">
-<meta property="og:image" content="${ORIGIN}/img/og.jpg">
+<meta property="og:image" content="${ORIGIN}/brand/belline-og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="A concierge bell on a reception counter, a call arriving on a phone beside it.">
+<meta property="og:image:alt" content="The Belline bell button beside the words: Someone always answers.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(v.title)}">
 <meta name="twitter:description" content="${esc(v.description)}">
-<meta name="twitter:image" content="${ORIGIN}/img/og.jpg">
+<meta name="twitter:image" content="${ORIGIN}/brand/belline-og.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Instrument+Sans:wght@400;500;600;700&display=swap">
