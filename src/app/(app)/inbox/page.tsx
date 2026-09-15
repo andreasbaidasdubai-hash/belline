@@ -1,11 +1,7 @@
 import { requireUser } from "@/lib/auth-server";
-import { inboxTenants, visibleLocations } from "@/lib/auth";
-import { isConfigured } from "@/lib/db/client";
-import { listConversations, listMessages, getCustomer } from "@/lib/reception/repo";
+import { loadInbox } from "@/lib/reception/inbox-view";
 import { seedIfEmpty } from "@/lib/seed";
-import { describeHandle } from "@/lib/webchat";
 import Thread from "./Thread";
-import type { Conversation, Message, Customer } from "@/lib/reception/types";
 
 export const dynamic = "force-dynamic";
 
@@ -41,91 +37,39 @@ export default async function InboxPage({
   const user = await requireUser();
   const { id } = await searchParams;
 
-  if (!isConfigured()) {
+  const view = await loadInbox(user, id);
+
+  if (view.state !== "ok") {
     return (
       <div>
         <h1 className="page-title">Inbox</h1>
-        <div className="panel" style={{ padding: 24, marginTop: 18 }}>
-          <p className="muted" style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>
-            Messaging needs a database, and <code>DATABASE_URL</code> is not set on this
-            deployment. Voice works without it; WhatsApp does not.
-          </p>
+        <div className="panel" role="status" style={{ padding: 24, marginTop: 18 }}>
+          {view.state === "not-configured" ? (
+            <p className="muted" style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>
+              Messaging needs a database, and <code>DATABASE_URL</code> is not set on this
+              deployment. Voice works without it; WhatsApp does not.
+            </p>
+          ) : (
+            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, maxWidth: "62ch" }}>
+              Messages can&apos;t be loaded right now. Phone calls don&apos;t depend on this and
+              are still being answered. Reload this page in a minute; if it keeps happening,
+              email <a href="mailto:hello@belline.ai" style={{ textDecoration: "underline" }}>hello@belline.ai</a>.
+            </p>
+          )}
         </div>
       </div>
     );
   }
 
-  // Belline staff read two inboxes: their own account's, and Belline's own —
-  // WhatsApp and website chat on our number — which lives in a tenant of its
-  // own, on an internal venue hidden from every list. Everyone else reads one.
-  const mine = visibleLocations(user).map((l) => l.id);
-  const tenantOf = new Map<number, string>();
-  const conversations = (
-    await Promise.all(
-      inboxTenants(user).map(async (tenantId) => {
-        const rows = await listConversations(tenantId, {
-          locationIds: tenantId === user.tenantId ? mine : undefined,
-          limit: 60,
-        });
-        for (const c of rows) tenantOf.set(c.id, tenantId);
-        return rows;
-      }),
-    )
-  )
-    .flat()
-    .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
-    .slice(0, 60);
-  const tenantFor = (c: Conversation) => tenantOf.get(c.id) ?? user.tenantId;
-
-  const selected: Conversation | undefined =
-    conversations.find((c) => String(c.id) === id) ?? conversations[0];
-
-  const messages: Message[] = selected
-    ? await listMessages(tenantFor(selected), selected.id)
-    : [];
-  const customer: Customer | undefined = selected
-    ? await getCustomer(tenantFor(selected), selected.customerId)
-    : undefined;
-
   return (
     <Thread
-      conversations={conversations.map((c) => ({
-        id: c.id,
-        status: c.status,
-        channel: c.channel,
-        lastMessageAt: c.lastMessageAt,
-        customerId: c.customerId,
-        handoffReason: c.handoffReason,
-      }))}
-      names={Object.fromEntries(
-        await Promise.all(
-          conversations.map(async (c) => {
-            const person = await getCustomer(tenantFor(c), c.customerId);
-            return [
-              c.id,
-              person
-                ? [person.firstName, person.lastName].filter(Boolean).join(" ") || describeHandle(person.phoneE164)
-                : "Unknown",
-            ] as const;
-          }),
-        ),
-      )}
-      previews={Object.fromEntries(
-        await Promise.all(
-          conversations.map(async (c) => {
-            const last = (await listMessages(tenantFor(c), c.id, 400)).at(-1);
-            return [c.id, last?.body?.slice(0, 90) ?? ""] as const;
-          }),
-        ),
-      )}
-      selected={selected ?? null}
-      messages={messages}
-      customerName={
-        customer
-          ? [customer.firstName, customer.lastName].filter(Boolean).join(" ") || describeHandle(customer.phoneE164)
-          : ""
-      }
-      customerPhone={describeHandle(customer?.phoneE164)}
+      conversations={view.conversations}
+      names={view.names}
+      previews={view.previews}
+      selected={view.selected}
+      messages={view.messages}
+      customerName={view.customerName}
+      customerPhone={view.customerPhone}
     />
   );
 }

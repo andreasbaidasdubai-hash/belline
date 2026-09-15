@@ -3,7 +3,7 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { seedIfEmpty } from "@/lib/seed";
 import { connectionState, googleConfigured } from "@/lib/integrations/google";
-import { venueWhatsApp, whatsappConfigured } from "@/lib/whatsapp";
+import { whatsappConfigured, whatsappStatus } from "@/lib/whatsapp";
 import { provisioningReady } from "@/lib/whatsapp-provision";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import ConnectWhatsApp from "./ConnectWhatsApp";
@@ -49,7 +49,8 @@ export default async function IntegrationsPage({
       : location;
 
   const google = connectionState(location);
-  const whatsapp = await venueWhatsApp(location);
+  const whatsapp = await whatsappStatus(location);
+  const account = whatsapp.state === "connected" ? whatsapp.account : null;
 
   return (
     <>
@@ -139,20 +140,29 @@ export default async function IntegrationsPage({
             <span
               className="pill"
               style={
-                whatsapp
+                account
                   ? { background: "var(--ok-soft)", color: "var(--ok)", borderColor: "var(--ok)" }
-                  : undefined
+                  : whatsapp.state === "unavailable"
+                    ? { background: "var(--warn-soft)", color: "var(--warn)", borderColor: "var(--warn)" }
+                    : undefined
               }
             >
-              {whatsapp ? "Connected" : "Not connected"}
+              {account ? "Connected" : whatsapp.state === "unavailable" ? "Couldn't check" : "Not connected"}
             </span>
-            {whatsapp && (
+            {account && (
               <span className="mono" style={{ fontSize: 13.5 }}>
-                {whatsapp.phoneE164}
+                {account.phoneE164}
               </span>
             )}
           </div>
-          {whatsapp ? (
+          {whatsapp.state === "unavailable" ? (
+            // Not "Not connected": the number may already be live, and offering
+            // to connect it again is how an owner registers it twice.
+            <p role="status" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
+              Belline couldn&apos;t check this venue&apos;s WhatsApp just now. Nothing has changed on
+              your number. Reload this page in a minute.
+            </p>
+          ) : account ? (
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
               Belline answers this number on WhatsApp — questions, bookings, changes — and every
               thread is in your inbox. Put it on your website, your Google profile and your

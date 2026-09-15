@@ -164,6 +164,38 @@ await test("below 860px the search button shrinks instead of pushing Menu off th
   assert.match(rule[1], /margin:\s*0/);
 });
 
+console.log("\n\x1b[1mWhen the database cannot be reached\x1b[0m\n");
+
+// Inbox and Integrations used to throw straight out of the page on a
+// connection error, so a Postgres blip was a 500 for the whole screen. An
+// address that can never resolve reproduces that without touching any real
+// database.
+process.env.DATABASE_URL = "postgres://nobody:nothing@disabled.invalid:5432/none";
+
+await test("the inbox says messages cannot be loaded instead of failing the page", async () => {
+  const mod = await import("../src/lib/reception/inbox-view").catch(() => null);
+  assert.ok(mod, "src/lib/reception/inbox-view.ts does not exist");
+  const view = await mod.loadInbox(owner, undefined);
+  assert.equal(view.state, "unavailable");
+});
+
+await test("the WhatsApp card says its status could not be checked, not 'Not connected'", async () => {
+  const whatsapp = await import("../src/lib/whatsapp");
+  assert.equal(typeof (whatsapp as Record<string, unknown>).whatsappStatus, "function", "whatsappStatus is not exported");
+  const status = await (whatsapp as unknown as { whatsappStatus: (l: unknown) => Promise<{ state: string }> }).whatsappStatus(venue());
+  assert.equal(status.state, "unavailable");
+});
+
+await test("with no database configured at all, WhatsApp is simply not connected", async () => {
+  delete process.env.DATABASE_URL;
+  const whatsapp = await import("../src/lib/whatsapp");
+  assert.equal(typeof (whatsapp as Record<string, unknown>).whatsappStatus, "function", "whatsappStatus is not exported");
+  const status = await (whatsapp as unknown as { whatsappStatus: (l: unknown) => Promise<{ state: string }> }).whatsappStatus(venue());
+  assert.equal(status.state, "none");
+});
+
+await (globalThis as { __bellineDbPool?: { end(): Promise<void> } }).__bellineDbPool?.end().catch(() => {});
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 console.log(

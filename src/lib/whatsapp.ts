@@ -206,6 +206,30 @@ export async function venueWhatsApp(location: Location): Promise<ChannelAccount 
   );
 }
 
+export type WhatsAppStatus =
+  | { state: "none" }
+  | { state: "connected"; account: ChannelAccount }
+  | { state: "unavailable" };
+
+/**
+ * The venue's WhatsApp, for a screen to describe.
+ *
+ * `venueWhatsApp` throws when the database cannot be reached, and a page that
+ * let it through turned a Postgres blip into a 500. "Not connected" would be
+ * the wrong thing to show instead: the owner would try to connect a number that
+ * may already be live. So a failure to look is its own state.
+ */
+export async function whatsappStatus(location: Location): Promise<WhatsAppStatus> {
+  if (!isConfigured()) return { state: "none" };
+  try {
+    const account = await venueWhatsApp(location);
+    return account ? { state: "connected", account } : { state: "none" };
+  } catch (err) {
+    console.error(`[whatsapp] could not read ${location.id}'s account:`, err instanceof Error ? err.message : String(err));
+    return { state: "unavailable" };
+  }
+}
+
 /** Stop answering on a venue's number. The row stays, for the history it holds. */
 export async function disconnectVenueNumber(location: Location): Promise<boolean> {
   const account = await venueWhatsApp(location);
