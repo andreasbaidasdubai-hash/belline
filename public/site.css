@@ -19,16 +19,9 @@
   --ink-2: var(--bl-graphite);
   --ink-3: var(--bl-stone);
 
-  /* Messing, nicht Gold. Der alte Verlauf wollte teuer wirken und wirkte
-     digital; ein einzelner gedeckter Ton, sparsam eingesetzt, wirkt teuer,
-     weil er sich zurückhält.
-
-     Der Ton ist dunkler als der erste Entwurf (#A67C3D), und zwar nicht aus
-     Geschmack: Messing steht hier in der Kopfzeile über den Abschnitten und
-     in den Uhrzeiten — kleine Schrift, also 4.5:1 gefordert. #A67C3D kam auf
-     3.58 und fiel durch die Prüfung. Dasselbe galt für das Grau: #8A8176 lag
-     bei 3.64. Beide sind so weit abgedunkelt, dass sie auf *beiden* Papieren
-     bestehen, und keinen Schritt weiter. */
+  /* The accent. The names still say brass because every rule below uses
+     them; since the Ink + Indigo recolour they resolve to indigo in
+     public/brand/tokens.css, checked at 4.5:1 or better for small text. */
   --brass: var(--bl-brass-desk);
   --brass-soft: var(--bl-brass-tint);
   --brass-fill: var(--bl-brass);
@@ -46,21 +39,23 @@
   /* Semantic roles, so a palette change is a token change, not a hunt.
      Each points at a brand token today; none carries a colour of its own
      except the shadows, which the tokens only offer in one size. */
-  --btn-primary-bg: var(--bl-brass);
-  --btn-primary-text: var(--bl-ink);
-  --btn-primary-hover-bg: var(--bl-ink);
-  --btn-primary-hover-text: var(--bl-ivory);
+  /* Indigo with white words (6.29:1); hover goes a step darker (7.90:1). The
+     bell on the button is the inverse mark: a white badge with an indigo bell. */
+  --btn-primary-bg: var(--bl-indigo);
+  --btn-primary-text: var(--bl-ground);
+  --btn-primary-hover-bg: var(--bl-indigo-hover);
+  --btn-primary-hover-text: var(--bl-ground);
   --btn-primary-mark: url("/brand/belline-mark-inverse.svg");
-  --btn-primary-hover-mark: url("/brand/belline-mark.svg");
-  --mark-ground: var(--bl-brass);     /* the bell button's badge */
-  --mark-glyph: var(--bl-ink);        /* the bell inside it */
-  --accent-line: var(--bl-brass);     /* decorative rules and dots, never text */
-  --surface-dark: var(--bl-ink);      /* the call card's header bar */
-  --on-dark: var(--bl-ivory);         /* text on --surface-dark */
-  --on-dark-accent: var(--bl-brass-lit); /* labels and the level meter on --surface-dark */
-  --site-shadow-sheet: 0 18px 34px -22px rgba(17, 17, 17, 0.5);
-  --site-shadow-fab: 0 14px 34px -14px rgba(17, 17, 17, 0.5);
-  --site-shadow-fab-soft: 0 12px 28px -14px rgba(17, 17, 17, 0.42);
+  --btn-primary-hover-mark: url("/brand/belline-mark-inverse.svg");
+  --mark-ground: var(--bl-indigo);    /* the bell button's badge */
+  --mark-glyph: var(--bl-ground);     /* the white bell inside it */
+  --accent-line: var(--bl-indigo-line); /* decorative rules and dots, never text */
+  --surface-dark: var(--bl-ink-900);  /* the call card's header bar */
+  --on-dark: var(--bl-ground);        /* text on --surface-dark */
+  --on-dark-accent: var(--bl-indigo-lit); /* labels and the level meter on --surface-dark (8.90:1) */
+  --site-shadow-sheet: 0 18px 34px -22px rgba(17, 24, 39, 0.5);
+  --site-shadow-fab: 0 14px 34px -14px rgba(17, 24, 39, 0.5);
+  --site-shadow-fab-soft: 0 12px 28px -14px rgba(17, 24, 39, 0.42);
   --site-shadow-chat-dock: 0 24px 60px -20px rgba(17, 17, 17, 0.55);
   --site-shadow-call-dock: 0 20px 46px -16px rgba(17, 17, 17, 0.4);
 
@@ -1944,7 +1939,7 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 }
 .state-available { background: var(--bl-lagoon-tint); color: var(--bl-lagoon); }
 .state-available::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
-.state-beta { background: var(--bl-brass-tint); color: var(--bl-brass-desk); }
+.state-beta { background: var(--bl-indigo-tint); color: var(--bl-indigo-hover); }
 .state-soon { border-color: var(--bl-rule-strong); color: var(--bl-stone); font-weight: 500; }
 .state-request { border-color: var(--bl-ink); color: var(--bl-ink); }
 
