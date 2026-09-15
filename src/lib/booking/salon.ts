@@ -152,7 +152,9 @@ export function staffWorkingRanges(staff: StaffMember, date: string): TimeRange[
   if (base.length === 0) return [];
 
   const blocks: TimeRange[] = [
-    ...(staff.breaks?.[weekday] ?? []),
+    // Weekly breaks belong to the weekly pattern. A shift set for the day
+    // replaces both: whoever set 12:00–16:00 chose those hours, gap or no gap.
+    ...(rota ? [] : (staff.breaks?.[weekday] ?? [])),
     ...staff.timeOff.filter((t) => t.date === date),
   ];
   return blocks.length === 0 ? base.map((r) => ({ ...r })) : subtract(base, blocks);
