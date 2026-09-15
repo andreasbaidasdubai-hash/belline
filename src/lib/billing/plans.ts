@@ -250,11 +250,15 @@ const INTEGRATIONS: Feature = {
 
 const STARTER_FEATURES: Feature[] = [
   { text: "Keep your number — forward it to Belline", status: "live" },
-  { text: "Books and changes appointments against your real availability", status: "live" },
+  { text: "Takes booking requests and passes them to your team", status: "live" },
   { text: "Answers questions from your own hours, prices and policies", status: "live" },
   { text: "Summary and full transcript of every call and chat", status: "live" },
   { text: "Puts urgent calls through to your team, live", status: "live" },
-  { text: "A reminder text the day before every booking", status: "live" },
+  {
+    text: "A reminder text the day before every booking",
+    status: "not-yet",
+    gap: "Built in src/lib/reminders.ts, but no text is sent until TWILIO_SMS_FROM is set in Railway.",
+  },
   { text: "Your team can take over any chat from the inbox", status: "live" },
   { text: "Your own words and colours on the website buttons", status: "live" },
   DEPOSITS,
@@ -266,7 +270,10 @@ const BUSINESS_FEATURES: Feature[] = [
   { text: "Every change versioned, with one-click revert", status: "live" },
   {
     text: "Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number",
-    status: "live",
+    status: "not-yet",
+    gap:
+      "Works only on Belline's own booking list, which the September 2026 direction freezes; " +
+      "it is not offered on public plans while Belline works with the customer's own booking system.",
   },
 ];
 
@@ -288,7 +295,7 @@ const V2_STARTER_FEATURES: Feature[] = [
   { text: "One location", status: "live" },
   { text: "Keep your number — forward it to Belline", status: "live" },
   { text: "Answers questions from your own hours, prices and policies", status: "live" },
-  { text: "Books and changes appointments against your real availability", status: "live" },
+  { text: "Takes booking requests and passes them to your team", status: "live" },
   { text: "Summary and full transcript of every call and chat", status: "live" },
   { text: "Your team can take over any chat from the inbox", status: "live" },
   { text: "Your own words and colours on the website buttons", status: "live" },
@@ -305,12 +312,19 @@ const V2_STARTER_FEATURES: Feature[] = [
 const V2_GROWTH_FEATURES: Feature[] = [
   ...V2_STARTER_FEATURES,
   { text: "Puts urgent calls through to your team, live", status: "live" },
-  { text: "A reminder text the day before every booking", status: "live" },
+  {
+    text: "A reminder text the day before every booking",
+    status: "not-yet",
+    gap: "Built in src/lib/reminders.ts, but no text is sent until TWILIO_SMS_FROM is set in Railway.",
+  },
   { text: "Your own rules about what it may and may not decide", status: "live" },
   { text: "Every change versioned, with one-click revert", status: "live" },
   {
     text: "Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number",
-    status: "live",
+    status: "not-yet",
+    gap:
+      "Works only on Belline's own booking list, which the September 2026 direction freezes; " +
+      "it is not offered on public plans while Belline works with the customer's own booking system.",
   },
   {
     text: "WhatsApp, sharing your text conversations",
