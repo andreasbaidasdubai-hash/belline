@@ -232,6 +232,47 @@ export interface Location {
    * restored — see locations.ts.
    */
   archivedAt?: string;
+  /**
+   * How far the owner has got from signup to answering real calls.
+   *
+   * Facts, not a current-step pointer: journey.ts derives the step from these
+   * and the venue's own data, so a step cannot say "done" about something that
+   * was undone later. Absent only on venues that predate it, and seed.ts fills
+   * it on boot — see `backfillOnboarding`.
+   */
+  onboarding?: OnboardingState;
+}
+
+export type DestinationKind = "requests" | "belline" | "google" | "outlook" | "partner";
+
+export interface OnboardingState {
+  version: 1;
+  importedAt?: string;
+  /** When the owner saved the review form. */
+  reviewedAt?: string;
+  /** The facts they confirmed on it. */
+  reviewedFields?: string[];
+  destination?: { kind: DestinationKind; partner?: string; bookingLink?: string; setAt: string };
+  rulesConfirmedAt?: string;
+  escalation?: { transferNumber?: string; notifyEmail?: string; notifyWhatsApp?: string };
+  channels: {
+    web?: { domains: string[]; detectedAt?: string; lastCheckAt?: string };
+    phone?: {
+      numberAssignedAt?: string;
+      forwardingVerifiedAt?: string;
+      carrier?: "du" | "eand" | "virgin" | "landline" | "pbx";
+      modes?: ("noanswer" | "busy" | "unreachable" | "all")[];
+    };
+    whatsapp?: { status: "none" | "pending_code" | "pending_name" | "live" | "rejected"; since: string };
+  };
+  tests?: { runId: string; at: string; results: { scenario: string; passed: boolean; detail?: string }[]; passed: boolean };
+  activatedAt?: string;
+  /** A user id, or "backfill" for a venue that was live before the journey existed. */
+  activatedBy?: string;
+  pausedAt?: string;
+  pauseReason?: string;
+  /** Set when seed.ts wrote this record for a venue that predates it. */
+  backfilledAt?: string;
 }
 
 /**

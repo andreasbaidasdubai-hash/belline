@@ -160,6 +160,8 @@ export function blankVenue(input: SignupInput, tenantId: string, businessId: str
     hours: everyDay(9 * 60, 18 * 60),
     closures: [],
     subscription: trialSubscription(timezone, input.products, input.market),
+    // Not live, nothing reviewed: the journey starts at reading the business.
+    onboarding: { version: 1, channels: {} },
     agent: {
       displayName: "Belline",
       greeting: `Thank you for calling ${name}, this is Belline. How can I help?`,

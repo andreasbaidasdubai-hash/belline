@@ -1,5 +1,7 @@
 import type { AgentConfig, Location, StaffMember, WeeklyHours } from "./types";
-import { isEmpty, listLocations, replaceAll, upsertLocation } from "./store";
+import { isEmpty, listCalls, listLocations, replaceAll, upsertLocation } from "./store";
+import { backfillOnboarding, factsFrom } from "./onboarding/journey";
+import { BELLINE_TENANT_ID } from "./tenancy";
 import { ensureBaseline } from "./brain";
 import { bellineVenue } from "./seed-belline";
 import { grandfatherLegacyPlans } from "./billing/grandfather";
@@ -692,6 +694,7 @@ export function seedIfEmpty(): void {
     replaceAll({ locations: FIXTURES, bookings: [], calls: [] });
     ensureTenancy();
     baselineBrains();
+    ensureOnboarding();
     return;
   }
   addMissingVenues();
@@ -704,6 +707,25 @@ export function seedIfEmpty(): void {
   // without an owner is not one we want to write history for.
   ensureTenancy();
   baselineBrains();
+  // After the brains, so a live venue's activation date is its first version.
+  ensureOnboarding();
+}
+
+/**
+ * Give every venue an onboarding record, once.
+ *
+ * Venues from before the journey existed have none. The ones already live are
+ * marked live, so their owners keep the full dashboard and nothing about how
+ * they book changes; see `backfillOnboarding`. Writes only a missing record, so
+ * the second boot touches nothing.
+ */
+function ensureOnboarding(): void {
+  for (const location of listLocations({ includeInternal: true, includeArchived: true })) {
+    if (location.onboarding) continue;
+    const legacy = location.tenantId === DEFAULT_TENANT_ID || location.tenantId === BELLINE_TENANT_ID;
+    const filled = backfillOnboarding(location, factsFrom(location, listCalls(location.id)), new Date(), legacy);
+    if (filled) upsertLocation(filled);
+  }
 }
 
 /**

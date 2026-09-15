@@ -44,7 +44,7 @@ interface Draft {
   gaps: { field: string; question: string; why: string }[];
 }
 
-type Stage = "ask" | "reading" | "review" | "saving" | "done";
+type Stage = "ask" | "reading" | "review" | "saving";
 
 // The same limits the server enforces (lib/onboarding/uploads.ts), repeated
 // here so the owner hears about a fourth file before waiting on an upload.
@@ -78,34 +78,36 @@ function readFrom(draft: Draft): string {
   return host && docs ? `${host} and ${docs}` : host || docs;
 }
 
+/**
+ * Keep the address bar on the step being shown, without a navigation that
+ * would drop the draft held in this component. A refresh then opens the same
+ * step, from what is saved.
+ */
+function showStep(step: "import" | "review") {
+  window.history.replaceState(null, "", `/setup/${step}`);
+}
+
 export default function SetupWizard({
-  venueName,
   vertical,
   currency,
-  alreadyReady,
-  missing: missingAtLoad,
   current,
-  manual,
+  start,
 }: {
-  venueName: string;
   vertical: Vertical;
   currency: string;
-  alreadyReady: boolean;
-  missing: { label: string; where: string }[];
   current: CurrentVenue;
-  /** Opened as "set it up by hand": straight to the form, from what is saved. */
-  manual: boolean;
+  /** "review" opens the form straight away, from what is saved. */
+  start: "ask" | "review";
 }) {
-  const [stage, setStage] = useState<Stage>(manual ? "review" : alreadyReady ? "done" : "ask");
+  const [stage, setStage] = useState<Stage>(start);
   const [website, setWebsite] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [form, setForm] = useState<ReviewForm | null>(manual ? formFromDraft(null, "typed", current) : null);
+  const [form, setForm] = useState<ReviewForm | null>(start === "review" ? formFromDraft(null, "typed", current) : null);
   const [fileName, setFileName] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [fallback, setFallback] = useState<string | null>(null);
-  const [missing, setMissing] = useState(missingAtLoad);
   const [newStaff, setNewStaff] = useState("");
   const isRestaurant = vertical === "restaurant";
 
@@ -146,6 +148,7 @@ export default function SetupWizard({
     setError(null);
     setFallback(null);
     setStage("review");
+    showStep("review");
   }
 
   async function read(event: React.FormEvent) {
@@ -186,6 +189,7 @@ export default function SetupWizard({
       setDraft(body.draft);
       setForm(formFromDraft(body.draft.found, source, current));
       setStage("review");
+      showStep("review");
     } catch {
       setError(files.length ? "Could not send those files. Check your connection and try again." : "Could not reach that address.");
       setStage("ask");
@@ -212,19 +216,15 @@ export default function SetupWizard({
           documents: draft?.documents ?? 0,
         }),
       });
-      const body = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        readiness?: { missing: { label: string; where: string }[] };
-      };
+      const body = (await res.json().catch(() => ({}))) as { error?: string; next?: string };
       if (!res.ok) {
         setError(body.error ?? "That could not be saved. Try again. Nothing you typed has been lost.");
         setStage("review");
         return;
       }
-      // What is still missing, read from the venue as it was just saved, so
-      // nothing saved a second ago is listed as missing.
-      setMissing(body.readiness?.missing ?? []);
-      setStage("done");
+      // On to the step the journey gives, read from the venue as it was just
+      // saved. Anything still missing is listed where it blocks Go live.
+      window.location.href = body.next?.startsWith("/") && !body.next.startsWith("//") ? body.next : "/setup";
     } catch {
       setError("That could not be saved. Check your connection and try again. Nothing you typed has been lost.");
       setStage("review");
@@ -241,63 +241,6 @@ export default function SetupWizard({
   // The same label as the questions on the review screen: sentence case, not the form-caps default.
   const fieldLabel = { display: "block", textTransform: "none", letterSpacing: 0, fontSize: 14, fontWeight: 600, margin: "0 0 6px" } as const;
   const eyebrow = { fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase", margin: "0 0 14px", color: "var(--gold-ink)" } as const;
-
-  // ---- done ---------------------------------------------------------------
-
-  if (stage === "done") {
-    return (
-      <div>
-        <h1 style={{ ...serif, fontSize: 34, letterSpacing: "-0.02em", lineHeight: 1.1, margin: "0 0 14px" }}>
-          {alreadyReady && !form ? "Belline is ready." : "That's the hard part done."}
-        </h1>
-        <p style={{ color: "var(--text-2)", fontSize: 16, lineHeight: 1.6, maxWidth: "54ch" }}>
-          {missing.length
-            ? "A few things are still worth filling in before it answers a real customer."
-            : "Try it now — ring it, or open the test console and talk to it."}
-        </p>
-
-        {missing.length > 0 && (
-          <ul style={{ margin: "18px 0 0", paddingLeft: 20, color: "var(--text-2)", fontSize: 14.5 }}>
-            {missing.map((m) => (
-              <li key={m.label} style={{ marginBottom: 6 }}>
-                {m.label} — <a href={m.where}>add it</a>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div style={{ display: "flex", gap: 12, marginTop: 30, flexWrap: "wrap" }}>
-          {missing.length > 0 && (
-            <a className="btn btn-accent" href="/setup/assistant" style={{ padding: "12px 20px" }}>
-              Finish with Belle
-            </a>
-          )}
-          <a className={missing.length > 0 ? "btn" : "btn btn-accent"} href="/test" style={{ padding: "12px 20px" }}>
-            Talk to {venueName}
-          </a>
-          <a className="btn" href="/golive" style={{ padding: "12px 20px" }}>
-            Put it on my phone line
-          </a>
-          <a className="btn" href="/setup?manual=1" style={{ padding: "12px 20px" }}>
-            Change what it knows
-          </a>
-          <a className="btn" href="/" style={{ padding: "12px 20px" }}>
-            Open the dashboard
-          </a>
-        </div>
-
-        {/*
-          The card, offered rather than demanded. They are inside the product
-          on a trial that is already answering — asking for it before they have
-          heard it work would have been the easier sale and the worse one.
-        */}
-        <p className="muted" style={{ fontSize: 12.5, marginTop: 26, lineHeight: 1.6 }}>
-          Your first fortnight is free. <a href="/checkout">Add a card</a> whenever you are
-          ready — nothing stops working before then.
-        </p>
-      </div>
-    );
-  }
 
   // ---- review -------------------------------------------------------------
 
@@ -598,7 +541,23 @@ export default function SetupWizard({
           </p>
         )}
 
-        <div style={{ display: "flex", gap: 12, marginTop: 32, alignItems: "center", flexWrap: "wrap" }}>
+        {/* Kept on screen while the form scrolls: on a phone the form is many
+            screens long, and the one button that moves setup on should not be
+            at the bottom of it. */}
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            marginTop: 32,
+            alignItems: "center",
+            flexWrap: "wrap",
+            position: "sticky",
+            bottom: 0,
+            padding: "12px 0",
+            background: "var(--bg)",
+            borderTop: "1px solid var(--border-soft)",
+          }}
+        >
           <button className="btn btn-accent" onClick={save} disabled={stage === "saving"} style={{ padding: "12px 22px" }}>
             {stage === "saving" ? "Saving…" : "That's right — save it"}
           </button>
@@ -609,6 +568,7 @@ export default function SetupWizard({
               setForm(null);
               setError(null);
               setStage("ask");
+              showStep("import");
             }}
             style={{ padding: "12px 18px" }}
           >

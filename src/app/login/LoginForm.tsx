@@ -19,13 +19,14 @@ export default function LoginForm({ firstRun, initialEmail = "" }: { firstRun: b
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, name }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; next?: string };
       if (!res.ok) {
         setError(data.error ?? "Something went wrong.");
         return;
       }
-      // Hard navigation so the server re-renders with the new session.
-      window.location.href = "/";
+      // Hard navigation so the server re-renders with the new session. Only a
+      // path of ours: the value comes from our own route, never a query string.
+      window.location.href = data.next?.startsWith("/") && !data.next.startsWith("//") ? data.next : "/";
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

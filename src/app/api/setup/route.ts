@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
-import { getLocation, listLocationsFor } from "@/lib/store";
+import { getLocation, listLocationsFor, upsertLocation } from "@/lib/store";
 import { applyDraft, readiness, setupNote } from "@/lib/onboarding";
+import { journeyFor, markReviewed } from "@/lib/onboarding/journey";
 import { draftFromRequest } from "@/lib/onboarding/uploads";
 import { publish } from "@/lib/brain";
 import { cleanConfirmed } from "@/lib/onboarding/review";
@@ -68,6 +69,10 @@ export async function PUT(req: Request) {
   let updated;
   try {
     updated = applyDraft(location, checked.confirmed);
+    // The review step is done, and the import step with it when what was
+    // saved came from a website or files rather than being typed.
+    const imported = Boolean(String(body.website ?? "").trim()) || Number(body.documents) > 0;
+    updated = upsertLocation(markReviewed(updated, Object.keys(checked.confirmed), imported));
   } catch (err) {
     const out = customerError("setup", err, "failed", location.id);
     return NextResponse.json({ error: `${out.message} ${out.next}` }, { status: 500 });
@@ -79,5 +84,7 @@ export async function PUT(req: Request) {
   // second.
   publish(updated.id, user, setupNote(String(body.website ?? ""), Number(body.documents) || 0));
 
-  return NextResponse.json({ ok: true, readiness: readiness(updated) });
+  // The page moves on to whatever the journey says is next, read from the venue
+  // as it was just saved.
+  return NextResponse.json({ ok: true, readiness: readiness(updated), next: journeyFor(updated).next?.url ?? "/" });
 }

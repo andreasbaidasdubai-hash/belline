@@ -19,7 +19,7 @@ test("a failed import offers the form, and edited hours and prices survive a rel
   await page.getByLabel("Choose a password").fill("Correct-Horse-Battery-9");
   await page.locator("#acceptTerms").check();
   await page.getByRole("button", { name: "Start free trial" }).click();
-  await page.waitForURL("**/setup");
+  await page.waitForURL("**/setup/import");
 
   // Import failure: the mapped sentence and the button, never vendor text.
   await page.getByLabel("Your website address").fill("example.ae");
@@ -45,9 +45,8 @@ test("a failed import offers the form, and edited hours and prices survive a rel
   await page.getByLabel("Answer 1").fill("Yes, behind the building.");
 
   await page.getByRole("button", { name: "That's right — save it" }).click();
-  await expect(page.getByRole("heading", { name: "That's the hard part done." })).toBeVisible();
-  // Nothing just saved is listed as missing.
-  await expect(page.locator("ul")).not.toContainText(/What you offer|Who works there|An address|A few common questions/);
+  // Saved, and on to the next step of the journey.
+  await page.waitForURL("**/setup/bookings");
 
   // Reload the form and edit a price and the hours again.
   await page.goto("/setup?manual=1");
@@ -56,7 +55,7 @@ test("a failed import offers the form, and edited hours and prices survive a rel
   await page.getByLabel("Service 1 price").fill("150");
   await page.getByLabel("Opening hours").fill("Sat–Thu 10–10");
   await page.getByRole("button", { name: "That's right — save it" }).click();
-  await expect(page.getByRole("heading", { name: "That's the hard part done." })).toBeVisible();
+  await page.waitForURL("**/setup/bookings");
 
   await page.reload();
   await page.goto("/setup?manual=1");
