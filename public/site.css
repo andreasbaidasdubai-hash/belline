@@ -2561,24 +2561,11 @@ h2.display {
 }
 
 /* --- Hero ------------------------------------------------------------------ */
+/* No decorative dot grid above the headline: the owner asked for it gone. The
+   hero opens straight on the headline and the example conversations. */
 .hero {
-  padding: 40px 0 88px;
+  padding: 96px 0 88px;
   background: linear-gradient(180deg, #FFFFFF 0%, #FFFFFF 62%, var(--bl-blue-tint) 100%);
-}
-/* The dot grid: two layers of dots, the blue one sparser, faded out at both
-   ends. Decorative, above the headline, never behind text. */
-.hero-dots {
-  height: 132px;
-  margin-bottom: 36px;
-  background-image:
-    radial-gradient(circle at center, var(--bl-blue) 2.2px, transparent 2.8px),
-    radial-gradient(circle at center, #C9D5F2 2px, transparent 2.6px);
-  background-size: 50px 50px, 25px 25px;
-  background-position: 12px 0, 0 0;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%), linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%), linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
-  mask-composite: intersect;
 }
 .hero-demo { gap: 56px; }
 .hero .lead { margin-top: 24px; max-width: 44ch; }
@@ -2970,7 +2957,7 @@ footer a { color: var(--bl-ink-900); }
   .knows > div { padding: 24px 22px 26px; border-bottom: 1px solid var(--card-line); }
 }
 @media (max-width: 760px) {
-  .hero-dots { height: 44px; margin-bottom: 24px; background-size: 36px 36px, 18px 18px; }
+  .hero { padding-top: 48px; }
   .plain-facts { margin-top: 48px; padding: 0 22px; }
   .plain-facts li,
   .plain-facts li:first-child,
