@@ -18,19 +18,19 @@ export default async function LoginPage() {
   const firstRun = hasNoUsers();
 
   return (
-    <div className="auth-shell">
+    <main className="auth-shell">
       <div className="auth-card">
         <div className="auth-brand">
           <Brand size={30} />
         </div>
-        <p
+        <h1
           className="muted"
-          style={{ textAlign: "center", fontSize: 13, margin: "0 0 22px" }}
+          style={{ textAlign: "center", fontSize: 13, fontWeight: 400, margin: "0 0 22px" }}
         >
           {firstRun
             ? "Nobody has set this up yet. Create the owner account."
             : "Sign in to the dashboard"}
-        </p>
+        </h1>
 
         <LoginForm firstRun={firstRun} />
 
@@ -53,6 +53,6 @@ export default async function LoginPage() {
               )}
         </p>
       </div>
-    </div>
+    </main>
   );
 }

@@ -1,6 +1,31 @@
 "use client";
 
+import { useEffect, useId, useRef } from "react";
 import { minutesToClock, parseClock } from "@/lib/time";
+
+/**
+ * Ties the controls inside a Field or Cell to its label.
+ *
+ * The label was a sibling with no htmlFor, so a screen reader announced
+ * fifty-odd unnamed boxes on the venue page. Children are anything (inputs,
+ * selects, the boxes below), so rather than thread an id through every call
+ * site, each render names whichever control still has no name of its own.
+ */
+function useLabelledControls() {
+  const labelId = useId();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const controls = ref.current?.querySelectorAll<HTMLElement>(
+      "input:not([type=checkbox]):not([type=radio]), select, textarea",
+    );
+    controls?.forEach((control) => {
+      if (!control.hasAttribute("aria-label") && !control.hasAttribute("aria-labelledby")) {
+        control.setAttribute("aria-labelledby", labelId);
+      }
+    });
+  });
+  return { labelId, ref };
+}
 
 /**
  * The form vocabulary for the venue setup pages.
@@ -31,9 +56,10 @@ export function Field({
   children: React.ReactNode;
   problem?: string;
 }) {
+  const { labelId, ref } = useLabelledControls();
   return (
-    <div style={{ marginBottom: 14 }}>
-      <label>{label}</label>
+    <div ref={ref} style={{ marginBottom: 14 }}>
+      <label id={labelId}>{label}</label>
       {children}
       {problem && (
         <div style={{ color: "var(--bad)", fontSize: 11.5, marginTop: 5 }}>{problem}</div>
@@ -268,9 +294,10 @@ export function Cell({
   width?: number;
   children: React.ReactNode;
 }) {
+  const { labelId, ref } = useLabelledControls();
   return (
-    <div style={{ width, minWidth: width ? undefined : 0 }}>
-      <label style={{ marginBottom: 5 }}>{label}</label>
+    <div ref={ref} style={{ width, minWidth: width ? undefined : 0 }}>
+      <label id={labelId} style={{ marginBottom: 5 }}>{label}</label>
       {children}
     </div>
   );

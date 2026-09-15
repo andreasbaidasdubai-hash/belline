@@ -2088,6 +2088,25 @@ body:has(.callbar) {
   .btn, .btn-row, .who button, .navlink { min-height: 44px; }
 }
 
+/* Below 16px iOS zooms into a focused field, which is why zoom used to be
+   blocked for the whole page. Sixteen pixels keeps zoom available. */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px; }
+}
+
+/* A name for a control that only a screen reader needs to hear. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* --- Page titles ------------------------------------------------------------- */
 
 /* Three screens used this class and it had no rule, so they came out as a

@@ -882,6 +882,7 @@ export default function Console({
                     value={from}
                     onChange={(e) => setFrom(e.target.value)}
                     placeholder="Your number (optional)"
+                    aria-label="Your number (optional)"
                     title="Give a number that already has a booking and the agent will recognise the caller."
                     style={{ width: 190 }}
                   />

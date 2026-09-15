@@ -202,6 +202,7 @@ export default function VenueEditor({
         <input
           value={note}
           placeholder="What changed, in a line — kept with the version"
+          aria-label="Change note"
           onChange={(e) => setNote(e.target.value)}
           style={{ flex: 1, minWidth: 220 }}
         />

@@ -296,11 +296,20 @@ export default function SetupWizard({
       </p>
 
       <form onSubmit={read} style={{ marginTop: 28, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <label htmlFor="setup-website" className="sr-only">
+          Your website address
+        </label>
+        {/* Not type="url": the browser refuses "yourbusiness.ae" without https://,
+            which is how nearly everybody types it. */}
         <input
-          type="url"
+          id="setup-website"
+          type="text"
+          inputMode="url"
+          autoComplete="url"
+          aria-label="Your website address"
           value={website}
           onChange={(e) => setWebsite(e.target.value)}
-          placeholder="marinahair.ae"
+          placeholder="yourbusiness.ae"
           autoFocus
           required
           spellCheck={false}

@@ -11,9 +11,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // The console has a fixed input row at the bottom; letting the page zoom
-  // out on a phone would push it off screen.
-  maximumScale: 1,
+  // No maximum scale: blocking pinch-zoom fails people who need larger text.
+  // iOS zooming into a focused field is prevented with 16px inputs on touch
+  // screens instead (globals.css).
   themeColor: "#F4F0E8",
 };
 

@@ -210,6 +210,44 @@ await test("the venue type in the location tabs is not faded below AA", () => {
   assert.doesNotMatch(tabs, /opacity:\s*0\.65/, "inactive venue-type label is still at opacity 0.65 (2.55:1)");
 });
 
+console.log("\n\x1b[1mZoom, labels and landmarks\x1b[0m\n");
+
+const read = (...parts: string[]) => fs.readFileSync(path.join(process.cwd(), ...parts), "utf8");
+
+await test("people can pinch-zoom; phones get 16px inputs so iOS does not zoom on focus instead", () => {
+  assert.doesNotMatch(read("src", "app", "layout.tsx"), /maximumScale/, "maximumScale still blocks zoom");
+  assert.match(shellCss, /@media \(pointer: coarse\)\s*\{[^}]*input[^}]*font-size:\s*16px/, "no 16px input rule for touch screens");
+});
+
+await test("there is an .sr-only utility for labels only a screen reader needs", () => {
+  assert.match(ruleBody(".sr-only"), /clip/);
+});
+
+await test("every venue field and cell names its control after its label", () => {
+  const fields = read("src", "app", "(app)", "venue", "fields.tsx");
+  assert.match(fields, /useId\(\)/, "labels have no stable id");
+  assert.match(fields, /aria-labelledby/, "controls are not tied to their label");
+});
+
+await test("the login page has a main landmark and a heading", () => {
+  const login = read("src", "app", "login", "page.tsx");
+  assert.match(login, /<main\b/);
+  assert.match(login, /<h1\b/);
+});
+
+await test("the setup website box accepts a bare domain and has a name", () => {
+  const wizard = read("src", "app", "setup", "SetupWizard.tsx");
+  const input = wizard.slice(wizard.indexOf("value={website}") - 200, wizard.indexOf("value={website}") + 500);
+  assert.doesNotMatch(input, /type="url"/, "type=url refuses 'marinahair.ae' without https://");
+  assert.match(input, /inputMode="url"/);
+  assert.match(input, /aria-label=|aria-labelledby=/);
+});
+
+await test("the console's number box and the change note have names", () => {
+  assert.match(read("src", "app", "(app)", "test", "Console.tsx"), /aria-label="Your number \(optional\)"/);
+  assert.match(read("src", "app", "(app)", "venue", "VenueEditor.tsx"), /aria-label="Change note"/);
+});
+
 console.log("\n\x1b[1mWhen the database cannot be reached\x1b[0m\n");
 
 // Inbox and Integrations used to throw straight out of the page on a
