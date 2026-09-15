@@ -28,7 +28,9 @@ import PayButton from "./PayButton";
  * number comes from `plans.ts`, in the market's own currency.
  */
 
-const serif = { fontFamily: '"Fraunces", Georgia, serif', fontWeight: 500 } as const;
+// The brand display face (Direction C). Fraunces is no longer loaded, so the
+// old stack fell back to Georgia.
+const serif = { fontFamily: '"Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif', fontWeight: 700, letterSpacing: "-0.035em" } as const;
 
 /** "250 voice min · 600 text conversations", or an older product's per-channel list, live channels only. */
 function shortAllowances(product: Product): string {

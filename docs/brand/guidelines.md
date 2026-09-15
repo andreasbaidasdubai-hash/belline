@@ -246,7 +246,7 @@ Five attributes:
 | Attribute | In practice |
 |---|---|
 | **Attentive** | Hears the caller out and answers the question asked. |
-| **Precise** | Never offers a time the calendar did not return; gives numbers, not adjectives. |
+| **Precise** | Answers only from the business's own information and says when it doesn't know; gives numbers, not adjectives. |
 | **Warm** | Sounds like a good receptionist, not a system. Plain words, full sentences. |
 | **Discreet** | Hands clinical and sensitive questions to a person, and says it is doing so. |
 | **Dependable** | Says what works today and nothing more. |
@@ -268,9 +268,9 @@ What Belline is not: an "AI from the future", a developer platform, cute or cart
 |---|---|
 | "Never miss another customer!" | "Someone always answers." |
 | "WhatsApp integration included" | "WhatsApp: coming soon" |
-| "Seamlessly syncs with all your tools" | "Books into the calendar you already use." |
+| "Seamlessly syncs with all your tools" | "Google Calendar: coming soon" |
 | "Oops! Something went wrong." | "Belline couldn't check this number just now. Nothing has changed. Try again in a minute." |
-| "AI-powered booking engine" | "Belline answers, checks the diary and books the slot, or passes it to your team." |
+| "AI-powered booking engine" | "Belline answers, takes the details and tells your team what to do next." |
 
 ---
 

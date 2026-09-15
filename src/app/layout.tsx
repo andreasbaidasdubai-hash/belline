@@ -32,7 +32,7 @@ export const viewport: Viewport = {
   // No maximum scale: blocking pinch-zoom fails people who need larger text.
   // iOS zooming into a focused field is prevented with 16px inputs on touch
   // screens instead (globals.css).
-  themeColor: "#F4F0E8",
+  themeColor: "#FCFAF6",
 };
 
 /**
