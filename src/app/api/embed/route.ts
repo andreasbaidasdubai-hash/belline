@@ -4,6 +4,7 @@ import { canEditAgent } from "@/lib/auth";
 import { getLocation, listLocationsFor } from "@/lib/store";
 import { disableEmbed, embedSnippet, enableEmbed, normaliseOrigin, parseAppearance, parseMode } from "@/lib/embed";
 import { publish } from "@/lib/brain";
+import { appOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
     key: updated.embed!.key,
     mode: updated.embed!.mode,
     origins: updated.embed!.allowedOrigins,
-    snippet: embedSnippet(updated, new URL(req.url).origin),
+    snippet: embedSnippet(updated, appOrigin()),
     maxCallsPerDay: updated.embed!.maxCallsPerDay,
     maxChatsPerDay: updated.embed!.maxChatsPerDay,
   });

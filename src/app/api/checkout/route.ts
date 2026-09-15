@@ -5,6 +5,7 @@ import { listLocationsFor } from "@/lib/store";
 import { createCheckout, stripeEnabled } from "@/lib/billing/stripe";
 import { LEGACY_TO_BUNDLE, checkSelection, type BillingCycle } from "@/lib/billing/plans";
 import { subscriptionMarket } from "@/lib/billing/usage";
+import { appOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +70,9 @@ export async function POST(req: Request) {
   }
   const cycle: BillingCycle = body.cycle === "annual" ? "annual" : "monthly";
 
-  const origin = new URL(req.url).origin;
+  // Where Stripe sends them back. Never the request's origin: behind the proxy
+  // that is localhost, and a customer who has just paid would land there.
+  const origin = appOrigin();
 
   try {
     const { url } = await createCheckout({

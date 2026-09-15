@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import net from "node:net";
 import dns from "node:dns/promises";
+import { appOrigin } from "./origin";
 import Anthropic from "@anthropic-ai/sdk";
 import type { Location, Vertical, WeeklyHours } from "./types";
 import { upsertLocation, listLocations } from "./store";
@@ -247,9 +248,7 @@ function weekdayHours(open: number, close: number): WeeklyHours {
 }
 
 /** Where the app is served. The demo page frames the widget from here. */
-export function appOrigin(): string {
-  return (process.env.PUBLIC_APP_URL || "https://app.belline.ai").replace(/\/+$/, "");
-}
+export { appOrigin };
 
 /**
  * What one demo may spend in a day, on us.

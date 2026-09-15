@@ -3,6 +3,7 @@ import { requireApiUser } from "@/lib/auth-server";
 import { canManageUsers } from "@/lib/auth";
 import { listLocationsFor } from "@/lib/store";
 import { portalUrl, stripeEnabled } from "@/lib/billing/stripe";
+import { appOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
  * A link into Stripe's customer portal — card, invoices, cancellation.
  *
  * Same shape as checkout: returns a URL for the browser to follow, built from
- * the request's own origin rather than the body, so a failure is a message on
+ * the app's public origin rather than the body, so a failure is a message on
  * the page rather than a redirect to somewhere unreadable, and nothing here is
  * an open redirect.
  */
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const url = await portalUrl(customerId, `${new URL(req.url).origin}/billing`);
+    const url = await portalUrl(customerId, `${appOrigin()}/billing`);
     return NextResponse.json({ ok: true, url });
   } catch (err) {
     console.error("[billing portal]", err);
