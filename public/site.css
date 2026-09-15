@@ -319,7 +319,7 @@ footer .brand span { font-size: 1.55rem; }
 
 section { padding: 110px 0; }
 /* Die Kopfzeile klebt; ein Sprungziel landet sonst darunter. */
-:target, #what, #trade, #price, #faq, #book { scroll-margin-top: 92px; }
+:target, #what, #for, #price, #faq, #book { scroll-margin-top: 92px; }
 .rule { border-top: 1px solid var(--rule); }
 
 /* Die Nummerierung ist echt: das sind drei Schritte in einer Reihenfolge.
@@ -1600,84 +1600,6 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
  * Dekoration — sie sagt, dass es genau vier sind und dass man sie zählen kann,
  * bevor man sie liest.
  */
-.trade-cards {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
-  margin-top: 52px;
-  border-top: 1px solid var(--rule);
-}
-.trade-cards a {
-  display: flex;
-  flex-direction: column;
-  padding: 30px 26px 28px;
-  border-right: 1px solid var(--rule-soft);
-  border-bottom: 1px solid var(--rule-soft);
-  color: inherit;
-  text-decoration: none;
-  transition: background 0.18s ease;
-}
-.trade-cards a:first-child { padding-left: 0; }
-.trade-cards a:last-child { border-right: 0; padding-right: 0; }
-.trade-cards a:hover,
-.trade-cards a:focus-visible { background: var(--paper-2); }
-
-/* Unter den vier Karten: die Zeile für alle anderen. Gedämpft, damit die
-   Karten die Bühne behalten, aber ein ganzer Satz — nicht eine Fußnote. */
-.trade-more {
-  margin: 28px 0 0;
-  max-width: 62ch;
-  font-size: 0.98rem;
-  line-height: 1.55;
-  color: var(--ink-2);
-}
-.trade-more a { color: var(--ink); text-underline-offset: 3px; }
-.trade-cards h3 {
-  margin: 0 0 10px;
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 1.32rem;
-  letter-spacing: -0.015em;
-}
-.trade-cards p {
-  margin: 0 0 22px;
-  font-size: 0.9rem;
-  line-height: 1.55;
-  color: var(--ink-2);
-}
-/* Der Pfeil rückt beim Überfahren nach — die einzige Bewegung im Abschnitt,
-   und sie zeigt in die Richtung, in die der Klick führt. */
-.trade-go {
-  margin-top: auto;
-  font-size: 0.84rem;
-  color: var(--brass);
-  border-bottom: 1px solid var(--brass-soft);
-  padding-bottom: 2px;
-  align-self: start;
-}
-.trade-go::after {
-  content: " →";
-  display: inline-block;
-  transition: transform 0.18s ease;
-}
-.trade-cards a:hover .trade-go::after { transform: translateX(3px); }
-
-@media (max-width: 1040px) {
-  .trade-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .trade-cards a { padding: 26px 22px; }
-  .trade-cards a:first-child { padding-left: 22px; }
-  .trade-cards a:last-child { padding-right: 22px; }
-  .trade-cards a:nth-child(2n) { border-right: 0; padding-right: 0; }
-  .trade-cards a:nth-child(2n + 1) { padding-left: 0; }
-}
-@media (max-width: 600px) {
-  .trade-cards { grid-template-columns: 1fr; margin-top: 36px; }
-  .trade-cards a { padding: 24px 0; border-right: 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .trade-cards a,
-  .trade-go::after { transition: none; }
-}
 
 @media (max-width: 900px) {
   .trades { grid-template-columns: 1fr; gap: 28px; margin-top: 40px; }
@@ -2379,7 +2301,6 @@ h2.display {
 /* --- Cards: the one card language for every white section ------------------ */
 #channels .channels-4 > li,
 #works .works-grid > div,
-#trade .trade-cards a,
 .problem .problem-grid > div,
 #price .plan,
 .knows > div {
@@ -2587,7 +2508,6 @@ h2.display {
 .problem-grid h3,
 .works h3,
 .channels h3,
-.trade-cards h3,
 .steps-home h3,
 .knows h3,
 .plan h3,
@@ -2683,14 +2603,30 @@ h2.display {
 #stop :focus-visible { outline-color: var(--bl-focus-on-dark); }
 #stop + section { border-top: 0; }
 
-/* --- Trades ---------------------------------------------------------------- */
-#trade .trade-cards { gap: 20px; border-top: 0; margin-top: 48px; }
-#trade .trade-cards a:hover,
-#trade .trade-cards a:focus-visible { background: #FFFFFF; border-color: var(--bl-blue); }
-#trade .trade-cards p { color: var(--bl-text-2); }
-.trade-go { color: var(--bl-accent-text); font-weight: 600; border-bottom: 0; }
-.trade-go::after { margin-left: 0.3em; }
-.trade-more a { color: var(--bl-accent-text); }
+/* --- Who it is for: example kinds of business, not links ------------------ */
+#for .kinds {
+  list-style: none;
+  margin: 40px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  max-width: 1000px;
+}
+#for .kinds li {
+  padding: 10px 18px;
+  background: #FFFFFF;
+  border: 1px solid var(--card-line);
+  border-radius: var(--bl-radius-pill);
+  font-family: var(--bl-font-display);
+  font-weight: var(--bl-weight-heading);
+  font-size: 1rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--bl-ink-900);
+}
+#for .kinds-note { margin: 28px 0 0; max-width: 62ch; font-size: 0.95rem; color: var(--bl-text-2); }
+#for .kinds-note a { color: var(--bl-accent-text); text-underline-offset: 3px; }
 
 /* --- Set up from what you already have: the light grey band ---------------- */
 #how { background: var(--bl-surface); border-top: 0; }
@@ -2907,13 +2843,6 @@ footer a { color: var(--bl-ink-900); }
   #channels .channels-4 > li:nth-child(2n),
   #channels .channels-4 > li:nth-child(2n + 1) { padding: 26px 24px 28px; border: 1px solid var(--card-line); }
 }
-@media (max-width: 1040px) {
-  #trade .trade-cards a,
-  #trade .trade-cards a:first-child,
-  #trade .trade-cards a:last-child,
-  #trade .trade-cards a:nth-child(2n),
-  #trade .trade-cards a:nth-child(2n + 1) { padding: 26px 24px 28px; border: 1px solid var(--card-line); }
-}
 @media (max-width: 1000px) {
   #price .plans { grid-template-columns: minmax(0, 1fr); }
   #price .plan,
@@ -2948,7 +2877,8 @@ footer a { color: var(--bl-ink-900); }
   .routes { padding: 4px 20px; }
 }
 @media (max-width: 600px) {
-  #trade .trade-cards { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  #for .kinds { gap: 8px; margin-top: 32px; }
+  #for .kinds li { padding: 8px 14px; font-size: 0.92rem; }
   #faq .faq summary { font-size: 1rem; }
 }
 @media (prefers-reduced-motion: reduce) {

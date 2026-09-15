@@ -607,6 +607,23 @@ await test("the channels section still shows all four channels as Available, so 
   assert.equal((section.match(/state-available">Available</g) ?? []).length, 4, "not every channel is marked Available");
 });
 
+await test("the homepage speaks to any business, promotes no trade page, and keeps clinics to appointment requests", () => {
+  const html = visibleHtml("landing.html");
+  assert.doesNotMatch(html, /id="trade"|trade-cards/, "the old trade section is back");
+  assert.doesNotMatch(html, /href="\/(?:salons|restaurants|clinics|dental)"/, "the homepage links to a trade page again");
+  const start = html.indexOf('<section id="for"');
+  assert.ok(start >= 0, "no audience section");
+  const section = html.slice(start, html.indexOf("</section>", start));
+  const list = section.slice(section.indexOf('<ul class="kinds"'), section.indexOf("</ul>", section.indexOf('<ul class="kinds"')));
+  const kinds = [...list.matchAll(/<li>([^<]+)<\/li>/g)].map((m) => m[1]);
+  assert.ok(kinds.length >= 10, `only ${kinds.length} example kinds of business`);
+  assert.doesNotMatch(list, /<a\b/, "the example kinds of business are links");
+  // Clinics and dental stay toned down until the health-data question is settled.
+  const plain = section.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.match(plain, /appointment requests only, never medical details/);
+  assert.doesNotMatch(plain, /\b(?:medical|clinical) (?:advice|records|history|questions answered)\b/i);
+});
+
 await test("no public page claims a business's existing WhatsApp is answered, or voice notes on WhatsApp", () => {
   const pages = fs.readdirSync(path.join(process.cwd(), "public")).filter((f) => f.endsWith(".html"));
   const sources = [
