@@ -11,8 +11,8 @@
  * from a fixture.
  *
  * **The trial is capped.** An account nobody is watching must not be able to
- * run up a vendor bill. Fourteen days and thirty minutes, written at signup
- * rather than assumed by a job that might not run.
+ * run up a vendor bill. The catalogue's length and thirty minutes, written at
+ * signup rather than assumed by a job that might not run.
  *
  * **A new venue is blank, not plausible.** Seeding a fictional stylist and a
  * made-up price list makes a venue that looks configured and answers wrongly.
@@ -41,6 +41,7 @@ const { getLocation, listLocationsFor, listTenants, getBusiness, listUsers } = a
 const { canSeeLocation, visibleLocations } = await import("../src/lib/auth");
 const { DEFAULT_TENANT_ID } = await import("../src/lib/tenancy");
 const { historyFor } = await import("../src/lib/brain");
+const { TRIAL } = await import("../src/lib/billing/plans");
 
 let passed = 0;
 let failed = 0;
@@ -89,11 +90,11 @@ await test("the venue starts on a capped trial, not on a plan", () => {
   // Catalogue 2026-10: 30 voice minutes and 50 text conversations.
   assert.equal(sub?.trial?.minutes, 30);
   assert.equal(sub?.trial?.conversations, 50);
-  // Fourteen days from today, so an unattended account expires on its own.
+  // The catalogue's length from today, so an unattended account expires on its own.
   const days =
     (Date.parse(`${sub!.trial!.endsOn}T12:00:00Z`) - Date.parse(`${sub!.startedOn}T12:00:00Z`)) /
     86_400_000;
-  assert.equal(Math.round(days), 14);
+  assert.equal(Math.round(days), TRIAL.days);
 });
 
 await test("the new venue is blank rather than plausibly wrong", () => {

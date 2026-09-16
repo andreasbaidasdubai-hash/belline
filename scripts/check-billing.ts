@@ -537,6 +537,63 @@ test("the terms carry the catalogue's trial and over-limit sentences word for wo
   assert.ok(terms.includes(overLimitSentence()), `terms.html does not carry the catalogue's over-limit sentence: "${overLimitSentence()}"`);
 });
 
+/**
+ * The trial's length, everywhere a customer can read it.
+ *
+ * Every trial line is generated from `TRIAL`, but generated text still has to
+ * be regenerated: a page, a built copy of the site or a seeded answer can go
+ * on carrying a number somebody typed once. So this reads what actually
+ * ships and fails on any trial length that is not the catalogue's.
+ *
+ * Only lengths written about the trial count. "30 days' notice" of a price
+ * change and "we answer within 30 days" are unrelated promises that happen to
+ * use the same number today, and a test that failed on those the day the
+ * trial changed would be teaching somebody to switch it off.
+ */
+test("no shipped copy states a trial length other than the catalogue's", () => {
+  const LENGTH = /\b(\d{1,3}|fourteen|thirty)[\s-]?days?\b/gi;
+  const WORDS: Record<string, number> = { fourteen: 14, thirty: 30 };
+  const site = path.join(ROOT, "site");
+  const built = fs.existsSync(site)
+    ? fs
+        .readdirSync(site, { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile() && e.name.endsWith(".html"))
+        .map((e) => {
+          const file = path.join(e.parentPath ?? site, e.name);
+          return { file: path.relative(ROOT, file), text: fs.readFileSync(file, "utf8"), whole: false };
+        })
+    : [];
+
+  const scanned = [
+    ...publicPages.map((p) => ({ file: `public/${p.file}`, text: p.html, whole: false })),
+    ...built,
+    // Belle's own answers. The question carries the word "trial", so the pair
+    // is read together rather than the answer alone.
+    ...bellineVenue.agent.faqs.map((f) => ({ file: `seeded FAQ "${f.q}"`, text: `${f.q} ${f.a}`, whole: true })),
+  ];
+
+  for (const { file, text, whole } of scanned) {
+    for (const match of text.matchAll(LENGTH)) {
+      const token = match[1].toLowerCase();
+      const days = WORDS[token] ?? Number(token);
+      // Is this sentence about the trial at all?
+      const near = whole ? text : text.slice(Math.max(0, match.index - 60), match.index + match[0].length + 60);
+      if (!/free|trial/i.test(near)) continue;
+      assert.equal(
+        days,
+        TRIAL.days,
+        `${file} states a ${days}-day trial, but the catalogue's trial is ${TRIAL.days} days: "${match[0]}"`,
+      );
+    }
+  }
+
+  // And the scan is only worth having if it is actually reading the pages.
+  assert.ok(
+    scanned.some(({ text }) => new RegExp(`${TRIAL.days}[\\s-]?days? free`, "i").test(text)),
+    "the scan found no trial length at all — it is no longer reading the shipped copy",
+  );
+});
+
 test("the legal pages claim nothing that is not live", () => {
   for (const file of ["terms.html", "privacy.html"]) {
     const html = publicPages.find((p) => p.file === file)!.html.replace(/<!--[\s\S]*?-->/g, "");

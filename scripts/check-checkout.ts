@@ -170,7 +170,7 @@ await test("the venue, plan, market, cycle, amount and catalogue version ride on
 
 console.log("\n\x1b[1mThe trial takes no card\x1b[0m\n");
 
-await test("signup starts a card-free trial of Starter: 30 voice minutes, 50 text conversations, fourteen days", () => {
+await test("signup starts a card-free trial of Starter: 30 voice minutes, 50 text conversations, thirty days", () => {
   const sub = getLocation(venue.id)!.subscription!;
   assert.equal(sub.status, "trialing");
   assert.deepEqual(sub.products, [...TRIAL.products]);

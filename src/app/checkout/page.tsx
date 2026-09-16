@@ -2,7 +2,7 @@ import Brand from "@/components/Brand";
 import { currentUser } from "@/lib/auth-server";
 import { listLocationsFor } from "@/lib/store";
 import { seedIfEmpty } from "@/lib/seed";
-import { LEGACY_TO_BUNDLE, checkSelection, recommendedPlan, type BillingCycle } from "@/lib/billing/plans";
+import { LEGACY_TO_BUNDLE, TRIAL, checkSelection, recommendedPlan, type BillingCycle } from "@/lib/billing/plans";
 import { productsOf, subscriptionMarket } from "@/lib/billing/usage";
 import { MARKETS, marketOf } from "@/lib/markets";
 import { stripeEnabled } from "@/lib/billing/stripe";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Get Belline",
-  description: "Belline, your AI receptionist. Fourteen days free, no card, cancel anytime.",
+  description: `Belline, your AI receptionist. ${TRIAL.days} days free, no card, cancel anytime.`,
 };
 
 /**

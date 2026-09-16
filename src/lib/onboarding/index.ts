@@ -62,9 +62,9 @@ export type SignupResult =
   | { ok: false; field: "businessName" | "email" | "password" | "vertical"; error: string };
 
 /**
- * Fourteen days, every channel on, no card, and a cap on voice minutes and
+ * A month, every channel on, no card, and a cap on voice minutes and
  * text conversations so an unattended trial cannot run up a bill
- * (billing/plans.ts `TRIAL`).
+ * (billing/plans.ts `TRIAL`, which is the only place the length is set).
  */
 function trialSubscription(timezone: string, picked?: unknown[], market?: Market): Subscription {
   const today = todayIn(timezone);
