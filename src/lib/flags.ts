@@ -35,6 +35,7 @@ export const FLAG_NAMES = [
   "vertical.clinic.selfserve",
   "forwarding.autotest",
   "forwarding.carrier.virgin",
+  "ui.simplified",
   "stubs",
 ] as const;
 
@@ -77,6 +78,11 @@ const DEFS: Record<Exclude<StaticFlag, "stubs">, FlagDef> = {
   "forwarding.autotest": { needs: [...TWILIO, "TWILIO_TESTER_NUMBER"], explicit: true },
   // Codes verified by a real test call on the carrier first.
   "forwarding.carrier.virgin": { needs: [], explicit: true },
+  // The seven-destination navigation for the post-pivot product. Off until
+  // somebody asks for it, and see nav.ts: a venue on Belline's own diary keeps
+  // the full navigation whatever this says, because the diary pages are its
+  // daily work.
+  "ui.simplified": { needs: [], explicit: true },
 };
 
 function partnerId(name: string): string | null {

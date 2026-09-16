@@ -104,6 +104,137 @@ await test("never finds another business's bookings or customers", async () => {
   assert.equal(hits.filter((h) => h.kind !== "page").length, 0);
 });
 
+console.log("\n\x1b[1mThe seven destinations\x1b[0m\n");
+
+/**
+ * The navigation after the pivot.
+ *
+ * Two things have to stay true at once, and they pull in opposite
+ * directions: an owner who never touches a diary should not be shown one,
+ * and a venue that runs on the diary must not lose a single page it used
+ * yesterday. So every assertion here comes in that pair.
+ */
+const { advancedGroups, navFor, simplifiedFor, usesDiary } = await import("../src/lib/nav");
+
+const ON = { FLAG_UI_SIMPLIFIED: "on" };
+/** A venue that took the pivot's default: requests, no Belline diary. */
+const requestVenue = () => ({
+  ...venue(),
+  onboarding: { ...venue().onboarding!, destination: { kind: "requests" as const, setAt: new Date().toISOString() } },
+});
+const hrefs = (items: { href: string }[]) => items.map((i) => i.href);
+const advancedHrefs = (user: typeof owner, locations: ReturnType<typeof venue>[]) =>
+  advancedGroups(user, locations).flatMap((g) => g.items.map((i) => i.href));
+
+await test("with the flag off, the navigation is exactly what it was", () => {
+  const items = navFor(owner, [requestVenue()], {}, {}).items;
+  assert.ok(hrefs(items).includes("/calendar"), "the diary navigation changed with the flag off");
+  assert.ok(hrefs(items).includes("/attention"));
+  assert.equal(navFor(owner, [requestVenue()], {}, {}).advanced, null, "an Advanced entry appeared with the flag off");
+});
+
+await test("with the flag on, a request-only venue gets the seven and nothing else", () => {
+  const shape = navFor(owner, [requestVenue()], {}, ON);
+  assert.deepEqual(hrefs(shape.items), ["/", "/conversations", "/requests", "/venue", "/channels", "/billing", "/team"]);
+  assert.equal(shape.advanced?.href, "/advanced", "there is no way into the rest of the product");
+});
+
+await test("a venue on Belline's own diary keeps the full navigation, flag or no flag", () => {
+  // The protection that makes this safe to switch on. A pilot venue that
+  // books through Belline opens the floor plan every service.
+  assert.equal(usesDiary(venue()), true, "a venue with no destination is not being read as a diary venue");
+  assert.equal(simplifiedFor([venue()], ON), false);
+  // Recall is offered when somebody is actually due back, as it always was.
+  const items = navFor(owner, [venue()], { dueBack: 3 }, ON).items;
+  for (const href of ["/calendar", "/bookings", "/waitlist", "/guests", "/recall"]) {
+    assert.ok(hrefs(items).includes(href), `${href} was taken from a venue that runs on the diary`);
+  }
+});
+
+await test("one diary venue among several keeps the whole account on the old navigation", () => {
+  assert.equal(simplifiedFor([requestVenue(), venue()], ON), false);
+  assert.equal(simplifiedFor([requestVenue(), requestVenue()], ON), true);
+});
+
+await test("every page that left the navigation is still reachable from Advanced", () => {
+  const moved = ["/calendar", "/bookings", "/waitlist", "/recall", "/guests", "/agents", "/locations", "/reports", "/golive", "/test"];
+  const reachable = advancedHrefs(owner, [requestVenue()]);
+  for (const href of moved) {
+    assert.ok(reachable.includes(href), `${href} is in neither the navigation nor Advanced — it has been orphaned`);
+  }
+});
+
+await test("the diary pages a venue cannot use are not offered to it", () => {
+  // The old nav already did this for Floor and Rota; Advanced must not undo it.
+  const salonOnly = advancedHrefs(owner, [requestVenue()]);
+  assert.ok(!salonOnly.includes("/floor"), "a salon was offered the restaurant floor plan");
+  assert.ok(salonOnly.includes("/rota"), "a salon was not offered the rota");
+});
+
+await test("no internal or staff page is in the simplified navigation", () => {
+  const items = hrefs(navFor(owner, [requestVenue()], {}, ON).items);
+  for (const href of ["/prospects", "/demo", "/test"]) {
+    assert.ok(!items.includes(href), `${href} is in an owner's simplified navigation`);
+  }
+  // Still reachable, and still guarded by their own pages.
+  const reachable = advancedHrefs(owner, [requestVenue()]);
+  assert.ok(reachable.includes("/demo"), "the demo line is now unreachable");
+  assert.ok(reachable.includes("/test"), "the test console is now unreachable");
+  assert.ok(!reachable.includes("/prospects"), "Advanced offers a staff-only page to a customer");
+});
+
+await test("the old navigation is untouched, link for link", () => {
+  // The promise to existing venues. Whatever this re-organisation does, a
+  // venue on the diary opens the dashboard to what it saw yesterday.
+  const items = hrefs(navFor(owner, [venue()], { dueBack: 3 }, {}).items);
+  assert.deepEqual(items, [
+    "/attention",
+    "/",
+    "/calendar",
+    "/calls",
+    "/inbox",
+    "/bookings",
+    "/waitlist",
+    "/recall",
+    "/guests",
+    "/test",
+    "/golive",
+    "/agents",
+    "/venue",
+    "/locations",
+    "/rota",
+    "/reports",
+    "/website",
+    "/integrations",
+    "/billing",
+    "/demo",
+    "/team",
+  ]);
+});
+
+await test("floor staff are not offered the manager's destinations", () => {
+  const floor = createUser({ email: "nav@glowstudio.test", name: "Nav", password: "Correct-Horse-Battery-9", role: "staff", tenantId: owner.tenantId });
+  assert.ok(floor.ok);
+  const items = hrefs(navFor(floor.ok ? floor.user : null!, [requestVenue()], {}, ON).items);
+  assert.deepEqual(items, ["/", "/conversations", "/requests"]);
+});
+
+await test("search reaches the moved pages, whichever navigation you are on", () => {
+  // The whole promise of Advanced. Somebody who has always typed "rota" must
+  // still land on it.
+  assert.ok(searchEverything(owner, "rota").some((h) => h.href === "/rota"));
+  assert.ok(searchEverything(owner, "calend").some((h) => h.href === "/calendar"));
+});
+
+await test("the seven destinations all exist as routes", () => {
+  for (const route of ["conversations", "requests", "channels", "advanced"]) {
+    assert.ok(
+      fs.existsSync(path.join(process.cwd(), "src", "app", "(app)", route, "page.tsx")),
+      `/${route} is in the navigation but has no page`,
+    );
+  }
+});
+
 console.log("\n\x1b[1mCustomer profiles\x1b[0m\n");
 
 await test("one person across differently written numbers is one profile, with every booking", () => {

@@ -290,6 +290,27 @@ await test("the password hint, minLength and server rule come from one constant"
   assert.ok(!/twelve|minLength=\{\d+\}/i.test(form), "a hand-typed length is still in the form");
 });
 
+await test("the terms checkbox is announced by what it agrees to, not by the word 'on'", () => {
+  // A consent control is the one field on this page where the name matters
+  // most, and it read as `checkbox "on"` — the checkbox sat inside its own
+  // <label>, so the name was computed from the label's contents, into which
+  // an embedded control contributes its value attribute. The input has to be
+  // a sibling bound by `htmlFor`, not a child.
+  const form = fs.readFileSync(path.join(import.meta.dirname, "../src/app/checkout/CheckoutForm.tsx"), "utf8");
+  const at = form.indexOf('htmlFor="acceptTerms"');
+  assert.ok(at > 0, "nothing is labelled for the terms checkbox");
+  const label = form.slice(at, form.indexOf("</label>", at));
+  assert.doesNotMatch(
+    label,
+    /type="checkbox"/,
+    'the consent checkbox is nested inside its own <label> again, so it announces itself as "on"',
+  );
+  assert.match(label, /I agree to the/, "the consent label does not say what is being agreed to");
+  assert.match(label, /Terms/, "the consent label does not name the Terms");
+  assert.match(label, /Privacy policy/, "the consent label does not name the Privacy policy");
+  assert.match(form, /id="acceptTerms"[^>]*type="checkbox"/, "the terms checkbox is gone or renamed");
+});
+
 const matrix: { market?: string; browserZone?: string; currency: string; timezone: string }[] = [
   { market: "AE", browserZone: "Asia/Dubai", currency: "AED", timezone: "Asia/Dubai" },
   { market: "AE", browserZone: "Europe/Zurich", currency: "AED", timezone: "Asia/Dubai" },

@@ -203,17 +203,26 @@ export default function CheckoutForm({
         </p>
       </div>
 
-      <label
-        htmlFor="acceptTerms"
-        style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 11.5, lineHeight: 1.5 }}
-      >
+      {/*
+        The checkbox is a sibling of its label, not a child of it.
+
+        It used to sit inside the <label>, which reads as the obvious way to
+        write this and is the one arrangement that breaks the name. A label
+        names its control from its own contents, and an embedded control
+        inside those contents contributes its *value* — so this consent
+        checkbox announced itself as "on". A person agreeing to terms by
+        screen reader heard the word "on" and nothing about what they were
+        agreeing to. Clicking the text still toggles it, because `htmlFor`
+        binds them; only the nesting is gone.
+      */}
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 11.5, lineHeight: 1.5 }}>
         <input id="acceptTerms" name="acceptTerms" type="checkbox" required style={{ width: "auto", marginTop: 2 }} />
-        <span>
+        <label htmlFor="acceptTerms">
           I agree to the{" "}
           <a href="https://belline.ai/terms" target="_blank" rel="noopener">Terms</a> and{" "}
           <a href="https://belline.ai/privacy" target="_blank" rel="noopener">Privacy policy</a>.
-        </span>
-      </label>
+        </label>
+      </div>
 
       {error && (
         <div
