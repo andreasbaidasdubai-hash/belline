@@ -3,11 +3,18 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { integrationErrorText } from "@/lib/errors/customer";
 import { seedIfEmpty } from "@/lib/seed";
-import { destinationOf, googleUsable, takesRequestsOnly } from "@/lib/booking/destination";
+import { destinationOf, googleUsable, outlookUsable, takesRequestsOnly } from "@/lib/booking/destination";
 import { GOOGLE_ABANDONED_TEXT, GOOGLE_EXPIRED_TEXT, connectionState, listCalendarsFor } from "@/lib/integrations/google";
 import { flag } from "@/lib/flags";
 import { getLocation } from "@/lib/store";
 import GoogleCalendarControls from "./GoogleCalendarControls";
+import CalendarControls from "./CalendarControls";
+import {
+  OUTLOOK_ABANDONED_TEXT,
+  OUTLOOK_ADMIN_APPROVAL_TEXT,
+  listOutlookCalendarsFor,
+  outlookConnectionState,
+} from "@/lib/integrations/outlook";
 import { whatsappStatus } from "@/lib/whatsapp";
 import { whatsappCard } from "@/lib/whatsapp-selfserve";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -60,6 +67,12 @@ export default async function IntegrationsPage({
   const googleVenue = getLocation(location.id) ?? location;
   const google = connectionState(googleVenue);
   const twoWay = destinationOf(googleVenue) === "google";
+  // Outlook, the same way, from its own flag.
+  const outlookOn = flag("booking.outlook");
+  const outlookCalendars = outlookOn && outlookUsable(googleVenue) ? await listOutlookCalendarsFor(googleVenue).catch(() => null) : null;
+  const outlookVenue = getLocation(location.id) ?? googleVenue;
+  const outlook = outlookConnectionState(outlookVenue);
+  const outlookTwoWay = destinationOf(outlookVenue) === "outlook";
   const whatsapp = await whatsappStatus(location);
   const account = whatsapp.state === "connected" ? whatsapp.account : null;
 
@@ -246,6 +259,84 @@ export default async function IntegrationsPage({
               Google Calendar isn&apos;t available on this account yet.
               {isBellineStaff(user) && (
                 <span className="muted"> (Ours to fix: the booking.google flag is off. See the ops flags.)</span>
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="panel-head">Outlook</div>
+        <div style={{ padding: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <span
+              className="pill"
+              style={
+                outlook.connected && outlook.healthy
+                  ? { background: "var(--ok-soft)", color: "var(--ok)", borderColor: "var(--ok)" }
+                  : outlook.connected
+                    ? { background: "var(--bad-soft)", color: "var(--bad)", borderColor: "var(--bad)" }
+                    : undefined
+              }
+            >
+              {outlook.connected ? (outlook.healthy ? "Connected" : "Needs attention") : "Not connected"}
+            </span>
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              {outlook.detail}
+            </span>
+          </div>
+
+          {outlookOn && !outlook.connected && outlookVenue.outlookAdminApprovalAt && (
+            <div role="status" className="panel" style={{ padding: "12px 14px", margin: "0 0 12px", borderColor: "var(--warn)", fontSize: 13.5, lineHeight: 1.55 }}>
+              {OUTLOOK_ADMIN_APPROVAL_TEXT}
+            </div>
+          )}
+          {outlookOn && !outlook.connected && !outlookVenue.outlookAdminApprovalAt && outlookVenue.outlookConnectAbandonedAt && (
+            <div role="status" className="panel" style={{ padding: "12px 14px", margin: "0 0 12px", borderColor: "var(--warn)", fontSize: 13.5, lineHeight: 1.55 }}>
+              {OUTLOOK_ABANDONED_TEXT}
+            </div>
+          )}
+          {outlook.expired && (
+            <div role="alert" className="panel" style={{ padding: "12px 14px", margin: "0 0 12px", borderColor: "var(--bad)", background: "var(--bad-soft)", fontSize: 13.5 }}>
+              {outlook.detail}
+            </div>
+          )}
+
+          {outlookOn ? (
+            <>
+              <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch" }}>
+                {outlookTwoWay
+                  ? "Belline reads busy times from the Outlook calendars you pick and adds each booking to them. Your hours, services and rules still decide what can be booked; the calendar can only take times away. To change or cancel a booking, do it in Belline, so the customer's record stays right."
+                  : "Works with a Microsoft 365 work account or an Outlook.com account. Belline reads busy times only from the calendars you pick, and adds, changes and removes only the bookings it takes. Some organisations need their IT admin to approve Belline first; if Microsoft asks for that, we help."}
+              </p>
+              <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                {googleVenue.google ? (
+                  <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+                    Google Calendar is connected to this venue. Belline uses one calendar per venue: disconnect Google Calendar first to use Outlook.
+                  </p>
+                ) : (
+                  <a className="btn btn-accent" href={`/api/integrations/microsoft?locationId=${location.id}`}>
+                    {outlook.connected ? "Reconnect" : "Connect Outlook"}
+                  </a>
+                )}
+              </div>
+              {outlookUsable(outlookVenue) && outlookVenue.outlook && (
+                <CalendarControls
+                  endpoint="/api/integrations/microsoft"
+                  idPrefix="outlook"
+                  locationId={location.id}
+                  calendars={outlookCalendars}
+                  calendarId={outlookVenue.outlook.calendarId}
+                  staff={(location.salon?.staff ?? []).map((s) => ({ id: s.id, name: s.name }))}
+                  staffCalendars={outlookVenue.outlook.staffCalendars ?? {}}
+                />
+              )}
+            </>
+          ) : (
+            <p style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 14 }}>
+              Outlook isn&apos;t available on this account yet. Until it is, Belline takes booking requests and your team confirms them.
+              {isBellineStaff(user) && (
+                <span className="muted"> (Ours to fix: the booking.outlook flag is off. See the ops flags.)</span>
               )}
             </p>
           )}

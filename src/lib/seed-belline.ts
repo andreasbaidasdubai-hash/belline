@@ -8,35 +8,54 @@ import { flag } from "./flags";
 type Env = Record<string, string | undefined>;
 
 /**
- * What Belle says about booking systems, from the same flag the product and
+ * What Belle says about booking systems, from the same flags the product and
  * the website read: Google Calendar is "coming soon" exactly while
- * `booking.google` is off.
+ * `booking.google` is off, and Outlook works exactly while `booking.outlook`
+ * is on.
  */
 export function bookingSystemAnswer(env: Env = process.env): string {
-  return flag("booking.google", env)
+  const google = flag("booking.google", env);
+  const outlook = flag("booking.outlook", env);
+  if (google && outlook) {
+    return "Google Calendar and Outlook, yes: connect either and Belline checks it for times already taken, then books straight into it. Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so for those Belline takes the customer's request and your team books it where you always do. Which system do you use?";
+  }
+  if (outlook) {
+    return "Outlook, yes: connect your Microsoft 365 or Outlook.com calendar and Belline checks it for times already taken, then books straight into it. Google Calendar is coming soon, and Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so for those Belline takes the customer's request and your team books it where you always do. Which system do you use?";
+  }
+  return google
     ? "Google Calendar, yes: connect it and Belline checks it for times already taken, then books straight into it. Outlook isn't connected yet, and Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so for those Belline takes the customer's request and your team books it where you always do. Which system do you use?"
     : "Not yet. Google Calendar is coming soon. Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so I can't give you a date. Today Belline takes the customer's request and your team books it where you always do. Which system do you use? I'll pass that on.";
 }
 
 export function routeLine(env: Env = process.env): string {
-  const calendars = flag("booking.google", env)
-    ? "Google Calendar: once they connect it, Belline checks it for busy times and books straight into it. Outlook: Belline takes requests now."
-    : "Google Calendar or Outlook: Belline takes requests now; booking into Google Calendar is coming soon.";
+  const google = flag("booking.google", env);
+  const outlook = flag("booking.outlook", env);
+  const calendars =
+    google && outlook
+      ? "Google Calendar or Outlook: once they connect it, Belline checks it for busy times and books straight into it."
+      : outlook
+        ? "Outlook: once they connect it, Belline checks it for busy times and books straight into it. Google Calendar: Belline takes requests now; booking into Google Calendar is coming soon."
+        : google
+          ? "Google Calendar: once they connect it, Belline checks it for busy times and books straight into it. Outlook: Belline takes requests now."
+          : "Google Calendar or Outlook: Belline takes requests now; booking into Google Calendar is coming soon.";
   return `Match their route and say only what is true today. A booking platform: Belline answers and takes the request, their team books it in their system; direct connection needs a partner agreement Belline doesn't have. ${calendars} No system: Belline answers, takes messages and requests, and makes sure the right person follows up.`;
 }
 
 /**
- * The catalogue's not-yet list, as Belle may say it. With Google Calendar
- * live, the entries that bundle it with what is still missing name only the
- * missing part, so Belle never tells a prospect Google Calendar does not work.
+ * The catalogue's not-yet list, as Belle may say it. With a calendar live, the
+ * entries that bundle it with what is still missing name only the missing
+ * part, and an entry with nothing missing goes: Belle never tells a prospect
+ * that Google Calendar or Outlook does not work while it does.
  */
 export function notYetForBelle(features: string[], env: Env = process.env): string[] {
-  if (!flag("booking.google", env)) return features;
-  const rename: Record<string, string> = {
-    "Google Calendar and booking-system integrations": "Fresha, SevenRooms, OpenTable and Treatwell integrations",
-    "One Google Calendar or Microsoft Outlook connection": "A Microsoft Outlook connection",
+  const google = flag("booking.google", env);
+  const outlook = flag("booking.outlook", env);
+  if (!google && !outlook) return features;
+  const rename: Record<string, string | null> = {
+    "Google Calendar and booking-system integrations": google ? "Fresha, SevenRooms, OpenTable and Treatwell integrations" : "Google Calendar and booking-system integrations",
+    "One Google Calendar or Microsoft Outlook connection": google && outlook ? null : google ? "A Microsoft Outlook connection" : "A Google Calendar connection",
   };
-  return features.map((f) => rename[f] ?? f);
+  return features.flatMap((f) => (f in rename ? (rename[f] === null ? [] : [rename[f]!]) : [f]));
 }
 
 /**

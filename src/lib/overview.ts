@@ -3,6 +3,7 @@ import { listBookings, listCalls } from "./store";
 import { attentionFor, type AttentionItem } from "./attention";
 import { currentVersion } from "./brain";
 import { connectionState } from "./integrations/google";
+import { outlookConnectionState } from "./integrations/outlook";
 import { todayIn, nowMinutesIn } from "./time";
 import { isRestaurant, terms } from "./verticals";
 
@@ -167,7 +168,8 @@ export function overviewFor(location: Location): Overview {
     days: DAYS,
   };
 
-  const google = connectionState(location);
+  // The venue's one calendar connection: Outlook where it has one, Google otherwise.
+  const google = location.outlook ? outlookConnectionState(location) : connectionState(location);
   const version = currentVersion(location);
   const lastCall = calls[0];
   const hoursSinceCall = lastCall

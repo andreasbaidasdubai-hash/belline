@@ -53,7 +53,7 @@ interface Db {
   numberPool: PoolNumber[];
   /** Stripe webhook events already applied, so a redelivery changes nothing. See billing/stripe.ts. */
   stripeEvents: StripeEventRow[];
-  /** Google connections started and not yet back from Google. See integrations/google.ts. */
+  /** Calendar connections started and not yet back from Google or Microsoft. See integrations/oauth-state.ts. */
   oauthStates: OAuthStateRow[];
 }
 
@@ -64,6 +64,8 @@ interface Db {
 export interface OAuthStateRow {
   /** sha256 of the nonce, hex. */
   id: string;
+  /** Whose connection. Absent on Google's, which predate Outlook. See integrations/oauth-state.ts. */
+  provider?: "google" | "outlook";
   locationId: string;
   userId: string;
   createdAt: string;

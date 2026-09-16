@@ -1,5 +1,6 @@
 import type { BrainVersion } from "./brain";
 import type { GoogleLink } from "./integrations/google";
+import type { OutlookLink } from "./integrations/outlook";
 import type { BillingCycle, LegacyPlanId, ProductId } from "./billing/plans";
 import type { Market } from "./markets";
 
@@ -170,6 +171,12 @@ export interface Location {
    * Google. Cleared by the next connection that does. See integrations/google.ts.
    */
   googleConnectAbandonedAt?: string;
+  /** A connected Outlook calendar (Microsoft 365 or Outlook.com). See integrations/outlook.ts. */
+  outlook?: OutlookLink;
+  /** As `googleConnectAbandonedAt`, for Outlook: a connection that never came back from Microsoft. */
+  outlookConnectAbandonedAt?: string;
+  /** When Microsoft last said the owner's organisation must approve Belline first. Cleared by a connection. */
+  outlookAdminApprovalAt?: string;
   /**
    * What one booking is typically worth here.
    *
@@ -1164,14 +1171,20 @@ export interface Booking {
   cancelledAt?: string;
   cancelReason?: string;
   /**
-   * The Google Calendar event this booking is, and the calendar it is in.
-   * Derived from the idempotency key, so a second create finds the first.
+   * The calendar event this booking is, and the calendar it is in. For Google
+   * the id is derived from the idempotency key, so a second create finds the
+   * first. For Outlook it is the id Microsoft assigned.
    */
   calendarEventId?: string;
   calendarId?: string;
   /**
-   * Where the venue's connected Google Calendar stands with this booking.
-   * Absent when the venue has no connection. See integrations/google-sync.ts.
+   * Outlook only: the key written on the event (integrations/calendar-connector.ts),
+   * by which it is found again whatever id Microsoft gave it. Google's key is its id.
+   */
+  calendarEventKey?: string;
+  /**
+   * Where the venue's connected calendar stands with this booking.
+   * Absent when the venue has no connection. See integrations/calendar-sync.ts.
    */
   calendarSync?: CalendarSync;
   /**
@@ -1392,7 +1405,7 @@ export interface User {
   resetNonce?: string;
 }
 
-/** An event in a calendar, by calendar and id. */
+/** An event in a calendar, by calendar and key (for Google the key is the id). */
 export interface CalendarEventRef {
   calendarId: string;
   eventId: string;
@@ -1419,8 +1432,10 @@ export interface CalendarSync {
   lastError?: string;
   /** Events this booking left behind on another calendar, still to be removed. */
   stale?: CalendarEventRef[];
-  /** A write that was started and not confirmed: it may exist in Google. */
+  /** A write that was started and not confirmed: it may exist in the calendar. */
   inflight?: CalendarEventRef;
+  /** Which calendar service the event fields belong to. Absent: Google. */
+  provider?: "outlook";
 }
 
 /** Why a person at Belline has to step in. See exceptions.ts. */
@@ -1446,7 +1461,12 @@ export type ExceptionKind =
   | "google_sync_failed"
   | "google_token_expired"
   | "google_misconfigured"
-  | "google_connect_abandoned";
+  | "google_connect_abandoned"
+  | "outlook_sync_failed"
+  | "outlook_token_expired"
+  | "outlook_misconfigured"
+  | "outlook_connect_abandoned"
+  | "outlook_admin_approval";
 
 export interface SupportException {
   id: string;

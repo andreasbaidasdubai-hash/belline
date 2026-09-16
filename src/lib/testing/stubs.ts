@@ -16,6 +16,14 @@ import {
   type GoogleCalendarEntry,
   type GoogleEvent,
 } from "../integrations/google-api";
+import {
+  graphFailure,
+  tokenFailure,
+  type MicrosoftApi,
+  type OutlookCalendarEntry,
+  type OutlookEvent,
+  type TokenErrorBody,
+} from "../integrations/microsoft-api";
 
 /**
  * Fake providers for local end-to-end runs.
@@ -448,6 +456,209 @@ export function fakeGoogleApi(opts: { calendars?: GoogleCalendarEntry[] } = {}) 
     /** What the owner leaves ticked on Google's screen. Defaults to both. */
     grant(scopes: readonly string[] = GOOGLE_SCOPES): void {
       grantedScope = scopes.join(" ");
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Microsoft (token endpoint and Graph)
+// ---------------------------------------------------------------------------
+
+/**
+ * The Microsoft identity platform and the Graph calls Belline makes.
+ *
+ * The code `stub-code` connects; any other is refused as Microsoft refuses a
+ * spent code. Every refresh hands back a new refresh token, as Microsoft does.
+ * By default the old one keeps working, as Microsoft's does; `revokeOnRotate()`
+ * makes a used refresh token stop working, which is how a test proves Belline
+ * stored the new one rather than getting lucky with the old.
+ *
+ * Failures are fed through the same classifiers the live client uses
+ * (`tokenFailure`, `graphFailure`), with the bodies Microsoft sends.
+ */
+export interface OutlookStubEvent {
+  id: string;
+  start: string;
+  end: string;
+  subject?: string;
+  free?: boolean;
+  bellineBookingId?: string;
+  key?: string;
+}
+
+export function fakeMicrosoftApi(opts: { calendars?: OutlookCalendarEntry[] } = {}) {
+  const calls: { method: keyof MicrosoftApi; calendarId?: string; id?: string }[] = [];
+  /** Refresh tokens Microsoft would accept. */
+  const live = new Set<string>();
+  /** Every refresh token ever issued, in order. */
+  const issued: string[] = [];
+  let seq = 0;
+  let expired = false;
+  let revokeOnRotate = false;
+  let grantedScope = "Calendars.ReadWrite User.Read profile openid email";
+  let calendars = opts.calendars ?? [{ id: "AAMkAD-default", name: "Calendar", primary: true }];
+  let tokenError: { status: number; body: TokenErrorBody } | null = null;
+
+  const issue = () => {
+    const token = `stub-ms-refresh-${++seq}-${randomUUID()}`;
+    live.add(token);
+    issued.push(token);
+    return token;
+  };
+  const access = (token: string) => {
+    if (expired || !token.startsWith("stub-ms-access-") || !issued.includes(token.slice("stub-ms-access-".length))) {
+      throw graphFailure(401, JSON.stringify({ error: { code: "InvalidAuthenticationToken", message: "Access token has expired or is not yet valid." } }), "stub");
+    }
+    if (graphError) throw graphFailure(graphError.status, JSON.stringify(graphError.body), "stub");
+  };
+  let graphError: { status: number; body: unknown } | null = null;
+  let eventSeq = 0;
+  const calendarsEvents = new Map<string, Map<string, OutlookStubEvent>>();
+  const of = (calendarId: string) => {
+    if (!calendarsEvents.has(calendarId)) calendarsEvents.set(calendarId, new Map());
+    return calendarsEvents.get(calendarId)!;
+  };
+  const fromGraph = (id: string, event: OutlookEvent): OutlookStubEvent => {
+    const prop = (name: string) => event.singleValueExtendedProperties.find((p) => p.id.endsWith(`Name ${name}`))?.value;
+    return {
+      id,
+      start: `${event.start.dateTime}Z`,
+      end: `${event.end.dateTime}Z`,
+      subject: event.subject,
+      bellineBookingId: prop("bellineBookingId"),
+      key: prop("bellineEventKey"),
+    };
+  };
+  const failures = new Map<keyof MicrosoftApi, { times: number; afterWrite: boolean }>();
+  const trip = (method: keyof MicrosoftApi, wrote: boolean) => {
+    const f = failures.get(method);
+    if (!f || f.times <= 0 || f.afterWrite !== wrote) return;
+    f.times--;
+    throw graphFailure(503, JSON.stringify({ error: { code: "ServiceNotAvailable", message: `stub: ${method} failed${wrote ? " after the write landed" : ""}` } }), method);
+  };
+
+  const api: MicrosoftApi = {
+    async exchangeCode(code) {
+      calls.push({ method: "exchangeCode" });
+      if (tokenError) throw tokenFailure(tokenError.status, tokenError.body, "code");
+      if (code !== "stub-code") {
+        throw tokenFailure(400, { error: "invalid_grant", error_description: "AADSTS54005: OAuth2 Authorization code was already redeemed.", error_codes: [54005] }, "code");
+      }
+      const refreshToken = issue();
+      return { accessToken: `stub-ms-access-${refreshToken}`, refreshToken, scope: grantedScope, expiresIn: 3600 };
+    },
+    async refresh(refreshToken) {
+      calls.push({ method: "refresh" });
+      if (tokenError) throw tokenFailure(tokenError.status, tokenError.body, "refresh");
+      if (expired || !live.has(refreshToken)) {
+        throw tokenFailure(
+          400,
+          { error: "invalid_grant", error_description: "AADSTS700082: The refresh token has expired due to inactivity.", error_codes: [700082] },
+          "refresh",
+        );
+      }
+      const next = issue();
+      if (revokeOnRotate) live.delete(refreshToken);
+      return { accessToken: `stub-ms-access-${next}`, refreshToken: next, scope: grantedScope, expiresIn: 3600 };
+    },
+    async listCalendars(token) {
+      access(token);
+      calls.push({ method: "listCalendars" });
+      trip("listCalendars", false);
+      return calendars;
+    },
+    async listEvents(token, calendarId, start, end) {
+      access(token);
+      calls.push({ method: "listEvents", calendarId });
+      trip("listEvents", false);
+      const lo = Date.parse(start);
+      const hi = Date.parse(end);
+      return [...of(calendarId).values()]
+        .filter((e) => Date.parse(e.start) < hi && Date.parse(e.end) > lo)
+        .map(({ id, start: s, end: e, free, bellineBookingId }) => ({ id, start: s, end: e, free, bellineBookingId }));
+    },
+    async findEventByKey(token, calendarId, key) {
+      access(token);
+      calls.push({ method: "findEventByKey", calendarId, id: key });
+      trip("findEventByKey", false);
+      return [...of(calendarId).values()].find((e) => e.key === key)?.id ?? null;
+    },
+    async createEvent(token, calendarId, event) {
+      access(token);
+      trip("createEvent", false);
+      const id = `AAMkAD-evt-${++eventSeq}`;
+      calls.push({ method: "createEvent", calendarId, id });
+      of(calendarId).set(id, fromGraph(id, event));
+      trip("createEvent", true);
+      return id;
+    },
+    async updateEvent(token, calendarId, eventId, event) {
+      access(token);
+      calls.push({ method: "updateEvent", calendarId, id: eventId });
+      trip("updateEvent", false);
+      if (!of(calendarId).has(eventId)) return false;
+      of(calendarId).set(eventId, fromGraph(eventId, event));
+      trip("updateEvent", true);
+      return true;
+    },
+    async deleteEvent(token, calendarId, eventId) {
+      access(token);
+      calls.push({ method: "deleteEvent", calendarId, id: eventId });
+      trip("deleteEvent", false);
+      of(calendarId).delete(eventId);
+      trip("deleteEvent", true);
+    },
+  };
+
+  return {
+    api,
+    calls,
+    issued,
+    /** Live events on a calendar, as Microsoft holds them. */
+    events(calendarId: string): OutlookStubEvent[] {
+      return [...of(calendarId).values()];
+    },
+    /** Something the owner put in their calendar themselves. `free` is "Show as: Free". */
+    addBusy(calendarId: string, start: string, end: string, opts: { free?: boolean } = {}): void {
+      const id = `AAMkAD-own-${++eventSeq}`;
+      of(calendarId).set(id, { id, start, end, subject: "Owner's own event", free: opts.free });
+    },
+    /**
+     * The next `times` calls to `method` fail with a 503. With `afterWrite` the
+     * write lands first and only the answer is lost.
+     */
+    failNext(method: keyof MicrosoftApi, times = 1, opts: { afterWrite?: boolean } = {}): void {
+      failures.set(method, { times, afterWrite: Boolean(opts.afterWrite) });
+    },
+    /** Every Graph call answers this, as Microsoft does for a mailbox that has none. */
+    failGraph(reply: { status: number; body: unknown } | null): void {
+      graphError = reply;
+    },
+    /** Microsoft stops accepting every refresh token and access token. */
+    expire(): void {
+      expired = true;
+    },
+    restore(): void {
+      expired = false;
+    },
+    /** A used refresh token stops working once a new one is issued. */
+    revokeOnRotate(on = true): void {
+      revokeOnRotate = on;
+    },
+    /** Is this refresh token one Microsoft would still accept? */
+    accepts(refreshToken: string): boolean {
+      return live.has(refreshToken) && !expired;
+    },
+    /** What Microsoft reports as granted. */
+    grant(scope: string): void {
+      grantedScope = scope;
+    },
+    setCalendars(list: OutlookCalendarEntry[]): void {
+      calendars = list;
+    },
+    /** Every token request fails with this body until cleared with null. */
+    failTokens(reply: { status: number; body: TokenErrorBody } | null): void {
+      tokenError = reply;
     },
   };
 }

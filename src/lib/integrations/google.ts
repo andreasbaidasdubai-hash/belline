@@ -1,6 +1,7 @@
-import crypto from "node:crypto";
 import type { Booking, Location } from "../types";
-import { getLocation, listLocations, mutateOAuthStates, upsertLocation } from "../store";
+import { bookingEventId, overlapsBusy, type Busy, type CalendarConnector } from "./calendar-connector";
+import { getLocation, listLocations, upsertLocation } from "../store";
+import { signOAuthState, takeExpiredStates, verifyOAuthState, type ReturnTo, type StateCheck } from "./oauth-state";
 import { describeBookingShort } from "../booking";
 import { destinationOf, googleUsable } from "../booking/destination";
 import { credentialsConfigured, openCredentials, sealCredentials } from "../db/credentials";
@@ -129,25 +130,8 @@ export function googleApi(): GoogleApi {
 // ---------------------------------------------------------------------------
 
 export const STATE_COOKIE = "belline_google_state";
-const STATE_TTL_MS = 10 * 60_000;
 
-export type ReturnTo = "setup" | "integrations";
-
-interface StatePayload {
-  l: string;
-  u: string;
-  r: ReturnTo;
-  n: string;
-  e: number;
-}
-
-function stateKey(): Buffer {
-  // Derived, so the sealing key itself is never used as an HMAC key directly.
-  return crypto.createHmac("sha256", process.env.CREDENTIALS_KEY ?? "").update("belline google oauth state v1").digest();
-}
-
-const b64url = (buf: Buffer | string) => Buffer.from(buf).toString("base64url");
-const nonceHash = (nonce: string) => crypto.createHash("sha256").update(nonce).digest("hex");
+export type { ReturnTo, StateCheck } from "./oauth-state";
 
 /**
  * The `state` Google hands back.
@@ -155,42 +139,11 @@ const nonceHash = (nonce: string) => crypto.createHash("sha256").update(nonce).d
  * It used to be the bare location id, which let anybody who could get an owner
  * to click a link attach their own Google account to that owner's venue. Now
  * it is signed, expires in ten minutes, names the user who started it, and
- * carries a nonce that is also set as a cookie and can be used once.
- *
- * The pending nonce is kept in the store, not in memory, so a deploy or a
- * restart between "Connect" and Google's answer does not send the owner back
- * to the start. Only its hash is written: the nonce itself lives in the owner's
- * cookie, and a copy of the data cannot finish anybody's connection.
+ * carries a nonce that is also set as a cookie and can be used once. The
+ * mechanics are shared with Outlook: see oauth-state.ts.
  */
 export function signState(input: { locationId: string; userId: string; returnTo: ReturnTo }, now = Date.now()): { state: string; nonce: string } {
-  const nonce = crypto.randomBytes(18).toString("base64url");
-  const payload: StatePayload = { l: input.locationId, u: input.userId, r: input.returnTo, n: nonce, e: now + STATE_TTL_MS };
-  const body = b64url(JSON.stringify(payload));
-  const sig = b64url(crypto.createHmac("sha256", stateKey()).update(body).digest());
-  mutateOAuthStates((rows) => ({
-    rows: [
-      // Long gone: a day past its expiry, whatever the sweep made of it.
-      ...rows.filter((r) => Date.parse(r.expiresAt) > now - 24 * 60 * 60_000),
-      {
-        id: nonceHash(nonce),
-        locationId: input.locationId,
-        userId: input.userId,
-        createdAt: new Date(now).toISOString(),
-        expiresAt: new Date(payload.e).toISOString(),
-      },
-    ],
-    out: undefined,
-  }));
-  return { state: `${body}.${sig}`, nonce };
-}
-
-/** Consume a pending nonce. True when it was there to consume. */
-function consumeNonce(nonce: string): boolean {
-  const id = nonceHash(nonce);
-  return mutateOAuthStates((rows) => {
-    const known = rows.some((r) => r.id === id);
-    return { rows: known ? rows.filter((r) => r.id !== id) : rows, out: known };
-  });
+  return signOAuthState("google", input, now);
 }
 
 /**
@@ -204,10 +157,7 @@ function consumeNonce(nonce: string): boolean {
  * exception, because closing the window looks the same from here.
  */
 export function sweepAbandonedConnects(now = new Date()): number {
-  const gone = mutateOAuthStates((rows) => {
-    const expired = rows.filter((r) => Date.parse(r.expiresAt) <= now.getTime());
-    return { rows: rows.filter((r) => !expired.includes(r)), out: expired };
-  });
+  const gone = takeExpiredStates("google", now);
   let raised = 0;
   for (const row of gone) {
     const location = getLocation(row.locationId);
@@ -232,39 +182,8 @@ export function sweepAbandonedConnects(now = new Date()): number {
   return raised;
 }
 
-export type StateCheck =
-  | { ok: true; locationId: string; returnTo: ReturnTo }
-  | { ok: false; reason: "malformed" | "signature" | "expired" | "used" | "user" | "cookie"; returnTo?: ReturnTo };
-
 export function verifyState(state: string, opts: { userId: string; cookieNonce?: string; now?: number }): StateCheck {
-  const now = opts.now ?? Date.now();
-  const [body, sig] = state.split(".");
-  if (!body || !sig) return { ok: false, reason: "malformed" };
-  const expected = crypto.createHmac("sha256", stateKey()).update(body).digest();
-  const given = Buffer.from(sig, "base64url");
-  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) return { ok: false, reason: "signature" };
-
-  let payload: StatePayload;
-  try {
-    payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as StatePayload;
-  } catch {
-    return { ok: false, reason: "malformed" };
-  }
-  const returnTo: ReturnTo = payload.r === "setup" ? "setup" : "integrations";
-  // Consumed on first sight, whatever happens next: a state is never good twice.
-  // Unknown — used already, or its record lost with the data — is refused the
-  // same way, and the route sends the owner back to connect again.
-  let known = false;
-  try {
-    known = typeof payload.n === "string" && consumeNonce(payload.n);
-  } catch (err) {
-    console.error(`[google] could not read pending connections: ${err instanceof Error ? err.message : String(err)}`);
-  }
-  if (payload.e < now) return { ok: false, reason: "expired", returnTo };
-  if (!known) return { ok: false, reason: "used", returnTo };
-  if (payload.u !== opts.userId) return { ok: false, reason: "user", returnTo };
-  if (!opts.cookieNonce || opts.cookieNonce !== payload.n) return { ok: false, reason: "cookie", returnTo };
-  return { ok: true, locationId: payload.l, returnTo };
+  return verifyOAuthState("google", state, opts);
 }
 
 /**
@@ -294,7 +213,7 @@ export function authUrl(state: string, redirectUri: string): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
-export type Outcome = "connected" | "declined" | "google_unavailable" | "google_refused" | "google_failed";
+export type Outcome = "connected" | "declined" | "google_unavailable" | "google_refused" | "google_failed" | "google_in_use";
 
 /**
  * Where the owner lands after Google, by where they started. Never Google
@@ -583,7 +502,7 @@ export function calendarFor(link: GoogleLink, staffId?: string): string {
   return (staffId && link.staffCalendars?.[staffId]) || link.calendarId;
 }
 
-export type Busy = Map<string, [number, number][]>;
+export type { Busy } from "./calendar-connector";
 
 /**
  * Busy intervals, per calendar, for one local day (and the small hours after
@@ -618,13 +537,7 @@ export function isBusy(location: Location, busy: Busy, slot: { date: string; sta
   const link = location.google!;
   const from = zonedInstant(slot.date, slot.startMin, location.timezone);
   const to = zonedInstant(slot.date, slot.endMin, location.timezone);
-  const calendars = new Set([link.calendarId, calendarFor(link, slot.staffId)]);
-  for (const calendarId of calendars) {
-    for (const [start, end] of busy.get(calendarId) ?? []) {
-      if (start < to && end > from) return true;
-    }
-  }
-  return false;
+  return overlapsBusy(busy, new Set([link.calendarId, calendarFor(link, slot.staffId)]), from, to);
 }
 
 // ---------------------------------------------------------------------------
@@ -632,27 +545,11 @@ export function isBusy(location: Location, busy: Busy, slot: { date: string; sta
 // ---------------------------------------------------------------------------
 
 /**
- * A Google event id from an idempotency key.
- *
- * Google lets the caller choose the id (base32hex, 5–1024 characters), and an
- * insert with an id that exists is refused with 409. So the same key arriving
- * twice — a retried webhook, a caller who said yes twice — can only ever make
- * one event, and nothing has to be remembered to make that true.
+ * A Google event id is an event key (calendar-connector.ts): Google lets the
+ * caller choose the id, and an insert with an id that exists is refused with
+ * 409, so the same key arriving twice can only ever make one event.
  */
-export function eventIdFor(locationId: string, key: string): string {
-  return `bl${crypto.createHash("sha256").update(`${locationId}|${key}`).digest("hex").slice(0, 40)}`;
-}
-
-/**
- * The event id for a booking that did not come through the Google provider:
- * made at the desk, from a guest's link, or before event ids were stored. It is
- * the id the one-way mirror has always used, so an event it already wrote is
- * the same event, and it depends only on the booking's own id, so every write
- * for one booking lands on one event.
- */
-export function bookingEventId(booking: Booking): string {
-  return `belline${booking.id.replace(/[^a-z0-9]/gi, "").toLowerCase()}`.slice(0, 60);
-}
+export { bookingEventId, eventIdFor } from "./calendar-connector";
 
 /** A local wall-clock time in the venue's own zone, as Google wants it. */
 function isoLocal(date: string, minutes: number): string {
@@ -685,6 +582,35 @@ export function eventFor(location: Location, booking: Booking, id: string): Goog
     extendedProperties: { private: { bellineBookingId: booking.id } },
   };
 }
+
+/** Google, as the shared provider and sync see it (calendar-connector.ts). */
+export const googleConnector: CalendarConnector = {
+  kind: "google",
+  name: "Google Calendar",
+  tag: "google",
+  failedException: "google_sync_failed",
+  linked: (location) => Boolean(location.google),
+  usable: (location) => googleUsable(location),
+  calendarFor: (location, staffId) => calendarFor(location.google!, staffId),
+  keyOf: (booking) => booking.calendarEventId ?? bookingEventId(booking),
+  refFields: (key) => ({ calendarEventId: key }),
+  async put(location, booking, calendarId, key) {
+    await withAccess(location, (token, api) => api.putEvent(token, calendarId, eventFor(location, booking, key)));
+    return key;
+  },
+  async insert(location, booking, calendarId, key) {
+    await withAccess(location, (token, api) => api.insertEvent(token, calendarId, eventFor(location, booking, key)));
+    return key;
+  },
+  async remove(location, _booking, ref) {
+    await withAccess(location, (token, api) => api.cancelEvent(token, ref.calendarId, ref.eventId));
+  },
+  busyFor: (location, date) => busyFor(location, date),
+  isBusy: (location, busy, slot) => isBusy(location, busy, slot),
+  waiting: (err) => err instanceof GoogleAuthError || err instanceof GoogleConfigError,
+  noteWriteFailure: (locationId, raw) => noteWriteFailure(locationId, raw),
+  noteWriteSuccess: (locationId, stillFailing, now) => noteWriteSuccess(locationId, stillFailing, now),
+};
 
 /** What the dashboard shows about the connection. Our sentences only. */
 export function connectionState(location: Location): {

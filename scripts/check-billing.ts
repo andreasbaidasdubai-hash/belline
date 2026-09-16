@@ -617,7 +617,8 @@ test("no shipped copy states a trial length other than the catalogue's", () => {
 test("the legal pages claim nothing that is not live", () => {
   for (const file of ["terms.html", "privacy.html"]) {
     const html = publicPages.find((p) => p.file === file)!.html.replace(/<!--[\s\S]*?-->/g, "");
-    assert.match(html, /Last updated 15 September 2026/, `${file}: last-updated date`);
+    // The privacy page changed on the 16th: Vercel no longer hosts the website, and Microsoft joined for Outlook.
+    assert.match(html, file === "privacy.html" ? /Last updated 16 September 2026/ : /Last updated 15 September 2026/, `${file}: last-updated date`);
     for (const [pattern, what] of [
       [/\b(?:books?|booking|booked) (?:straight |directly )?(?:into|against|in) (?:your|the|their) (?:real |existing )?(?:diary|calendar)\b/i, "books into a diary or calendar"],
       [/Belline diary|makes, changes and cancels bookings|booking made, changed or cancelled/i, "the Belline diary"],

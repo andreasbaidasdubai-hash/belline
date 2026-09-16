@@ -1,0 +1,430 @@
+/**
+ * The handful of Microsoft calls Belline makes, behind one interface.
+ *
+ * The Outlook twin of google-api.ts, kept apart from outlook.ts for the same
+ * reasons: the connection logic (sealed and rotating tokens, expiry, fallback
+ * to requests) is tested against a fake with this shape (testing/stubs.ts),
+ * and nothing in a check script can reach Microsoft by accident.
+ *
+ * One app registration for every kind of account: the `common` endpoint takes
+ * work and school accounts from any Microsoft Entra tenant and personal
+ * Microsoft accounts (Outlook.com, Hotmail, Live).
+ *
+ * Scopes, exactly, and why these three:
+ *
+ * - `Calendars.ReadWrite` — list the owner's calendars for the picker, read the
+ *   events on the ones they pick so busy times can be taken out, and create,
+ *   change and delete the events Belline books.
+ * - `offline_access` — a refresh token, so Belline can keep the calendar in
+ *   step when the owner is not signed in. Without it every booking would need
+ *   the owner at a browser.
+ * - `User.Read` — the minimum sign-in permission Microsoft pairs with any
+ *   delegated Graph scope. Belline reads nothing with it.
+ *
+ * Not `Calendars.Read.Shared` or `MailboxSettings`: Belline never reads
+ * somebody else's calendar or changes the mailbox. And not free/busy through
+ * `getSchedule`: like Google's free/busy it says "busy" without saying by
+ * what, so Belline's own table bookings would block every other table at the
+ * same time. Listing the events (calendarView) lets Belline skip its own,
+ * tagged with a private extended property, and anything shown as free.
+ */
+
+export const MICROSOFT_SCOPES = ["offline_access", "User.Read", "Calendars.ReadWrite"] as const;
+
+export const MICROSOFT_AUTHORITY = "https://login.microsoftonline.com/common/oauth2/v2.0";
+const TOKEN_URL = `${MICROSOFT_AUTHORITY}/token`;
+const GRAPH = "https://graph.microsoft.com/v1.0";
+
+/** Microsoft no longer accepts the saved connection: revoked, expired, consent withdrawn. The owner reconnects. */
+export class MicrosoftAuthError extends Error {
+  constructor(message = "Microsoft no longer accepts the saved connection.") {
+    super(message);
+    this.name = "MicrosoftAuthError";
+  }
+}
+
+/** Anything else Microsoft refused or failed at. The message is for the log, never a screen. */
+export class MicrosoftApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "MicrosoftApiError";
+  }
+}
+
+/**
+ * Microsoft refuses because of how Belline's Entra app registration is set
+ * up, not because of anything the owner did: the client id is not one
+ * Microsoft knows (AADSTS700016), the secret is wrong or has expired
+ * (AADSTS7000215, AADSTS7000222), or the redirect address is not registered
+ * (AADSTS50011). Only Belline can fix these; reconnecting does not help.
+ */
+export class MicrosoftConfigError extends Error {
+  constructor(
+    readonly reason: "client" | "secret" | "redirect",
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "MicrosoftConfigError";
+  }
+}
+
+/**
+ * The owner's organisation will not let them approve Belline themselves.
+ *
+ * Belline's app is multi-tenant and, until the founder completes Microsoft's
+ * publisher verification, from an unverified publisher. Microsoft 365
+ * organisations commonly allow staff to approve only verified apps, or none,
+ * and conditional-access or assignment rules can block an app outright. The
+ * owner is stopped at "Need admin approval" (AADSTS90094, or 90095 where the
+ * organisation has an approval workflow), or the grant arrives without consent
+ * (AADSTS65001), or the user is not assigned (AADSTS50105), or a sign-in policy
+ * blocks it (AADSTS53003). Only their IT admin can change any of that.
+ */
+export class MicrosoftAdminApprovalError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "MicrosoftAdminApprovalError";
+  }
+}
+
+/**
+ * The Microsoft account has no mailbox Graph can reach, so no calendar: a work
+ * account without an Exchange Online licence, a mailbox kept on the company's
+ * own Exchange servers, or a personal Microsoft account that never had an
+ * Outlook.com mailbox. Graph answers MailboxNotEnabledForRESTAPI and friends.
+ */
+export class MicrosoftNoMailboxError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MicrosoftNoMailboxError";
+  }
+}
+
+/** AADSTS codes that mean the organisation's IT admin has to act. */
+const ADMIN_CODES = new Set(["90094", "90095", "900941", "65001", "50105", "53003", "530003"]);
+/** The owner pressed Cancel or "No" on Microsoft's consent screen. */
+const DECLINED_CODES = new Set(["65004"]);
+
+/** Graph error codes for an account with no mailbox Belline can use. */
+const NO_MAILBOX_CODES = new Set([
+  "MailboxNotEnabledForRESTAPI",
+  "MailboxNotSupportedForRESTAPI",
+  "ErrorNonExistentMailbox",
+  "OrganizationFromTenantGuidNotFound",
+  "ErrorMailboxNotEnabledForRESTAPI",
+]);
+
+export type AuthorizeOutcome =
+  | { kind: "declined" }
+  | { kind: "admin"; code: string }
+  | { kind: "config"; error: MicrosoftConfigError }
+  | { kind: "refused"; code: string };
+
+/**
+ * What Microsoft's `error` and `error_description` on the redirect back mean.
+ * Exported for the tests, which feed it what Microsoft sends.
+ */
+export function classifyAuthorizeError(error: string, description = "", subcode = ""): AuthorizeOutcome {
+  const code = aadstsCode(description);
+  const config = CONFIG_CODES[code];
+  if (config) return { kind: "config", error: new MicrosoftConfigError(config, code, `authorize: ${error} AADSTS${code}`) };
+  if (ADMIN_CODES.has(code) || error === "consent_required" || error === "admin_consent_required") return { kind: "admin", code };
+  if (DECLINED_CODES.has(code) || (error === "access_denied" && (subcode === "cancel" || !code))) return { kind: "declined" };
+  return { kind: "refused", code };
+}
+
+/** The AADSTS number in an error description, as a string, or "". */
+export function aadstsCode(text: string | undefined): string {
+  return /AADSTS(\d+)/.exec(text ?? "")?.[1] ?? "";
+}
+
+const CONFIG_CODES: Record<string, MicrosoftConfigError["reason"]> = {
+  "700016": "client", // application not found in the directory
+  "7000215": "secret", // invalid client secret
+  "7000222": "secret", // client secret expired
+  "7000218": "secret", // no client secret sent
+  "50011": "redirect", // redirect URI not registered
+  "500113": "redirect", // no reply address registered
+  "900971": "redirect", // no reply address provided
+};
+
+/** Token-endpoint `error` codes that mean refresh token or grant is no good any more. */
+const GRANT_CODES = new Set([
+  "70000", // invalid grant
+  "70008", // expired
+  "700082", // expired through inactivity (90 days)
+  "50173", // grant revoked, e.g. the password changed
+  "50076", // multi-factor sign-in required again
+  "50078",
+  "50079",
+  "50097", // device authentication required
+]);
+
+export interface TokenErrorBody {
+  error?: string;
+  error_description?: string;
+  error_codes?: number[];
+}
+
+/**
+ * Turn a token endpoint failure into the error Belline acts on. Exported for
+ * the tests, which feed it the bodies Microsoft actually sends. `grant` says
+ * whether the grant was a refresh token (a refused one means reconnect) or an
+ * authorization code (a refused one means try again).
+ */
+export function tokenFailure(status: number, data: TokenErrorBody, grant: "code" | "refresh"): Error {
+  const code = aadstsCode(data.error_description) || String(data.error_codes?.[0] ?? "");
+  const short = `token ${grant}: ${status} ${data.error ?? ""} AADSTS${code}`.slice(0, 300);
+  const config = CONFIG_CODES[code];
+  if (config) return new MicrosoftConfigError(config, code, short);
+  if (data.error === "invalid_client" || data.error === "unauthorized_client") return new MicrosoftConfigError("client", code, short);
+  // At the connection, an organisation's rule: the IT admin has to act. On a
+  // refresh the same codes mean consent was withdrawn since, which a reconnect
+  // (and, if the rule still stands, the admin) fixes.
+  if (grant === "code" && ADMIN_CODES.has(code)) return new MicrosoftAdminApprovalError(code, short);
+  if (grant === "refresh" && (data.error === "invalid_grant" || data.error === "interaction_required" || GRANT_CODES.has(code) || ADMIN_CODES.has(code))) {
+    return new MicrosoftAuthError(short);
+  }
+  return new MicrosoftApiError(status, short);
+}
+
+/** A Graph failure, as the error Belline acts on. Exported for the tests. */
+export function graphFailure(status: number, text: string, what: string): Error {
+  let code = "";
+  let message = "";
+  try {
+    const data = JSON.parse(text) as { error?: { code?: string; message?: string } };
+    code = data.error?.code ?? "";
+    message = data.error?.message ?? "";
+  } catch {
+    message = text;
+  }
+  const short = `${what}: ${status} ${code} ${message}`.slice(0, 300);
+  if (NO_MAILBOX_CODES.has(code)) return new MicrosoftNoMailboxError(short);
+  // Token no good, or a permission withdrawn since: only reconnecting fixes either.
+  if (status === 401 || status === 403) return new MicrosoftAuthError(short);
+  return new MicrosoftApiError(status, short);
+}
+
+export interface MicrosoftTokens {
+  accessToken: string;
+  /** Microsoft may hand back a new one on every refresh; the old one keeps working until it expires. */
+  refreshToken: string;
+  /** What was granted, space-separated as Microsoft returned it. */
+  scope: string;
+  /** Seconds the access token lasts. */
+  expiresIn: number;
+}
+
+export interface OutlookCalendarEntry {
+  id: string;
+  name: string;
+  primary: boolean;
+}
+
+/**
+ * Belline's private extended properties on the events it writes. One GUID for
+ * Belline, two names: the booking the event is (so reading busy times back
+ * skips Belline's own), and the event key (so an event is found again whatever
+ * id Graph gave it, and never created twice).
+ */
+const PROPERTY_SET = "{5f3e2b7a-9c4d-4e1f-8a6b-3d2c1b0a9f8e}";
+export const BOOKING_PROPERTY = `String ${PROPERTY_SET} Name bellineBookingId`;
+export const KEY_PROPERTY = `String ${PROPERTY_SET} Name bellineEventKey`;
+
+/**
+ * An event as Belline writes it. Times are UTC wall-clock, which Graph accepts
+ * in every mailbox without mapping IANA zones to Windows ones.
+ *
+ * No `transactionId`: Graph's own de-duplication is keyed on it for an unstated
+ * window, and a booking moved away from a calendar and back would reuse it.
+ * The key property, looked up before every create, is the idempotency here.
+ */
+export interface OutlookEvent {
+  subject: string;
+  body: { contentType: "text"; content: string };
+  start: { dateTime: string; timeZone: "UTC" };
+  end: { dateTime: string; timeZone: "UTC" };
+  showAs: "busy";
+  isReminderOn: false;
+  singleValueExtendedProperties: { id: string; value: string }[];
+}
+
+/** An event reduced to what availability needs. Times are ISO instants. */
+export interface OutlookBusyEvent {
+  id: string;
+  start: string;
+  end: string;
+  /** Shown as free or working elsewhere. Never blocks a time. */
+  free?: boolean;
+  /** Set on events Belline wrote. Belline's own diary already counts those. */
+  bellineBookingId?: string;
+}
+
+export interface MicrosoftApi {
+  /** Finish OAuth. Throws when Microsoft returns no refresh token. */
+  exchangeCode(code: string, redirectUri: string): Promise<MicrosoftTokens>;
+  /** Throws MicrosoftAuthError when the refresh token is no longer good. */
+  refresh(refreshToken: string): Promise<MicrosoftTokens>;
+  /** The calendars this account can add events to. */
+  listCalendars(accessToken: string): Promise<OutlookCalendarEntry[]>;
+  /** Events overlapping [start, end), cancelled ones left out. */
+  listEvents(accessToken: string, calendarId: string, start: string, end: string): Promise<OutlookBusyEvent[]>;
+  /** The id of the event on this calendar carrying this key, or null. */
+  findEventByKey(accessToken: string, calendarId: string, key: string): Promise<string | null>;
+  /** Create. Returns Graph's id. */
+  createEvent(accessToken: string, calendarId: string, event: OutlookEvent): Promise<string>;
+  /** Replace the fields Belline writes. False when there is no such event. */
+  updateEvent(accessToken: string, calendarId: string, eventId: string, event: OutlookEvent): Promise<boolean>;
+  /** An event already gone counts as deleted. */
+  deleteEvent(accessToken: string, calendarId: string, eventId: string): Promise<void>;
+}
+
+function clientId(): string {
+  return process.env.MICROSOFT_CLIENT_ID ?? "";
+}
+function clientSecret(): string {
+  return process.env.MICROSOFT_CLIENT_SECRET ?? "";
+}
+
+async function body(res: Response): Promise<string> {
+  return (await res.text().catch(() => "")).slice(0, 600);
+}
+
+async function token(params: Record<string, string>, grant: "code" | "refresh"): Promise<MicrosoftTokens> {
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId(),
+      client_secret: clientSecret(),
+      scope: MICROSOFT_SCOPES.join(" "),
+      ...params,
+    }),
+  });
+  const data = (await res.json().catch(() => ({}))) as TokenErrorBody & {
+    access_token?: string;
+    refresh_token?: string;
+    scope?: string;
+    expires_in?: number;
+  };
+  if (!res.ok || data.error) throw tokenFailure(res.status, data, grant);
+  if (!data.access_token) throw new MicrosoftApiError(res.status, `token ${grant}: no access token returned`);
+  if (grant === "code" && !data.refresh_token) throw new MicrosoftApiError(res.status, "token code: no refresh token returned");
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token ?? params.refresh_token ?? "",
+    scope: data.scope ?? "",
+    expiresIn: Number(data.expires_in ?? 3600),
+  };
+}
+
+export async function graph(accessToken: string, path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(path.startsWith("https://") ? path : `${GRAPH}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      // Every time Graph hands back comes in UTC, so no zone names need mapping.
+      Prefer: 'outlook.timezone="UTC"',
+      ...(init.headers ?? {}),
+    },
+  });
+}
+
+/** The real thing. Only reached when nothing was injected and stubs are off. */
+export const liveMicrosoftApi: MicrosoftApi = {
+  exchangeCode(code, redirectUri) {
+    return token({ code, redirect_uri: redirectUri, grant_type: "authorization_code" }, "code");
+  },
+
+  refresh(refreshToken) {
+    return token({ refresh_token: refreshToken, grant_type: "refresh_token" }, "refresh");
+  },
+
+  async listCalendars(accessToken) {
+    const res = await graph(accessToken, "/me/calendars?$select=id,name,canEdit,isDefaultCalendar&$top=100");
+    if (!res.ok) throw graphFailure(res.status, await body(res), "calendars");
+    const data = (await res.json()) as { value?: { id: string; name?: string; canEdit?: boolean; isDefaultCalendar?: boolean }[] };
+    return (data.value ?? [])
+      .filter((c) => c.canEdit !== false)
+      .map((c) => ({ id: c.id, name: c.name ?? "Calendar", primary: Boolean(c.isDefaultCalendar) }));
+  },
+
+  async listEvents(accessToken, calendarId, start, end) {
+    type Item = {
+      id: string;
+      isCancelled?: boolean;
+      showAs?: string;
+      start?: { dateTime?: string };
+      end?: { dateTime?: string };
+      singleValueExtendedProperties?: { id: string; value: string }[];
+    };
+    const params = new URLSearchParams({
+      startDateTime: start,
+      endDateTime: end,
+      $top: "250",
+      $select: "id,start,end,showAs,isCancelled",
+      $expand: `singleValueExtendedProperties($filter=id eq '${BOOKING_PROPERTY}')`,
+    });
+    const out: OutlookBusyEvent[] = [];
+    let next: string | undefined = `/me/calendars/${encodeURIComponent(calendarId)}/calendarView?${params}`;
+    // A day's view is one page almost always; the cap keeps a runaway calendar from holding a caller.
+    for (let page = 0; next && page < 10; page++) {
+      const res = await graph(accessToken, next);
+      if (!res.ok) throw graphFailure(res.status, await body(res), "calendarView");
+      const data = (await res.json()) as { value?: Item[]; "@odata.nextLink"?: string };
+      for (const e of data.value ?? []) {
+        if (e.isCancelled) continue;
+        out.push({
+          id: e.id,
+          // UTC wall-clock, because of the Prefer header.
+          start: `${e.start?.dateTime?.slice(0, 19)}Z`,
+          end: `${e.end?.dateTime?.slice(0, 19)}Z`,
+          free: e.showAs === "free" || e.showAs === "workingElsewhere",
+          bellineBookingId: e.singleValueExtendedProperties?.find((p) => p.id.toLowerCase() === BOOKING_PROPERTY.toLowerCase())?.value,
+        });
+      }
+      next = data["@odata.nextLink"];
+    }
+    return out;
+  },
+
+  async findEventByKey(accessToken, calendarId, key) {
+    const filter = `singleValueExtendedProperties/Any(ep: ep/id eq '${KEY_PROPERTY}' and ep/value eq '${key.replace(/'/g, "''")}')`;
+    const res = await graph(accessToken, `/me/calendars/${encodeURIComponent(calendarId)}/events?$filter=${encodeURIComponent(filter)}&$select=id&$top=1`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw graphFailure(res.status, await body(res), "events.find");
+    const data = (await res.json()) as { value?: { id: string }[] };
+    return data.value?.[0]?.id ?? null;
+  },
+
+  async createEvent(accessToken, calendarId, event) {
+    const res = await graph(accessToken, `/me/calendars/${encodeURIComponent(calendarId)}/events`, { method: "POST", body: JSON.stringify(event) });
+    if (!res.ok) throw graphFailure(res.status, await body(res), "events.create");
+    return ((await res.json()) as { id: string }).id;
+  },
+
+  async updateEvent(accessToken, calendarId, eventId, event) {
+    const res = await graph(accessToken, `/me/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(event),
+    });
+    if (res.status === 404) return false;
+    if (!res.ok) throw graphFailure(res.status, await body(res), "events.update");
+    return true;
+  },
+
+  async deleteEvent(accessToken, calendarId, eventId) {
+    const res = await graph(accessToken, `/me/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, { method: "DELETE" });
+    if (res.status === 404 || res.status === 410) return;
+    if (!res.ok) throw graphFailure(res.status, await body(res), "events.delete");
+  },
+};
