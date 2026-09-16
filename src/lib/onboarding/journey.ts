@@ -2,7 +2,7 @@ import type { Call, DestinationKind, Location, OnboardingState } from "../types"
 import { readiness } from "./index";
 import { listCalls } from "../store";
 import { flag } from "../flags";
-import { googleUsable } from "../booking/destination";
+import { googleUsable, outlookUsable } from "../booking/destination";
 import { applyRules, type RulesInput } from "./rules";
 import { testsCurrent, testsPassed } from "./selftest-state";
 
@@ -337,8 +337,20 @@ export function recordStep(location: Location, action: StepAction, facts: Journe
         fix: `/api/integrations/google?locationId=${encodeURIComponent(location.id)}&from=setup`,
       };
     }
-    // Outlook and partner systems have no adapter yet, so choosing one would
-    // promise bookings nobody makes. The owner can ask to be told.
+    // Outlook, the same once its own flag is on.
+    if (kind === "outlook" && flag("booking.outlook")) {
+      if (outlookUsable(location)) {
+        return { ok: true, location: { ...location, onboarding: { ...o, destination: { kind, setAt: at } } } };
+      }
+      return {
+        ok: false,
+        status: 409,
+        error: "Connect Outlook first, then choose it here.",
+        fix: `/api/integrations/microsoft?locationId=${encodeURIComponent(location.id)}&from=setup`,
+      };
+    }
+    // Partner systems have no adapter yet, so choosing one would promise
+    // bookings nobody makes. The owner can ask to be told.
     return {
       ok: false,
       status: 422,

@@ -25,6 +25,14 @@ type Env = Record<string, string | undefined>;
  *
  * A sentence that no longer appears in its page is an error (`check:google`),
  * so rewording a page cannot silently strand its flag-on copy.
+ *
+ * Flags compose in the order they are listed. Outlook's swaps are written
+ * against the page as Google's flag has already left it: its `off` is either
+ * Google's flag-off sentence (Outlook alone) or Google's flag-on sentence
+ * (both), and its `on` names what is then true. To apply, every swap is first
+ * reverted, last flag first, and then the flags that are on are applied, first
+ * flag first, so any mix of flags and any page already built with others comes
+ * out the same.
  */
 
 export interface SiteSwap {
@@ -63,6 +71,41 @@ export const SITE_FLAG_COPY: Partial<Record<FlagName, SiteSwap[]>> = {
       on: "<p>Connecting a Google Calendar is optional. Only if a business chooses to connect one, this is how Belline treats the information it receives from Google:</p>",
     },
   ],
+  "booking.outlook": [
+    // The hero's lead: Outlook alone, then Google and Outlook.
+    {
+      file: "landing.html",
+      off: "Soon, it will also book straight into the calendar you already use.",
+      on: "It can also book straight into your Outlook calendar, after checking it for times already taken.",
+    },
+    {
+      file: "landing.html",
+      off: "It can also book straight into your Google Calendar, after checking it for times already taken.",
+      on: "It can also book straight into your Google Calendar or Outlook, after checking it for times already taken.",
+    },
+    // The example calendar's badge.
+    {
+      file: "landing.html",
+      off: '<span class="state state-soon cal-soon">Coming soon: books into your calendar</span>',
+      on: '<span class="state state-available cal-soon">Books into Outlook</span>',
+    },
+    {
+      file: "landing.html",
+      off: '<span class="state state-available cal-soon">Books into Google Calendar</span>',
+      on: '<span class="state state-available cal-soon">Books into Google Calendar or Outlook</span>',
+    },
+    // "Whatever you book with".
+    {
+      file: "landing.html",
+      off: "<dd>Belline takes booking requests today. Booking straight into Google Calendar is coming soon.</dd>",
+      on: "<dd>Connect Outlook and Belline checks it for times already taken, then books straight into it. Booking straight into Google Calendar is coming soon.</dd>",
+    },
+    {
+      file: "landing.html",
+      off: "<dd>Connect Google Calendar and Belline checks it for times already taken, then books straight into it. Outlook isn’t connected yet, so for Outlook Belline takes booking requests.</dd>",
+      on: "<dd>Connect Google Calendar or Outlook and Belline checks it for times already taken, then books straight into it.</dd>",
+    },
+  ],
 };
 
 /**
@@ -84,26 +127,39 @@ export function publicFlag(name: FlagName, env: Env = process.env): boolean {
   return flag(name, publicEnv(env));
 }
 
+const swap = (html: string, from: string, to: string) => html.split(from).join(to);
+
 /** The page's hand-written flag copy as the flags in `env` say it. */
 export function applySiteFlags(file: string, html: string, env: Env = process.env): string {
+  const flags = Object.entries(SITE_FLAG_COPY) as [FlagName, SiteSwap[]][];
   let out = html;
-  for (const [name, swaps] of Object.entries(SITE_FLAG_COPY) as [FlagName, SiteSwap[]][]) {
-    const on = publicFlag(name, env);
-    for (const swap of swaps) {
-      if (swap.file !== file) continue;
-      out = on ? out.split(swap.off).join(swap.on) : out.split(swap.on).join(swap.off);
-    }
+  // Back to the page as written: last flag first, each swap in reverse.
+  for (const [, swaps] of [...flags].reverse()) {
+    for (const s of [...swaps].reverse()) if (s.file === file) out = swap(out, s.on, s.off);
+  }
+  // Then forward, for the flags that are on.
+  for (const [name, swaps] of flags) {
+    if (!publicFlag(name, env)) continue;
+    for (const s of swaps) if (s.file === file) out = swap(out, s.off, s.on);
   }
   return out;
 }
 
-/** Swaps whose `off` sentence is not in its page exactly once, as "file: sentence". Empty when all are found. */
+/**
+ * Swaps whose `off` sentence is not in its page exactly once, as "file:
+ * sentence". A later flag's swap may be written against the page with the
+ * earlier flags on, so it is also looked for there. Empty when all are found.
+ */
 export function strandedSiteCopy(read: (file: string) => string): string[] {
   const out: string[] = [];
-  for (const swaps of Object.values(SITE_FLAG_COPY)) {
-    for (const swap of swaps ?? []) {
-      if (read(swap.file).split(swap.off).length !== 2) out.push(`${swap.file}: ${swap.off}`);
+  const flags = Object.entries(SITE_FLAG_COPY) as [FlagName, SiteSwap[]][];
+  flags.forEach(([, swaps], i) => {
+    for (const s of swaps) {
+      const page = read(s.file);
+      let earlierOn = page;
+      for (const [, before] of flags.slice(0, i)) for (const b of before) if (b.file === s.file) earlierOn = swap(earlierOn, b.off, b.on);
+      if (page.split(s.off).length !== 2 && earlierOn.split(s.off).length !== 2) out.push(`${s.file}: ${s.off}`);
     }
-  }
+  });
   return out;
 }

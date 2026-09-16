@@ -1147,6 +1147,168 @@ await test("an account with no mailbox: refused at connect with its own sentence
   }
 });
 
+// ---------------------------------------------------------------------------
+head("Outlook works exactly while booking.outlook is on: the setup step, the app, Belle and the website");
+
+const { NO_FACTS, recordStep } = await import("../src/lib/onboarding/journey");
+const OUTLOOK_OFF = { FLAG_BOOKING_OUTLOOK: "off" } as Record<string, string>;
+/** On as production would have it. FLAG_STUBS alone never turns the public copy on. */
+const OUTLOOK_ON = { MICROSOFT_CLIENT_ID: "id", MICROSOFT_CLIENT_SECRET: "secret", CREDENTIALS_KEY: "key", FLAG_BOOKING_OUTLOOK: "on" } as Record<string, string>;
+const GOOGLE_ON = { GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret", CREDENTIALS_KEY: "key", FLAG_BOOKING_GOOGLE: "on" } as Record<string, string>;
+const BOTH_ON = { ...GOOGLE_ON, ...OUTLOOK_ON };
+
+await test("Outlook can be chosen with a working connection, is refused unconnected (with the way to connect), and not at all with the flag off", async () => {
+  const fresh = { ...salonBase, outlook: undefined, google: undefined, onboarding: { version: 1 as const, channels: {}, reviewedAt: at } };
+  const unconnected = recordStep(fresh, { kind: "destination", destination: "outlook" }, NO_FACTS, now);
+  assert.ok(!unconnected.ok && unconnected.status === 409 && /Connect Outlook first/.test(unconnected.error));
+  if (!unconnected.ok) assert.match(unconnected.fix!, /^\/api\/integrations\/microsoft\?locationId=.*&from=setup$/);
+  const connected = { ...getLocation(salonBase.id)!, onboarding: fresh.onboarding };
+  const ok = recordStep(connected, { kind: "destination", destination: "outlook" }, NO_FACTS, now);
+  assert.ok(ok.ok && ok.location.onboarding!.destination!.kind === "outlook");
+  process.env.FLAG_BOOKING_OUTLOOK = "off";
+  try {
+    assert.equal(recordStep(connected, { kind: "destination", destination: "outlook" }, NO_FACTS, now).ok, false);
+    assert.equal(takesRequestsOnly({ ...connected, onboarding: { ...fresh.onboarding, destination: { kind: "outlook", setAt: at } } }), true);
+    assert.equal(providerFor({ ...connected, onboarding: { ...fresh.onboarding, destination: { kind: "outlook", setAt: at } } }), requestOnlyProvider);
+  } finally {
+    process.env.FLAG_BOOKING_OUTLOOK = "on";
+  }
+});
+
+await test("the bookings step, integrations, channels and requests pages read the flag and the connection, never fixed copy", () => {
+  const setup = source("src/app/setup/[step]/page.tsx");
+  assert.match(setup, /function outlookCard\(venue: Location\): DestinationOption \{[\s\S]{0,120}if \(!flag\("booking\.outlook"\)\) \{\s*return \{ id: "outlook", title, state: "soon"/);
+  assert.match(setup, /if \(outlookUsable\(venue\)\)/);
+  assert.match(setup, /outlookCard\(venue\)/);
+  assert.doesNotMatch(setup, /id: "outlook", title: "Outlook calendar", \.\.\.calendar\(/, "the old never-choosable card is back");
+  assert.match(setup, /notice=\{googleNotice\(google\) \?\? outlookNotice\(outlook\)\}/);
+  const integrations = source("src/app/(app)/integrations/page.tsx");
+  assert.match(integrations, /const outlookOn = flag\("booking\.outlook"\)/);
+  assert.match(integrations, /\{outlookOn \? \(/);
+  assert.match(integrations, /OUTLOOK_ADMIN_APPROVAL_TEXT/);
+  assert.match(integrations, /endpoint="\/api\/integrations\/microsoft"/);
+  const channels = source("src/app/(app)/channels/page.tsx");
+  assert.match(channels, /const outlookOn = flag\("booking\.outlook"\);[\s\S]{0,200}!outlookOn \? "soon"/);
+  assert.match(source("src/app/(app)/requests/page.tsx"), /outlookUsable\(location\)/);
+  for (const file of ["src/app/setup/[step]/page.tsx", "src/app/(app)/channels/page.tsx", "src/app/(app)/integrations/page.tsx"]) {
+    const text = source(file);
+    for (const m of text.matchAll(/Outlook[^"\n]{0,80}(?:coming soon|isn.t available|not available|isn.t connected yet)/gi)) {
+      const before = text.slice(Math.max(0, m.index! - 700), m.index);
+      assert.match(before, /flag\("booking\.outlook"\)|outlookOn/, `${file}: "${m[0]}" is not behind the flag`);
+    }
+  }
+});
+
+await test("Belle says what the website says, by the same flags, in every combination", async () => {
+  const belle = await import("../src/lib/seed-belline");
+  // Neither: nothing about Outlook working.
+  assert.doesNotMatch(belle.bookingSystemAnswer(OUTLOOK_OFF), /Outlook, yes|connect either/);
+  assert.match(belle.routeLine(OUTLOOK_OFF), /Google Calendar or Outlook: Belline takes requests now/);
+  // Outlook alone.
+  assert.match(belle.bookingSystemAnswer(OUTLOOK_ON), /^Outlook, yes: .*books straight into it\. Google Calendar is coming soon/);
+  assert.match(belle.routeLine(OUTLOOK_ON), /Outlook: once they connect it, Belline checks it for busy times and books straight into it\./);
+  // Google alone: Outlook kept honest.
+  assert.match(belle.bookingSystemAnswer(GOOGLE_ON), /Outlook isn't connected yet/);
+  assert.match(belle.routeLine(GOOGLE_ON), /Outlook: Belline takes requests now/);
+  // Both.
+  assert.match(belle.bookingSystemAnswer(BOTH_ON), /Google Calendar and Outlook, yes/);
+  assert.doesNotMatch(belle.bookingSystemAnswer(BOTH_ON), /soon|not yet|isn't connected/i);
+  assert.doesNotMatch(belle.routeLine(BOTH_ON), /soon|requests now; booking into/i);
+  const features = ["Google Calendar and booking-system integrations", "One Google Calendar or Microsoft Outlook connection", "Something else"];
+  assert.deepEqual(belle.notYetForBelle(features, OUTLOOK_OFF), features);
+  assert.ok(belle.notYetForBelle(features, OUTLOOK_ON).every((f) => !/Outlook/.test(f)), "Belle would still say Outlook does not work");
+  assert.ok(belle.notYetForBelle(features, OUTLOOK_ON).includes("A Google Calendar connection"), "Belle would say Google Calendar works");
+  assert.ok(belle.notYetForBelle(features, BOTH_ON).every((f) => !/Google Calendar|Outlook/.test(f)), "Belle would still name a working calendar as not working");
+  assert.ok(belle.notYetForBelle(features, GOOGLE_ON).includes("A Microsoft Outlook connection"));
+});
+
+const { applySiteFlags, strandedSiteCopy, SITE_FLAG_COPY } = await import("../src/lib/site-flags");
+const publicPage = (file: string) => source(`public/${file}`);
+const visible = (html: string) => html.replace(/<!--[\s\S]*?-->/g, "");
+const words = (html: string) => visible(html.replace(/<section id="connects"[\s\S]*?<\/section>/g, "")).replace(/<[^>]+>/g, " ");
+const SOON_CALENDAR = /\bsoon\b[^.<]{0,80}\bcalendar\b|\bcalendar\b[^.<]{0,80}\bsoon\b|not available yet|No calendar can be connected yet/i;
+
+await test("every Outlook sentence the flag swaps is in its page, as written or as Google's flag leaves it", () => {
+  assert.ok((SITE_FLAG_COPY["booking.outlook"] ?? []).length >= 6);
+  assert.deepEqual(strandedSiteCopy(publicPage), []);
+  // And a stranded one is caught.
+  assert.deepEqual(strandedSiteCopy((f) => publicPage(f).replace("Soon, it will also book straight into the calendar you already use.", "Reworded.")).length > 0, true);
+});
+
+await test("flag off, the website is exactly the page as written; on, it says Outlook works, alone or with Google, and back again", () => {
+  const landing = publicPage("landing.html");
+  assert.equal(applySiteFlags("landing.html", landing, OUTLOOK_OFF), landing);
+  assert.equal(applySiteFlags("landing.html", landing, {}), landing);
+  // Outlook alone.
+  const alone = visible(applySiteFlags("landing.html", landing, OUTLOOK_ON));
+  assert.match(alone, /It can also book straight into your Outlook calendar, after checking it for times already taken\./);
+  assert.match(alone, /<span class="state state-available cal-soon">Books into Outlook<\/span>/);
+  assert.match(alone, /<dd>Connect Outlook and Belline checks it for times already taken, then books straight into it\. Booking straight into Google Calendar is coming soon\.<\/dd>/);
+  assert.doesNotMatch(alone, /Coming soon: books into your calendar|Soon, it will also book/);
+  // FLAG_STUBS alone never makes the public site say so.
+  assert.equal(applySiteFlags("landing.html", landing, { FLAG_STUBS: "on", FLAG_BOOKING_OUTLOOK: "on" }), landing);
+  // Both: nothing about a calendar coming soon.
+  const both = applySiteFlags("landing.html", landing, BOTH_ON);
+  assert.doesNotMatch(words(visible(both)), SOON_CALENDAR, "the landing page still says a calendar is coming");
+  assert.match(both, /Books into Google Calendar or Outlook<\/span>/);
+  assert.match(both, /<dd>Connect Google Calendar or Outlook and Belline checks it for times already taken, then books straight into it\.<\/dd>/);
+  // Google alone is exactly what check:google holds it to.
+  const googleOnly = applySiteFlags("landing.html", landing, GOOGLE_ON);
+  assert.match(googleOnly, /books straight into it\. Outlook isn’t connected yet/);
+  // Any page, whatever it was built with, comes out as the flags say now.
+  for (const built of [applySiteFlags("landing.html", landing, OUTLOOK_ON), both, googleOnly]) {
+    assert.equal(applySiteFlags("landing.html", built, {}), landing, "switching the flags off does not restore the page");
+    assert.equal(applySiteFlags("landing.html", built, BOTH_ON), both);
+    assert.equal(applySiteFlags("landing.html", built, GOOGLE_ON), googleOnly);
+  }
+  // The hero still books and confirms nothing.
+  const start = both.indexOf('<section class="hero">');
+  const hero = both.slice(start, both.indexOf("</section>", start)).replace(/<[^>]+>/g, " ");
+  assert.doesNotMatch(hero, /\b(?:booked|confirmed)\b/i);
+});
+
+await test("the server swaps the copy and the strip's Outlook tag as it serves the built site, by the flag it has now", async () => {
+  const { serveMarketing } = await import("../src/lib/marketing");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "belline-site-"));
+  const cwd = process.cwd();
+  fs.mkdirSync(path.join(dir, "site"));
+  fs.writeFileSync(path.join(dir, "site", "index.html"), publicPage("landing.html"));
+  fs.writeFileSync(path.join(dir, "site", "privacy.html"), publicPage("privacy.html"));
+  const get = (url: string) => {
+    let body = "";
+    const res = { writeHead: () => res, end: (b?: Buffer | string) => void (body = b ? String(b) : "") };
+    assert.ok(serveMarketing({ method: "GET", url } as never, res as never), `${url} was not served`);
+    return body;
+  };
+  process.chdir(dir);
+  const saved = { ...process.env };
+  delete process.env.FLAG_STUBS;
+  Object.assign(process.env, { MICROSOFT_CLIENT_ID: "id", MICROSOFT_CLIENT_SECRET: "secret" });
+  try {
+    process.env.FLAG_BOOKING_OUTLOOK = "off";
+    assert.match(get("/"), /Coming soon: books into your calendar/);
+    assert.match(get("/"), /data-integration="booking\.outlook" data-state="soon"/);
+    process.env.FLAG_BOOKING_OUTLOOK = "on";
+    assert.match(get("/"), /Books into Outlook<\/span>/);
+    assert.match(get("/"), /data-integration="booking\.outlook" data-state="available"/);
+  } finally {
+    for (const k of ["FLAG_STUBS", "FLAG_BOOKING_OUTLOOK", "MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET"]) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+    process.chdir(cwd);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+await test("the flag itself is never switched on in code, and outreach may not name Outlook while it is off", async () => {
+  assert.match(source("src/lib/flags.ts"), /"booking\.outlook": \{ needs: \["MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET", "CREDENTIALS_KEY"\], explicit: true \}/);
+  for (const file of ["Dockerfile", "server.ts", "src/lib/site-flags.ts", "src/lib/marketing.ts", "src/lib/seed-belline.ts", "src/lib/billing/plans.ts", "scripts/build-site.ts"]) {
+    assert.doesNotMatch(source(file), /FLAG_BOOKING_OUTLOOK\s*[=:]\s*["']?on/, file);
+  }
+  assert.match(source("src/lib/sales/outreach/guards.ts"), /unlessFlag: "booking\.outlook"/);
+});
+
 // __MORE__
 
 await test("nothing in this run reached a real host", () => {

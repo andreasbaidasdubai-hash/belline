@@ -4,6 +4,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import { flag } from "@/lib/flags";
 import { whatsappStatus } from "@/lib/whatsapp";
 import { connectionState } from "@/lib/integrations/google";
+import { outlookConnectionState } from "@/lib/integrations/outlook";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
 export const dynamic = "force-dynamic";
@@ -117,14 +118,26 @@ export default async function ChannelsPage({
         ? "WhatsApp's status could not be checked just now. Nothing has changed; try again in a minute."
         : "Belline answers WhatsApp on a second number for the business. You get a new number and we set it up with you — your own WhatsApp stays as it is.";
 
-  // Calendar. Two gates: whether the connection exists on this account at
-  // all, and whether Google is still accepting the token.
+  // Calendar. Two gates per calendar: whether the connection exists on this
+  // account at all (its flag), and whether Google or Microsoft still accepts
+  // the token. A venue has one calendar; the one it connected is the one shown.
   const googleOn = flag("booking.google");
   const google = connectionState(location);
-  const calendarState: State = !googleOn ? "soon" : google.connected && google.healthy ? "live" : "preparing";
-  const calendarDetail = !googleOn
-    ? "Connecting your Google or Outlook calendar is not available on this account yet. Until it is, Belline takes booking requests and your team confirms them."
-    : google.detail;
+  const googleState: State = !googleOn ? "soon" : google.connected && google.healthy ? "live" : "preparing";
+  const outlookOn = flag("booking.outlook");
+  const outlook = outlookConnectionState(location);
+  const outlookState: State = !outlookOn ? "soon" : outlook.connected && outlook.healthy ? "live" : "preparing";
+  const which = [googleOn && "Google Calendar", outlookOn && "Outlook"].filter(Boolean).join(" or ");
+  const calendarState: State =
+    outlookOn && outlook.connected ? outlookState : googleOn && google.connected ? googleState : googleOn || outlookOn ? "preparing" : "soon";
+  const calendarDetail =
+    outlookOn && outlook.connected
+      ? outlook.detail
+      : googleOn && google.connected
+        ? google.detail
+        : googleOn || outlookOn
+          ? `Not connected. Connect ${which} under Integrations; until then Belline takes booking requests and your team confirms them.`
+          : "Connecting your Google or Outlook calendar is not available on this account yet. Until it is, Belline takes booking requests and your team confirms them.";
 
   return (
     <>

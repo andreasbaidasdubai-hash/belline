@@ -8,7 +8,8 @@ import { INTEGRATIONS, bellineDiaryOffered, factsFrom, isStepId, journey, type J
 import { venueMarket } from "@/lib/onboarding/rules";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import { requestRulesOf } from "@/lib/booking/requests";
-import { destinationOf, googleUsable, serviceLengthsRequired, takesRequestsOnly } from "@/lib/booking/destination";
+import { destinationOf, googleUsable, outlookUsable, serviceLengthsRequired, takesRequestsOnly } from "@/lib/booking/destination";
+import { OUTLOOK_NO_CALENDAR_TEXT } from "@/lib/integrations/outlook";
 import { integrationErrorText } from "@/lib/errors/customer";
 import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
 import { MARKETS } from "@/lib/markets";
@@ -161,15 +162,39 @@ function googleNotice(code: string | undefined): string | undefined {
 }
 
 /**
- * The bookings step's cards. Outlook shows its flag's state and can never be
- * chosen here: no adapter exists yet, so "Being prepared" is the most a
- * switched-on flag can honestly say. Google follows `googleCard`.
+ * The Outlook card, as Google's: "Coming soon" with `booking.outlook` off;
+ * with it on, chosen only once a working connection exists, and until then it
+ * offers the connection and says what stands in the way.
  */
+function outlookCard(venue: Location): DestinationOption {
+  const title = "Outlook calendar";
+  if (!flag("booking.outlook")) {
+    return { id: "outlook", title, state: "soon", body: "Coming soon. Belline starts with requests, and you can ask to be told when it is ready." };
+  }
+  const connectUrl = `/api/integrations/microsoft?locationId=${encodeURIComponent(venue.id)}&from=setup`;
+  if (outlookUsable(venue)) {
+    const name = venue.outlook?.calendarName ?? "your calendar";
+    return { id: "outlook", title, body: `Belline checks ${name} for busy times and adds each booking to it.`, state: "available" };
+  }
+  if (venue.outlook?.expiredAt) {
+    const body = venue.outlook.lastError === OUTLOOK_NO_CALENDAR_TEXT ? OUTLOOK_NO_CALENDAR_TEXT : "Microsoft stopped letting Belline in. Connect it again to use it; until then Belline takes requests.";
+    return { id: "outlook", title, state: "connect", connectUrl, body };
+  }
+  if (venue.outlookAdminApprovalAt && !venue.outlook) {
+    return { id: "outlook", title, state: "connect", connectUrl, body: "Your organisation's IT admin has to approve Belline first. Once they have, connect your Microsoft account here." };
+  }
+  return { id: "outlook", title, state: "connect", connectUrl, body: "Connect your Microsoft 365 or Outlook.com account first. Belline only reads busy times and adds bookings on the calendars you pick." };
+}
+
+/** What the page says after Microsoft sends the owner back here. */
+function outlookNotice(code: string | undefined): string | undefined {
+  if (code === "declined") return integrationErrorText("outlook_declined") ?? undefined;
+  if (code === "connected") return "Outlook is connected. Choose it below and press Use this.";
+  return code?.startsWith("outlook_") ? (integrationErrorText(code) ?? undefined) : undefined;
+}
+
+/** The bookings step's cards. Google follows `googleCard`, Outlook `outlookCard`. */
 function destinationOptions(venue: Location): DestinationOption[] {
-  const calendar = (on: boolean): Pick<DestinationOption, "state" | "body"> =>
-    on
-      ? { state: "preparing", body: "Being prepared. Belline starts with requests until it is ready." }
-      : { state: "soon", body: "Coming soon. Belline starts with requests, and you can ask to be told when it is ready." };
   const clinicPreview = venue.vertical === "clinic" && !flag("vertical.clinic.selfserve");
   return [
     {
@@ -198,7 +223,7 @@ function destinationOptions(venue: Location): DestinationOption[] {
       ? []
       : [
           googleCard(venue),
-          { id: "outlook", title: "Outlook calendar", ...calendar(flag("booking.outlook")) } satisfies DestinationOption,
+          outlookCard(venue),
         ]),
   ];
 }
@@ -211,6 +236,7 @@ function Body({
   venue,
   facts,
   google,
+  outlook,
   whatsapp,
 }: {
   step: Step;
@@ -218,6 +244,7 @@ function Body({
   venue: Location;
   facts: ReturnType<typeof factsFrom>;
   google?: string;
+  outlook?: string;
   whatsapp: WhatsAppCardState;
 }) {
   const next = j.next;
@@ -278,7 +305,7 @@ function Body({
           </p>
           <DestinationPicker
             options={destinationOptions(venue)}
-            notice={googleNotice(google)}
+            notice={googleNotice(google) ?? outlookNotice(outlook)}
             current={venue.onboarding?.destination?.kind}
             currentLink={venue.onboarding?.destination?.bookingLink}
             requested={venue.onboarding?.integrationRequests ?? []}
@@ -497,12 +524,12 @@ export default async function SetupStepPage({
   searchParams,
 }: {
   params: Promise<{ step: string }>;
-  searchParams: Promise<{ google?: string }>;
+  searchParams: Promise<{ google?: string; outlook?: string }>;
 }) {
   seedIfEmpty();
   const user = await requireUser();
   const { step: requested } = await params;
-  const { google } = await searchParams;
+  const { google, outlook } = await searchParams;
 
   const venue = listLocationsFor(user.tenantId)[0];
   if (!venue) redirect("/");
@@ -539,7 +566,7 @@ export default async function SetupStepPage({
         <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 112px" }}>
           <Rail j={j} active={step} />
           <main style={{ minWidth: 0, maxWidth: 720 }}>
-            <Body step={step} j={j} venue={venue} facts={facts} google={google} whatsapp={whatsapp} />
+            <Body step={step} j={j} venue={venue} facts={facts} google={google} outlook={outlook} whatsapp={whatsapp} />
             {/* A ticket the team is working on, so the owner is not left guessing. */}
             {tickets.map((t) => (
               <div key={t.ticket} className="panel" role="status" style={{ padding: "12px 16px", marginTop: 22, fontSize: 13.5 }}>

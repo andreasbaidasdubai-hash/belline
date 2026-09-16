@@ -254,10 +254,10 @@ export const SETUP_TOOLS: Anthropic.Tool[] = [
   {
     name: "set_destination",
     description:
-      "Where bookings go: 'requests' (Belline takes the details and the team confirms), 'belline' (Belline's own diary, only if offered) or 'google' (only once connected). Use only when the owner has chosen.",
+      "Where bookings go: 'requests' (Belline takes the details and the team confirms), 'belline' (Belline's own diary, only if offered), 'google' or 'outlook' (each only once connected). Use only when the owner has chosen.",
     input_schema: {
       type: "object",
-      properties: { destination: { type: "string", enum: ["requests", "belline", "google"] }, booking_link: { type: "string" } },
+      properties: { destination: { type: "string", enum: ["requests", "belline", "google", "outlook"] }, booking_link: { type: "string" } },
       required: ["destination"],
     },
   },
@@ -514,7 +514,7 @@ export function executeSetupTool(
       if (name === "set_booking_link" && destinationOf(location) !== "requests") {
         return { ok: false, say: "A booking link is for businesses taking requests. Ask whether they want bookings to come in as requests first." };
       }
-      if (destination !== "requests" && destination !== "belline" && destination !== "google") {
+      if (destination !== "requests" && destination !== "belline" && destination !== "google" && destination !== "outlook") {
         return { ok: false, say: "Ask whether bookings should come in as requests for their team to confirm." };
       }
       const link = text(name === "set_booking_link" ? input.url : input.booking_link, 300);
@@ -524,7 +524,7 @@ export function executeSetupTool(
       const saved = out.location.onboarding?.destination;
       return {
         ok: true,
-        say: `Saved: bookings ${saved?.kind === "requests" ? "come in as requests" : saved?.kind === "belline" ? "go into Belline's diary" : "go into Google Calendar"}${saved?.bookingLink ? `, with the booking link ${saved.bookingLink}` : ""}. Confirm it in one sentence.`,
+        say: `Saved: bookings ${saved?.kind === "requests" ? "come in as requests" : saved?.kind === "belline" ? "go into Belline's diary" : saved?.kind === "outlook" ? "go into Outlook" : "go into Google Calendar"}${saved?.bookingLink ? `, with the booking link ${saved.bookingLink}` : ""}. Confirm it in one sentence.`,
       };
     }
 

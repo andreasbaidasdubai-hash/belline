@@ -3,7 +3,7 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { listCalls, getBooking } from "@/lib/store";
 import { describeRequest } from "@/lib/booking/requests";
-import { googleUsable, takesRequestsOnly } from "@/lib/booking/destination";
+import { googleUsable, outlookUsable, takesRequestsOnly } from "@/lib/booking/destination";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ export const metadata = { title: "Requests" };
  *   With your team — Belline took it and somebody has to confirm it.
  *
  * There is no third state that means "probably fine". Where a calendar is
- * connected and `booking.google` is on, the booking is the event; where it is
+ * connected and its flag (`booking.google`, `booking.outlook`) is on, the booking is the event; where it is
  * not, the request is all there is and the page says so rather than implying
  * a calendar wrote it down.
  */
@@ -55,10 +55,10 @@ export default async function RequestsPage({
 
   // Where the request goes once Belline has taken it. Said once, at the top,
   // rather than repeated down a column.
-  const connected = googleUsable(location);
+  const connected = googleUsable(location) ? "Google Calendar" : outlookUsable(location) ? "Outlook calendar" : null;
   const requestsOnly = takesRequestsOnly(location);
   const where = connected
-    ? "This venue's Google Calendar is connected, so Belline books into it and the event is linked below."
+    ? `This venue's ${connected} is connected, so Belline books into it and the event is linked below.`
     : requestsOnly
       ? "Belline takes the details and your team confirms each one. No calendar is connected to this venue yet."
       : "Belline books these into your Belline diary.";
