@@ -1,4 +1,6 @@
 import type { Location, Vertical } from "../types";
+import { answersIn } from "../language";
+import { copy, type CopyKey } from "../customer-copy";
 
 /**
  * What Belline is allowed to do about a thing a caller just said.
@@ -55,17 +57,12 @@ export interface AuthorityRule {
 // 998 is the UAE ambulance number, and "emergency department" is what the
 // hospitals here call it. The first draft said "ring 999" and "A&E", which is
 // London — a caller in Dubai who did as told would have reached the police.
-const EMERGENCY_ADVICE =
-  "That needs proper medical attention now, not an appointment. Please call 998 for an " +
-  "ambulance, or go to the nearest emergency department. I'm not the right place for this.";
+const EMERGENCY_ADVICE = copy("en", "authority.emergency");
 
 // A message and a call back from the clinical team, not a live transfer: the
 // person at the desk who would pick up a transfer is not a clinician either,
 // and the promise made here is that a clinician rings back.
-const CLINICAL_REFUSAL =
-  "I'm not able to advise on that, and I'm not going to guess at it. Let me take your " +
-  "number and exactly what you've told me — the clinical team will ring you back, and " +
-  "I'm marking it urgent.";
+const CLINICAL_REFUSAL = copy("en", "authority.clinical");
 
 /**
  * Symptoms that describe an emergency in progress. Paired with the urgency
@@ -214,15 +211,182 @@ const RULES: Record<Vertical, AuthorityRule[]> = {
         ["reaction", "burnt", "burned", "blistered", "swollen", "swelling", "rash", "scalp is"],
         ["treatment", "colour", "color", "bleach", "dye", "peel", "laser", "wax", "after"],
       ],
-      say:
-        "That needs someone to look at it properly, not me. I'm putting you through to the team now.",
-      sayIfNoTransfer:
-        "That needs someone to look at it properly, not me. Let me take your number and exactly what happened — the team will ring you back, and I'm marking it urgent.",
+      say: copy("en", "authority.reaction"),
+      sayIfNoTransfer: copy("en", "authority.reaction_no_transfer"),
       then: "transfer",
     },
   ],
   restaurant: [],
 };
+
+// ---------------------------------------------------------------------------
+// German
+// ---------------------------------------------------------------------------
+
+/**
+ * The same rules, as German callers put it.
+ *
+ * Not a translation of the phrases above but of the situations: "ich kriege
+ * keine Luft", "die Blutung hört nicht auf", "ist das normal?". Written folded —
+ * lower case, ä as ae, ß as ss — because the recogniser and a person typing on
+ * a phone do not agree about umlauts, and the text is folded the same way
+ * before it is compared.
+ *
+ * A German venue is protected by these *and* the English lists, so a caller
+ * who switches language mid-sentence is still caught. The words said back are
+ * German, from customer-copy.ts, with 112 as the emergency number: it reaches
+ * the emergency services in Germany, Austria and Switzerland alike.
+ */
+const EMERGENCY_SYMPTOMS_DE = [
+  "brustschmerz",
+  "schmerzen in der brust",
+  "brust tut weh",
+  "brust ist eng",
+  "engegefuehl in der brust",
+  "druck auf der brust",
+  "keine luft",
+  "atemnot",
+  "kann nicht atmen",
+  "schwer atmen",
+  "blutet stark",
+  "starke blutung",
+  "hoert nicht auf zu bluten",
+  "blutung hoert nicht auf",
+  "ohnmaechtig",
+  "bewusstlos",
+  "zusammengebrochen",
+  "umgekippt",
+  "kollabiert",
+  "verwaschene sprache",
+  "gesicht haengt",
+  "halbseitig taub",
+  "allergische reaktion",
+  "anaphyla",
+  "hals schwillt zu",
+  "zunge schwillt",
+  "ueberdosis",
+  "zu viele tabletten",
+];
+
+const HAPPENING_NOW_DE = [
+  "jetzt",
+  "gerade",
+  "sofort",
+  "akut",
+  "seit",
+  "heute",
+  "ploetzlich",
+  "auf einmal",
+  "hilfe",
+  "kann nicht",
+  "ist",
+  "bin",
+  "habe",
+  "hab ",
+  "fuehle",
+  "angefangen",
+  "kriege",
+  "bekomme",
+  "hoert nicht auf",
+  "immer noch",
+];
+
+const CLINICAL_QUESTION_DE = [
+  "ist das normal",
+  "ist das schlimm",
+  "ist das gefaehrlich",
+  "muss ich mir sorgen",
+  "sollte ich mir sorgen",
+  "mache mir sorgen",
+  "ist es entzuendet",
+  "ist das entzuendet",
+  "was koennte das sein",
+  "was meinen sie was",
+  "glauben sie dass",
+  "denken sie dass",
+  "soll ich nehmen",
+  "kann ich nehmen",
+  "darf ich nehmen",
+  "soll ich ein",
+  "wie viel soll ich",
+  "wieviel soll ich",
+  "doppelte dosis",
+  "statt antibiotik",
+  "diagnos",
+];
+
+const CLINICAL_CONTEXT_DE = [
+  "schmerz",
+  "tut weh",
+  "geschwollen",
+  "schwellung",
+  "blutet",
+  "blutung",
+  "entzuend",
+  "infekt",
+  "symptom",
+  "knoten",
+  "beule",
+  "ausschlag",
+  "fieber",
+  "temperatur",
+  "medikament",
+  "tablette",
+  "antibiotik",
+  "schmerzmittel",
+  "ibuprofen",
+  "paracetamol",
+  "rezept",
+  "operation",
+  "fuellung",
+  "gezogen",
+  "faeden",
+  "naht",
+  "wunde",
+  "behandlung",
+  "eingriff",
+];
+
+/** Which German line each rule says, by id. */
+const SAYS_DE: Record<string, { say: CopyKey; sayIfNoTransfer?: CopyKey }> = {
+  "medical-emergency": { say: "authority.emergency" },
+  "clinical-advice": { say: "authority.clinical" },
+  "adverse-reaction": { say: "authority.reaction", sayIfNoTransfer: "authority.reaction_no_transfer" },
+};
+
+/** The German phrase groups for each rule, by id. Same shape as `requires`. */
+const REQUIRES_DE: Record<string, string[][]> = {
+  "medical-emergency": [EMERGENCY_SYMPTOMS_DE, HAPPENING_NOW_DE],
+  "clinical-advice": [CLINICAL_QUESTION_DE, CLINICAL_CONTEXT_DE],
+  "adverse-reaction": [
+    ["reaktion", "verbrannt", "verbrennung", "blasen", "geschwollen", "schwellung", "ausschlag", "kopfhaut", "brennt", "juckt"],
+    ["behandlung", "farbe", "faerb", "blondier", "bleach", "peeling", "laser", "waxing", "wachs", "nach dem", "nach der", "seit dem", "seit der"],
+  ],
+};
+
+/** A rule as a German venue says it: the same rule, German words. */
+function inGerman(rule: AuthorityRule): AuthorityRule {
+  const says = SAYS_DE[rule.id];
+  if (!says) return rule;
+  return {
+    ...rule,
+    say: copy("de", says.say),
+    ...(says.sayIfNoTransfer ? { sayIfNoTransfer: copy("de", says.sayIfNoTransfer) } : {}),
+  };
+}
+
+/** Lower case, umlauts and ß spelled out, punctuation gone: how the German lists are written. */
+function foldGerman(said: string): string {
+  const folded = said
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .replace(/\s+/g, " ");
+  return ` ${folded} `;
+}
 
 export interface Assessment {
   disposition: Disposition;
@@ -243,10 +407,21 @@ function hasAny(haystack: string, needles: string[]): boolean {
  */
 export function assessAuthority(location: Location, said: string): Assessment | null {
   const text = ` ${said.toLowerCase().replace(/[^a-z0-9'\s]/g, " ").replace(/\s+/g, " ")} `;
+  const german = answersIn(location) === "de";
 
   for (const rule of RULES[location.vertical] ?? []) {
     if (rule.requires.every((group) => hasAny(text, group))) {
-      return { disposition: "escalate", rule };
+      return { disposition: "escalate", rule: german ? inGerman(rule) : rule };
+    }
+  }
+
+  if (german) {
+    const folded = foldGerman(said);
+    for (const rule of RULES[location.vertical] ?? []) {
+      const requires = REQUIRES_DE[rule.id];
+      if (requires?.every((group) => hasAny(folded, group))) {
+        return { disposition: "escalate", rule: inGerman(rule) };
+      }
     }
   }
   return null;
@@ -254,5 +429,6 @@ export function assessAuthority(location: Location, said: string): Assessment | 
 
 /** Every rule a venue is currently protected by — for the dashboard, and for procurement. */
 export function authorityRules(location: Location): AuthorityRule[] {
-  return RULES[location.vertical] ?? [];
+  const rules = RULES[location.vertical] ?? [];
+  return answersIn(location) === "de" ? rules.map(inGerman) : rules;
 }

@@ -3,6 +3,7 @@ import { isRestaurant, terms } from "../verticals";
 import { minutesToClock, todayIn, nowMinutesIn, dateToSpoken } from "../time";
 import { bookingLinkOf, takesRequestsOnly } from "../booking/destination";
 import { requestRulesOf } from "../booking/requests";
+import { answersIn, localeOf } from "../language";
 
 /**
  * A clinic's rule about medical detail. In the prompt for every clinic,
@@ -191,6 +192,55 @@ For anything that simply needs writing down rather than escalating — a supplie
 When their business is done, do not sign off. A message that says "Is there anything else I can help you with today?" is the clearest possible sign that nobody is there.`,
 };
 
+/**
+ * Answering in German.
+ *
+ * One block added to the same prompt, not a translation of it. The rules a
+ * receptionist follows — only what this prompt says, never an invented time,
+ * nothing confirmed that a tool did not confirm — are the English sentences
+ * above, and a second copy in German would be a second set of rules to keep in
+ * step and eventually a place where they differ. Models follow instructions in
+ * one language and answer in another without difficulty; what they need told
+ * is which language, which register, and which of the English examples above
+ * do not carry over (times, references, openers).
+ *
+ * Empty for every venue not answered in German, so an English prompt is the
+ * same bytes it always was.
+ */
+export function languageBlock(location: Location, channel: AgentChannel): string {
+  if (answersIn(location) !== "de") return "";
+  const swiss = localeOf(location) === "de-CH";
+  const t = terms(location);
+  const voice = channel === "voice";
+  const lines = [
+    `# Language: German`,
+    `Everyone who gets in touch with ${location.name} is answered in German. Every word you ${voice ? "say" : "write"} is German, even though these instructions are in English: the English examples above show the manner, not the words.`,
+    "",
+    `- Always the formal "Sie", never "du" — even if the ${t.guest} says "du" — unless a house rule below says otherwise.`,
+    `- Natural front-desk German: short, warm and polite without being stiff. "Gern", "Einen Moment", "Das passt", "Sehr gern". Never translated English — not "Absolut!", not "Das ist eine großartige Frage".`,
+    ...(swiss ? [`- ${location.name} is in Switzerland. Write "ss", never "ß" ("Strasse", "grüssen"), and prices in Franken.`] : []),
+    ...(voice
+      ? [
+          `- Write times as digits with "Uhr": "14:30 Uhr", "9 Uhr". The voice reads them out properly. Never "halb drei", and never AM or PM.`,
+          `- Dates as "Donnerstag, 17. September". Prices as "69 Euro" or "45 Franken".`,
+          `- Write a booking reference as it is, "R7K2". It is spelled out letter by letter for the caller automatically.`,
+          `- By the time your reply plays, the caller has already heard "Gerne", "Alles klar", "Genau" or "Einen Moment". Never open with those, nor with "Natürlich" or "Selbstverständlich".`,
+        ]
+      : [
+          `- Times on the 24-hour clock, "14:30 Uhr", never AM or PM. Dates as "Donnerstag, 17. September". Prices as "69 €" or "CHF 45".`,
+          `- "Guten Tag – wie kann ich Ihnen helfen?" is the whole greeting.`,
+        ]),
+    `- If anyone asks whether you are a person, a robot or an AI, say plainly that you are the AI assistant for ${location.name} ("Ich bin die KI-Assistenz von ${location.name}"), then carry on helping. Never claim to be a person.`,
+    `- Every rule above applies unchanged in German. Answer only from what this prompt says about ${location.name}. Never invent a price, a time, availability or a policy. Take requests and messages with the tools as described. "Gebucht", "bestätigt", "reserviert", "eingetragen" and "bis dann" tell someone they hold a booking, exactly as their English equivalents do, and follow the same rules.`,
+    `- Tools stay exactly as specified: tool names and fields are not translated, dates are YYYY-MM-DD and times HH:MM. Pass services and people by the ids and names in this prompt, even when the ${t.guest} says them differently in German.`,
+    ...(location.vertical === "clinic" ? [`- The emergency number in Germany, Austria and Switzerland is 112.`] : []),
+    voice
+      ? `- This line listens for German. If a caller cannot carry on in German, say once, in simple English, that the team will call them back, take their name and number with take_message, and close politely. Do not try to hold the conversation in another language.`
+      : `- If someone writes to you in English, answer in English for the rest of the conversation. In any other language, answer in German and offer English in one short sentence.`,
+  ];
+  return `\n\n${lines.join("\n")}`;
+}
+
 export function staticPrompt(location: Location, channel: AgentChannel = "voice"): string {
   const a = location.agent;
   const t = terms(location);
@@ -261,7 +311,7 @@ Call the people who get in touch "${t.guests}", never "customers" or "users". Th
 
 ${a.persona}
 
-${medium}
+${medium}${languageBlock(location, channel)}
 
 ${bookingRules}${bookingRulesRest}# House rules you must follow
 ${[...a.policies, ...(requestsOnly ? rules.neverSay.map((s) => `Never say: ${s}`) : [])].map((p) => `- ${p}`).join("\n")}${
