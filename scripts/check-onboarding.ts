@@ -26,7 +26,8 @@ const {
   dayIndexes,
   formFromDraft,
   payloadFromForm,
-  ticksNeeded,
+  reviewErrors,
+  REVIEW_IDS,
   cleanConfirmed,
   sourceLabel,
   confidenceOf,
@@ -250,8 +251,6 @@ await test("typing new hours in the review and saving stores exactly those hours
   const shop = await venue("Review Hours Salon", "salon");
   const form = formFromDraft(found, "website", currentVenue(getLocation(shop.id)!));
   form.hours = { value: "12:00–23:30 every day", source: "typed" };
-  form.ticks.address = true;
-  form.ticks.prices = true;
   form.services[1].price = 350;
   const check = payloadFromForm(form);
   assert.ok(check.ok, check.ok ? "" : check.error);
@@ -271,16 +270,78 @@ await test("typing new hours in the review and saving stores exactly those hours
   assert.equal(saved.address, found.address);
 });
 
-await test("hours, address and prices Belline read are not saved until ticked", () => {
+await test("what Belline read saves on the one press of save, with no ticks to give", () => {
+  // The screen shows every value and where it came from; save is the confirmation.
   const form = formFromDraft(found, "website", currentVenue(fresh()));
+  assert.ok(!("ticks" in form), "the form still carries confirmation ticks");
+  assert.equal(form.hours.source, "website");
+  assert.equal(form.address.source, "website");
+  const check = payloadFromForm(form);
+  assert.ok(check.ok, check.ok ? "" : check.error);
+  if (check.ok) {
+    assert.equal(check.body.address, found.address);
+    assert.deepEqual(check.body.services.slice(0, 2).map((s) => [s.name, s.price]), [["Cut and blow dry", 180], ["Colour", 0]]);
+  }
+});
+
+await test("every problem is tied to the input it is about, in screen order", () => {
+  const form = formFromDraft(found, "website", currentVenue(fresh()));
+  form.hours = { value: "18:00-09:00", source: "typed" };
+  form.services[0].durationMin = 0;
+  form.faqs = [
+    { q: "Is there parking?", a: "", source: "typed" },
+    { q: "", a: "Yes, from 9.", source: "typed" },
+  ];
+  const errors = reviewErrors(form);
+  assert.deepEqual(
+    errors.map((e) => e.id),
+    [REVIEW_IDS.hours, REVIEW_IDS.serviceMinutes(0), REVIEW_IDS.faqAnswer(0), REVIEW_IDS.faqQuestion(1)],
+  );
   const check = payloadFromForm(form);
   assert.equal(check.ok, false);
   if (!check.ok) {
-    assert.equal(check.field, "ticks");
-    assert.match(check.error, /the hours and the address and the prices/);
+    // Focus goes to the first one; all of them are returned, not just the first.
+    assert.equal(check.field, REVIEW_IDS.hours);
+    assert.equal(check.errors.length, 4);
+    assert.match(check.errors[1].message, /Cut and blow dry/);
   }
-  form.ticks = { hours: true, address: true, prices: true };
+  // Fixed, and it saves.
+  form.hours = { value: "every day 09:00-18:00", source: "typed" };
+  form.services[0].durationMin = 60;
+  form.faqs = [{ q: "Is there parking?", a: "Yes.", source: "typed" }];
+  assert.deepEqual(reviewErrors(form), []);
   assert.ok(payloadFromForm(form).ok);
+});
+
+await test("the server names the field a refused save is about", () => {
+  const hours = cleanConfirmed({ hours: "18:00-09:00" });
+  assert.equal(hours.ok, false);
+  if (!hours.ok) assert.equal(hours.field, REVIEW_IDS.hours);
+  const length = cleanConfirmed({ services: [{ name: "Cut", durationMin: 2, price: 0 }] });
+  assert.equal(length.ok, false);
+  if (!length.ok) assert.equal(length.service, "Cut");
+});
+
+await test("the review screen shows each problem under its input and takes the owner there", () => {
+  const wizard = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "SetupWizard.tsx"), "utf8");
+  // No confirmation ticks anywhere on the review.
+  assert.doesNotMatch(wizard, /type="checkbox"/);
+  assert.doesNotMatch(wizard, /These prices are right|This address is right|These hours are right|Tick .* to save/);
+  // Where the form came from is still said beside each value.
+  assert.match(wizard, /sourceLabel\(/);
+  // Every input a problem can name carries that id, aria-invalid and a message beneath it.
+  for (const id of ["REVIEW_IDS.hours", "REVIEW_IDS.serviceMinutes(i)", "REVIEW_IDS.faqQuestion(i)", "REVIEW_IDS.faqAnswer(i)"]) {
+    assert.ok(wizard.includes(`id={${id}}`), `no input with id ${id}`);
+    assert.ok(wizard.includes(`{...invalid(${id}`), `${id} is never marked invalid`);
+  }
+  assert.match(wizard, /"aria-invalid": problem\(id\)/);
+  assert.match(wizard, /"aria-describedby"/);
+  assert.match(wizard, /className="field-error"/);
+  // Save with problems moves focus to the first, and every summary line is a way to its field.
+  assert.match(wizard, /focusField\(list\[0\]\.id\)/);
+  assert.match(wizard, /el\.focus\(/);
+  assert.match(wizard, /prefers-reduced-motion/);
+  assert.match(wizard, /href=\{`#\$\{errors\[0\]\.id\}`\}[\s\S]{0,400}focusField\(errors\[0\]\.id\)/);
 });
 
 await test("each value says where it came from, and a missing price is marked", () => {
@@ -306,7 +367,6 @@ await test("running setup again keeps services and questions added since, and th
   assert.ok(form.services.some((s) => s.name === "Cut" && s.source === "saved"));
   assert.ok(form.faqs.some((f) => f.q === "Walk-ins?"));
   assert.ok(form.staff.some((s) => s.value === "Mira"));
-  form.ticks = { hours: true, address: true, prices: true };
   const check = payloadFromForm(form);
   assert.ok(check.ok, check.ok ? "" : check.error);
   if (!check.ok) return;
@@ -317,11 +377,12 @@ await test("running setup again keeps services and questions added since, and th
   assert.deepEqual(saved.hours, every(600, 1200));
 });
 
-await test("setting up by hand starts from the venue as it is, and needs no ticks", () => {
+await test("setting up by hand starts from the venue as it is, and saves as it stands", () => {
   const form = formFromDraft(null, "typed", currentVenue(fresh()));
   assert.equal(form.address.value, fresh().address);
   assert.deepEqual(parseHours(form.hours.value).ok && parseHours(form.hours.value), { ok: true, hours: fresh().hours });
-  assert.deepEqual(ticksNeeded(form), []);
+  assert.deepEqual(reviewErrors(form), []);
+  assert.ok(payloadFromForm(form).ok);
 });
 
 await test("nothing just saved is listed as missing afterwards", async () => {

@@ -9,10 +9,11 @@ import {
   parseHours,
   parseStaff,
   payloadFromForm,
+  REVIEW_IDS,
   sourceLabel,
-  ticksNeeded,
   type Confidence,
   type CurrentVenue,
+  type FieldError,
   type Found,
   type ReviewForm,
   type Source,
@@ -27,10 +28,14 @@ import {
  *
  * So: paste the website, Belline reads it, and the owner checks what it found
  * on one form where every line can be changed. Nothing read reaches the venue
- * until the owner presses save, and hours, the address and prices that Belline
- * read need a tick, because the reader is a model looking at a public web
- * page, and it is wrong often enough that an unreviewed price would otherwise
- * be quoted to a real customer on a real call.
+ * until the owner presses save. Each value read says where it came from, so
+ * the owner can see what a model took off a public web page; pressing "That's
+ * right — save it" on that screen is the confirmation. There used to be a tick
+ * beside the hours, the address and the prices as well, and it only added a
+ * second thing to press and a way to be stuck without seeing why.
+ *
+ * Anything that stops the save is shown under its own input, in red, and focus
+ * moves to the first one. Nothing is only said at the bottom of the form.
  *
  * Setting up by hand opens the same form, filled with what the venue already
  * has. There is one form, so the hand-typed path cannot drift from the read one.
@@ -107,6 +112,8 @@ export default function SetupWizard({
   const [form, setForm] = useState<ReviewForm | null>(start === "review" ? formFromDraft(null, "typed", current) : null);
   const [fileName, setFileName] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  /** Problems with particular inputs on the review, shown under each one. */
+  const [errors, setErrors] = useState<FieldError[]>([]);
   const [fallback, setFallback] = useState<string | null>(null);
   const [newStaff, setNewStaff] = useState("");
   const isRestaurant = vertical === "restaurant";
@@ -196,15 +203,37 @@ export default function SetupWizard({
     }
   }
 
+  /**
+   * Take the owner to an input: scrolled to the middle of the screen, clear of
+   * the sticky save bar, and focused so a screen reader reads its message.
+   */
+  function focusField(id: string) {
+    // After React has rendered the message and the red outline.
+    window.setTimeout(() => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
+      el.focus({ preventScroll: true });
+    }, 0);
+  }
+
+  function showErrors(list: FieldError[]) {
+    setErrors(list);
+    setError(null);
+    if (list.length) focusField(list[0].id);
+  }
+
   async function save() {
     if (!form) return;
     const check = payloadFromForm(form);
     if (!check.ok) {
-      setError(check.error);
+      showErrors(check.errors);
       return;
     }
     setStage("saving");
     setError(null);
+    setErrors([]);
     try {
       const res = await fetch("/api/setup", {
         method: "PUT",
@@ -216,10 +245,15 @@ export default function SetupWizard({
           documents: draft?.documents ?? 0,
         }),
       });
-      const body = (await res.json().catch(() => ({}))) as { error?: string; next?: string };
+      const body = (await res.json().catch(() => ({}))) as { error?: string; next?: string; field?: string; service?: string };
       if (!res.ok) {
-        setError(body.error ?? "That could not be saved. Try again. Nothing you typed has been lost.");
         setStage("review");
+        // The server checks the same things; when it names a field, the
+        // message goes under that field like any other.
+        const row = body.service ? form.services.findIndex((s) => s.name.trim() === body.service) : -1;
+        const id = row >= 0 ? REVIEW_IDS.serviceMinutes(row) : body.field;
+        if (body.error && id) showErrors([{ id, message: body.error }]);
+        else setError(body.error ?? "That could not be saved. Try again. Nothing you typed has been lost.");
         return;
       }
       // On to the step the journey gives, read from the venue as it was just
@@ -231,10 +265,15 @@ export default function SetupWizard({
     }
   }
 
-  /** Change a value; anything the owner types is theirs, so its source becomes "you typed". */
-  function edit(patch: (f: ReviewForm) => ReviewForm) {
+  /**
+   * Change a value; anything the owner types is theirs, so its source becomes
+   * "you typed". Typing into an input clears that input's message; adding or
+   * removing a row renumbers the inputs, so it clears them all.
+   */
+  function edit(patch: (f: ReviewForm) => ReviewForm, field?: string) {
     setForm((f) => (f ? patch(f) : f));
     setError(null);
+    setErrors((list) => (field ? list.filter((e) => e.id !== field) : []));
   }
 
   const serif = { fontFamily: "var(--bl-font-display)", fontWeight: 700 } as const;
@@ -247,8 +286,18 @@ export default function SetupWizard({
   if ((stage === "review" || stage === "saving") && form) {
     const why = (field: string) => draft?.gaps.find((g) => g.field === field)?.why;
     const hoursRead = parseHours(form.hours.value);
-    const ticks = ticksNeeded(form);
-    const read = (s: Source) => s !== "typed" && s !== "saved";
+    const problem = (id: string) => errors.find((e) => e.id === id)?.message;
+    /** aria-invalid and the message's id, for an input with a problem. */
+    const invalid = (id: string, also?: string) => {
+      const described = [problem(id) ? `${id}-error` : "", also ?? ""].filter(Boolean).join(" ");
+      return { "aria-invalid": problem(id) ? true : undefined, "aria-describedby": described || undefined };
+    };
+    const message = (id: string) =>
+      problem(id) ? (
+        <p id={`${id}-error`} className="field-error">
+          {problem(id)}
+        </p>
+      ) : null;
 
     return (
       <div>
@@ -297,11 +346,6 @@ export default function SetupWizard({
               autoComplete="street-address"
               onChange={(e) => edit((f) => ({ ...f, address: { value: e.target.value, source: "typed" } }))}
             />
-            {read(form.address.source) && form.address.value.trim() && (
-              <Tick checked={form.ticks.address} onChange={(v) => edit((f) => ({ ...f, ticks: { ...f.ticks, address: v } }))}>
-                This address is right
-              </Tick>
-            )}
           </Section>
 
           <Section label="Phone number for the business" source={form.phone.source} confidence={confidenceOf("text", form.phone.value, form.phone.source)} fileName={fileName} htmlFor="review-phone">
@@ -324,10 +368,11 @@ export default function SetupWizard({
             htmlFor="review-hours"
           >
             <textarea
-              id="review-hours"
+              id={REVIEW_IDS.hours}
               rows={2}
               value={form.hours.value}
-              onChange={(e) => edit((f) => ({ ...f, hours: { value: e.target.value, source: "typed" }, ticks: { ...f.ticks, hours: false } }))}
+              {...invalid(REVIEW_IDS.hours, hoursRead.ok || problem(REVIEW_IDS.hours) ? "" : "review-hours-reading")}
+              onChange={(e) => edit((f) => ({ ...f, hours: { value: e.target.value, source: "typed" } }), REVIEW_IDS.hours)}
             />
             {hoursRead.ok ? (
               <div aria-live="polite" data-testid="hours-preview" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "2px 16px", marginTop: 10, fontSize: 13 }}>
@@ -342,15 +387,14 @@ export default function SetupWizard({
                   </div>
                 ))}
               </div>
+            ) : problem(REVIEW_IDS.hours) ? (
+              // After pressing save: this input's error.
+              message(REVIEW_IDS.hours)
             ) : (
-              <p role="status" style={{ fontSize: 13, color: "var(--bad)", margin: "8px 0 0" }}>
+              // While typing: how it reads so far, said under the input.
+              <p id="review-hours-reading" role="status" className="field-error">
                 {hoursRead.error}
               </p>
-            )}
-            {read(form.hours.source) && form.hours.value.trim() && (
-              <Tick checked={form.ticks.hours} onChange={(v) => edit((f) => ({ ...f, ticks: { ...f.ticks, hours: v } }))}>
-                These hours are right
-              </Tick>
             )}
           </Section>
 
@@ -365,53 +409,63 @@ export default function SetupWizard({
           >
             <div style={{ display: "grid", gap: 10 }}>
               {form.services.map((s, i) => (
-                <div key={i} style={{ display: "grid", gap: 8, gridTemplateColumns: isRestaurant ? "minmax(0, 1fr) 120px auto" : "minmax(0, 1fr) 96px 120px auto", alignItems: "end" }}>
-                  <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
-                    <span className="muted">
-                      {isRestaurant ? "Dish or section" : "Service"} · {sourceLabel(s.source, fileName)}
-                    </span>
-                    <input
-                      value={s.name}
-                      aria-label={`${isRestaurant ? "Dish" : "Service"} ${i + 1} name`}
-                      onChange={(e) => edit((f) => ({ ...f, services: f.services.map((x, j) => (j === i ? { ...x, name: e.target.value, source: "typed" } : x)) }))}
-                    />
-                  </label>
-                  {!isRestaurant && (
+                <div key={i}>
+                  <div style={{ display: "grid", gap: 8, gridTemplateColumns: isRestaurant ? "minmax(0, 1fr) 120px auto" : "minmax(0, 1fr) 96px 120px auto", alignItems: "end" }}>
                     <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
-                      <span className="muted">Minutes</span>
+                      <span className="muted">
+                        {isRestaurant ? "Dish or section" : "Service"} · {sourceLabel(s.source, fileName)}
+                      </span>
                       <input
-                        type="number"
-                        min={5}
-                        step={5}
-                        inputMode="numeric"
-                        aria-label={`Service ${i + 1} minutes`}
-                        value={s.durationMin || ""}
-                        onChange={(e) => edit((f) => ({ ...f, services: f.services.map((x, j) => (j === i ? { ...x, durationMin: Number(e.target.value), source: "typed" } : x)) }))}
+                        value={s.name}
+                        aria-label={`${isRestaurant ? "Dish" : "Service"} ${i + 1} name`}
+                        onChange={(e) => edit((f) => ({ ...f, services: f.services.map((x, j) => (j === i ? { ...x, name: e.target.value, source: "typed" } : x)) }))}
                       />
                     </label>
-                  )}
-                  <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
-                    <span className="muted">
-                      Price, {currency} {s.price > 0 ? "" : `· ${CONFIDENCE_LABEL.missing.toLowerCase()}`}
-                    </span>
-                    <input
-                      type="number"
-                      min={0}
-                      inputMode="decimal"
-                      aria-label={`${isRestaurant ? "Dish" : "Service"} ${i + 1} price`}
-                      value={s.price || ""}
-                      onChange={(e) => edit((f) => ({ ...f, services: f.services.map((x, j) => (j === i ? { ...x, price: Number(e.target.value), source: "typed" } : x)) }))}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn"
-                    style={{ padding: "8px 12px", fontSize: 13 }}
-                    aria-label={`Remove ${s.name || `row ${i + 1}`}`}
-                    onClick={() => edit((f) => ({ ...f, services: f.services.filter((_, j) => j !== i) }))}
-                  >
-                    Remove
-                  </button>
+                    {!isRestaurant && (
+                      <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
+                        <span className="muted">Minutes</span>
+                        <input
+                          id={REVIEW_IDS.serviceMinutes(i)}
+                          type="number"
+                          min={5}
+                          step={5}
+                          inputMode="numeric"
+                          aria-label={`Service ${i + 1} minutes`}
+                          value={s.durationMin || ""}
+                          {...invalid(REVIEW_IDS.serviceMinutes(i))}
+                          onChange={(e) =>
+                            edit(
+                              (f) => ({ ...f, services: f.services.map((x, j) => (j === i ? { ...x, durationMin: Number(e.target.value), source: "typed" } : x)) }),
+                              REVIEW_IDS.serviceMinutes(i),
+                            )
+                          }
+                        />
+                      </label>
+                    )}
+                    <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
+                      <span className="muted">
+                        Price, {currency} {s.price > 0 ? "" : `· ${CONFIDENCE_LABEL.missing.toLowerCase()}`}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        inputMode="decimal"
+                        aria-label={`${isRestaurant ? "Dish" : "Service"} ${i + 1} price`}
+                        value={s.price || ""}
+                        onChange={(e) => edit((f) => ({ ...f, services: f.services.map((x, j) => (j === i ? { ...x, price: Number(e.target.value), source: "typed" } : x)) }))}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ padding: "8px 12px", fontSize: 13 }}
+                      aria-label={`Remove ${s.name || `row ${i + 1}`}`}
+                      onClick={() => edit((f) => ({ ...f, services: f.services.filter((_, j) => j !== i) }))}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  {!isRestaurant && message(REVIEW_IDS.serviceMinutes(i))}
                 </div>
               ))}
               <div>
@@ -424,11 +478,6 @@ export default function SetupWizard({
                   {isRestaurant ? "Add a dish" : "Add a service"}
                 </button>
               </div>
-              {form.services.some((s) => read(s.source) && s.price > 0) && (
-                <Tick checked={form.ticks.prices} onChange={(v) => edit((f) => ({ ...f, ticks: { ...f.ticks, prices: v } }))}>
-                  These prices are right
-                </Tick>
-              )}
             </div>
           </Section>
 
@@ -493,18 +542,24 @@ export default function SetupWizard({
                     {sourceLabel(q.source, fileName)}
                   </span>
                   <input
+                    id={REVIEW_IDS.faqQuestion(i)}
                     aria-label={`Question ${i + 1}`}
                     value={q.q}
                     placeholder="Is there parking?"
-                    onChange={(e) => edit((f) => ({ ...f, faqs: f.faqs.map((x, j) => (j === i ? { ...x, q: e.target.value, source: "typed" } : x)) }))}
+                    {...invalid(REVIEW_IDS.faqQuestion(i))}
+                    onChange={(e) => edit((f) => ({ ...f, faqs: f.faqs.map((x, j) => (j === i ? { ...x, q: e.target.value, source: "typed" } : x)) }), REVIEW_IDS.faqQuestion(i))}
                   />
+                  {message(REVIEW_IDS.faqQuestion(i))}
                   <textarea
+                    id={REVIEW_IDS.faqAnswer(i)}
                     aria-label={`Answer ${i + 1}`}
                     rows={2}
                     value={q.a}
                     placeholder="Yes, free parking behind the building."
-                    onChange={(e) => edit((f) => ({ ...f, faqs: f.faqs.map((x, j) => (j === i ? { ...x, a: e.target.value, source: "typed" } : x)) }))}
+                    {...invalid(REVIEW_IDS.faqAnswer(i))}
+                    onChange={(e) => edit((f) => ({ ...f, faqs: f.faqs.map((x, j) => (j === i ? { ...x, a: e.target.value, source: "typed" } : x)) }), REVIEW_IDS.faqAnswer(i))}
                   />
+                  {message(REVIEW_IDS.faqAnswer(i))}
                   <div>
                     <button type="button" className="btn" style={{ padding: "6px 12px", fontSize: 12.5 }} onClick={() => edit((f) => ({ ...f, faqs: f.faqs.filter((_, j) => j !== i) }))}>
                       Remove this question
@@ -574,10 +629,24 @@ export default function SetupWizard({
           >
             {draft ? "Try a different page" : "Read my website instead"}
           </button>
-          {ticks.length > 0 && stage !== "saving" && (
-            <span className="muted" style={{ fontSize: 12.5 }}>
-              Tick {ticks.map((t) => ({ hours: "the hours", address: "the address", prices: "the prices" })[t]).join(" and ")} to save.
-            </span>
+          {/* Beside the button that did nothing, one short line and a way to
+              the next problem. The messages themselves are under their inputs;
+              repeating them all here made this sticky bar half a phone screen
+              tall, on top of the very fields it pointed at. */}
+          {errors.length > 0 && stage !== "saving" && (
+            <p role="alert" data-testid="review-problems" style={{ flexBasis: "100%", margin: 0, fontSize: 13, color: "var(--bad)" }}>
+              {errors.length === 1 ? "One thing to fix before saving." : `${errors.length} things to fix before saving.`}{" "}
+              <a
+                href={`#${errors[0].id}`}
+                style={{ color: "var(--bad)", textDecoration: "underline" }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  focusField(errors[0].id);
+                }}
+              >
+                Show me
+              </a>
+            </p>
           )}
         </div>
       </div>
@@ -787,14 +856,5 @@ function Section({
       )}
       {children}
     </div>
-  );
-}
-
-function Tick({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
-  return (
-    <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 13.5, textTransform: "none", letterSpacing: 0 }}>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} style={{ width: "auto" }} />
-      {children}
-    </label>
   );
 }

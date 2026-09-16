@@ -282,8 +282,6 @@ export interface ReviewForm {
   faqs: (Faq & { source: Source })[];
   /** One per line. */
   policies: Field<string>;
-  /** Hours, address and prices read by Belline need a person to say they are right. */
-  ticks: { hours: boolean; address: boolean; prices: boolean };
 }
 
 /** What the venue has now, as the page hands it to the form. */
@@ -359,18 +357,7 @@ export function formFromDraft(found: Found | null, read: Source, current: Curren
     staff,
     faqs,
     policies: { value: current.policies.join("\n"), source: "saved" },
-    ticks: { hours: false, address: false, prices: false },
   };
-}
-
-/** Which ticks the owner still has to give before saving. */
-export function ticksNeeded(form: ReviewForm): ("hours" | "address" | "prices")[] {
-  const read = (s: Source) => s !== "typed" && s !== "saved";
-  const out: ("hours" | "address" | "prices")[] = [];
-  if (read(form.hours.source) && form.hours.value.trim() && !form.ticks.hours) out.push("hours");
-  if (read(form.address.source) && form.address.value.trim() && !form.ticks.address) out.push("address");
-  if (form.services.some((s) => read(s.source) && s.price > 0) && !form.ticks.prices) out.push("prices");
-  return out;
 }
 
 export interface SaveBody {
@@ -385,30 +372,85 @@ export interface SaveBody {
   policies: string[];
 }
 
+/**
+ * One thing that stops the review being saved, and the field it is about.
+ *
+ * `id` is the id of the input on the review screen, so the page puts the
+ * message directly under that input, marks it invalid and moves focus to it.
+ * "How long does X take?" printed at the bottom of a long form was answered in
+ * whichever box happened to sit nearest the message.
+ */
+export interface FieldError {
+  id: string;
+  message: string;
+}
+
+/** The review screen's input ids, shared so an error and its input cannot drift apart. */
+export const REVIEW_IDS = {
+  hours: "review-hours",
+  serviceMinutes: (i: number) => `review-service-${i}-minutes`,
+  faqQuestion: (i: number) => `review-faq-${i}-q`,
+  faqAnswer: (i: number) => `review-faq-${i}-a`,
+} as const;
+
 export type SaveCheck =
   | { ok: true; body: SaveBody }
-  | { ok: false; field: "hours" | "services" | "faqs" | "ticks"; error: string };
+  | {
+      ok: false;
+      /** Every problem, in screen order. */
+      errors: FieldError[];
+      /** The first problem's input id: where focus goes. */
+      field: string;
+      error: string;
+    };
 
-/** The PUT body for a filled-in form, or the first thing that stops it being saved. */
-export function payloadFromForm(form: ReviewForm): SaveCheck {
+/**
+ * Everything on the form that stops it being saved, in screen order.
+ *
+ * There are no confirmation ticks. Pressing save on a screen that shows every
+ * value, each read one labelled with where it came from, is the confirmation.
+ * A tick beside each block only added a second thing to press, and a way to be
+ * stuck on a form without seeing why.
+ */
+export function reviewErrors(form: ReviewForm): FieldError[] {
+  const errors: FieldError[] = [];
+
   const hours = parseHours(form.hours.value);
-  if (!hours.ok) return { ok: false, field: "hours", error: hours.error };
+  if (!hours.ok) errors.push({ id: REVIEW_IDS.hours, message: hours.error });
+
+  form.services.forEach((s, i) => {
+    if (!s.name.trim()) return;
+    const minutes = Math.round(Number(s.durationMin) || 0);
+    if (minutes < 5) {
+      errors.push({ id: REVIEW_IDS.serviceMinutes(i), message: `How long does "${s.name.trim()}" take? Type the minutes here.` });
+    } else if (minutes > 12 * 60) {
+      errors.push({ id: REVIEW_IDS.serviceMinutes(i), message: "A service can take at most 12 hours (720 minutes)." });
+    }
+  });
+
+  form.faqs.forEach((f, i) => {
+    const q = Boolean(f.q.trim());
+    const a = Boolean(f.a.trim());
+    if (q && !a) errors.push({ id: REVIEW_IDS.faqAnswer(i), message: "Type the answer, or remove this question." });
+    if (a && !q) errors.push({ id: REVIEW_IDS.faqQuestion(i), message: "Type the question this answers, or remove it." });
+  });
+
+  return errors;
+}
+
+/** The PUT body for a filled-in form, or every field that stops it being saved. */
+export function payloadFromForm(form: ReviewForm): SaveCheck {
+  const errors = reviewErrors(form);
+  const hours = parseHours(form.hours.value);
+  if (errors.length || !hours.ok) {
+    const all = errors.length ? errors : [{ id: REVIEW_IDS.hours, message: hours.ok ? "" : hours.error }];
+    return { ok: false, errors: all, field: all[0].id, error: all[0].message };
+  }
 
   const services = form.services
     .filter((s) => s.name.trim())
     .map((s) => ({ name: s.name.trim(), durationMin: Math.round(Number(s.durationMin) || 0), price: Math.max(0, Number(s.price) || 0) }));
-  const short = services.find((s) => s.durationMin < 5);
-  if (short) return { ok: false, field: "services", error: `How long does "${short.name}" take? Belline needs the length to offer a time.` };
-
   const faqs = form.faqs.filter((f) => f.q.trim() && f.a.trim()).map((f) => ({ q: f.q.trim(), a: f.a.trim() }));
-  const half = form.faqs.find((f) => Boolean(f.q.trim()) !== Boolean(f.a.trim()));
-  if (half) return { ok: false, field: "faqs", error: "Each question needs an answer, or remove it." };
-
-  const ticks = ticksNeeded(form);
-  if (ticks.length) {
-    const words = { hours: "the hours", address: "the address", prices: "the prices" };
-    return { ok: false, field: "ticks", error: `Tick to confirm ${ticks.map((t) => words[t]).join(" and ")} before saving.` };
-  }
 
   return {
     ok: true,
@@ -457,15 +499,26 @@ const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice
  * words; anything that does not read is refused with the reason rather than
  * saved half-right.
  */
-export function cleanConfirmed(body: Record<string, unknown>): { ok: true; confirmed: Confirmed } | { ok: false; error: string } {
+export type CleanResult =
+  | { ok: true; confirmed: Confirmed }
+  | {
+      ok: false;
+      error: string;
+      /** The review input the refusal is about, when there is one. */
+      field?: string;
+      /** The service the refusal is about, by name, so the page can find its row. */
+      service?: string;
+    };
+
+export function cleanConfirmed(body: Record<string, unknown>): CleanResult {
   let hours: WeeklyHours | undefined;
   if (typeof body.hours === "string") {
     const parsed = parseHours(body.hours);
-    if (!parsed.ok) return { ok: false, error: parsed.error };
+    if (!parsed.ok) return { ok: false, error: parsed.error, field: REVIEW_IDS.hours };
     hours = parsed.hours;
   } else if (body.hours !== undefined && body.hours !== null) {
     const clean = cleanHours(body.hours);
-    if (!clean) return { ok: false, error: "Those opening hours could not be read. Check each day." };
+    if (!clean) return { ok: false, error: "Those opening hours could not be read. Check each day.", field: REVIEW_IDS.hours };
     hours = clean;
   }
 
@@ -478,8 +531,9 @@ export function cleanConfirmed(body: Record<string, unknown>): { ok: true; confi
       price: Math.max(0, Number((s as { price?: unknown })?.price) || 0),
     }))
     .filter((s) => s.name);
-  if (services?.some((s) => s.durationMin < 5 || s.durationMin > 12 * 60)) {
-    return { ok: false, error: "Each service needs a length between 5 minutes and 12 hours." };
+  const badLength = services?.find((s) => s.durationMin < 5 || s.durationMin > 12 * 60);
+  if (badLength) {
+    return { ok: false, error: "Each service needs a length between 5 minutes and 12 hours.", service: badLength.name };
   }
 
   return {

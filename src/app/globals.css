@@ -284,6 +284,22 @@ select:focus {
   box-shadow: 0 0 0 1px var(--focus);
 }
 
+/* A field that stops a save: red, and red still while it has focus, so the
+   owner sent to it can see which one it is. Its message sits right under it. */
+input[aria-invalid="true"],
+textarea[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 1px var(--bad);
+}
+
+.field-error {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--bad);
+}
+
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;

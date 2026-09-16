@@ -65,7 +65,8 @@ export async function PUT(req: Request) {
   // Every field is checked, hours included: the old handler cast whatever
   // arrived to WeeklyHours and saved it.
   const checked = cleanConfirmed(body);
-  if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 422 });
+  // With the field it is about, so the page can show it under that input.
+  if (!checked.ok) return NextResponse.json({ error: checked.error, field: checked.field, service: checked.service }, { status: 422 });
 
   let updated;
   try {
