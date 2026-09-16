@@ -53,6 +53,21 @@ interface Db {
   numberPool: PoolNumber[];
   /** Stripe webhook events already applied, so a redelivery changes nothing. See billing/stripe.ts. */
   stripeEvents: StripeEventRow[];
+  /** Google connections started and not yet back from Google. See integrations/google.ts. */
+  oauthStates: OAuthStateRow[];
+}
+
+/**
+ * One "Connect Google Calendar" waiting for Google to send the owner back.
+ * Only a hash of the nonce is kept: the nonce itself is in the owner's cookie.
+ */
+export interface OAuthStateRow {
+  /** sha256 of the nonce, hex. */
+  id: string;
+  locationId: string;
+  userId: string;
+  createdAt: string;
+  expiresAt: string;
 }
 
 /** One Stripe event we have applied. Kept for the newest `STRIPE_EVENTS_KEPT`. */
@@ -69,6 +84,7 @@ export interface StripeEventRow {
 const STRIPE_EVENTS_KEPT = 5000;
 
 const EMPTY: Db = {
+  oauthStates: [],
   stripeEvents: [],
   numberPool: [],
   tenants: [],
@@ -501,6 +517,21 @@ export function recordStripeEvent(row: StripeEventRow): void {
   db.stripeEvents.push(row);
   if (db.stripeEvents.length > STRIPE_EVENTS_KEPT) db.stripeEvents.splice(0, db.stripeEvents.length - STRIPE_EVENTS_KEPT);
   persist("stripeEvents");
+}
+
+// --- pending OAuth connections ---------------------------------------------
+
+export function listOAuthStates(): OAuthStateRow[] {
+  return load().oauthStates;
+}
+
+/** Change the pending connections in one synchronous step; see `mutatePool`. */
+export function mutateOAuthStates<T>(fn: (rows: OAuthStateRow[]) => { rows: OAuthStateRow[]; out: T }): T {
+  const db = load();
+  const { rows, out } = fn(db.oauthStates);
+  db.oauthStates = rows;
+  persist("oauthStates");
+  return out;
 }
 
 // --- support exceptions ----------------------------------------------------

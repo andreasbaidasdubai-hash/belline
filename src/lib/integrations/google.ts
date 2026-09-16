@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { Booking, Location } from "../types";
-import { getLocation, listLocations, upsertLocation } from "../store";
+import { getLocation, listLocations, mutateOAuthStates, upsertLocation } from "../store";
 import { describeBookingShort } from "../booking";
 import { destinationOf, googleUsable } from "../booking/destination";
 import { credentialsConfigured, openCredentials, sealCredentials } from "../db/credentials";
@@ -91,7 +91,6 @@ export function googleConfigured(): boolean {
 const globalRef = globalThis as unknown as {
   __bellineGoogleApi?: GoogleApi | null;
   __bellineGoogleStub?: ReturnType<typeof fakeGoogleApi>;
-  __bellineGoogleNonces?: Map<string, number>;
   __bellineGoogleAccess?: Map<string, { token: string; until: number; sealed: string }>;
 };
 
@@ -134,7 +133,7 @@ function stateKey(): Buffer {
 }
 
 const b64url = (buf: Buffer | string) => Buffer.from(buf).toString("base64url");
-const nonces = () => (globalRef.__bellineGoogleNonces ??= new Map());
+const nonceHash = (nonce: string) => crypto.createHash("sha256").update(nonce).digest("hex");
 
 /**
  * The `state` Google hands back.
@@ -143,16 +142,41 @@ const nonces = () => (globalRef.__bellineGoogleNonces ??= new Map());
  * to click a link attach their own Google account to that owner's venue. Now
  * it is signed, expires in ten minutes, names the user who started it, and
  * carries a nonce that is also set as a cookie and can be used once.
+ *
+ * The pending nonce is kept in the store, not in memory, so a deploy or a
+ * restart between "Connect" and Google's answer does not send the owner back
+ * to the start. Only its hash is written: the nonce itself lives in the owner's
+ * cookie, and a copy of the data cannot finish anybody's connection.
  */
 export function signState(input: { locationId: string; userId: string; returnTo: ReturnTo }, now = Date.now()): { state: string; nonce: string } {
   const nonce = crypto.randomBytes(18).toString("base64url");
   const payload: StatePayload = { l: input.locationId, u: input.userId, r: input.returnTo, n: nonce, e: now + STATE_TTL_MS };
   const body = b64url(JSON.stringify(payload));
   const sig = b64url(crypto.createHmac("sha256", stateKey()).update(body).digest());
-  const pending = nonces();
-  for (const [n, exp] of pending) if (exp < now) pending.delete(n);
-  pending.set(nonce, payload.e);
+  mutateOAuthStates((rows) => ({
+    rows: [
+      // Long gone: a day past its expiry, whatever the sweep made of it.
+      ...rows.filter((r) => Date.parse(r.expiresAt) > now - 24 * 60 * 60_000),
+      {
+        id: nonceHash(nonce),
+        locationId: input.locationId,
+        userId: input.userId,
+        createdAt: new Date(now).toISOString(),
+        expiresAt: new Date(payload.e).toISOString(),
+      },
+    ],
+    out: undefined,
+  }));
   return { state: `${body}.${sig}`, nonce };
+}
+
+/** Consume a pending nonce. True when it was there to consume. */
+function consumeNonce(nonce: string): boolean {
+  const id = nonceHash(nonce);
+  return mutateOAuthStates((rows) => {
+    const known = rows.some((r) => r.id === id);
+    return { rows: known ? rows.filter((r) => r.id !== id) : rows, out: known };
+  });
 }
 
 export type StateCheck =
@@ -175,8 +199,14 @@ export function verifyState(state: string, opts: { userId: string; cookieNonce?:
   }
   const returnTo: ReturnTo = payload.r === "setup" ? "setup" : "integrations";
   // Consumed on first sight, whatever happens next: a state is never good twice.
-  const pending = nonces();
-  const known = pending.delete(payload.n);
+  // Unknown — used already, or its record lost with the data — is refused the
+  // same way, and the route sends the owner back to connect again.
+  let known = false;
+  try {
+    known = typeof payload.n === "string" && consumeNonce(payload.n);
+  } catch (err) {
+    console.error(`[google] could not read pending connections: ${err instanceof Error ? err.message : String(err)}`);
+  }
   if (payload.e < now) return { ok: false, reason: "expired", returnTo };
   if (!known) return { ok: false, reason: "used", returnTo };
   if (payload.u !== opts.userId) return { ok: false, reason: "user", returnTo };

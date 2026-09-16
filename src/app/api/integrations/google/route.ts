@@ -159,7 +159,7 @@ export async function POST(request: Request) {
     resyncMovedCalendars(upsertLocation(out.location));
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const said = customerError("google", err, "failed", location.id);
+    const said = customerError("google", err, "unavailable", location.id);
     return NextResponse.json({ error: `${said.message} ${said.next}` }, { status: 502 });
   }
 }

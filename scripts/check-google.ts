@@ -161,6 +161,43 @@ await test("a forged, expired, other user's or cookieless state is refused", () 
   assert.ok(!google.verifyState("locationid-only", { userId: "user_owner" }).ok);
 });
 
+/** What a restart looks like to this process: every in-memory cache gone, the data directory kept. */
+function restart(): void {
+  const g = globalThis as Record<string, unknown>;
+  for (const key of ["__bellineDb", "__bellineStamps", "__bellineCheckedAt", "__bellineGoogleNonces", "__bellineGoogleAccess"]) delete g[key];
+}
+
+await test("a restart between 'Connect' and Google's answer does not make the owner start again", () => {
+  const { state, nonce } = google.signState({ locationId: salonBase.id, userId: "user_owner", returnTo: "setup" });
+  restart();
+  const back = google.verifyState(state, { userId: "user_owner", cookieNonce: nonce });
+  assert.deepEqual(back, { ok: true, locationId: salonBase.id, returnTo: "setup" }, `refused after a restart: ${JSON.stringify(back)}`);
+  assert.ok(!dataOnDisk().includes(nonce), "the nonce itself is written to the data");
+  // And still single use after the restart.
+  restart();
+  const again = google.verifyState(state, { userId: "user_owner", cookieNonce: nonce });
+  assert.ok(!again.ok && again.reason === "used");
+});
+
+await test("a connection whose record is gone fails gracefully: back where it started, told to connect again", () => {
+  const { state, nonce } = google.signState({ locationId: salonBase.id, userId: "user_owner", returnTo: "setup" });
+  // The pending record lost, as it was on every restart before it was stored.
+  const stateFile = path.join(process.env.DATA_DIR!, "oauthStates.json");
+  if (fs.existsSync(stateFile)) fs.writeFileSync(stateFile, "[]");
+  restart();
+  let checked: ReturnType<typeof google.verifyState> | undefined;
+  assert.doesNotThrow(() => {
+    checked = google.verifyState(state, { userId: "user_owner", cookieNonce: nonce });
+  });
+  assert.ok(checked && !checked.ok && checked.reason === "used" && checked.returnTo === "setup");
+  const route = source("src/app/api/integrations/google/route.ts");
+  assert.match(route, /if \(!checked\.ok\) \{[\s\S]{0,200}land\(request, checked\.returnTo \?\? "integrations", undefined, "google_failed"\)/);
+  assert.equal(google.returnPath("setup", undefined, "google_failed"), "/setup/bookings?google=google_failed");
+  assert.match(integrationErrorText("google_failed")!, /Please connect again/);
+  // The setup step shows that sentence for this code.
+  assert.match(source("src/app/setup/[step]/page.tsx"), /code === "google_failed"\) return integrationErrorText\(code\)/);
+});
+
 await test("a decline lands on the bookings step with 'No problem — requests for now', never on Google", () => {
   const setup = google.returnPath("setup", salonBase.id, "declined");
   assert.equal(setup, "/setup/bookings?google=declined");

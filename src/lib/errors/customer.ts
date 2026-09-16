@@ -52,7 +52,10 @@ const COPY: Record<Provider, Partial<Record<Kind, [string, string]>> & { failed:
       "No problem — requests for now.",
       "Belline takes the details and your team confirms. You can connect Google Calendar whenever you like.",
     ],
-    failed: ["Google Calendar could not be connected just now.", "Try again in a few minutes."],
+    // Also what a connection that was interrupted says: a restart or a deploy
+    // between "Connect" and Google's answer, or a link opened twice.
+    failed: ["Google Calendar could not be connected just now.", "Please connect again. If it happens twice, wait a few minutes first."],
+    unavailable: ["Google Calendar could not be reached just now.", "Try again in a few minutes."],
   },
   stripe: {
     not_configured: ["Card payments are not switched on yet.", "Nothing is charged until they are."],
