@@ -167,7 +167,7 @@ const SCHEMA = {
         type: "object",
         properties: {
           name: { type: "string" },
-          durationMin: { type: "number", description: "Realistic length in minutes." },
+          durationMin: { type: "number", description: "Length in minutes when the source states one; 0 when it does not. Never estimate." },
           price: { type: "number", description: "0 if the page does not state one." },
         },
         required: ["name", "durationMin", "price"],

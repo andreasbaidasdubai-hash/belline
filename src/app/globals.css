@@ -300,6 +300,22 @@ select[aria-invalid="true"] {
   color: var(--bad);
 }
 
+/* A service on the setup review: name, minutes, price, remove. On a phone the
+   name takes its own line, so it is readable and "Minutes · optional" does not
+   run into the name's label. */
+.review-service-row {
+  display: grid;
+  gap: 8px;
+  align-items: end;
+  grid-template-columns: minmax(0, 1fr) 110px 130px auto;
+}
+.review-menu-row { grid-template-columns: minmax(0, 1fr) 130px auto; }
+@media (max-width: 600px) {
+  .review-service-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .review-service-row > label:first-child { grid-column: 1 / -1; }
+  .review-menu-row { grid-template-columns: minmax(0, 1fr) auto; }
+}
+
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;

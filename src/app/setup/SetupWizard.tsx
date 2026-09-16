@@ -97,9 +97,16 @@ export default function SetupWizard({
   currency,
   current,
   start,
+  lengthsRequired,
 }: {
   vertical: Vertical;
   currency: string;
+  /**
+   * Does each service need a length? Only where Belline books it into a day
+   * itself (booking/destination.ts `serviceLengthsRequired`). Otherwise a
+   * service needs only a name.
+   */
+  lengthsRequired: boolean;
   current: CurrentVenue;
   /** "review" opens the form straight away, from what is saved. */
   start: "ask" | "review";
@@ -226,7 +233,7 @@ export default function SetupWizard({
 
   async function save() {
     if (!form) return;
-    const check = payloadFromForm(form);
+    const check = payloadFromForm(form, { lengthsRequired });
     if (!check.ok) {
       showErrors(check.errors);
       return;
@@ -404,13 +411,15 @@ export default function SetupWizard({
               why("services") ??
               (isRestaurant
                 ? "Belline answers questions about the menu. Guests book a table, not a dish."
-                : "Belline only offers a time it can honour, so each one needs a length.")
+                : lengthsRequired
+                  ? "Belline books these into your diary, so each one needs its length in minutes. The price is optional."
+                  : "A name is enough. Minutes and price are optional: with no price, Belline says your team will confirm it.")
             }
           >
             <div style={{ display: "grid", gap: 10 }}>
               {form.services.map((s, i) => (
                 <div key={i}>
-                  <div style={{ display: "grid", gap: 8, gridTemplateColumns: isRestaurant ? "minmax(0, 1fr) 120px auto" : "minmax(0, 1fr) 96px 120px auto", alignItems: "end" }}>
+                  <div className={isRestaurant ? "review-service-row review-menu-row" : "review-service-row"}>
                     <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
                       <span className="muted">
                         {isRestaurant ? "Dish or section" : "Service"} · {sourceLabel(s.source, fileName)}
@@ -423,7 +432,7 @@ export default function SetupWizard({
                     </label>
                     {!isRestaurant && (
                       <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
-                        <span className="muted">Minutes</span>
+                        <span className="muted">Minutes{lengthsRequired ? "" : " · optional"}</span>
                         <input
                           id={REVIEW_IDS.serviceMinutes(i)}
                           type="number"
@@ -444,7 +453,7 @@ export default function SetupWizard({
                     )}
                     <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0 }}>
                       <span className="muted">
-                        Price, {currency} {s.price > 0 ? "" : `· ${CONFIDENCE_LABEL.missing.toLowerCase()}`}
+                        Price, {currency} · optional
                       </span>
                       <input
                         type="number"
@@ -473,7 +482,7 @@ export default function SetupWizard({
                   type="button"
                   className="btn"
                   style={{ padding: "8px 14px", fontSize: 13 }}
-                  onClick={() => edit((f) => ({ ...f, services: [...f.services, { name: "", durationMin: isRestaurant ? 30 : 60, price: 0, source: "typed" }] }))}
+                  onClick={() => edit((f) => ({ ...f, services: [...f.services, { name: "", durationMin: 0, price: 0, source: "typed" }] }))}
                 >
                   {isRestaurant ? "Add a dish" : "Add a service"}
                 </button>

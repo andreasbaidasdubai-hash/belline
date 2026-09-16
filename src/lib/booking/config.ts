@@ -7,6 +7,7 @@ import type {
   StaffMember,
 } from "../types";
 import { resourceTypesOf } from "./services";
+import { serviceLengthsRequired } from "./destination";
 
 /**
  * Checking a venue's own configuration before it is allowed to save it.
@@ -121,7 +122,15 @@ export function validatePolicy(policy: BookingPolicy | undefined): Finding[] {
 
 // ---------------------------------------------------------------------------
 
-export function validateSalon(config: SalonConfig): Finding[] {
+export function validateSalon(
+  config: SalonConfig,
+  /**
+   * Whether every service needs a length: only where Belline fits bookings
+   * into a day (destination.ts `serviceLengthsRequired`). A business that
+   * confirms its own bookings may list a service with no length at all.
+   */
+  opts: { lengthsRequired?: boolean } = {},
+): Finding[] {
   const out: Finding[] = [];
   const ids = new Set<string>();
 
@@ -137,7 +146,10 @@ export function validateSalon(config: SalonConfig): Finding[] {
     }
     ids.add(service.id);
 
-    if (!Number.isFinite(service.durationMin) || service.durationMin <= 0) {
+    const unmeasured = service.durationMin === 0 && !service.phases?.length && opts.lengthsRequired === false;
+    if (unmeasured) {
+      // Allowed: nothing is fitted into a day for this venue.
+    } else if (!Number.isFinite(service.durationMin) || service.durationMin <= 0) {
       out.push({ level: "error", where: `${at}.durationMin`, message: `${service.name} needs a length.` });
     } else if (service.durationMin > MAX_SERVICE_MINUTES) {
       out.push({
@@ -542,7 +554,7 @@ export function validateRestaurant(config: RestaurantConfig): Finding[] {
 export function validateVenue(location: Location): Finding[] {
   const out = validatePolicy(location.policy);
   if (location.restaurant) out.push(...validateRestaurant(location.restaurant));
-  if (location.salon) out.push(...validateSalon(location.salon));
+  if (location.salon) out.push(...validateSalon(location.salon, { lengthsRequired: serviceLengthsRequired(location) }));
   return out;
 }
 

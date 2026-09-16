@@ -393,6 +393,34 @@ export const REVIEW_IDS = {
   faqAnswer: (i: number) => `review-faq-${i}-a`,
 } as const;
 
+/**
+ * What the review needs to know about where bookings go.
+ *
+ * `lengthsRequired` is booking/destination.ts `serviceLengthsRequired` for the
+ * venue: only a business Belline books into itself needs to say how long each
+ * service takes. Unset means required, the safe answer for a caller that did
+ * not ask.
+ */
+export interface ReviewOptions {
+  lengthsRequired?: boolean;
+}
+
+/**
+ * A service needs only a name. Its length is required only where Belline
+ * fits it into a day; a length that is given has to be a real one either way.
+ * A price is always optional: with none, the agent says the team will confirm
+ * it (agent/prompt.ts).
+ */
+export function lengthProblem(name: string, durationMin: unknown, required: boolean): string | null {
+  const minutes = Math.round(Number(durationMin) || 0);
+  if (minutes <= 0) {
+    return required ? `How long does "${name}" take? Belline books it into your diary, so type the minutes here.` : null;
+  }
+  if (minutes < 5) return `"${name}" is shorter than 5 minutes. Type the minutes, or leave it empty.`;
+  if (minutes > 12 * 60) return "A service can take at most 12 hours (720 minutes).";
+  return null;
+}
+
 export type SaveCheck =
   | { ok: true; body: SaveBody }
   | {
@@ -412,7 +440,7 @@ export type SaveCheck =
  * A tick beside each block only added a second thing to press, and a way to be
  * stuck on a form without seeing why.
  */
-export function reviewErrors(form: ReviewForm): FieldError[] {
+export function reviewErrors(form: ReviewForm, opts: ReviewOptions = {}): FieldError[] {
   const errors: FieldError[] = [];
 
   const hours = parseHours(form.hours.value);
@@ -420,12 +448,8 @@ export function reviewErrors(form: ReviewForm): FieldError[] {
 
   form.services.forEach((s, i) => {
     if (!s.name.trim()) return;
-    const minutes = Math.round(Number(s.durationMin) || 0);
-    if (minutes < 5) {
-      errors.push({ id: REVIEW_IDS.serviceMinutes(i), message: `How long does "${s.name.trim()}" take? Type the minutes here.` });
-    } else if (minutes > 12 * 60) {
-      errors.push({ id: REVIEW_IDS.serviceMinutes(i), message: "A service can take at most 12 hours (720 minutes)." });
-    }
+    const problem = lengthProblem(s.name.trim(), s.durationMin, opts.lengthsRequired ?? true);
+    if (problem) errors.push({ id: REVIEW_IDS.serviceMinutes(i), message: problem });
   });
 
   form.faqs.forEach((f, i) => {
@@ -439,8 +463,8 @@ export function reviewErrors(form: ReviewForm): FieldError[] {
 }
 
 /** The PUT body for a filled-in form, or every field that stops it being saved. */
-export function payloadFromForm(form: ReviewForm): SaveCheck {
-  const errors = reviewErrors(form);
+export function payloadFromForm(form: ReviewForm, opts: ReviewOptions = {}): SaveCheck {
+  const errors = reviewErrors(form, opts);
   const hours = parseHours(form.hours.value);
   if (errors.length || !hours.ok) {
     const all = errors.length ? errors : [{ id: REVIEW_IDS.hours, message: hours.ok ? "" : hours.error }];
@@ -449,7 +473,8 @@ export function payloadFromForm(form: ReviewForm): SaveCheck {
 
   const services = form.services
     .filter((s) => s.name.trim())
-    .map((s) => ({ name: s.name.trim(), durationMin: Math.round(Number(s.durationMin) || 0), price: Math.max(0, Number(s.price) || 0) }));
+    // 0 is "not given", for the length and the price alike.
+    .map((s) => ({ name: s.name.trim(), durationMin: Math.max(0, Math.round(Number(s.durationMin) || 0)), price: Math.max(0, Number(s.price) || 0) }));
   const faqs = form.faqs.filter((f) => f.q.trim() && f.a.trim()).map((f) => ({ q: f.q.trim(), a: f.a.trim() }));
 
   return {
@@ -510,7 +535,7 @@ export type CleanResult =
       service?: string;
     };
 
-export function cleanConfirmed(body: Record<string, unknown>): CleanResult {
+export function cleanConfirmed(body: Record<string, unknown>, opts: ReviewOptions = {}): CleanResult {
   let hours: WeeklyHours | undefined;
   if (typeof body.hours === "string") {
     const parsed = parseHours(body.hours);
@@ -527,13 +552,13 @@ export function cleanConfirmed(body: Record<string, unknown>): CleanResult {
   const services = list(body.services, 80)
     ?.map((s) => ({
       name: str((s as { name?: unknown })?.name, 120) ?? "",
-      durationMin: Math.round(Number((s as { durationMin?: unknown })?.durationMin) || 0),
+      durationMin: Math.max(0, Math.round(Number((s as { durationMin?: unknown })?.durationMin) || 0)),
       price: Math.max(0, Number((s as { price?: unknown })?.price) || 0),
     }))
     .filter((s) => s.name);
-  const badLength = services?.find((s) => s.durationMin < 5 || s.durationMin > 12 * 60);
-  if (badLength) {
-    return { ok: false, error: "Each service needs a length between 5 minutes and 12 hours.", service: badLength.name };
+  for (const s of services ?? []) {
+    const problem = lengthProblem(s.name, s.durationMin, opts.lengthsRequired ?? true);
+    if (problem) return { ok: false, error: problem, service: s.name };
   }
 
   return {

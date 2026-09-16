@@ -301,6 +301,18 @@ export function checkSalonSlot(
     return { ok: false, reason: "unknown_service", detail: "No service was requested." };
   }
 
+  // A service saved without a length (setup allows it for a business that
+  // confirms its own bookings) cannot be fitted into a day, so no time is
+  // offered for it rather than a guessed one.
+  const unmeasured = services.find((s) => !(s.durationMin > 0));
+  if (unmeasured) {
+    return {
+      ok: false,
+      reason: "not_bookable",
+      detail: `${unmeasured.name} has no length set yet, so take their details and say the team will confirm a time.`,
+    };
+  }
+
   if (!query.staffOverride) {
     const offline = services.find((s) => s.online === false);
     if (offline) {

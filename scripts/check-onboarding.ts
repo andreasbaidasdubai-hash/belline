@@ -34,7 +34,11 @@ const {
   MENU_QUESTION,
 } = await import("../src/lib/onboarding/review");
 const { staticPrompt } = await import("../src/lib/agent/prompt");
-const { getLocation } = await import("../src/lib/store");
+const { getLocation, upsertLocation } = await import("../src/lib/store");
+const { serviceLengthsRequired } = await import("../src/lib/booking/destination");
+const { isBlocking, validateVenue } = await import("../src/lib/booking/config");
+const { checkSalonSlot } = await import("../src/lib/booking/salon");
+const { scenariosFor } = await import("../src/lib/onboarding/selftest");
 const { historyFor } = await import("../src/lib/brain");
 const { executeSetupTool, runSetupTurn, setupGreeting } = await import("../src/lib/onboarding/assistant");
 const { INSTALL_STEPS, detectPlatform, installedIn } = await import("../src/lib/onboarding/platform");
@@ -107,7 +111,14 @@ await test("a service is added exactly as described, and the version says who se
   assert.equal(latest.authorName, salon.by.name);
 });
 
-await test("a service with no length is refused, and nothing is saved", () => {
+/** Where bookings go, as the bookings step records it. */
+function bookInto(id: string, kind: "belline" | "requests") {
+  const loc = getLocation(id)!;
+  return upsertLocation({ ...loc, onboarding: { ...loc.onboarding!, destination: { kind, setAt: new Date().toISOString() } } });
+}
+
+await test("on Belline's diary, a service with no length is refused, and nothing is saved", () => {
+  bookInto(salon.id, "belline");
   const before = fresh().salon!.services.length;
   const out = executeSetupTool(salon.id, salon.by, "add_service", { name: "Mystery", duration_min: 0, price: 100 });
   assert.equal(out.ok, false);
@@ -418,6 +429,91 @@ await test("a restaurant's menu is kept as something to answer about, never as b
   assert.deepEqual(saved.hours, every(720, 1410));
   // Retrievable: it is in what the agent is told.
   assert.ok(staticPrompt(saved).includes("Grilled hammour"), "the menu is not in the agent's prompt");
+});
+
+console.log("\n\x1b[1mA service needs only a name\x1b[0m\n");
+
+await test("a request-only business saves a service with no minutes and no price", async () => {
+  const dev = await venue("Saadiyat Developments", "salon");
+  bookInto(dev.id, "requests");
+  assert.equal(serviceLengthsRequired(getLocation(dev.id)!), false);
+  const opts = { lengthsRequired: serviceLengthsRequired(getLocation(dev.id)!) };
+
+  const form = formFromDraft(null, "typed", currentVenue(getLocation(dev.id)!));
+  form.services = [{ name: "Immobilienentwicklung", durationMin: 0, price: 0, source: "typed" }];
+  assert.deepEqual(reviewErrors(form, opts), []);
+  const check = payloadFromForm(form, opts);
+  assert.ok(check.ok, check.ok ? "" : check.error);
+  if (!check.ok) return;
+  const clean = cleanConfirmed(JSON.parse(JSON.stringify(check.body)), opts);
+  assert.ok(clean.ok, clean.ok ? "" : clean.error);
+  if (!clean.ok) return;
+  const saved = applyDraft(getLocation(dev.id)!, clean.confirmed);
+
+  // Stored as not given, never as a guessed length or a price of nothing.
+  const service = saved.salon!.services.find((s) => s.name === "Immobilienentwicklung")!;
+  assert.equal(service.durationMin, 0, "a length was invented");
+  assert.equal(service.price, 0);
+  assert.ok(!isBlocking(validateVenue(saved)), "the venue gate refuses a request-only service with no length");
+  assert.ok(!readiness(saved).missing.some((m) => /how long/i.test(m.label)));
+
+  // The agent is told the price is not listed and the team confirms it.
+  const prompt = staticPrompt(saved);
+  assert.match(prompt, /Immobilienentwicklung, price not listed \(the team will confirm it\)/);
+  assert.match(prompt, /Where a price is not listed, say the team will confirm the price/);
+  assert.doesNotMatch(prompt, /Immobilienentwicklung[^\n]*(AED 0|0 min)/);
+
+  // Belle can add one by name alone, and later changes still pass the gate.
+  const added = executeSetupTool(dev.id, dev.by, "add_service", { name: "Site visit" });
+  assert.ok(added.ok, added.say);
+  assert.equal(getLocation(dev.id)!.salon!.services.find((s) => s.name === "Site visit")!.durationMin, 0);
+  assert.ok(executeSetupTool(dev.id, dev.by, "add_faq", { question: "Do you sell off-plan?", answer: "Yes." }).ok);
+
+  // The checks still ask for a booking in words, with nothing undefined in them.
+  const booking = scenariosFor(getLocation(dev.id)!).find((s) => s.id === "booking")!;
+  assert.match(booking.prompt, /Can I book a Immobilienentwicklung (tomorrow|on \w+) at \d\d:\d\d\?/);
+  assert.doesNotMatch(booking.prompt, /undefined|NaN|null/);
+});
+
+await test("a business on Belline's diary still needs the minutes for each service", async () => {
+  const shop = await venue("Diary Minutes Salon", "salon");
+  bookInto(shop.id, "belline");
+  const opts = { lengthsRequired: serviceLengthsRequired(getLocation(shop.id)!) };
+  assert.equal(opts.lengthsRequired, true);
+
+  const form = formFromDraft(null, "typed", currentVenue(getLocation(shop.id)!));
+  form.services = [{ name: "Cut", durationMin: 0, price: 0, source: "typed" }];
+  const errors = reviewErrors(form, opts);
+  assert.deepEqual(errors.map((e) => e.id), [REVIEW_IDS.serviceMinutes(0)]);
+  assert.match(errors[0].message, /How long does "Cut" take\?/);
+  assert.equal(payloadFromForm(form, opts).ok, false);
+
+  const refused = cleanConfirmed({ services: [{ name: "Cut", durationMin: 0, price: 0 }] }, opts);
+  assert.equal(refused.ok, false);
+  if (!refused.ok) assert.equal(refused.service, "Cut");
+  // A length that is given has to be a real one, required or not.
+  assert.equal(cleanConfirmed({ services: [{ name: "Cut", durationMin: 3 }] }, { lengthsRequired: false }).ok, false);
+  // With a length, a price is still optional.
+  assert.ok(cleanConfirmed({ services: [{ name: "Cut", durationMin: 45 }] }, opts).ok);
+});
+
+await test("before the destination is chosen nothing is required; choosing the diary afterwards asks for the lengths", async () => {
+  const shop = await venue("Undecided Salon", "salon");
+  assert.equal(serviceLengthsRequired(getLocation(shop.id)!), false, "a new account is asked for lengths before it chose where bookings go");
+  const out = cleanConfirmed({ services: [{ name: "Blow-dry", durationMin: 0, price: 0 }], staff: ["Mira"] }, { lengthsRequired: false });
+  assert.ok(out.ok);
+  if (!out.ok) return;
+  applyDraft(getLocation(shop.id)!, out.confirmed);
+
+  const diary = bookInto(shop.id, "belline");
+  assert.ok(readiness(diary).missing.some((m) => m.label === "How long each service takes" && m.where === "/setup/review"));
+  // The diary never offers a time for a service it cannot measure.
+  const blowDry = diary.salon!.services[0];
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const slot = checkSalonSlot(diary, [], { date: tomorrow, startMin: 11 * 60, serviceIds: [blowDry.id] });
+  assert.equal(slot.ok, false);
+  if (!slot.ok) assert.match(slot.detail, /no length set yet/);
+  assert.match(staticPrompt(diary), /Blow-dry \(id: [^)]+\) — length not set, price not listed/);
 });
 
 await test("hours sent as anything but hours are refused, not cast and saved", () => {

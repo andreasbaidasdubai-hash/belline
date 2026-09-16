@@ -455,7 +455,8 @@ function bookingPayload(location: Location, booking: Booking) {
     with: staff?.name,
     ...(second ? { also_seeing: second.name } : {}),
     duration_min: shape.durationMin,
-    price: `${location.currency} ${shape.price}`,
+    // No figure for a service with no price: the team confirms it.
+    price: shape.price > 0 ? `${location.currency} ${shape.price}` : "not listed, the team will confirm it",
   };
 }
 

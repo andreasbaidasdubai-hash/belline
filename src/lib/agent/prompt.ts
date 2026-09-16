@@ -59,6 +59,15 @@ ${services}
 Largest party you may book yourself: ${c.maxPartySize}.`;
 }
 
+/**
+ * A service with no price is common and fine: a property developer does not
+ * publish one. Said on the line itself so the model cannot read a missing
+ * figure as free, and repeated as a rule.
+ */
+const NO_PRICE = "price not listed (the team will confirm it)";
+const PRICE_RULE =
+  "Where a price is not listed, say the team will confirm the price. Never give a figure, a range or an estimate for it.";
+
 /** Shared by salon and clinic — same diary, different vocabulary. */
 function diaryFacts(location: Location): string {
   const c = location.salon!;
@@ -66,7 +75,7 @@ function diaryFacts(location: Location): string {
   const services = c.services
     .map(
       (s) =>
-        `- ${s.name} (id: ${s.id}) — ${s.durationMin} min, ${location.currency} ${s.price}`,
+        `- ${s.name} (id: ${s.id}) — ${s.durationMin > 0 ? `${s.durationMin} min` : "length not set"}, ${s.price > 0 ? `${location.currency} ${s.price}` : NO_PRICE}`,
     )
     .join("\n");
   const staff = c.staff
@@ -87,6 +96,7 @@ ${services}
 
 ${t.staffPlural.toUpperCase()}
 ${staff}
+${PRICE_RULE}
 
 When a caller asks for several ${t.services} in one visit, pass every service id to the tools and quote the combined price and total time.`;
 }
@@ -101,10 +111,11 @@ function requestFacts(location: Location): string {
   const services = location.vertical === "restaurant" ? [] : (location.salon?.services ?? []);
   if (!services.length) return "";
   const list = services
-    .map((s) => `- ${s.name}${s.durationMin ? `, about ${s.durationMin} min` : ""}${s.price ? `, ${location.currency} ${s.price}` : ""}`)
+    .map((s) => `- ${s.name}${s.durationMin > 0 ? `, about ${s.durationMin} min` : ""}, ${s.price > 0 ? `${location.currency} ${s.price}` : NO_PRICE}`)
     .join("\n");
   return `${t.services.toUpperCase()} AND PRICES
-${list}`;
+${list}
+${PRICE_RULE}`;
 }
 
 /**

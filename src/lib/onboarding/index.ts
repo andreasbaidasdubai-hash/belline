@@ -20,7 +20,7 @@ import { passwordProblem, tradeFromParam, tradeLabel, verticalForTrade } from ".
 import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
 import { MENU_QUESTION, type Confirmed, type CurrentVenue } from "./review";
-import { takesRequestsOnly } from "../booking/destination";
+import { serviceLengthsRequired, takesRequestsOnly } from "../booking/destination";
 
 /**
  * Getting a business live without a person in the loop.
@@ -453,14 +453,14 @@ export async function draftFromSources(sources: SetupSources, deps: DraftDeps = 
       question:
         found.vertical === "restaurant"
           ? "How long does a table usually turn, by party size?"
-          : "What do you offer, roughly how long does each take, and what does it cost?",
-      why: "Belline will not offer a time it cannot honour, so it needs the lengths.",
+          : "What do you offer?",
+      why: "A name is enough. Add how long each takes and what it costs if you like; with no price, Belline says your team will confirm it.",
     });
   } else if (found.services.some((s) => !s.price)) {
     gaps.push({
       field: "services",
-      question: `A few of these have no price on ${where}. What should Belline say?`,
-      why: "It will never invent one — it will say it does not know, which sounds worse.",
+      question: `A few of these have no price on ${where}. Add one, or leave it empty.`,
+      why: "With no price, Belline tells the customer your team will confirm it. It never invents one.",
     });
   }
   if (found.vertical !== "restaurant" && !found.staff.length) {
@@ -564,7 +564,10 @@ export function applyDraft(location: Location, confirmed: Confirmed): Location {
             ...(was ?? {}),
             id,
             name: s.name.trim(),
-            durationMin: Math.max(5, Math.round(s.durationMin || 30)),
+            // Never a made-up length: 0 is "not given", which a business
+            // that confirms its own bookings never needs, and which the diary
+            // refuses to offer a time for (booking/salon.ts).
+            durationMin: Math.round(s.durationMin || 0) >= 5 ? Math.round(s.durationMin) : 0,
             // Held after the appointment and never quoted to the guest. Fifteen
             // minutes is the number every salon uses when asked, and it is editable.
             bufferMin: was?.bufferMin ?? 15,
@@ -663,6 +666,10 @@ export function readiness(location: Location): {
     }
     if (!location.salon?.staff.length) {
       missing.push({ label: "Who works there", where: "/venue" });
+    }
+    // Set up before the diary was chosen, when lengths were not asked for.
+    if (serviceLengthsRequired(location) && location.salon?.services.some((s) => !(s.durationMin > 0))) {
+      missing.push({ label: "How long each service takes", where: "/setup/review" });
     }
   }
   if (!location.agent.faqs.length) {

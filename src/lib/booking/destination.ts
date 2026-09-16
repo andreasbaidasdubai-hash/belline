@@ -43,6 +43,26 @@ export function takesRequestsOnly(location: Venue): boolean {
   return true;
 }
 
+/**
+ * Does each service need a length?
+ *
+ * Only where Belline fits the appointment into a day itself: its own diary,
+ * or a Google Calendar it books into (the same engine, with the calendar's
+ * busy times taken out). A business that confirms its own bookings — requests,
+ * a booking link, a calendar Belline cannot book into yet — is never offered a
+ * time, so "how long does a property development take?" is not a question
+ * setup should ask.
+ *
+ * A new account reviews its business before it chooses where bookings go.
+ * Until it chooses, nothing is required; choosing the diary afterwards lists
+ * any service without a length as missing before Go live (onboarding
+ * `readiness`), and the diary never offers a time for one.
+ */
+export function serviceLengthsRequired(location: Venue): boolean {
+  if (location.onboarding && !location.onboarding.destination) return false;
+  return !takesRequestsOnly(location);
+}
+
 /** The owner's own booking link, when they gave one. */
 export function bookingLinkOf(location: Pick<Location, "onboarding">): string | undefined {
   return takesRequestsOnly(location) ? location.onboarding?.destination?.bookingLink : undefined;

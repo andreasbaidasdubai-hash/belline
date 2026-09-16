@@ -8,7 +8,7 @@ import { INTEGRATIONS, bellineDiaryOffered, factsFrom, isStepId, journey, type J
 import { venueMarket } from "@/lib/onboarding/rules";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import { requestRulesOf } from "@/lib/booking/requests";
-import { destinationOf, googleUsable, takesRequestsOnly } from "@/lib/booking/destination";
+import { destinationOf, googleUsable, serviceLengthsRequired, takesRequestsOnly } from "@/lib/booking/destination";
 import { integrationErrorText } from "@/lib/errors/customer";
 import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
 import { MARKETS } from "@/lib/markets";
@@ -257,7 +257,13 @@ function Body({
     case "import":
     case "review":
       return (
-        <SetupWizard vertical={venue.vertical} currency={venue.currency} current={currentVenue(venue)} start={step.id === "review" ? "review" : "ask"} />
+        <SetupWizard
+          vertical={venue.vertical}
+          currency={venue.currency}
+          current={currentVenue(venue)}
+          start={step.id === "review" ? "review" : "ask"}
+          lengthsRequired={serviceLengthsRequired(venue)}
+        />
       );
 
     case "bookings":

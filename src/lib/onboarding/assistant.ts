@@ -6,7 +6,7 @@ import { isBlocking, validateVenue } from "../booking/config";
 import { parseClock } from "../time";
 import { flag } from "../flags";
 import { raiseException } from "../errors/customer";
-import { destinationOf } from "../booking/destination";
+import { destinationOf, serviceLengthsRequired } from "../booking/destination";
 import { PBX_NOTE, forwardingCodes, uaeCarriers } from "../telephony/forwarding";
 import { KIND_META, isExceptionKind, openException, ownerTickets } from "../exceptions";
 import { DAYS, dayIndexes } from "./review";
@@ -166,15 +166,16 @@ export const SETUP_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "add_service",
-    description: "Add a service they offer, exactly as they described it.",
+    description:
+      "Add a service they offer, exactly as they described it. Only the name is needed; pass a length or a price only when they gave one. Never guess either.",
     input_schema: {
       type: "object",
       properties: {
         name: { type: "string" },
-        duration_min: { type: "number" },
-        price: { type: "number", description: "In the venue's currency. 0 if they do not want a price quoted." },
+        duration_min: { type: "number", description: "Minutes, when they said. Needed only when bookings go into Belline's diary; the tool says so." },
+        price: { type: "number", description: "In the venue's currency, when they said. Leave out and Belline tells customers the team will confirm the price." },
       },
-      required: ["name", "duration_min", "price"],
+      required: ["name"],
     },
   },
   {
@@ -349,9 +350,11 @@ export function executeSetupTool(
       if (!location.salon) return { ok: false, say: "This is a restaurant: tables and service times are set on the How it works page. Say so." };
       const serviceName = text(input.name, 80);
       if (!serviceName) return { ok: false, say: "Ask what the service is called." };
-      const durationMin = Math.round(Number(input.duration_min));
+      const durationMin = Math.max(0, Math.round(Number(input.duration_min) || 0));
       const price = Math.max(0, Math.round(Number(input.price) || 0));
-      if (!Number.isFinite(durationMin) || durationMin <= 0) return { ok: false, say: "Ask how long the service takes." };
+      if (durationMin <= 0 && serviceLengthsRequired(location)) {
+        return { ok: false, say: "Bookings go into Belline's diary, so ask how long the service takes." };
+      }
       const existing = location.salon.services;
       if (existing.some((s) => s.name.toLowerCase() === serviceName.toLowerCase())) {
         return { ok: false, say: `${serviceName} is already on the list. Ask whether they want to change its duration or price instead.` };
@@ -364,7 +367,7 @@ export function executeSetupTool(
         existing.every((e) => s.serviceIds.includes(e.id)) || everything.size === 0 ? { ...s, serviceIds: [...s.serviceIds, id] } : s,
       );
       const next: Location = { ...location, salon: { ...location.salon, services: [...existing, service], staff } };
-      return commit(location, next, by, `service ${serviceName}, ${durationMin} min, ${price}`);
+      return commit(location, next, by, `service ${serviceName}${durationMin ? `, ${durationMin} min` : ""}${price ? `, ${price}` : ""}`);
     }
 
     case "edit_service": {
@@ -381,8 +384,8 @@ export function executeSetupTool(
         changed.name = newName;
       }
       if (input.duration_min !== undefined) {
-        const d = Math.round(Number(input.duration_min));
-        if (!Number.isFinite(d) || d <= 0) return { ok: false, say: "Ask how long the service takes." };
+        const d = Math.max(0, Math.round(Number(input.duration_min) || 0));
+        if (d <= 0 && serviceLengthsRequired(location)) return { ok: false, say: "Bookings go into Belline's diary, so ask how long the service takes." };
         changed.durationMin = d;
       }
       if (input.price !== undefined) {
@@ -394,7 +397,7 @@ export function executeSetupTool(
         ...location,
         salon: { ...location.salon, services: location.salon.services.map((s) => (s.id === service.id ? changed : s)) },
       };
-      return commit(location, next, by, `service ${changed.name}, ${changed.durationMin} min, ${changed.price}`);
+      return commit(location, next, by, `service ${changed.name}${changed.durationMin ? `, ${changed.durationMin} min` : ""}${changed.price ? `, ${changed.price}` : ""}`);
     }
 
     case "remove_service": {
@@ -641,7 +644,9 @@ function summary(location: Location): string {
   const lines = [
     `Business: ${location.name} (${location.vertical}), ${location.address || "no address yet"}`,
     `Hours: ${hours}`,
-    location.salon ? `Services: ${location.salon.services.map((s) => `${s.name} ${s.durationMin}min ${s.price}`).join("; ") || "none"}` : "",
+    location.salon
+      ? `Services: ${location.salon.services.map((s) => `${s.name} ${s.durationMin > 0 ? `${s.durationMin}min` : "no length"} ${s.price > 0 ? s.price : "no price"}`).join("; ") || "none"}`
+      : "",
     location.salon ? `Staff: ${location.salon.staff.map((s) => s.name).join(", ") || "none"}` : "",
     `Bookings: ${location.onboarding?.destination?.kind ?? "not chosen yet"}`,
     `Urgent calls to: ${location.agent.transferNumber || "not set"}`,
