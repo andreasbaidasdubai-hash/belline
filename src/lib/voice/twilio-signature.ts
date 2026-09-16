@@ -15,6 +15,26 @@ import crypto from "node:crypto";
  * missing token is the normal state and refusing would only mean nobody could
  * run the thing locally.
  */
+/**
+ * The public URL Twilio requested, which is the one it signed.
+ *
+ * Railway (like every managed host) terminates TLS at the edge and forwards
+ * plain HTTP, so request.url says http:// while Twilio signed the https:// URL
+ * the caller actually hit. Rebuilt from the forwarded headers, or the
+ * signature never matches.
+ */
+export function publicRequestUrl(request: Request): string {
+  const url = new URL(request.url);
+  const signed = new URL(url.toString());
+  signed.protocol = (request.headers.get("x-forwarded-proto") ?? "https").split(",")[0].trim() + ":";
+  // Clear the port before setting the host: the URL host setter leaves the
+  // existing port in place unless the new value carries one of its own, which
+  // would otherwise leave the internal :3000 glued to the public hostname.
+  signed.port = "";
+  signed.host = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? url.host).split(",")[0].trim();
+  return signed.toString();
+}
+
 export function twilioSignatureValid(
   url: string,
   params: Record<string, string>,

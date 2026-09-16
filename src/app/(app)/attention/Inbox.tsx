@@ -17,6 +17,7 @@ import type { AttentionItem, AttentionKind } from "@/lib/attention";
 const TONE: Record<AttentionKind, { border: string; ink: string; wash: string }> = {
   waitlist_match: { border: "var(--ok)", ink: "var(--ok)", wash: "var(--ok-soft)" },
   booking_request: { border: "var(--accent)", ink: "var(--accent)", wash: "var(--panel-2)" },
+  voicemail: { border: "var(--accent)", ink: "var(--accent)", wash: "var(--panel-2)" },
   escalated: { border: "var(--bad)", ink: "var(--bad)", wash: "var(--bad-soft)" },
   transferred: { border: "var(--warn)", ink: "var(--warn)", wash: "var(--warn-soft)" },
   message: { border: "var(--gold-ink)", ink: "var(--gold-ink)", wash: "var(--panel-2)" },
@@ -150,7 +151,12 @@ export default function Inbox({
                     Call {item.callbackNumber}
                   </a>
                 )}
-                {item.callId && (
+                {item.recordingHref && (
+                  <a className="btn" href={item.recordingHref} target="_blank" rel="noreferrer">
+                    Listen to the voicemail
+                  </a>
+                )}
+                {item.callId && !item.recordingHref && (
                   <Link className="btn" href={`/calls/${item.callId}`}>
                     Read the call
                   </Link>

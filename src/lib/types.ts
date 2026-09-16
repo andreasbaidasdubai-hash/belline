@@ -1364,6 +1364,24 @@ export interface Call {
   isTest?: boolean;
   /** Twilio's id for a phone call, so a retried webhook cannot record it twice. */
   callSid?: string;
+  /**
+   * A voicemail the caller chose to leave on a venue that had not gone live.
+   *
+   * No agent, no stream and no speech-to-text: Twilio played a greeting and
+   * recorded the message. Only Twilio's handles are kept — the recording
+   * itself stays with Twilio and is played to the owner through
+   * /api/voicemail/<callId> — and nothing transcribes it. Never billed as
+   * minutes (billing/usage.ts). See telephony/voicemail.ts.
+   */
+  voicemail?: {
+    /** Twilio's RecordingSid. One recording is one inbox item, however often Twilio calls back. */
+    recordingSid: string;
+    /** Twilio's RecordingUrl, fetched with our Twilio credentials, never linked to directly. */
+    recordingUrl: string;
+    durationSeconds: number;
+    /** Left before the owner pressed Go live. The only case voicemail is offered in. */
+    beforeLive: true;
+  };
 }
 
 /** A pre-bought Belline number waiting in, or taken from, the pool. See telephony/pool.ts. */

@@ -34,7 +34,9 @@ export type AttentionKind =
   /** Somebody on the waitlist can now have what they asked for. */
   | "waitlist_match"
   /** A business that confirms its own bookings has one to confirm. */
-  | "booking_request";
+  | "booking_request"
+  /** A caller left a voicemail on a venue that had not gone live. */
+  | "voicemail";
 
 export interface AttentionItem {
   /** The call this came from. Absent on a waitlist match, which has no call. */
@@ -55,6 +57,8 @@ export interface AttentionItem {
   todo: string;
   at: string;
   callbackNumber?: string;
+  /** Where the owner listens to a voicemail: our authenticated route, never Twilio's URL. */
+  recordingHref?: string;
 }
 
 /** The caller's own words from the first thing they said. */
@@ -93,6 +97,25 @@ export function attentionFor(location: Location, includeResolved = false): Atten
         at: call.endedAt ?? call.startedAt,
         what: call.summary ?? firstAsk(call) ?? "—",
       };
+
+      // A caller reached the line before Go live and left a message. Belline
+      // did not answer them, so this is a callback the team owes.
+      if (call.voicemail) {
+        const seconds = call.voicemail.durationSeconds;
+        return [
+          {
+            ...base,
+            kind: "voicemail" as const,
+            urgency: 85,
+            who: call.from && call.from !== "unknown" ? call.from : "Unknown caller",
+            what: `Left a voicemail${seconds > 0 ? ` (${seconds} ${seconds === 1 ? "second" : "seconds"})` : ""} before you went live.`,
+            why: "Your line forwarded this call to Belline before you pressed Go live, so Belline did not answer it. The caller chose to leave a message.",
+            todo: "Listen to it and call them back.",
+            callbackNumber: call.from && call.from !== "unknown" ? call.from : undefined,
+            recordingHref: `/api/voicemail/${call.id}`,
+          },
+        ];
+      }
 
       // Nothing was booked: the team has to confirm it, or offer another time.
       if (call.bookingRequests?.length) {
@@ -237,6 +260,7 @@ export function reopenAttention(callId: string): Call | null {
 export const KIND_LABEL: Record<AttentionKind, string> = {
   waitlist_match: "Slot free",
   booking_request: "Booking request",
+  voicemail: "Voicemail before going live",
   escalated: "Sent elsewhere",
   transferred: "Transferred",
   message: "Message",

@@ -1,13 +1,14 @@
 import { findCallBySid, listLocations } from "@/lib/store";
 import { TEST_SCRIPT, isVerificationCall, recordVerificationCall } from "@/lib/telephony/verify";
-import { twilioSignatureValid } from "@/lib/voice/twilio-signature";
+import { publicRequestUrl, twilioSignatureValid } from "@/lib/voice/twilio-signature";
 import { signStreamToken } from "@/lib/auth";
 import { checkDemoGate, clearOldDemoBookings, isDemo } from "@/lib/demo";
 import { seedIfEmpty } from "@/lib/seed";
 import { serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
-import { answersRealCustomers, notLiveMessage } from "@/lib/onboarding/journey";
+import { answersRealCustomers } from "@/lib/onboarding/journey";
 import { venueForDialledNumber } from "@/lib/telephony/number";
+import { voicemailTwiml } from "@/lib/telephony/voicemail";
 
 export const dynamic = "force-dynamic";
 
@@ -49,27 +50,16 @@ export async function POST(request: Request) {
   const params = Object.fromEntries(new URLSearchParams(raw)) as Record<string, string>;
   const url = new URL(request.url);
 
-  // Railway (like every managed host) terminates TLS at the edge and forwards
-  // plain HTTP, so request.url says http:// while Twilio signed the https://
-  // URL the caller actually hit. Rebuild the public URL from the forwarded
-  // headers or the signature never matches.
-  const signedUrl = new URL(url.toString());
-  signedUrl.protocol = (request.headers.get("x-forwarded-proto") ?? "https").split(",")[0].trim() + ":";
-  // Clear the port before setting the host: the URL host setter leaves the
-  // existing port in place unless the new value carries one of its own, which
-  // would otherwise leave the internal :3000 glued to the public hostname.
-  signedUrl.port = "";
-  signedUrl.host = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? url.host)
-    .split(",")[0]
-    .trim();
+  // The https:// URL Twilio signed, not the http:// one the edge forwarded.
+  const signedUrl = publicRequestUrl(request);
 
-  if (!signatureValid(signedUrl.toString(), params, request.headers.get("x-twilio-signature"))) {
+  if (!signatureValid(signedUrl, params, request.headers.get("x-twilio-signature"))) {
     // A rejected call is silent from the caller's side — Twilio just plays its
     // own failure message — so say why here or the next misconfigured host
     // costs an afternoon. Never log the signature itself.
     console.warn(
       "[twilio] signature rejected. signed-url=%s raw-url=%s proto=%s fwd-host=%s host=%s params=%s",
-      signedUrl.toString(),
+      signedUrl,
       request.url,
       request.headers.get("x-forwarded-proto"),
       request.headers.get("x-forwarded-host"),
@@ -148,14 +138,13 @@ export async function POST(request: Request) {
 
   // Not live yet: the owner has not pressed Go live, which needs the eight
   // checks passed first. Their forwarding test above is still answered; a real
-  // customer is not, and no stream, agent or minute is spent on them.
+  // customer is not, and no stream, agent or minute is spent on them. Their
+  // line may already forward here, though, so the caller can leave a
+  // voicemail for the owner rather than be turned away: Twilio's own <Say>
+  // and <Record>, nothing else (telephony/voicemail.ts).
   if (!answersRealCustomers(location)) {
-    console.warn("[twilio] not live yet for %s: refusing a real call", location.id);
-    return xml(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="Polly.Joanna">${escapeXml(notLiveMessage(location.name))}</Say>
-  <Hangup/>
-</Response>`);
+    console.warn("[twilio] not live yet for %s: offering voicemail", location.id);
+    return xml(voicemailTwiml(location));
   }
 
   if (isDemo(location)) {

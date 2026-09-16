@@ -122,7 +122,7 @@ const FAQS = [
   },
   {
     q: "What happens to our customers' data?",
-    a: "Transcripts and messages are stored so you can check what was said. Call audio is not recorded. The data belongs to your business, and we hand it over if you leave.",
+    a: "Transcripts and messages are stored so you can check what was said. Call audio is not recorded, with one exception the caller chooses: before a business goes live, a caller can leave a voicemail, and that recording is kept for the business. The data belongs to your business, and we hand it over if you leave.",
   },
   {
     q: "Is this a recording?",

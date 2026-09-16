@@ -379,6 +379,7 @@ console.log("\n\x1b[1mThe forwarding test call\x1b[0m\n");
       assert.equal(res.status, 200);
       assert.ok(xml.includes("Belline test call"), xml);
       assert.ok(!xml.includes("<Stream"), "the test call opened a metered stream");
+      assert.ok(!xml.includes("<Record"), "the owner's forwarding test was sent to voicemail");
       assert.ok(getLocation(salonC.id)!.onboarding?.channels.phone?.forwardingVerifiedAt);
       const retry = await (await send()).text();
       assert.ok(retry.includes("Belline test call"), "Twilio's retry of the same call reached the agent");
@@ -411,17 +412,116 @@ console.log("\n\x1b[1mThe forwarding test call\x1b[0m\n");
         assert.equal(res.status, 200);
         return res.text();
       };
+      const callsBefore = listCalls(venueD.id, { includeTests: true }).length;
       const before = await quiet(() => call("CA_not_live_1"));
-      assert.ok(!before.includes("<Stream"), "a real customer reached the agent before Go live");
+      assert.ok(!before.includes("<Stream") && !before.includes("<Connect"), "a real customer reached the agent before Go live");
       assert.ok(before.includes("<Hangup/>"));
       assert.doesNotMatch(before, /setup|trial|checks|go live|plan/i, "the caller was told about the owner's setup");
+      // A voicemail instead: Twilio's own Say and Record, in the business's name, calling back to us.
+      assert.ok(before.includes(`<Say voice="Polly.Joanna">Thanks for calling ${venueD.name.replace(/&/g, "&amp;")}. Please leave your name and number after the tone, and the team will call you back.</Say>`), before);
+      const record = before.match(/<Record [^>]*\/>/)?.[0] ?? "";
+      assert.match(record, /maxLength="60"/);
+      assert.match(record, /finishOnKey="#"/);
+      assert.match(record, /action="\/api\/twilio\/voicemail\?loc=loc_lumiere&amp;via=action"/);
+      assert.match(record, /recordingStatusCallback="\/api\/twilio\/voicemail\?loc=loc_lumiere&amp;via=status"/);
+      assert.doesNotMatch(record, /transcribe/, "Twilio's paid transcription was switched on");
+      assert.ok(before.indexOf("<Record") < before.indexOf("<Hangup/>"));
+      assert.equal(listCalls(venueD.id, { includeTests: true }).length, callsBefore, "offering voicemail started a call record, and so an agent");
       const live = getLocation(venueD.id)!;
       upsertLocation({ ...live, onboarding: { ...live.onboarding!, activatedAt: "2026-09-15T11:00:00.000Z" } });
       const after = await quiet(() => call("CA_live_1"));
       assert.ok(after.includes("<Stream"), after);
+      assert.ok(!after.includes("<Record"), "a live venue's callers were sent to voicemail");
     } finally {
       process.env = keep;
     }
+  });
+
+  t("a voicemail callback: a bad signature is refused; action, status and replays make exactly one item in Needs you, with no minutes", async () => {
+    const crypto = await import("node:crypto");
+    const { POST } = await import("../src/app/api/twilio/voicemail/route");
+    const { attentionFor } = await import("../src/lib/attention");
+    const { billableVoiceMinutes } = await import("../src/lib/billing/usage");
+    const venueE = getLocation("loc_meridian")!;
+    upsertLocation({ ...venueE, bellineNumber: { number: "+97140000005", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" }, onboarding: { version: 1, channels: {} } });
+    const keep = { ...process.env };
+    process.env.TWILIO_AUTH_TOKEN = "test-token";
+    try {
+      const recording = "https://api.twilio.com/2010-04-01/Accounts/ACtest0001/Recordings/REabc1234567890";
+      const send = async (via: "action" | "status", form: Record<string, string>, sign = true) => {
+        const url = `https://app.belline.ai/api/twilio/voicemail?loc=loc_meridian&via=${via}`;
+        const payload = url + Object.keys(form).sort().map((k) => k + form[k]).join("");
+        const signature = sign ? crypto.createHmac("sha1", "test-token").update(payload, "utf8").digest("base64") : "forged";
+        return quiet(() =>
+          POST(
+            new Request(url, {
+              method: "POST",
+              headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": signature, host: "app.belline.ai", "x-forwarded-proto": "https" },
+              body: new URLSearchParams(form).toString(),
+            }),
+          ),
+        );
+      };
+      const items = () => attentionFor(getLocation(venueE.id)!).filter((i) => i.kind === "voicemail");
+      const status = { AccountSid: "ACtest0001", CallSid: "CA_vm_1", RecordingSid: "REabc1234567890", RecordingUrl: recording, RecordingStatus: "completed", RecordingDuration: "14" };
+      const action = { AccountSid: "ACtest0001", CallSid: "CA_vm_1", From: "+971507770001", To: "+97140000005", RecordingSid: "REabc1234567890", RecordingUrl: recording, RecordingDuration: "14", Digits: "#" };
+
+      const forged = await send("action", action, false);
+      assert.equal(forged.status, 403);
+      assert.equal(items().length, 0, "an unsigned callback put an item in the owner's list");
+
+      // The status callback can arrive first, without the caller's number.
+      assert.equal((await send("status", status)).status, 200);
+      const thanks = await (await send("action", action)).text();
+      assert.match(thanks, /Thank you\. The team will call you back\.[\s\S]*<Hangup\/>/);
+      await send("action", action);
+      await send("status", status);
+
+      const list = items();
+      assert.equal(list.length, 1, "a replayed callback made a second item");
+      const item = list[0];
+      assert.equal(item.who, "+971507770001");
+      assert.equal(item.callbackNumber, "+971507770001");
+      assert.match(item.what, /voicemail \(14 seconds\) before you went live/);
+      assert.match(item.why, /before you pressed Go live/);
+      assert.equal(item.recordingHref, `/api/voicemail/${item.callId}`, "the owner was linked to Twilio rather than through our own route");
+      const stored = listCalls(venueE.id).find((c) => c.id === item.callId)!;
+      assert.deepEqual(stored.voicemail, { recordingSid: "REabc1234567890", recordingUrl: recording, durationSeconds: 14, beforeLive: true });
+      assert.deepEqual(stored.transcript, [], "a voicemail was transcribed");
+      assert.equal(billableVoiceMinutes(stored), 0, "a voicemail was billed as minutes");
+      // Only that venue's list.
+      assert.equal(attentionFor(getLocation("loc_azure")!).filter((i) => i.kind === "voicemail").length, 0);
+
+      // Nothing but Twilio's own recording URL is ever stored or fetched.
+      const elsewhere = await send("status", { ...status, RecordingSid: "REother1234567", RecordingUrl: "https://evil.example/r.mp3" });
+      assert.equal(elsewhere.status, 200);
+      assert.equal(listCalls(venueE.id).filter((c) => c.voicemail?.recordingSid === "REother1234567").length, 0);
+
+      // The recording is played through a signed-in route that checks the venue.
+      const player = fs.readFileSync(path.join(process.cwd(), "src", "app", "api", "voicemail", "[callId]", "route.ts"), "utf8");
+      assert.match(player, /requireApiUser\(\)/);
+      assert.match(player, /canSeeLocation\(auth\.user, call\.locationId\)/);
+    } finally {
+      process.env = keep;
+    }
+  });
+
+  t("the website, the privacy policy and Belle no longer say 'not recorded' without the voicemail exception", async () => {
+    const { bellineVenue } = await import("../src/lib/seed-belline");
+    const texts: [string, string][] = [
+      ["privacy.html", fs.readFileSync(path.join(process.cwd(), "public", "privacy.html"), "utf8")],
+      ["landing.html", fs.readFileSync(path.join(process.cwd(), "public", "landing.html"), "utf8")],
+      ["Belle", bellineVenue.agent.faqs.map((f) => f.a).join("\n")],
+    ];
+    for (const [where, text] of texts) {
+      const claims = text.split(/(?<=[.!?])\s+|\n|<\/p>/).filter((s) => /not recorded/i.test(s));
+      assert.ok(claims.length > 0, `${where} no longer says what is not recorded`);
+      for (const claim of claims) assert.match(claim, /exception/i, `${where} says "${claim.trim().slice(0, 80)}" with no voicemail exception`);
+      assert.match(text, /voicemail/i, `${where} does not mention voicemail`);
+    }
+    const privacy = texts[0][1];
+    assert.match(privacy, /That voicemail is a recording\. It is stored by Twilio, played only to the people at that business, not turned into text/);
+    assert.match(privacy, /voicemail recordings are kept/i);
   });
 
   for (const [name, fn] of tests) {
