@@ -30,6 +30,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-webchat-"));
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || "webchat-test-secret";
@@ -810,6 +811,216 @@ await test("the call panel's status words say request and handover, never booked
   assert.match(statuses, /Passed to the team/);
   // A scene without recordings must not leave a Listen button that throws.
   assert.match(js, /listenBtn\.disabled = !/, "Listen is not disabled for a scene without audio");
+});
+
+// ---------------------------------------------------------------------------
+head("The integrations strip");
+
+/**
+ * Six systems, none connected when the strip was added. Google Calendar and
+ * Outlook are being built, the four booking platforms need partner agreements
+ * Belline does not have. The strip may say where each stands and nothing
+ * more, its tags must follow the flags at build time, and it names the
+ * companies as text, never with their logo files.
+ */
+const {
+  INTEGRATIONS,
+  INTEGRATIONS_HEADING,
+  STATE_LABEL,
+  integrationState,
+  renderIntegrations,
+} = await import("./site-integrations");
+
+const STRIP_NAMES = ["Google Calendar", "Outlook", "Fresha", "SevenRooms", "OpenTable", "Treatwell"];
+
+const stripOf = (html: string) => {
+  const start = html.indexOf('<section id="connects"');
+  assert.ok(start >= 0, "the landing page has no integrations strip");
+  return html.slice(start, html.indexOf("</section>", start));
+};
+
+/** Each wordmark and the tag beside it, in page order. */
+const tagsIn = (strip: string) =>
+  [...strip.matchAll(/<span class="connect-name">([^<]+)<\/span>\s*<span class="state [^"]+">([^<]+)<\/span>/g)].map(
+    (m) => [m[1], m[2]] as [string, string],
+  );
+
+const plainText = (html: string) =>
+  html.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
+
+/**
+ * A "works with" or "integrates with" sentence naming a system that is not
+ * live in this build. The phrase and the name have to share a sentence, so
+ * "Works with how you already work." above an unrelated list is not a claim.
+ */
+const connectionClaims = (text: string, notLive: string[]) =>
+  [...text.matchAll(/[^.?!]*\b(?:works|integrates) with\b[^.?!]*/gi)]
+    .map((m) => m[0].trim())
+    .filter((sentence) => notLive.some((name) => sentence.toLowerCase().includes(name.toLowerCase())));
+
+/** Build the whole site into a throwaway folder with exactly this env on top of a scrubbed one. */
+function buildLanding(extra: Record<string, string>): string {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "belline-site-"));
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const k of Object.keys(env)) {
+    // Nothing from this machine may decide a flag in the test builds.
+    if (/^(?:FLAG_|GOOGLE_|MICROSOFT_|PARTNER_|CREDENTIALS_KEY$|DATABASE_URL$)/.test(k)) delete env[k];
+  }
+  Object.assign(env, extra, { SITE_OUT: out });
+  const run = spawnSync(process.execPath, ["--import", "tsx", path.join("scripts", "build-site.ts")], {
+    cwd: process.cwd(),
+    env,
+    encoding: "utf8",
+  });
+  try {
+    assert.equal(run.status, 0, `the site build failed:\n${run.stdout}\n${run.stderr}`);
+    return fs.readFileSync(path.join(out, "index.html"), "utf8");
+  } finally {
+    fs.rmSync(out, { recursive: true, force: true });
+  }
+}
+
+const GOOGLE_ON = {
+  GOOGLE_CLIENT_ID: "test-client-id",
+  GOOGLE_CLIENT_SECRET: "test-client-secret",
+  CREDENTIALS_KEY: "test-credentials-key",
+  FLAG_BOOKING_GOOGLE: "on",
+};
+
+const builds = new Map<string, string>();
+const built = (which: "off" | "on") => {
+  if (!builds.has(which)) builds.set(which, buildLanding(which === "on" ? GOOGLE_ON : {}));
+  return builds.get(which)!;
+};
+
+await test("the strip sits directly under the hero, with its heading and all six names, each tagged in words", () => {
+  const html = visibleHtml("landing.html");
+  const heroEnd = html.indexOf("</section>", html.indexOf('<section class="hero">'));
+  const next = html.indexOf("<section", heroEnd);
+  assert.equal(html.indexOf('<section id="connects"'), next, "the integrations strip is not the section after the hero");
+  const strip = stripOf(html);
+  assert.match(strip, new RegExp(`<h2 class="connects-h" id="connects-h">${INTEGRATIONS_HEADING}</h2>`));
+  assert.equal(INTEGRATIONS_HEADING, "Connecting to the tools you already use");
+  assert.deepEqual(INTEGRATIONS.map((i) => i.name), STRIP_NAMES);
+  assert.deepEqual(tagsIn(strip).map(([name]) => name), STRIP_NAMES, "the strip does not show the six names in order, each with a tag");
+});
+
+await test("the committed template is the flag-off strip, generated, never hand-edited", () => {
+  const raw = fs.readFileSync(path.join(process.cwd(), "public", "landing.html"), "utf8").replace(/\r\n/g, "\n");
+  const block = raw.slice(raw.indexOf("<!-- integrations:start"), raw.indexOf("<!-- integrations:end -->"));
+  assert.ok(block.includes(renderIntegrations({})), "public/landing.html's strip differs from what a flag-off build renders");
+  assert.deepEqual(tagsIn(stripOf(visibleHtml("landing.html"))), [
+    ["Google Calendar", "Coming soon"],
+    ["Outlook", "Coming soon"],
+    ["Fresha", "On our roadmap"],
+    ["SevenRooms", "On our roadmap"],
+    ["OpenTable", "On our roadmap"],
+    ["Treatwell", "On our roadmap"],
+  ]);
+});
+
+await test("built with booking.google off, Google Calendar reads Coming soon and nothing reads Available", () => {
+  const tags = tagsIn(stripOf(built("off")));
+  assert.deepEqual(tags, [
+    ["Google Calendar", "Coming soon"],
+    ["Outlook", "Coming soon"],
+    ["Fresha", "On our roadmap"],
+    ["SevenRooms", "On our roadmap"],
+    ["OpenTable", "On our roadmap"],
+    ["Treatwell", "On our roadmap"],
+  ]);
+  assert.doesNotMatch(stripOf(built("off")), /Available|state-available/);
+});
+
+await test("built with booking.google on, Google Calendar reads Available and nothing else changes", () => {
+  assert.deepEqual(tagsIn(stripOf(built("on"))), [
+    ["Google Calendar", "Available"],
+    ["Outlook", "Coming soon"],
+    ["Fresha", "On our roadmap"],
+    ["SevenRooms", "On our roadmap"],
+    ["OpenTable", "On our roadmap"],
+    ["Treatwell", "On our roadmap"],
+  ]);
+  assert.match(stripOf(built("on")), /<span class="state state-available">Available<\/span>/);
+});
+
+await test("Outlook and each booking platform follow their own flags, and stubs never make one Available", () => {
+  const byName = (name: string) => INTEGRATIONS.find((i) => i.name === name)!;
+  assert.equal(byName("Outlook").flag, "booking.outlook");
+  assert.equal(integrationState(byName("Outlook"), {}), "soon");
+  assert.equal(
+    integrationState(byName("Outlook"), {
+      MICROSOFT_CLIENT_ID: "x", MICROSOFT_CLIENT_SECRET: "x", CREDENTIALS_KEY: "x", FLAG_BOOKING_OUTLOOK: "on",
+    }),
+    "available",
+  );
+  for (const name of ["Fresha", "SevenRooms", "OpenTable", "Treatwell"]) {
+    const item = byName(name);
+    assert.match(item.flag, /^booking\.partner\.[a-z0-9-]+$/);
+    assert.equal(integrationState(item, {}), "roadmap");
+    const id = item.flag.slice("booking.partner.".length).toUpperCase().replace(/-/g, "_");
+    assert.equal(integrationState(item, { [`FLAG_BOOKING_PARTNER_${id}`]: "on", [`PARTNER_${id}_API_KEY`]: "k" }), "available");
+  }
+  // A local stubbed run switches flags on without credentials; the public site must not believe it.
+  assert.equal(integrationState(byName("Google Calendar"), { FLAG_STUBS: "on", FLAG_BOOKING_GOOGLE: "on" }), "soon");
+  assert.deepEqual(STATE_LABEL, { available: "Available", soon: "Coming soon", roadmap: "On our roadmap" });
+});
+
+await test("the pattern for a 'works with' claim catches a named system and spares the unrelated heading", () => {
+  assert.equal(connectionClaims("Works with Fresha and OpenTable.", STRIP_NAMES).length, 1);
+  assert.equal(connectionClaims("Belline integrates with Google Calendar today.", STRIP_NAMES).length, 1);
+  assert.deepEqual(connectionClaims("Works with how you already work. Fresha, SevenRooms or OpenTable: keep it.", STRIP_NAMES), []);
+});
+
+await test("no page says 'Works with' or 'Integrates with' for a system that is not live in that build", () => {
+  const notLiveOff = STRIP_NAMES;
+  const notLiveOn = STRIP_NAMES.filter((n) => n !== "Google Calendar");
+  const pages = fs.readdirSync(path.join(process.cwd(), "public")).filter((f) => f.endsWith(".html"));
+  for (const f of pages) {
+    assert.deepEqual(connectionClaims(plainText(visibleHtml(f)), notLiveOff), [], `public/${f}`);
+  }
+  assert.deepEqual(connectionClaims(plainText(built("off")), notLiveOff), [], "the flag-off build");
+  assert.deepEqual(connectionClaims(plainText(built("on")), notLiveOn), [], "the flag-on build");
+  // And the strip itself never uses either phrase, whatever the flags say.
+  for (const html of [visibleHtml("landing.html"), built("off"), built("on")]) {
+    assert.doesNotMatch(plainText(stripOf(html)), /\b(?:works?|integrates?|integrated) with\b/i);
+  }
+});
+
+await test("the strip names companies in text: no logo image, no external asset, nothing from their domains", () => {
+  const brandHosts = /google\.|microsoft\.|outlook\.|office\.com|live\.com|fresha\.|sevenrooms\.|opentable\.|treatwell\.|clearbit|logo\.dev|brandfetch|simpleicons|wikimedia/i;
+  for (const html of [visibleHtml("landing.html"), built("off"), built("on")]) {
+    const strip = stripOf(html);
+    assert.doesNotMatch(strip, /<img\b|<svg\b|<picture\b|<object\b|<use\b|srcset=|style=|url\(/i, "the strip carries an image");
+    const hrefs = [...strip.matchAll(/\b(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(hrefs, ["mailto:hello@belline.ai"], "the strip links somewhere other than the site's own contact address");
+    // Across the whole page: no image or stylesheet reference to a logo from outside the site.
+    const refs = [...html.matchAll(/\b(?:src|href|srcset|content)="([^"]+)"|url\(\s*['"]?([^'")]+)/gi)].map((m) => m[1] ?? m[2]);
+    for (const ref of refs) {
+      const external = /^(?:https?:)?\/\//i.test(ref) && !/^https:\/\/(?:app\.)?belline\.ai\//i.test(ref);
+      if (!external) continue;
+      assert.doesNotMatch(ref, /logo|\.(?:svg|png|jpe?g|webp|gif)(?:\?|$)/i, `the page references an external image: ${ref}`);
+      if (!/^https:\/\/fonts\.(?:googleapis|gstatic)\.com(?:\/|$)/.test(ref)) {
+        assert.doesNotMatch(ref, brandHosts, `the page references one of the six companies' sites: ${ref}`);
+      }
+    }
+  }
+  // The stylesheet's strip rules draw nothing, and no asset is named after one of the six.
+  const css = fs.readFileSync(path.join(process.cwd(), "public", "site.css"), "utf8");
+  const rules = css.slice(css.indexOf("/* --- Integrations strip"));
+  assert.ok(rules.length > 0 && css.includes("/* --- Integrations strip"), "site.css has lost the strip's rules");
+  assert.doesNotMatch(rules, /url\(/, "the strip's styles load an image");
+  const files = fs.readdirSync(path.join(process.cwd(), "public"), { recursive: true }) as string[];
+  const named = files.filter((f) => /google|outlook|microsoft|fresha|seven-?rooms|open-?table|treatwell/i.test(f));
+  assert.deepEqual(named, [], "public/ holds a file named after one of the six companies");
+});
+
+await test("the line under the strip asks for the missing system through the site's existing contact address", () => {
+  const html = visibleHtml("landing.html");
+  const strip = stripOf(html);
+  assert.match(plainText(strip), /Using a booking system we don’t list yet\? Tell us \./);
+  const elsewhere = html.slice(0, html.indexOf('<section id="connects"')) + html.slice(html.indexOf("</section>", html.indexOf('<section id="connects"')));
+  assert.ok(elsewhere.includes('href="mailto:hello@belline.ai"'), "the strip's contact address is not one the page already uses");
 });
 
 // ---------------------------------------------------------------------------

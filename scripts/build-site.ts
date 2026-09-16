@@ -15,10 +15,16 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { VERTICALS, type Vertical } from "./site-content";
 import { applyPricing, trialSentence } from "./site-pricing";
+import { applyIntegrations } from "./site-integrations";
 import { TRIAL } from "../src/lib/billing/plans";
 
 const SOURCE = "public";
-const OUT = "site";
+/**
+ * Where the build goes: `site/`, unless SITE_OUT names a folder. check-webchat
+ * builds the landing page twice, flag off and flag on, into throwaway folders
+ * that way, without touching the real site/.
+ */
+const OUT = process.env.SITE_OUT || "site";
 const ORIGIN = "https://belline.ai";
 
 /** The landing page becomes the site root; everything else keeps its name. */
@@ -283,6 +289,10 @@ for (const page of pages) {
   // catalogue change cannot ship with yesterday's prices even if nobody ran
   // `npm run pricing`; check-billing fails if public/landing.html is stale.
   if (page === "landing.html") html = applyPricing(html);
+  // The integrations strip's tags follow the flags as this build sees them:
+  // booking.google on is what turns Google Calendar "Available", and nothing
+  // else does. Throws if the strip's markers are gone.
+  if (page === "landing.html") html = applyIntegrations(html, process.env);
   if (page === "terms.html") html = fillTrial(html);
 
   html = repoint(fillLegal(html));
