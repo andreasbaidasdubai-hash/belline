@@ -4,7 +4,19 @@ import Brand from "@/components/Brand";
 import { requireUser } from "@/lib/auth-server";
 import { listCalls, listLocationsFor } from "@/lib/store";
 import { currentVenue } from "@/lib/onboarding";
-import { INTEGRATIONS, bellineDiaryOffered, factsFrom, isStepId, journey, type Journey, type Step } from "@/lib/onboarding/journey";
+import {
+  INTEGRATIONS,
+  bellineDiaryOffered,
+  channelStatuses,
+  checklistOf,
+  factsFrom,
+  isStepId,
+  journey,
+  stepAfter,
+  type ChannelStatus,
+  type Journey,
+  type Step,
+} from "@/lib/onboarding/journey";
 import { venueMarket } from "@/lib/onboarding/rules";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import { requestRulesOf } from "@/lib/booking/requests";
@@ -14,7 +26,7 @@ import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
 import { MARKETS } from "@/lib/markets";
 import { PHONE_OPTIONAL } from "@/lib/telephony/forwarding";
 import { flag } from "@/lib/flags";
-import { ownerTickets } from "@/lib/exceptions";
+import { listExceptions, ownerTickets } from "@/lib/exceptions";
 import { whatsappStatus } from "@/lib/whatsapp";
 import { whatsappCard, type WhatsAppCard as WhatsAppCardState } from "@/lib/whatsapp-selfserve";
 import { seedIfEmpty } from "@/lib/seed";
@@ -24,6 +36,10 @@ import { selftestAvailable, testsPassed, testsStale } from "@/lib/onboarding/sel
 import BelleDock from "../BelleDock";
 import SetupWizard from "../SetupWizard";
 import SelftestPanel from "../SelftestPanel";
+import WhatsAppAssisted from "@/app/(app)/integrations/WhatsAppAssisted";
+import { bellineNumberOf } from "@/lib/telephony/number";
+import ChatLinkCard from "@/app/(app)/channels/ChatLinkCard";
+import { chatLinkUrl } from "@/lib/chat-link";
 import { ActionButton, DestinationPicker, RulesForm, type DestinationOption } from "../StepActions";
 
 export const dynamic = "force-dynamic";
@@ -31,14 +47,17 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Set up Belline" };
 
 /**
- * One setup, one step at a time.
+ * One setup, one step at a time, in any order.
  *
- * Outside the `(app)` group on purpose: somebody who signed up ninety seconds
- * ago has one job, and a sidebar of dashboard links is a list of ways not to
- * do it. Every step has one primary button, placed before any detail so it is
- * on screen on a phone without scrolling. Steps that need an editor that
- * already exists link out to it with ?from=setup, and that page shows the way
- * back.
+ * Outside the `(app)` group so a step has the whole screen, and never a wall:
+ * every step opens whatever was done before it, every step can be skipped, and
+ * the dashboard is one press away in the header. What is left shows as a
+ * checklist on Today. Answering real customers is gated separately, per
+ * channel, by Go live (onboarding/journey.ts).
+ *
+ * Every step has one primary button, placed before any detail so it is on
+ * screen on a phone without scrolling. Steps that need an editor that already
+ * exists link out to it with ?from=setup, and that page shows the way back.
  *
  * The step is in the URL and everything on it is read from what is saved, so
  * a refresh, or signing in again next week, shows the same step.
@@ -76,8 +95,32 @@ function Card({ title, status, children }: { title: string; status: string; chil
   );
 }
 
+const STATE_WORD: Record<ChannelStatus["state"], string> = { live: "Live", waiting: "Waiting", not_set_up: "Not set up" };
+
+/** Each channel, and whether it is answering real customers. */
+function ChannelList({ statuses }: { statuses: ChannelStatus[] }) {
+  return (
+    <ul style={{ listStyle: "none", margin: "18px 0 0", padding: 0, display: "grid", gap: 8 }} data-testid="channel-statuses">
+      {statuses.map((c) => (
+        <li key={c.id} className="panel" style={{ padding: "12px 14px" }} data-channel={c.id} data-state={c.state}>
+          <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+            <strong style={{ fontSize: 14 }}>{c.label}</strong>
+            <span className="pill" style={{ marginLeft: "auto", color: c.state === "live" ? "var(--ok)" : c.state === "waiting" ? "var(--warn)" : "var(--text-2)" }}>
+              {STATE_WORD[c.state]}
+            </span>
+          </div>
+          <p className="muted" style={{ fontSize: 13, lineHeight: 1.5, margin: "4px 0 0" }}>
+            {c.detail}
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Rail({ j, active }: { j: Journey; active: Step }) {
-  const reachable = (s: Step) => s.done || s.id === j.next?.id || s.n <= (j.next?.n ?? Infinity);
+  // Every step opens, in any order. Nothing here is a gate.
+  const reachable = (_s: Step) => true;
   return (
     <>
       <style>{`
@@ -125,7 +168,7 @@ function Rail({ j, active }: { j: Journey; active: Step }) {
         </ol>
       </nav>
       <p className="setup-rail-compact muted" style={{ fontSize: 12.5, margin: "0 0 18px" }}>
-        Step {active.n} of {j.steps.length} · {j.steps.filter((s) => s.done).length} done
+        Step {active.n} of {j.steps.length} · {checklistOf(j).done} of {checklistOf(j).total} done
       </p>
     </>
   );
@@ -174,8 +217,8 @@ function destinationOptions(venue: Location): DestinationOption[] {
   return [
     {
       id: "requests",
-      title: "Phone, WhatsApp or walk-ins",
-      body: "Belline takes the details and tells the customer your team will confirm. Each request arrives in your Inbox.",
+      title: "My team confirms each booking",
+      body: "Belline takes the customer's details and the time they want, and tells them your team will confirm. Each request arrives in your Inbox for your team to confirm.",
       state: "available",
     },
     {
@@ -220,28 +263,15 @@ function Body({
   google?: string;
   whatsapp: WhatsAppCardState;
 }) {
-  const next = j.next;
-  const onward = next && next.id !== step.id ? next : null;
+  // Onward from this step, to the next one not done, or the dashboard. No
+  // step refuses to open because an earlier one is unfinished: a step that
+  // needs an earlier answer says so where it matters.
+  const onward = stepAfter(j, step.id);
   const cont = (
     <Link href={onward?.url ?? "/"} className="btn btn-accent" style={primary}>
       Continue
     </Link>
   );
-
-  // A step further on than the one the owner has reached shows the way back to
-  // it, not a button that would do something out of order. Reading and
-  // reviewing stay open: they are how an earlier answer gets changed.
-  if (next && step.n > next.n && step.id !== "golive" && !step.done) {
-    return (
-      <>
-        <Heading step={step} title={`Finish "${next.title}" first.`} />
-        <p style={lede}>Each step uses what the one before it saved.</p>
-        <Link href={next.url} className="btn btn-accent" style={primary}>
-          Go to {next.title.toLowerCase()}
-        </Link>
-      </>
-    );
-  }
 
   switch (step.id) {
     case "business":
@@ -264,6 +294,7 @@ function Body({
           current={currentVenue(venue)}
           start={step.id === "review" ? "review" : "ask"}
           lengthsRequired={serviceLengthsRequired(venue)}
+          country={venueMarket(venue)}
         />
       );
 
@@ -303,6 +334,12 @@ function Body({
       return (
         <>
           <Heading step={step} title={requests ? "How Belline takes a request." : "Check the rules Belline follows."} />
+          {!o?.destination && (
+            <p className="panel" role="status" style={{ padding: "12px 14px", fontSize: 13.5, margin: "0 0 16px" }}>
+              These rules follow from where bookings go, so choose that first.{" "}
+              <Link href="/setup/bookings">Choose where bookings go</Link>
+            </p>
+          )}
           <p style={lede}>
             {requests
               ? "A few answers, and Belline follows them on every call and chat."
@@ -312,6 +349,7 @@ function Body({
             mode={destinationOf(venue) === "belline" ? "belline" : "requests"}
             restaurant={venue.vertical === "restaurant"}
             country={MARKETS[venueMarket(venue)].name}
+            countryIso={venueMarket(venue)}
             initial={{
               askFor: rules.askFor.length > 0,
               transferNumber: o?.escalation?.transferNumber || venue.agent.transferNumber || venue.phone,
@@ -348,13 +386,23 @@ function Body({
       const web = venue.onboarding?.channels.web;
       const phoneWorks = Boolean(phone?.forwardingVerifiedAt) || facts.phoneCalls > 0;
       const webWorks = Boolean(web?.detectedAt) || facts.webConversations > 0;
+      // One answer for "is it answering", shared with Today and Channels.
+      const status = Object.fromEntries(
+        channelStatuses(venue, facts, { whatsappConnected: whatsapp.state === "live" }).map((c) => [c.id, c]),
+      ) as Record<ChannelStatus["id"], ChannelStatus>;
+      const pill = (c: ChannelStatus) => `${STATE_WORD[c.state]}${c.state === "waiting" && c.detail.startsWith("Connected") ? " — connected" : ""}`;
+      // Belline's own number, and only that. `venue.phone` also holds the
+      // business's own line from the review step, which was once shown here as
+      // the number to forward calls to.
+      const belline = bellineNumberOf(venue);
+      const action = { padding: "8px 14px", fontSize: 13.5, display: "inline-block" } as const;
       return (
         <>
           <Heading step={step} title="Let calls and chats reach Belline." />
           <p style={lede}>
-            One is enough to go live: the chat on your website, or your phone. Nothing is switched on until you do it, and
-            you can add the other later. The website counts once the widget loads on your site, and the phone once a test
-            call arrives.
+            One is enough to go live: the chat on your website, your chat link, or your phone. Nothing answers customers until
+            you go live, and you can add the others later. The website counts once the widget loads on your site, the chat
+            link once you make it, and the phone once a test call arrives.
           </p>
           {step.done ? (
             cont
@@ -368,34 +416,57 @@ function Body({
               </Link>
             </div>
           )}
-          <Card title="Your phone line (optional)" status={phoneWorks ? "Working" : venue.phone ? "Not forwarded yet" : "Optional"}>
-            {phoneWorks
-              ? "Forwarded calls are reaching Belline."
-              : venue.phone
-                ? `To use it, you dial a short code on your own phone that forwards the calls you miss to ${venue.phone}. Nothing is forwarded until you do.`
-                : flag("numbers.pool")
-                  ? "To use it, get your Belline number on the forwarding page. It takes a second, and nothing is forwarded until you dial a code yourself."
-                  : "Your Belline number is being prepared. It appears on the forwarding page as soon as it is ready."}
-            {!phoneWorks && !webWorks && (
+          <Card title="Your phone line (optional)" status={pill(status.phone)}>
+            <span data-testid="phone-card-text">
+              {phoneWorks
+                ? "Forwarded calls are reaching Belline."
+                : belline
+                  ? `To use it, you dial a short code on your own phone that forwards the calls you miss to your Belline number, ${belline}. Nothing is forwarded until you do.`
+                  : flag("numbers.pool")
+                    ? "To use it, get your Belline number on the forwarding page. It takes a second, and nothing is forwarded until you dial a code yourself."
+                    : "Your Belline number is being prepared. It appears on the forwarding page as soon as it is ready."}
+            </span>
+            {!phoneWorks && (
               <>
-                {" "}
-                {PHONE_OPTIONAL}{" "}
-                <Link href="/website?from=setup">Skip the phone for now</Link>
+                {!webWorks && <span style={{ display: "block", marginTop: 6 }}>{PHONE_OPTIONAL}</span>}
+                <span style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+                  {(belline || flag("numbers.pool")) && (
+                    <Link href="/golive?from=setup" className="btn" style={action}>
+                      {belline ? "Forward my calls" : "Get my Belline number"}
+                    </Link>
+                  )}
+                  <Link href={onward?.url ?? "/"} className="btn" style={action} data-testid="skip-phone">
+                    Skip the phone for now
+                  </Link>
+                </span>
               </>
             )}
           </Card>
-          <Card title="Your website" status={webWorks ? "Installed" : venue.embed?.enabled ? "Waiting for the widget to load" : "Not added yet"}>
+          <Card title="Your website" status={pill(status.web)}>
             {webWorks ? (
               "The widget is on your website."
             ) : (
               <>
-                Add the chat to your site with one line of code. <Link href="/website?from=setup">Add it to my website</Link>
+                Add the chat to your site with one line of code.
+                <span style={{ display: "block", marginTop: 10 }}>
+                  <Link href="/website?from=setup" className="btn btn-accent" style={action} data-testid="add-to-website">
+                    Add it to my website
+                  </Link>
+                </span>
               </>
             )}
           </Card>
-          <Card title="WhatsApp (optional)" status={whatsapp.state === "live" ? "Connected" : whatsapp.state === "soon" ? "Coming soon" : "Optional"}>
+          <Card title="Your chat link (no website needed)" status={pill(status.link)}>
+            A link that opens a chat with Belline, for your Instagram bio, your Google Business Profile or your WhatsApp status.
+            <ChatLinkCard locationId={venue.id} url={chatLinkUrl(venue)} live={status.link.state === "live"} />
+          </Card>
+          <Card title="WhatsApp (optional)" status={whatsapp.state === "soon" ? "Available — set up with us" : pill(status.whatsapp)}>
             {whatsapp.state === "soon" ? (
-              "Belline will answer a second WhatsApp number for you. Going live does not wait for it."
+              <>
+                WhatsApp works today on a second number for your business, which Belline sets up with you, so your own
+                WhatsApp stays as it is. Doing it yourself opens once Meta&apos;s verification is ready. Going live does not wait for it.
+                <WhatsAppAssisted locationId={venue.id} ticket={listExceptions({ locationId: venue.id, kind: "whatsapp_assisted_setup" }).find((e) => e.status !== "resolved")?.ticket} />
+              </>
             ) : whatsapp.state === "live" ? (
               "Belline answers your WhatsApp number."
             ) : (
@@ -439,11 +510,14 @@ function Body({
     }
 
     case "golive": {
+      const statuses = channelStatuses(venue, facts, { whatsappConnected: whatsapp.state === "live" });
       if (j.activated) {
         return (
           <>
-            <Heading step={step} title={`Belline is answering for ${venue.name}.`} />
+            <Heading step={step} title={`Belline is live for ${venue.name}.`} />
+            <p style={lede}>Each channel answers once it is connected. One you connect later starts answering on its own.</p>
             {cont}
+            <ChannelList statuses={statuses} />
           </>
         );
       }
@@ -453,7 +527,10 @@ function Body({
           <Heading step={step} title={j.canGoLive ? "Everything is ready." : "One thing before you go live."} />
           {j.canGoLive ? (
             <>
-              <p style={lede}>Belline starts answering real calls and chats for {venue.name}. You can pause it at any time.</p>
+              <p style={lede}>
+                Belline starts answering real customers for {venue.name} on the channels below that are connected. A channel you
+                connect later starts answering on its own, without going live again.
+              </p>
               <ActionButton action="activate" label="Go live" />
             </>
           ) : (
@@ -471,6 +548,7 @@ function Body({
               </>
             )
           )}
+          <ChannelList statuses={statuses} />
         </>
       );
     }
@@ -513,7 +591,7 @@ export default async function SetupStepPage({
   const step = j.steps.find((s) => s.id === requested)!;
   const tickets = ownerTickets(venue.id);
   // Only the channels step shows it, and only that step pays for the lookup.
-  const whatsapp = requested === "channels" ? whatsappCard(venue, await whatsappStatus(venue)) : ({ state: "soon" } as WhatsAppCardState);
+  const whatsapp = requested === "channels" || requested === "golive" ? whatsappCard(venue, await whatsappStatus(venue)) : ({ state: "soon" } as WhatsAppCardState);
 
   return (
     <div className="has-belle-fab" style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -531,6 +609,10 @@ export default async function SetupStepPage({
         <span className="muted" style={{ fontSize: 12.5, marginLeft: "auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {venue.name}
         </span>
+        {/* The dashboard is never behind setup. */}
+        <Link href="/" className="btn" style={{ padding: "6px 12px", fontSize: 13, flexShrink: 0 }} data-testid="setup-dashboard">
+          Dashboard
+        </Link>
         {/* No "Ask Belle" here: the floating bell (BelleDock) is the one way
             in, docked from 1024px up and /setup/assistant?step= below. */}
       </header>
@@ -540,6 +622,17 @@ export default async function SetupStepPage({
           <Rail j={j} active={step} />
           <main style={{ minWidth: 0, maxWidth: 720 }}>
             <Body step={step} j={j} venue={venue} facts={facts} google={google} whatsapp={whatsapp} />
+            {/* Every unfinished step can be left for later. */}
+            {!step.done && step.id !== "first-week" && (
+              <p style={{ margin: "26px 0 0", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                <Link href={stepAfter(j, step.id)?.url ?? "/"} className="btn" style={{ padding: "8px 14px", fontSize: 13.5 }} data-testid="setup-skip">
+                  Skip for now
+                </Link>
+                <span className="muted" style={{ fontSize: 12.5 }}>
+                  It stays on your checklist on Today.
+                </span>
+              </p>
+            )}
             {/* A ticket the team is working on, so the owner is not left guessing. */}
             {tickets.map((t) => (
               <div key={t.ticket} className="panel" role="status" style={{ padding: "12px 16px", marginTop: 22, fontSize: 13.5 }}>

@@ -251,6 +251,58 @@ await test("the owner route assigns through the pool; the staff override closes 
   assert.match(staff, /kind: "resolve", note:/);
 });
 
+console.log("\n\x1b[1mThe owner's own phone is never a forwarding target\x1b[0m\n");
+
+await test("the business phone saved on review is not a Belline number: no target, 'being prepared', and the pool still gives a real one", async () => {
+  const { bellineNumberOf } = await import("../src/lib/telephony/number");
+  const { openWindow } = await import("../src/lib/telephony/verify");
+  const { channelStatuses } = await import("../src/lib/onboarding/journey");
+  const owner = await newVenue("Pool Own Line");
+  // What the founder saw: 0502992339 typed as the business's own number, then
+  // shown on the channels step as the number to forward calls to.
+  upsertLocation({ ...getLocation(owner.id)!, phone: "0502992339" });
+  const v = () => getLocation(owner.id)!;
+  assert.equal(bellineNumberOf(v()), "", "the owner's own phone was taken for a Belline number");
+  assert.deepEqual(forwardingCodes(bellineNumberOf(v())), [], "forwarding codes were built for the owner's own phone");
+  const phone = channelStatuses(v())[0];
+  assert.equal(phone.state, "not_set_up");
+  assert.match(phone.detail, /Your Belline number is being prepared/);
+  assert.equal(openWindow(v(), "du").ok, false, "a forwarding test was opened against the owner's own phone");
+  off();
+  assert.equal(quiet(() => assignNumber(v())).state, "preparing", "assignNumber returned the owner's own phone as assigned");
+  on();
+  addPoolNumbers(["+97140000088"]);
+  const got = quiet(() => assignNumber(v()));
+  assert.equal(got.state, "assigned");
+  const number = got.state === "assigned" ? got.number : "";
+  assert.ok(listPoolRows().some((r) => r.number === number && r.locationId === owner.id), `${number} is not a pool number assigned to the venue`);
+  assert.notEqual(number.replace(/\D/g, "").slice(-9), "502992339");
+  assert.equal(bellineNumberOf(v()), number);
+});
+
+await test("a number staff set by hand, or one our own venues always had, is Belline's", async () => {
+  const { bellineNumberOf } = await import("../src/lib/telephony/number");
+  const hand = await newVenue("Pool Hand Set");
+  const base = getLocation(hand.id)!;
+  upsertLocation({ ...base, phone: "+97140000099", onboarding: { ...base.onboarding!, channels: { phone: { numberAssignedAt: "2026-09-16T08:00:00.000Z" } } } });
+  assert.equal(bellineNumberOf(getLocation(hand.id)!), "+97140000099");
+  assert.match(source("src/app/api/sales/clients/number/route.ts"), /numberAssignedAt = new Date\(\)\.toISOString\(\)/);
+  for (const id of ["loc_azure", "loc_lumiere", "loc_meridian", "loc_belline"]) {
+    const l = getLocation(id);
+    if (l?.phone.trim()) assert.equal(bellineNumberOf(l), l.phone.trim(), id);
+  }
+});
+
+await test("the channels step, Go live and Belle read only the Belline number", () => {
+  const step = source("src/app/setup/[step]/page.tsx");
+  assert.doesNotMatch(step, /forwards the calls you miss to \$\{venue\.phone\}/, "the channels card still forwards to venue.phone");
+  assert.match(step, /const belline = bellineNumberOf\(venue\)/);
+  assert.match(step, /Your Belline number is being prepared/);
+  assert.match(source("src/app/(app)/golive/page.tsx"), /const number = bellineNumberOf\(location\)/);
+  assert.match(source("src/lib/onboarding/assistant.ts"), /const number = bellineNumberOf\(location\)/);
+  assert.match(source("src/lib/telephony/verify.ts"), /bellineNumberOf\(location\)/);
+});
+
 await test("nothing tried to reach a real provider", () => {
   assert.deepEqual(blockedFetches(), []);
 });

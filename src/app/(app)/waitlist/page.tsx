@@ -6,6 +6,7 @@ import { minutesToSpoken, dateToSpoken, todayIn } from "@/lib/time";
 import { isRestaurant } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import { AddToWaitlist, RemoveFromWaitlist } from "./WaitlistManager";
+import { venueMarket } from "@/lib/onboarding/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ export default async function WaitlistPage({
 
       {/* Somebody rings the desk and asks to be told when Friday frees up.
           Until now only Belline could write that down. */}
-      <AddToWaitlist locationId={location.id} restaurant={isRestaurant(location)} today={today} />
+      <AddToWaitlist locationId={location.id} restaurant={isRestaurant(location)} today={today} country={venueMarket(location)} />
 
       {entries.length === 0 ? (
         <div className="panel">

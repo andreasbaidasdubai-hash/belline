@@ -12,7 +12,7 @@ import {
 } from "./store";
 import { canManageUsers } from "./auth";
 import { ensureBaseline } from "./brain";
-import { normalisePhone } from "./leads";
+import { requireE164 } from "./phone";
 import { blankVenue } from "./onboarding";
 
 /**
@@ -124,12 +124,15 @@ function applyBasics(location: Location, input: LocationInput): LocationResult {
     next.timezone = tz;
   }
   if (input.address !== undefined) next.address = String(input.address).trim().slice(0, 240);
-  if (input.phone !== undefined) {
+  // With its country code, always (lib/phone.ts): a number that is new or
+  // changed must arrive as E.164. One sent back exactly as stored is kept, so a
+  // venue saved before this rule can still change its hours.
+  if (input.phone !== undefined && String(input.phone).trim() !== location.phone.trim()) {
     const raw = String(input.phone).trim();
     if (raw) {
-      const { phone, valid } = normalisePhone(raw);
-      if (!valid) return { ok: false, field: "phone", error: "That does not look like a phone number. Include the country code." };
-      next.phone = phone;
+      const strict = requireE164(raw);
+      if (!strict.ok) return { ok: false, field: "phone", error: strict.reason };
+      next.phone = strict.e164;
     } else {
       next.phone = "";
     }

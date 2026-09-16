@@ -4,6 +4,7 @@ import { canSeeLocation } from "@/lib/auth";
 import { getLocation, getWaitlistEntry } from "@/lib/store";
 import { join, markCancelled } from "@/lib/waitlist";
 import { isValidDate, parseClock } from "@/lib/time";
+import { requireE164 } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
 
@@ -47,10 +48,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "A window like 7:00 PM to 9:00 PM." }, { status: 400 });
   }
 
+  // With its country code, when one is given (lib/phone.ts).
+  let guestPhone = (body.guestPhone ?? "").trim();
+  if (guestPhone) {
+    const phone = requireE164(guestPhone);
+    if (!phone.ok) return NextResponse.json({ error: phone.reason, field: "guestPhone" }, { status: 422 });
+    guestPhone = phone.e164;
+  }
+
   const entry = join({
     locationId: location.id,
     guestName,
-    guestPhone: (body.guestPhone ?? "").trim(),
+    guestPhone,
     date: body.date,
     earliestMin,
     latestMin,

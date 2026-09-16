@@ -22,6 +22,7 @@ import { webchatAdapter } from "./channel/webchat";
 import { isPhoneHandle } from "../webchat";
 import { serviceState } from "../billing/entitlement";
 import { todayIn } from "../time";
+import { answersRealCustomers } from "../onboarding/journey";
 import { openCredentials } from "../db/credentials";
 import {
   agentHistory,
@@ -90,7 +91,8 @@ export type Skipped =
   | "taken_over"
   | "nothing_to_say"
   | "unsupported_content"
-  | "not_entitled";
+  | "not_entitled"
+  | "not_live";
 
 export type TurnOutcome =
   | { sent: true; text: string; providerMessageId: string }
@@ -125,6 +127,11 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
     channel: conversation.channel === "webchat" ? "chat" : "whatsapp",
   });
   if (!service.answering) return { sent: false, skipped: "not_entitled" };
+  // Not live yet: the owner has not pressed Go live, which needs the eight
+  // checks passed. The message waits in the inbox for a person, like any other.
+  // Web chat is gated before it gets here (resolveVisitor), where a signed-in
+  // owner may still preview their own widget.
+  if (conversation.channel !== "webchat" && !answersRealCustomers(location)) return { sent: false, skipped: "not_live" };
 
   const customer = await getCustomer(tenantId, conversation.customerId);
 

@@ -6,6 +6,7 @@ import { toolsFor } from "@/lib/agent/tools";
 import { seedIfEmpty } from "@/lib/seed";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import AgentEditor from "./AgentEditor";
+import { venueMarket } from "@/lib/onboarding/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export default async function AgentsPage({
       />
       <LocationTabs base="/agents" active={location.id} />
 
-      <AgentEditor locationId={location.id} initial={location.agent} />
+      <AgentEditor locationId={location.id} initial={location.agent} country={venueMarket(location)} />
 
       <div className="panel" style={{ marginTop: 16 }}>
         <div className="panel-head">

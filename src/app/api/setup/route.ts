@@ -3,13 +3,14 @@ import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { getLocation, listLocationsFor, upsertLocation } from "@/lib/store";
 import { applyDraft, readiness, setupNote } from "@/lib/onboarding";
-import { journeyFor, markReviewed } from "@/lib/onboarding/journey";
+import { journeyFor, markReviewed, stepAfter } from "@/lib/onboarding/journey";
 import { draftFromRequest } from "@/lib/onboarding/uploads";
 import { publish } from "@/lib/brain";
 import { cleanConfirmed } from "@/lib/onboarding/review";
 import { customerError } from "@/lib/errors/customer";
 import { serviceLengthsRequired } from "@/lib/booking/destination";
 import { normaliseOrigin } from "@/lib/embed";
+import { venueMarket } from "@/lib/onboarding/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,7 @@ export async function PUT(req: Request) {
   // Every field is checked, hours included: the old handler cast whatever
   // arrived to WeeklyHours and saved it.
   // A length for each service only where Belline books it into a day itself.
-  const checked = cleanConfirmed(body, { lengthsRequired: serviceLengthsRequired(location) });
+  const checked = cleanConfirmed(body, { lengthsRequired: serviceLengthsRequired(location), country: venueMarket(location) });
   // With the field it is about, so the page can show it under that input.
   if (!checked.ok) return NextResponse.json({ error: checked.error, field: checked.field, service: checked.service }, { status: 422 });
 
@@ -98,5 +99,5 @@ export async function PUT(req: Request) {
 
   // The page moves on to whatever the journey says is next, read from the venue
   // as it was just saved.
-  return NextResponse.json({ ok: true, readiness: readiness(updated), next: journeyFor(updated).next?.url ?? "/" });
+  return NextResponse.json({ ok: true, readiness: readiness(updated), next: stepAfter(journeyFor(updated), "import")?.url ?? "/" });
 }

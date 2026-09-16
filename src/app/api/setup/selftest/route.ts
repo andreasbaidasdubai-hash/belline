@@ -4,7 +4,7 @@ import { canEditAgent } from "@/lib/auth";
 import { getLocation, listCalls, listLocationsFor } from "@/lib/store";
 import { runSelftest } from "@/lib/onboarding/selftest";
 import { testsCurrent } from "@/lib/onboarding/selftest-state";
-import { factsFrom, journey } from "@/lib/onboarding/journey";
+import { factsFrom, journey, stepAfter } from "@/lib/onboarding/journey";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status });
 
   const j = journey(out.location, factsFrom(out.location, listCalls(out.location.id)));
-  return NextResponse.json({ ok: true, passed: out.passed, results: out.results, next: j.next?.url ?? "/", canGoLive: j.canGoLive });
+  return NextResponse.json({ ok: true, passed: out.passed, results: out.results, next: stepAfter(j, "test")?.url ?? "/", canGoLive: j.canGoLive });
 }
 
 export async function GET(req: Request) {

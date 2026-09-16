@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import PhoneField, { type PhoneFieldHandle } from "@/components/PhoneField";
+import { countryForCurrency } from "@/lib/phone";
 import { minutesToClock } from "@/lib/time";
 
 /**
@@ -66,6 +68,9 @@ export default function BookingForm({
   const [partySize, setPartySize] = useState(2);
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
+  const phoneField = useRef<PhoneFieldHandle | null>(null);
+  /** Bumped when a returning guest is picked, so the phone field shows their number. */
+  const [picked, setPicked] = useState({ n: 0, phone: "" });
   const [guestEmail, setGuestEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [overbook, setOverbook] = useState(false);
@@ -110,6 +115,8 @@ export default function BookingForm({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    // The guest's number, with its country code, checked at the field.
+    if (!phoneField.current?.check()) return;
     setBusy(true);
     setError(null);
     try {
@@ -168,6 +175,7 @@ export default function BookingForm({
                     onClick={() => {
                       setGuestName(g.name);
                       setGuestPhone(g.phone);
+                      setPicked((p) => ({ n: p.n + 1, phone: g.phone }));
                       if (g.email) setGuestEmail(g.email);
                       setHits([]);
                     }}
@@ -182,7 +190,17 @@ export default function BookingForm({
           </div>
 
           <div className="drawer-row">
-            <label>Phone<input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} placeholder="+971 50 …" inputMode="tel" disabled={busy} /></label>
+            <PhoneField
+              key={picked.n}
+              ref={phoneField}
+              id="booking-guest-phone"
+              label="Phone"
+              compact
+              value={picked.phone}
+              defaultCountry={countryForCurrency(currency)}
+              disabled={busy}
+              onValue={(p) => setGuestPhone(p.error ? "" : p.e164)}
+            />
             <label>Email<input value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} placeholder="Optional" inputMode="email" disabled={busy} /></label>
           </div>
 

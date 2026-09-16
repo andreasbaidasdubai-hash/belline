@@ -18,6 +18,7 @@ import {
   type ReviewForm,
   type Source,
 } from "@/lib/onboarding/review";
+import { COUNTRIES, readStoredPhone } from "@/lib/phone";
 
 /**
  * Setup as a conversation.
@@ -98,8 +99,11 @@ export default function SetupWizard({
   current,
   start,
   lengthsRequired,
+  country = "AE",
 }: {
   vertical: Vertical;
+  /** The business's own market (ISO): the country a phone typed without its code is read with. */
+  country?: string;
   currency: string;
   /**
    * Does each service need a length? Only where Belline books it into a day
@@ -233,7 +237,7 @@ export default function SetupWizard({
 
   async function save() {
     if (!form) return;
-    const check = payloadFromForm(form, { lengthsRequired });
+    const check = payloadFromForm(form, { lengthsRequired, country });
     if (!check.ok) {
       showErrors(check.errors);
       return;
@@ -356,14 +360,39 @@ export default function SetupWizard({
           </Section>
 
           <Section label="Phone number for the business" source={form.phone.source} confidence={confidenceOf("text", form.phone.value, form.phone.source)} fileName={fileName} htmlFor="review-phone">
-            <input
-              id="review-phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={form.phone.value}
-              onChange={(e) => edit((f) => ({ ...f, phone: { value: e.target.value, source: "typed" } }))}
-            />
+            {/* With its country code, always: a local number is read with the country picked here. */}
+            <div style={{ display: "flex", gap: 8 }}>
+              <select
+                aria-label="Country code"
+                value={form.phoneCountry ?? readStoredPhone(form.phone.value, country).country}
+                onChange={(e) => {
+                  const iso = e.target.value;
+                  edit((f) => ({ ...f, phoneCountry: iso }), REVIEW_IDS.phone);
+                }}
+                style={{ width: "auto", maxWidth: 150, flex: "0 0 auto" }}
+              >
+                {COUNTRIES.map((c) => (
+                  <option key={c.iso} value={c.iso}>
+                    {c.iso} +{c.dial}
+                  </option>
+                ))}
+              </select>
+              <input
+                id={REVIEW_IDS.phone}
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={form.phone.value}
+                {...invalid(REVIEW_IDS.phone)}
+                style={{ flex: 1, minWidth: 0, ...(problem(REVIEW_IDS.phone) ? { borderColor: "var(--bad)" } : {}) }}
+                onChange={(e) => edit((f) => ({ ...f, phone: { value: e.target.value, source: "typed" } }), REVIEW_IDS.phone)}
+              />
+            </div>
+            {problem(REVIEW_IDS.phone) && (
+              <p id={`${REVIEW_IDS.phone}-error`} role="alert" style={{ fontSize: 13.5, color: "var(--bad)", margin: "6px 0 0" }}>
+                {problem(REVIEW_IDS.phone)}
+              </p>
+            )}
           </Section>
 
           <Section

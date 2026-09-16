@@ -161,7 +161,8 @@ console.log("\n\x1b[1mThe guard, as a table\x1b[0m\n");
 await test("allowed kinds follow the venue's state", () => {
   const loc = getLocation(salon.id)!;
   const none = { ...loc, phone: "" };
-  const has = { ...loc, phone: "+97145550000" };
+  // A Belline number is one Belline assigned (telephony/number.ts), stamped when it was.
+  const has = { ...loc, phone: "+97145550000", onboarding: { ...loc.onboarding!, channels: { ...loc.onboarding!.channels, phone: { numberAssignedAt: "2026-09-16T08:00:00.000Z" } } } };
   const once = [{ role: "user" as const, content: "can I talk to someone" }];
   const cases: [unknown, typeof loc, typeof once, boolean][] = [
     ["pool_empty", none, [], true],
@@ -237,7 +238,8 @@ await test("every tool from the plan is offered", () => {
 });
 
 await test("explain_forwarding: mobile codes, the PBX note, and no unverified Virgin codes", () => {
-  upsertLocation({ ...getLocation(salon.id)!, phone: "+97145550000" });
+  const s = getLocation(salon.id)!;
+  upsertLocation({ ...s, phone: "+97145550000", onboarding: { ...s.onboarding!, channels: { ...s.onboarding!.channels, phone: { numberAssignedAt: "2026-09-16T08:00:00.000Z" } } } });
   const mobile = executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "mobile" });
   assert.match(mobile.say, /\*\*61\*\+97145550000#/);
   assert.match(executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "landline" }).say, /\b155\b/);

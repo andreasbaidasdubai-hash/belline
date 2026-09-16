@@ -4,6 +4,10 @@ import { seedIfEmpty } from "@/lib/seed";
 import { flag } from "@/lib/flags";
 import { whatsappStatus } from "@/lib/whatsapp";
 import { connectionState } from "@/lib/integrations/google";
+import { channelStatuses, factsFrom, type ChannelStatus } from "@/lib/onboarding/journey";
+import { listCalls } from "@/lib/store";
+import { chatLinkUrl } from "@/lib/chat-link";
+import ChatLinkCard from "./ChatLinkCard";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
 export const dynamic = "force-dynamic";
@@ -19,10 +23,15 @@ export const metadata = { title: "Channels" };
  * the easy half of each flow inline and end up with two places that disagree
  * about whether WhatsApp is connected.
  *
- * The states are deliberately only these three, because the strategy document
- * is blunt about it: never show a channel as live until it is.
+ * Phone, website and WhatsApp use the one answer the journey gives
+ * (`channelStatuses`), which Today and the setup steps show too:
  *
- *   Live            — it is answering right now.
+ *   Live        — it is answering real customers right now.
+ *   Waiting     — connected or part way there, and not answering yet; it says why.
+ *   Not set up  — nothing done on it.
+ *
+ * The calendar is a booking destination, not a channel, and keeps its own:
+ *
  *   Being prepared  — somebody at Belline is working on it, or we are waiting
  *                     on the owner to do one thing.
  *   Coming soon     — it is not available on this account at all.
@@ -33,12 +42,14 @@ export const metadata = { title: "Channels" };
  * effect on one of them; /golive is where that belongs.
  */
 
-type State = "live" | "preparing" | "soon";
+type State = "live" | "preparing" | "soon" | ChannelStatus["state"];
 
 const TONE: Record<State, { text: string; colour: string }> = {
   live: { text: "Live", colour: "var(--ok)" },
   preparing: { text: "Being prepared", colour: "var(--warn)" },
   soon: { text: "Coming soon", colour: "var(--muted)" },
+  waiting: { text: "Waiting", colour: "var(--warn)" },
+  not_set_up: { text: "Not set up", colour: "var(--muted)" },
 };
 
 function Channel({
@@ -84,35 +95,36 @@ export default async function ChannelsPage({
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
 
-  const channels = location.onboarding?.channels;
+  const whatsapp = await whatsappStatus(location);
+  // Live, waiting or not set up: the same answer Today and setup give.
+  const status = Object.fromEntries(
+    channelStatuses(location, factsFrom(location, listCalls(location.id)), { whatsappConnected: whatsapp.state === "connected" }).map((c) => [c.id, c]),
+  ) as Record<ChannelStatus["id"], ChannelStatus>;
 
-  // Phone. Forwarding proved by a real call that arrived is the only thing
-  // that counts as live — a number assigned is not a line answered.
-  const phone = channels?.phone;
-  const phoneState: State = phone?.forwardingVerifiedAt ? "live" : "preparing";
-  const phoneDetail = phone?.forwardingVerifiedAt
-    ? `Your line is forwarded to Belline and a test call came through. Customers keep dialling ${location.phone || "the number they already have"}.`
-    : phone?.numberAssignedAt
-      ? "You have a Belline number. Forward your line to it and make one test call, and this turns live."
+  // Phone. What to do next, under the one-line state.
+  const phone = location.onboarding?.channels?.phone;
+  const phoneState: State = status.phone.state;
+  const phoneDetail =
+    status.phone.state !== "not_set_up"
+      ? status.phone.detail
       : flag("numbers.pool")
         ? "Get your Belline number, forward your line to it, and prove it with a test call."
-        : "Your number is being prepared by the Belline team. Nothing for you to do yet.";
+        : "Your Belline number is being prepared by the Belline team. Nothing for you to do yet.";
 
-  // Website. Domains on the record mean the widget has been configured; the
-  // install check on /website is what confirms it is actually on the page.
-  const web = channels?.web;
-  const webState: State = web?.detectedAt ? "live" : web?.domains?.length ? "preparing" : "soon";
-  const webDetail = web?.detectedAt
-    ? `The chat and voice button were found on ${web.domains.join(", ")}.`
-    : web?.domains?.length
-      ? `Set up for ${web.domains.join(", ")}, but the widget has not been seen on the page yet. Paste the snippet into your site and run the check.`
-      : "Add a button to your own website and a visitor reaches the same receptionist as your phone. Choose the sites it may appear on to switch it on.";
+  // Website.
+  const web = location.onboarding?.channels?.web;
+  const webState: State = status.web.state;
+  const webDetail =
+    status.web.state === "live" && web?.domains?.length
+      ? `${status.web.detail} Found on ${web.domains.join(", ")}.`
+      : status.web.state !== "not_set_up"
+        ? status.web.detail
+        : "Add a button to your own website and a visitor reaches the same receptionist as your phone. Choose the sites it may appear on to switch it on.";
 
-  const whatsapp = await whatsappStatus(location);
-  const whatsappState: State = whatsapp.state === "connected" ? "live" : "preparing";
+  const whatsappState: State = status.whatsapp.state;
   const whatsappDetail =
-    whatsapp.state === "connected"
-      ? "Belline answers your second WhatsApp number. Your own WhatsApp is untouched."
+    status.whatsapp.state !== "not_set_up"
+      ? `${status.whatsapp.detail} Your own WhatsApp is untouched.`
       : whatsapp.state === "unavailable"
         ? "WhatsApp's status could not be checked just now. Nothing has changed; try again in a minute."
         : "Belline answers WhatsApp on a second number for the business. You get a new number and we set it up with you — your own WhatsApp stays as it is.";
@@ -139,7 +151,7 @@ export default async function ChannelsPage({
         state={phoneState}
         detail={phoneDetail}
         href="/golive"
-        action={phoneState === "live" ? "Phone settings" : "Set up forwarding"}
+        action={phoneState === "live" || phone?.forwardingVerifiedAt ? "Phone settings" : "Set up forwarding"}
       />
       <Channel
         title="Your website"
@@ -148,6 +160,22 @@ export default async function ChannelsPage({
         href="/website"
         action={webState === "live" ? "Widget settings" : "Set up the widget"}
       />
+      <section className="panel" style={{ marginBottom: 14 }} data-testid="channel-link">
+        <div className="panel-head" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          Chat link
+          <span className="pill" style={{ marginLeft: "auto", color: TONE[status.link.state].colour }}>
+            {TONE[status.link.state].text}
+          </span>
+        </div>
+        <div style={{ padding: "16px 18px", fontSize: 13.5, lineHeight: 1.6 }}>
+          <p style={{ margin: 0, maxWidth: "70ch" }}>
+            {status.link.state === "not_set_up"
+              ? "A link that opens a chat with Belline, with no website needed: put it in your Instagram bio, your Google Business Profile or your WhatsApp status."
+              : status.link.detail}
+          </p>
+          <ChatLinkCard locationId={location.id} url={chatLinkUrl(location)} live={status.link.state === "live"} />
+        </div>
+      </section>
       <Channel
         title="WhatsApp"
         state={whatsappState}

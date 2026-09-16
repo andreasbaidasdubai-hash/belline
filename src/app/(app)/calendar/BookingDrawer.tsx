@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import PhoneField, { type PhoneFieldHandle } from "@/components/PhoneField";
+import { countryForCurrency } from "@/lib/phone";
 import type { Booking } from "@/lib/types";
 import { minutesToClock } from "@/lib/time";
 import type { ServiceOption } from "./BookingForm";
@@ -54,6 +56,7 @@ export default function BookingDrawer({
   const [partySize, setPartySize] = useState(booking.partySize ?? 2);
   const [guestName, setGuestName] = useState(booking.guestName);
   const [guestPhone, setGuestPhone] = useState(booking.guestPhone);
+  const phoneField = useRef<PhoneFieldHandle | null>(null);
   const [guestEmail, setGuestEmail] = useState(booking.guestEmail ?? "");
   const [notes, setNotes] = useState(booking.notes);
   const [reason, setReason] = useState("");
@@ -162,6 +165,8 @@ export default function BookingDrawer({
             className="drawer-body"
             onSubmit={(e) => {
               e.preventDefault();
+              // The guest's number, with its country code, checked at the field.
+              if (!phoneField.current?.check()) return;
               void call(
                 "/api/bookings/update",
                 "PATCH",
@@ -183,7 +188,18 @@ export default function BookingDrawer({
           >
             <label>Guest<input value={guestName} onChange={(e) => setGuestName(e.target.value)} required /></label>
             <div className="drawer-row">
-              <label>Phone<input value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} inputMode="tel" /></label>
+              <PhoneField
+                ref={phoneField}
+                id="drawer-guest-phone"
+                label="Phone"
+                compact
+                value={booking.guestPhone}
+                defaultCountry={countryForCurrency(currency)}
+                onValue={(p) => {
+                  // A number left as it was is sent back as it was.
+                  if (!p.error) setGuestPhone(p.e164);
+                }}
+              />
               <label>Email<input value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} inputMode="email" /></label>
             </div>
             <div className="drawer-row">

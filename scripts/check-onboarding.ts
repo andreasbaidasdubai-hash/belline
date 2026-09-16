@@ -156,7 +156,11 @@ await test("a person who takes bookings is added, able to do the services they n
 
 await test("a transfer number must be a real number, and is stored in international form", () => {
   assert.equal(executeSetupTool(salon.id, salon.by, "set_transfer_number", { number: "call me" }).ok, false);
-  assert.ok(executeSetupTool(salon.id, salon.by, "set_transfer_number", { number: "050 123 4567" }).ok);
+  // Without its country code it is not saved, and Belle is told to ask again (2026-09-16).
+  const local = executeSetupTool(salon.id, salon.by, "set_transfer_number", { number: "050 123 4567" });
+  assert.equal(local.ok, false);
+  assert.match(local.say, /country code/);
+  assert.ok(executeSetupTool(salon.id, salon.by, "set_transfer_number", { number: "+971 50 123 4567" }).ok);
   assert.match(fresh().agent.transferNumber ?? "", /^\+9715/);
 });
 
@@ -566,13 +570,82 @@ await test("the phone is plainly optional, with a way to skip it on the channels
   assert.match(step, /Skip the phone for now/);
   assert.doesNotMatch(step, /Waiting for the test call/);
   // Belle says the same.
-  upsertLocation({ ...fresh(), phone: "+97140000009" });
+  // Stamped as assigned: an unstamped phone on a new signup is the owner's own line, not Belline's.
+  upsertLocation({ ...fresh(), phone: "+97140000009", onboarding: { ...fresh().onboarding!, channels: { ...fresh().onboarding!.channels, phone: { numberAssignedAt: "2026-09-16T08:00:00.000Z" } } } });
   const said = executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "mobile" });
   upsertLocation({ ...fresh(), phone: "" });
   assert.ok(said.ok, said.say);
   assert.match(said.say, /\*\*61\*\+97140000009#/);
   assert.match(said.say, /nothing is forwarded until they do/);
   assert.match(said.say, /calls you do not pick up go to Belline/i);
+});
+
+await test("the owner's own number on the rules step is not Belline's: Belle gives no codes to it", () => {
+  // The review step saved the business's own mobile; nothing was assigned.
+  const f = fresh();
+  upsertLocation({ ...f, phone: "0502992339", onboarding: { ...f.onboarding!, channels: { ...f.onboarding!.channels, phone: {} } } });
+  const said = executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "mobile" });
+  upsertLocation({ ...fresh(), phone: "" });
+  assert.ok(said.ok, said.say);
+  assert.doesNotMatch(said.say, /0502992339|502992339/, "Belle told the owner to forward calls to their own phone");
+  assert.match(said.say, /being prepared/);
+});
+
+console.log("\n\x1b[1mSetup copy the founder read\x1b[0m\n");
+
+await test("Skip the phone for now and Add it to my website are real buttons, not links inside a sentence", () => {
+  const step = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "[step]", "page.tsx"), "utf8");
+  assert.match(step, /className="btn" style=\{action\} data-testid="skip-phone">\s*Skip the phone for now/);
+  assert.match(step, /className="btn btn-accent" style=\{action\} data-testid="add-to-website">\s*Add it to my website/);
+  assert.doesNotMatch(step, /one line of code\. <Link href="\/website\?from=setup">Add it to my website<\/Link>/);
+  assert.doesNotMatch(step, /\{PHONE_OPTIONAL\}\{" "\}\s*<Link href="\/website\?from=setup">Skip the phone for now<\/Link>/);
+});
+
+await test("the booking option says what it means: the team confirms each booking, with no walk-ins", () => {
+  const step = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "[step]", "page.tsx"), "utf8");
+  assert.doesNotMatch(step, /Phone, WhatsApp or walk-ins/);
+  assert.match(step, /title: "My team confirms each booking"/);
+  assert.match(step, /tells them your team will confirm/);
+});
+
+await test("the notification field is the owner's own email or WhatsApp, not Belline's", () => {
+  const form = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "StepActions.tsx"), "utf8");
+  assert.match(form, /Your own email or WhatsApp, for new requests/);
+  assert.match(form, /Your own email address or your own WhatsApp number \(the country code beside it is used for a number\), where Belline tells you about a new request/);
+  assert.match(form, /This is not\s+Belline&apos;s WhatsApp/);
+  assert.doesNotMatch(form, /Where to tell you about new requests/);
+});
+
+await test("WhatsApp is offered as it is today: set up with us on a second number, never a dead Coming soon", () => {
+  const step = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "[step]", "page.tsx"), "utf8");
+  const card = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "integrations", "WhatsAppCard.tsx"), "utf8");
+  const assisted = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "integrations", "WhatsAppAssisted.tsx"), "utf8");
+  assert.doesNotMatch(step, /whatsapp\.state === "soon" \? "Coming soon"/);
+  assert.match(step, /WhatsApp works today on a second number/);
+  assert.match(step, /<WhatsAppAssisted /);
+  assert.match(card, /soon: \["Available — set up with us"/);
+  assert.match(card, /<WhatsAppAssisted /);
+  assert.match(assisted, /Set it up with us/);
+  assert.match(assisted, /\/api\/whatsapp\/assisted/);
+  const route = fs.readFileSync(path.join(process.cwd(), "src", "app", "api", "whatsapp", "assisted", "route.ts"), "utf8");
+  assert.match(route, /requireApiUser\(\)/);
+  assert.match(route, /canEditAgent\(user, location\.id\)/);
+  assert.match(route, /kind: "whatsapp_assisted_setup"/);
+});
+
+await test("the website chat always offers voice notes, for Messages only and for Both", () => {
+  const chat = fs.readFileSync(path.join(process.cwd(), "src", "app", "embed", "[key]", "chat", "Chat.tsx"), "utf8");
+  const page = fs.readFileSync(path.join(process.cwd(), "src", "app", "embed", "[key]", "chat", "page.tsx"), "utf8");
+  const editor = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "website", "WidgetEditor.tsx"), "utf8");
+  // The microphone depends on what the browser can record, never on the widget's mode.
+  assert.match(chat, /setCanRecord\(Boolean\(recordingMime\(\) && navigator\.mediaDevices\?\.getUserMedia\)\)/);
+  assert.match(chat, /\{canRecord && !draft\.trim\(\) \?/);
+  assert.doesNotMatch(chat, /canRecord && (voiceHref|mode)/);
+  assert.doesNotMatch(page, /voiceNotes|canRecord/);
+  // And the frame may ask for it in either mode.
+  assert.match(fs.readFileSync(path.join(process.cwd(), "public", "embed.js"), "utf8"), /panel\.allow = kind === "voice" \? "microphone; autoplay" : "microphone"/);
+  assert.match(editor, /holds the microphone to send a voice note/);
+  assert.match(editor, /messages always take voice notes too/);
 });
 
 await test("landlines are sent to the carrier, with the right number to call", () => {
@@ -611,6 +684,114 @@ await test("the install check finds the venue's own key, and only its own", () =
   assert.equal(installedIn(page, "be_someoneelse").installed, false);
   assert.equal(installedIn(page, "be_abc123").platform, "squarespace");
 });
+
+console.log("\n\x1b[1mEvery phone number with its country code\x1b[0m\n");
+
+{
+  const phone = await import("../src/lib/phone");
+  const { applyRules, transferAllowed } = await import("../src/lib/onboarding/rules");
+  const { createLocation } = await import("../src/lib/locations");
+  const src = (...p: string[]) => fs.readFileSync(path.join(process.cwd(), ...p), "utf8");
+
+  await test("a local number converts with the country picked beside it; one typed with its code keeps its own", () => {
+    for (const typed of ["0502992339", "050 299 2339", "050-299-2339", "502992339", "971502992339"]) {
+      assert.deepEqual(phone.normaliseOwnerPhone(typed, "AE"), { ok: true, e164: "+971502992339" }, typed);
+    }
+    assert.deepEqual(phone.normaliseOwnerPhone("04 555 0100", "AE"), { ok: true, e164: "+97145550100" });
+    assert.deepEqual(phone.normaliseOwnerPhone("020 7946 0958", "GB"), { ok: true, e164: "+442079460958" });
+    assert.deepEqual(phone.normaliseOwnerPhone("055 123 4567", "SA"), { ok: true, e164: "+966551234567" });
+    // The code in the number wins over the picker.
+    assert.deepEqual(phone.normaliseOwnerPhone("+44 20 7946 0958", "AE"), { ok: true, e164: "+442079460958" });
+    assert.deepEqual(phone.normaliseOwnerPhone("0044 (0)20 7946 0958", "AE"), { ok: true, e164: "+442079460958" });
+  });
+
+  await test("a number with no resolvable country, or that is not a number, is refused at the field", () => {
+    const none = phone.normaliseOwnerPhone("0502992339", undefined);
+    assert.equal(none.ok, false);
+    assert.match(none.ok ? "" : none.reason, /Choose the country|country code/);
+    for (const bad of ["call me", "05029923", "+97150", "050 299 2339 ext 4", "+971 50+299"]) {
+      assert.equal(phone.normaliseOwnerPhone(bad, "AE").ok, false, bad);
+    }
+    // Every field component checks before it sends, and shows the reason under itself.
+    const field = src("src", "components", "PhoneField.tsx");
+    assert.match(field, /aria-invalid=\{error \? true : undefined\}/);
+    assert.match(field, /role="alert"/);
+    assert.match(field, /input\.current\?\.focus\(\)/);
+    assert.match(field, /aria-label="Country code"/);
+  });
+
+  await test("the server refuses a number without its country code, on every route that saves one", () => {
+    assert.equal(phone.requireE164("0502992339").ok, false);
+    assert.match((phone.requireE164("0502992339") as { reason: string }).reason, /country code/);
+    assert.deepEqual(phone.requireE164("+971 50 299 2339"), { ok: true, e164: "+971502992339" });
+    assert.equal(phone.isE164("+971502992339"), true);
+    assert.equal(phone.isE164("0502992339"), false);
+    const v = fresh();
+    const local = applyRules(v, { transferNumber: "0501234567" });
+    assert.ok(!local.ok && local.field === "transferNumber" && /country code/.test(local.error));
+    const notify = applyRules(v, { notify: "0501234567" });
+    assert.ok(!notify.ok && notify.field === "notify");
+    const good = applyRules(v, { transferNumber: "+971 50 123 4567", notify: "+971501234568" });
+    assert.ok(good.ok && good.location.agent.transferNumber === "+971501234567" && good.location.onboarding!.escalation!.notifyWhatsApp === "+971501234568");
+    // The review step's business phone.
+    const review = cleanConfirmed({ phone: "0502992339" });
+    assert.ok(!review.ok && review.field === REVIEW_IDS.phone);
+    const reviewed = cleanConfirmed({ phone: "+971 50 299 2339" });
+    assert.ok(reviewed.ok && reviewed.confirmed.phone === "+971502992339");
+    // A new location's phone.
+    for (const route of [
+      ["src", "app", "api", "agent", "route.ts"],
+      ["src", "app", "api", "bookings", "create", "route.ts"],
+      ["src", "app", "api", "bookings", "update", "route.ts"],
+      ["src", "app", "api", "waitlist", "route.ts"],
+      ["src", "lib", "locations.ts"],
+    ]) {
+      assert.match(src(...route), /requireE164\(/, route.join("/"));
+    }
+    void createLocation;
+  });
+
+  await test("the urgent-calls number still has to be in the United Arab Emirates", () => {
+    const abroad = applyRules(fresh(), { transferNumber: "+44 20 7946 0958" });
+    assert.ok(!abroad.ok && /outside United Arab Emirates/.test(abroad.error));
+    assert.match(src("src", "app", "api", "agent", "route.ts"), /checkTransferNumber\(strict\.e164, venueMarket\(location\)\)/);
+  });
+
+  await test("stored numbers are shown back international, and older local ones keep working", () => {
+    assert.equal(phone.formatInternational("+971502992339"), "+971 50 299 2339");
+    assert.equal(phone.formatInternational("+97145550100"), "+971 4 555 0100");
+    assert.equal(phone.formatInternational("+442079460958"), "+44 207 946 0958");
+    assert.deepEqual(phone.readStoredPhone("0502992339", "AE"), { country: "AE", text: "+971 50 299 2339", e164: "+971502992339" });
+    assert.deepEqual(phone.readStoredPhone("+442079460958", "AE"), { country: "GB", text: "+44 207 946 0958", e164: "+442079460958" });
+    // A transfer number saved before the rule is still dialled.
+    assert.equal(transferAllowed(fresh(), "0501234567"), true);
+    // The review form shows a stored number grouped.
+    const form = formFromDraft(null, "saved", { ...currentVenue(fresh()), phone: "+971502992339" });
+    assert.equal(form.phone.value, "+971 50 299 2339");
+  });
+
+  await test("every phone field in setup and the dashboard has the country picker", () => {
+    const uses: [string[], RegExp][] = [
+      [["src", "app", "setup", "StepActions.tsx"], /<PhoneField[\s\S]*id="transfer-number"/],
+      [["src", "app", "setup", "StepActions.tsx"], /aria-label="Country code"[\s\S]*id="notify"/],
+      [["src", "app", "setup", "SetupWizard.tsx"], /aria-label="Country code"[\s\S]*id=\{REVIEW_IDS\.phone\}/],
+      [["src", "app", "(app)", "agents", "AgentEditor.tsx"], /<PhoneField[\s\S]*id="agent-transfer-number"/],
+      [["src", "app", "(app)", "locations", "LocationsManager.tsx"], /<PhoneField[\s\S]*id="location-phone"/],
+      [["src", "app", "(app)", "integrations", "ConnectWhatsApp.tsx"], /<PhoneField[\s\S]*id="wa-number"/],
+      [["src", "app", "(app)", "calendar", "BookingForm.tsx"], /<PhoneField[\s\S]*id="booking-guest-phone"/],
+      [["src", "app", "(app)", "calendar", "BookingDrawer.tsx"], /<PhoneField[\s\S]*id="drawer-guest-phone"/],
+      [["src", "app", "(app)", "waitlist", "WaitlistManager.tsx"], /<PhoneField[^>]*id="wl-phone"/],
+    ];
+    for (const [file, pattern] of uses) assert.match(src(...file), pattern, file.join("/"));
+    // No bare tel input is left anywhere in the app.
+    const stray = ["src/app/setup/StepActions.tsx", "src/app/setup/SetupWizard.tsx", "src/app/(app)/locations/LocationsManager.tsx", "src/app/(app)/calendar/BookingForm.tsx", "src/app/(app)/calendar/BookingDrawer.tsx"]
+      .filter((f) => /<label>Phone<input/.test(src(...f.split("/"))));
+    assert.deepEqual(stray, []);
+    // The picker starts on the business's own market.
+    assert.match(src("src", "app", "setup", "[step]", "page.tsx"), /countryIso=\{venueMarket\(venue\)\}/);
+    assert.match(src("src", "app", "setup", "[step]", "page.tsx"), /country=\{venueMarket\(venue\)\}/);
+  });
+}
 
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 

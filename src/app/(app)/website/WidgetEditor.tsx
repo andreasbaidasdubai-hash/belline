@@ -27,7 +27,7 @@ const MODES: { id: EmbedMode; title: string; what: string; costs: string }[] = [
   {
     id: "both",
     title: "Both",
-    what: "A bell and a message button. The visitor picks.",
+    what: "A bell and a message button, and messages always take voice notes too. The visitor picks.",
     costs: "Most sites want this. Neither button costs anything until somebody uses it.",
   },
   {
@@ -39,8 +39,8 @@ const MODES: { id: EmbedMode; title: string; what: string; costs: string }[] = [
   {
     id: "chat",
     title: "Messages only",
-    what: "A message button. The visitor types; Belline writes back.",
-    costs: "No voice minutes. For visitors who will not talk out loud on a train or at a desk.",
+    what: "A message button. The visitor types, or holds the microphone to send a voice note; Belline writes back.",
+    costs: "No voice minutes: a voice note is written down and counts as a message. For visitors who will not hold a conversation out loud."
   },
 ];
 

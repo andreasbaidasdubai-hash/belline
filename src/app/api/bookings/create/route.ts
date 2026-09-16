@@ -3,6 +3,7 @@ import { requireApiUser } from "@/lib/auth-server";
 import { canSeeLocation } from "@/lib/auth";
 import { getLocation } from "@/lib/store";
 import { createFromDesk, type DeskInput } from "@/lib/booking/desk";
+import { requireE164 } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,13 @@ export async function POST(req: Request) {
   const location = body.locationId ? getLocation(body.locationId) : undefined;
   if (!location || !canSeeLocation(auth.user, location.id)) {
     return NextResponse.json({ error: "Unknown venue." }, { status: 404 });
+  }
+
+  // A guest's number typed at the desk is stored with its country code (lib/phone.ts).
+  if (String(body.guestPhone ?? "").trim()) {
+    const phone = requireE164(body.guestPhone);
+    if (!phone.ok) return NextResponse.json({ error: phone.reason, field: "guestPhone" }, { status: 422 });
+    body.guestPhone = phone.e164;
   }
 
   const result = createFromDesk(location, body);

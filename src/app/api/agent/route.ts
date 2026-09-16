@@ -4,6 +4,8 @@ import { canEditAgent } from "@/lib/auth";
 import { requireApiUser } from "@/lib/auth-server";
 import type { AgentConfig } from "@/lib/types";
 import { publish } from "@/lib/brain";
+import { requireE164 } from "@/lib/phone";
+import { checkTransferNumber, venueMarket } from "@/lib/onboarding/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +41,27 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "No agent payload" }, { status: 400 });
   }
 
+  // A transfer number that changed is stored E.164, in the venue's own country
+  // (the toll-fraud rule on the rules step). One left as it was stays as it was,
+  // so an older number saved before country codes were required keeps working.
+  let transferNumber = location.agent.transferNumber;
+  if (body.agent.transferNumber !== undefined && String(body.agent.transferNumber ?? "").trim() !== (location.agent.transferNumber ?? "").trim()) {
+    const raw = String(body.agent.transferNumber ?? "").trim();
+    if (raw) {
+      const strict = requireE164(raw);
+      if (!strict.ok) return NextResponse.json({ error: strict.reason, field: "transferNumber" }, { status: 422 });
+      const local = checkTransferNumber(strict.e164, venueMarket(location));
+      if (!local.ok) return NextResponse.json({ error: local.reason, field: "transferNumber" }, { status: 422 });
+      transferNumber = local.e164;
+    } else {
+      transferNumber = "";
+    }
+  }
+
   const next: AgentConfig = {
     ...location.agent,
     ...body.agent,
+    transferNumber,
     // Guard the numeric fields — a blank input arrives as NaN and a zero-second
     // call limit would hang up on every caller mid-greeting.
     maxCallSeconds:

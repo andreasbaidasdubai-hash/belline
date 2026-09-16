@@ -8,6 +8,7 @@ import { flag } from "../flags";
 import { raiseException } from "../errors/customer";
 import { destinationOf, serviceLengthsRequired } from "../booking/destination";
 import { PBX_NOTE, forwardingCodes, uaeCarriers } from "../telephony/forwarding";
+import { bellineNumberOf } from "../telephony/number";
 import { KIND_META, isExceptionKind, openException, ownerTickets } from "../exceptions";
 import { DAYS, dayIndexes } from "./review";
 import { readiness } from "./index";
@@ -137,9 +138,10 @@ export function exceptionAllowed(
       say: "Not opened: they have asked for a person once. Help with what they are stuck on first, and say that if they still want a person they can ask again.",
     };
   }
-  const hasNumber = Boolean(location.phone.trim());
+  const belline = bellineNumberOf(location);
+  const hasNumber = Boolean(belline);
   if ((kind === "pool_empty" || kind === "number_assign_failed") && hasNumber) {
-    return { ok: false, say: `Not opened: this business already has its Belline number, ${location.phone}. Help them forward to it.` };
+    return { ok: false, say: `Not opened: this business already has its Belline number, ${belline}. Help them forward to it.` };
   }
   if (kind === "forwarding_unverified_2x" && !hasNumber) {
     return { ok: false, say: "Not opened: there is no Belline number to forward to yet. Its preparation is already known to the team." };
@@ -545,7 +547,7 @@ export function executeSetupTool(
     }
 
     case "explain_forwarding": {
-      const number = location.phone.trim();
+      const number = bellineNumberOf(location);
       const carrier = text(input.carrier, 10).toLowerCase();
       const line = text(input.line, 10).toLowerCase();
       const to = number ? `your Belline number, ${number}` : "your Belline number";
@@ -655,7 +657,7 @@ function summary(location: Location): string {
     location.salon ? `Staff: ${location.salon.staff.map((s) => s.name).join(", ") || "none"}` : "",
     `Bookings: ${location.onboarding?.destination?.kind ?? "not chosen yet"}`,
     `Urgent calls to: ${location.agent.transferNumber || "not set"}`,
-    `Belline number: ${location.phone || "being prepared"}`,
+    `Belline number: ${bellineNumberOf(location) || "being prepared"}`,
     `FAQs: ${location.agent.faqs.length}; rules: ${location.agent.policies.length}`,
   ];
   return lines.filter(Boolean).join("\n");

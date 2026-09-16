@@ -5,7 +5,7 @@ import { expect, test } from "./helpers";
  *
  * Sign up, set the business up by hand, choose where bookings go, and stop on
  * step five. A refresh stays on step five; signing out and in again lands on
- * step five; the dashboard nav is collapsed and the home page points at it.
+ * the dashboard, whose full menu is there and whose checklist points at step five.
  * At 375px the step's primary button is on screen without scrolling.
  *
  *   npx playwright test --config playwright.selfserve.config.ts journey-resume
@@ -50,10 +50,12 @@ test("close at step five, sign in again, and land on step five", async ({ page, 
   await page.reload();
   await expect(page).toHaveURL(/\/setup\/rules$/);
 
-  // The dashboard, before going live: three nav items and one next step.
+  // The dashboard, before going live: the full menu, and a checklist whose next item is step five.
+  // (Before 2026-09-16 the menu collapsed to Setup and Account until Go live.)
   await page.goto("/");
   await expect(page.getByTestId("journey-next")).toHaveText("Next: Your rules");
-  await expect(page.locator("nav.nav")).not.toContainText("Calendar");
+  await expect(page.getByTestId("setup-checklist")).toContainText("4 of 7 done");
+  await expect(page.locator("nav.nav")).toContainText("Today");
 
   // Go live cannot be reached ahead of the steps before it.
   await page.goto("/setup/golive");
@@ -64,5 +66,7 @@ test("close at step five, sign in again, and land on step five", async ({ page, 
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL("**/setup/rules");
+  // Signing in lands on the dashboard, and its checklist resumes on step five.
+  await page.waitForURL((u) => u.pathname === "/");
+  await expect(page.getByTestId("journey-next")).toHaveAttribute("href", "/setup/rules");
 });

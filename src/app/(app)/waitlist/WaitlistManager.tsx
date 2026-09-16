@@ -1,23 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import PhoneField, { type PhoneFieldHandle } from "@/components/PhoneField";
 
 /** Add somebody to the waitlist from the desk, or take somebody off. */
 export function AddToWaitlist({
   locationId,
   restaurant,
   today,
+  country = "AE",
 }: {
   locationId: string;
   restaurant: boolean;
   today: string;
+  /** The business's own country (ISO), for the phone's country picker. */
+  country?: string;
 }) {
+  const phoneField = useRef<PhoneFieldHandle | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // With its country code, checked at the field.
+    if (!phoneField.current?.check()) return;
     const form = new FormData(e.currentTarget);
     setBusy(true);
     setError(null);
@@ -65,8 +72,7 @@ export function AddToWaitlist({
           <input id="wl-name" name="name" required autoComplete="off" />
         </div>
         <div>
-          <label htmlFor="wl-phone">Phone</label>
-          <input id="wl-phone" name="phone" inputMode="tel" autoComplete="off" />
+          <PhoneField ref={phoneField} id="wl-phone" name="phone" label="Phone" compact defaultCountry={country} />
         </div>
       </div>
       <div className="split" style={{ gap: 12 }}>

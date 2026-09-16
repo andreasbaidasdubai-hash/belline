@@ -2,6 +2,7 @@ import type { Location, RequestRules } from "../types";
 import { MARKETS, MARKET_CODES, type Market } from "../markets";
 import { takesRequestsOnly } from "../booking/destination";
 import { defaultRequestRules } from "../booking/requests";
+import { requireE164 } from "../phone";
 
 /**
  * The rules step: what Belline asks for, who it puts urgent calls through to,
@@ -110,7 +111,12 @@ export function applyRules(location: Location, input: RulesInput, now: Date = ne
   if (input.transferNumber !== undefined) {
     const raw = String(input.transferNumber ?? "").trim();
     if (raw) {
-      const check = checkTransferNumber(raw, market);
+      // With its country code, always: the field converts a local entry with
+      // the country picked beside it, and a request made by hand without one is
+      // refused here. Then the toll-fraud rule: a number in the venue's country.
+      const strict = requireE164(raw);
+      if (!strict.ok) return { ok: false, field: "transferNumber", error: strict.reason };
+      const check = checkTransferNumber(strict.e164, market);
       if (!check.ok) return { ok: false, field: "transferNumber", error: check.reason };
       escalation.transferNumber = check.e164;
       agent.transferNumber = check.e164;
@@ -128,7 +134,11 @@ export function applyRules(location: Location, input: RulesInput, now: Date = ne
       if (!EMAIL.test(raw) || raw.length > 200) return { ok: false, field: "notify", error: "That email address does not look right." };
       escalation.notifyEmail = raw.toLowerCase();
     } else if (raw) {
-      const check = checkTransferNumber(raw, market);
+      // The owner's own WhatsApp: with its country code, and in the venue's
+      // country, the same rule as the urgent-call number.
+      const strict = requireE164(raw);
+      if (!strict.ok) return { ok: false, field: "notify", error: `For WhatsApp alerts: ${strict.reason}` };
+      const check = checkTransferNumber(strict.e164, market);
       if (!check.ok) return { ok: false, field: "notify", error: `For WhatsApp alerts: ${check.reason}` };
       escalation.notifyWhatsApp = check.e164;
     }

@@ -1,5 +1,6 @@
 import type { Faq, Minutes, TimeRange, Vertical, WeeklyHours } from "../types";
 import { parseClock } from "../time";
+import { formatInternational, normaliseOwnerPhone, requireE164 } from "../phone";
 
 /**
  * The setup review, as data.
@@ -274,6 +275,8 @@ export interface ReviewForm {
   greeting: Field<string>;
   address: Field<string>;
   phone: Field<string>;
+  /** The country picked beside the phone (ISO), which a local entry is read with. Unset: the business's own market. */
+  phoneCountry?: string;
   /** Written as words; parsed on save and previewed as you type. */
   hours: Field<string>;
   /** Bookable services, or a restaurant's menu. */
@@ -349,7 +352,8 @@ export function formFromDraft(found: Found | null, read: Source, current: Curren
     name: { value: found?.name?.trim() || current.name, source: src(found?.name) },
     greeting: { value: found?.greeting?.trim() || current.greeting, source: src(found?.greeting) },
     address: { value: found?.address?.trim() || current.address, source: src(found?.address) },
-    phone: { value: current.phone, source: "saved" },
+    // Shown back international and grouped, as it is stored: +971 50 299 2339.
+    phone: { value: current.phone.trim().startsWith("+") ? formatInternational(current.phone) : current.phone, source: "saved" },
     hours: readHours
       ? { value: parsed?.ok ? formatHours(parsed.hours) : readHours, source: read }
       : { value: formatHours(current.hours), source: "saved" },
@@ -387,6 +391,7 @@ export interface FieldError {
 
 /** The review screen's input ids, shared so an error and its input cannot drift apart. */
 export const REVIEW_IDS = {
+  phone: "review-phone",
   hours: "review-hours",
   serviceMinutes: (i: number) => `review-service-${i}-minutes`,
   faqQuestion: (i: number) => `review-faq-${i}-q`,
@@ -403,6 +408,16 @@ export const REVIEW_IDS = {
  */
 export interface ReviewOptions {
   lengthsRequired?: boolean;
+  /** The business's own market (ISO), for a phone typed without its country code. */
+  country?: string;
+}
+
+/** The business phone as E.164, or why not. Empty is allowed. */
+function reviewPhone(form: ReviewForm, opts: ReviewOptions): { e164: string } | { error: string } {
+  const text = form.phone.value.trim();
+  if (!text) return { e164: "" };
+  const out = normaliseOwnerPhone(text, form.phoneCountry ?? opts.country ?? "AE");
+  return out.ok ? { e164: out.e164 } : { error: out.reason };
 }
 
 /**
@@ -442,6 +457,9 @@ export type SaveCheck =
  */
 export function reviewErrors(form: ReviewForm, opts: ReviewOptions = {}): FieldError[] {
   const errors: FieldError[] = [];
+
+  const phone = reviewPhone(form, opts);
+  if ("error" in phone) errors.push({ id: REVIEW_IDS.phone, message: phone.error });
 
   const hours = parseHours(form.hours.value);
   if (!hours.ok) errors.push({ id: REVIEW_IDS.hours, message: hours.error });
@@ -483,7 +501,11 @@ export function payloadFromForm(form: ReviewForm, opts: ReviewOptions = {}): Sav
       name: form.name.value.trim(),
       greeting: form.greeting.value.trim(),
       address: form.address.value.trim(),
-      phone: form.phone.value.trim(),
+      // E.164, converted at the field with the country picked beside it.
+      phone: (() => {
+        const p = reviewPhone(form, opts);
+        return "e164" in p ? p.e164 : "";
+      })(),
       hours: hours.hours,
       services,
       staff: form.staff.map((s) => s.value.trim()).filter(Boolean),
@@ -561,12 +583,21 @@ export function cleanConfirmed(body: Record<string, unknown>, opts: ReviewOption
     if (problem) return { ok: false, error: problem, service: s.name };
   }
 
+  // The business phone, stored E.164 only: a request without a country code is refused.
+  const rawPhone = str(body.phone, 40);
+  let phone = rawPhone;
+  if (rawPhone) {
+    const strict = requireE164(rawPhone);
+    if (!strict.ok) return { ok: false, error: strict.reason, field: REVIEW_IDS.phone };
+    phone = strict.e164;
+  }
+
   return {
     ok: true,
     confirmed: {
       name: str(body.name, 120) || undefined,
       address: str(body.address, 300),
-      phone: str(body.phone, 40),
+      phone,
       greeting: str(body.greeting, 400) || undefined,
       hours,
       services,

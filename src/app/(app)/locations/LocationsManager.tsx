@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import PhoneField, { type PhoneFieldHandle } from "@/components/PhoneField";
 import { useRouter } from "next/navigation";
 import type { Vertical, WeeklyHours } from "@/lib/types";
 import { TRADES, TRADE_GROUPS, tradeLabel } from "@/lib/signup-rules";
@@ -42,7 +43,7 @@ async function post(body: Record<string, unknown>) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = (await res.json().catch(() => ({}))) as { error?: string; locationId?: string };
+  const data = (await res.json().catch(() => ({}))) as { error?: string; locationId?: string; field?: string };
   return { ok: res.ok, ...data };
 }
 
@@ -221,6 +222,8 @@ function VenueDrawer({
   const [timezone, setTimezone] = useState(venue?.timezone ?? "Asia/Dubai");
   const [address, setAddress] = useState(venue?.address ?? "");
   const [phone, setPhone] = useState(venue?.phone ?? "");
+  const phoneField = useRef<PhoneFieldHandle | null>(null);
+  const [phoneError, setPhoneError] = useState<string | undefined>();
   const [currency, setCurrency] = useState(venue?.currency ?? "AED");
   const [hours, setHours] = useState<WeeklyHours>(
     venue?.hours ?? Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [d, [{ start: 540, end: 1080 }]])),
@@ -238,8 +241,11 @@ function VenueDrawer({
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    setBusy(true);
     setError(null);
+    setPhoneError(undefined);
+    // The phone is checked at its field: red, the reason under it, focus on it.
+    if (!phoneField.current?.check()) return;
+    setBusy(true);
     const result = await post({
       action: venue ? "update" : "create",
       locationId: venue?.id,
@@ -254,7 +260,8 @@ function VenueDrawer({
     });
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not save.");
+      if ((result as { field?: string }).field === "phone") setPhoneError(result.error);
+      else setError(result.error ?? "Could not save.");
       return;
     }
     onSaved(venue ? `${name} saved.` : `${name} added — let's set it up.`, venue ? undefined : result.locationId);
@@ -286,7 +293,19 @@ function VenueDrawer({
           )}
           <label>Address<input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={240} /></label>
           <div className="drawer-row">
-            <label>Phone<input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+971 4 …" inputMode="tel" /></label>
+            <PhoneField
+              ref={phoneField}
+              id="location-phone"
+              label="Phone"
+              compact
+              value={venue?.phone}
+              defaultCountry="AE"
+              serverError={phoneError}
+              onValue={(p) => {
+                if (!p.error) setPhone(p.e164);
+                setPhoneError(undefined);
+              }}
+            />
             <label>Currency<input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} /></label>
           </div>
           <label>

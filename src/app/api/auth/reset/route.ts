@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE, consumeResetToken, isBellineStaff } from "@/lib/auth";
+import { SESSION_COOKIE, consumeResetToken } from "@/lib/auth";
 import { sessionCookieOptions } from "@/lib/auth-server";
-import { listLocationsFor } from "@/lib/store";
-import { navCollapsed } from "@/lib/onboarding/journey";
 import { seedIfEmpty } from "@/lib/seed";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +9,7 @@ export const dynamic = "force-dynamic";
  * Set a new password from a reset link.
  *
  * The link is used up here, not when the page opens. Success signs out every
- * other session and signs this browser in, straight back to where the owner
- * was: setup if the business is not live yet, the dashboard otherwise.
+ * other session and signs this browser in, to the dashboard.
  */
 export async function POST(request: Request) {
   seedIfEmpty();
@@ -25,8 +22,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: result.error, field: result.field }, { status: result.field === "token" ? 410 : 422 });
   }
 
-  const venues = listLocationsFor(result.user.tenantId);
-  const next = navCollapsed(venues, isBellineStaff(result.user)) ? "/setup" : "/";
+  // The dashboard, as after signing in: its checklist leads back into setup.
+  const next = "/";
   const maxAge = Math.floor((Date.parse(result.session.expiresAt) - Date.now()) / 1000);
   const response = NextResponse.json({ ok: true, next });
   response.cookies.set(SESSION_COOKIE, result.session.id, sessionCookieOptions(maxAge));

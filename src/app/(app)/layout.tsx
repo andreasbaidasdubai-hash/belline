@@ -2,10 +2,9 @@ import { Suspense } from "react";
 import Link from "next/link";
 import Brand from "@/components/Brand";
 import BackToSetup from "@/components/BackToSetup";
-import { navCollapsed } from "@/lib/onboarding/journey";
 import { navFor } from "@/lib/nav";
 import { requireUser } from "@/lib/auth-server";
-import { canEditAgent, canManageUsers, canSeeLocation, isBellineStaff } from "@/lib/auth";
+import { canEditAgent, canSeeLocation, isBellineStaff } from "@/lib/auth";
 import { listLocations, listLocationsFor } from "@/lib/store";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import BelleDock from "@/app/setup/BelleDock";
@@ -48,25 +47,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const visible = listLocations().filter((l) => canSeeLocation(user, l.id));
 
-  // Until one of their businesses goes live, an owner sees the three places
-  // that move setup forward, not the twenty that assume it is done.
-  const collapsed = navCollapsed(visible, isBellineStaff(user));
-
+  // The full menu from the moment the account exists. Until 2026-09-16 it
+  // collapsed to Setup and Account until a venue went live, which left an
+  // owner who could not finish one step with no dashboard at all. What is left
+  // of setup is a checklist on Today; what gates answering real customers is
+  // per channel, in onboarding/journey.ts, not the menu.
+  //
   // The rest is decided in nav.ts: the seven destinations, with every other
-  // page one click away under "Everything else". The diary navigation this
-  // product grew was retired on 2026-09-16.
+  // page one click away under "Everything else".
   const shape = navFor(user, visible, { outstanding, dueBack });
 
   // Belle is not a place in the menu: she is the floating bell on every page.
-  const nav = collapsed
-    ? [{ href: "/setup", label: "Setup" }, ...(canManageUsers(user) ? [{ href: "/billing", label: "Account" }] : [])]
-    : shape.items;
+  const nav = shape.items;
 
   // The venue Belle works on, as /setup/assistant chooses it: this account's
   // own, and only one this person may change. Nobody else gets the bell.
   const belleVenue = listLocationsFor(user.tenantId).find((l) => canEditAgent(user, l.id));
 
-  const advanced = collapsed ? null : shape.advanced;
+  const advanced = shape.advanced;
 
   const content = (
     <main className="content">

@@ -4,12 +4,13 @@ import { seedIfEmpty } from "@/lib/seed";
 import { overviewFor, summarise, visibleHealth } from "@/lib/overview";
 import { isBellineStaff } from "@/lib/auth";
 import { readiness } from "@/lib/onboarding";
-import { isActivated, journeyFor } from "@/lib/onboarding/journey";
+import { channelStatuses, checklistOf, factsFrom, isActivated, journeyFor } from "@/lib/onboarding/journey";
 import { testsStale } from "@/lib/onboarding/selftest-state";
 import { ownerNotice } from "@/lib/billing/entitlement";
 import { raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
 import { todayIn } from "@/lib/time";
 import { callDurationSeconds } from "@/lib/calls";
+import { listCalls } from "@/lib/store";
 import { isRestaurant, terms } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
@@ -73,9 +74,12 @@ export default async function OverviewPage({
   // Before the sentence that says the team has been told, so it is true.
   raiseTrialCapIfPaymentsClosed(location, today);
   const notice = ownerNotice(location, today);
-  // Before going live the home page has one call to action: the journey's next
-  // step. A live venue keeps the page it had.
+  // Before going live the home page leads with what is left of setup, as a
+  // checklist: every item opens its step, in any order. A live venue keeps the
+  // page it had. `path` is null once live.
   const path = isActivated(location) ? null : journeyFor(location);
+  const checklist = path ? checklistOf(path) : null;
+  const channels = location.demo?.enabled ? [] : channelStatuses(location, factsFrom(location, listCalls(location.id)));
 
   return (
     <>
@@ -127,14 +131,41 @@ export default async function OverviewPage({
             ? summarise(location, did)
             : `Belline can't answer for ${location.name} yet — a few things to finish first.`}
         </p>
-        {path?.next && (
-          <div style={{ marginTop: 14, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
-            <Link href={path.next.url} className="btn btn-accent" data-testid="journey-next">
-              Next: {path.next.title}
-            </Link>
-            <span className="muted" style={{ fontSize: 12.5 }}>
-              Step {path.next.n} of {path.steps.length}
-            </span>
+        {checklist && (
+          <div style={{ marginTop: 16 }} data-testid="setup-checklist">
+            <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+              <strong style={{ fontSize: 14 }}>
+                Setup: {checklist.done} of {checklist.total} done
+              </strong>
+              {checklist.next ? (
+                <Link href={checklist.next.url} className="btn btn-accent" data-testid="journey-next">
+                  Next: {checklist.next.title}
+                </Link>
+              ) : (
+                path?.canGoLive && (
+                  <Link href="/setup/golive" className="btn btn-accent" data-testid="journey-next">
+                    Next: Go live
+                  </Link>
+                )
+              )}
+            </div>
+            <p className="muted" style={{ fontSize: 12.5, margin: "6px 0 0", lineHeight: 1.5, maxWidth: "60ch" }}>
+              Do them in any order, or come back later. Your dashboard works meanwhile; Belline answers real customers only
+              once the checks pass and you go live.
+            </p>
+            <ol style={{ listStyle: "none", margin: "12px 0 0", padding: 0, display: "grid", gap: 6 }}>
+              {checklist.items.map((s) => (
+                <li key={s.id} style={{ fontSize: 13.5, display: "flex", gap: 8, alignItems: "baseline" }}>
+                  <span aria-hidden="true" style={{ width: 18, color: s.done ? "var(--ok)" : "var(--text-2)" }}>
+                    {s.done ? "✓" : "○"}
+                  </span>
+                  <Link href={s.url} style={{ color: s.done ? "var(--text-2)" : "var(--accent)", textDecoration: s.done ? "none" : "underline" }}>
+                    {s.title}
+                  </Link>
+                  <span className="sr-only">{s.done ? " (done)" : " (not done)"}</span>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
         {!path && !setup.ready && (
@@ -175,6 +206,26 @@ export default async function OverviewPage({
           </div>
         )}
       </div>
+
+      {/* Where it answers, channel by channel, and nothing shown as live that is not. */}
+      {channels.length > 0 && (
+        <div className="panel" style={{ padding: "15px 18px", marginBottom: 14 }} data-testid="today-channels">
+          <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 8 }}>Where Belline answers</div>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 8 }}>
+            {channels.map((c) => (
+              <li key={c.id} data-channel={c.id} data-state={c.state} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                <Link href={c.href} style={{ fontWeight: 600 }}>
+                  {c.label}
+                </Link>{" "}
+                <span className="pill" style={{ marginLeft: 6, color: c.state === "live" ? "var(--ok)" : c.state === "waiting" ? "var(--warn)" : "var(--text-2)" }}>
+                  {c.state === "live" ? "Live" : c.state === "waiting" ? "Waiting" : "Not set up"}
+                </span>
+                <span style={{ color: "var(--text-2)", display: "block" }}>{c.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Anything broken goes above anything good. */}
       {unwell.length > 0 && (

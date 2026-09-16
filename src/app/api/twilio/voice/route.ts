@@ -6,6 +6,7 @@ import { checkDemoGate, clearOldDemoBookings, isDemo } from "@/lib/demo";
 import { seedIfEmpty } from "@/lib/seed";
 import { serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
+import { answersRealCustomers, notLiveMessage } from "@/lib/onboarding/journey";
 
 export const dynamic = "force-dynamic";
 
@@ -137,6 +138,18 @@ export async function POST(request: Request) {
     return xml(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">${escapeXml(TEST_SCRIPT)}</Say>
+  <Hangup/>
+</Response>`);
+  }
+
+  // Not live yet: the owner has not pressed Go live, which needs the eight
+  // checks passed first. Their forwarding test above is still answered; a real
+  // customer is not, and no stream, agent or minute is spent on them.
+  if (!answersRealCustomers(location)) {
+    console.warn("[twilio] not live yet for %s: refusing a real call", location.id);
+    return xml(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">${escapeXml(notLiveMessage(location.name))}</Say>
   <Hangup/>
 </Response>`);
   }

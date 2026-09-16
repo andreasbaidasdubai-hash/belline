@@ -1094,6 +1094,121 @@ await test("the line under the strip asks for the missing system through the sit
   assert.ok(elsewhere.includes('href="mailto:hello@belline.ai"'), "the strip's contact address is not one the page already uses");
 });
 
+head("The chat link: a channel with no website");
+
+{
+  const { upsertLocation } = await import("../src/lib/store");
+  const link = await import("../src/lib/chat-link");
+  const { channelStatuses, journey, answersRealCustomers } = await import("../src/lib/onboarding/journey");
+  const src = (...p: string[]) => fs.readFileSync(path.join(process.cwd(), ...p), "utf8");
+
+  const made = await signUp({
+    businessName: "Link Only Lashes",
+    email: "owner@linkonlylashes.ae",
+    password: "Correct-Horse-Battery-9",
+    timezone: "Asia/Dubai",
+    vertical: "salon",
+  });
+  if (!made.ok) throw new Error("could not create the link venue");
+  const id = made.location.id;
+  const fresh = () => getLocation(id)!;
+  upsertLocation({ ...fresh(), phone: "+97145550123" });
+
+  await test("making the link is idempotent, uses its own key, and resolves as a link — never as the widget", () => {
+    const first = link.ensureChatLink(fresh(), "usr_owner");
+    const again = link.ensureChatLink(fresh(), "usr_owner");
+    assert.ok(first.chatLink?.key.startsWith("bc_"));
+    assert.equal(again.chatLink!.key, first.chatLink!.key, "a second press made a second link");
+    assert.notEqual(first.chatLink!.key, fresh().embed?.key);
+    assert.deepEqual(link.findChatVenue(first.chatLink!.key)?.via, "link");
+    assert.equal(link.findChatVenue(first.chatLink!.key)?.location.id, id);
+    assert.equal(link.findChatVenue("bc_nothing"), null);
+    assert.equal(link.chatLinkUrl(fresh(), "https://app.belline.ai"), `https://app.belline.ai/c/${first.chatLink!.key}`);
+    // The page 404s a widget key: the widget only opens inside the sites it names.
+    assert.match(src("src", "app", "c", "[key]", "page.tsx"), /if \(!found \|\| found\.via !== "link"\) notFound\(\);/);
+  });
+
+  await test("before the venue is live it does not answer, and says nothing about the venue", () => {
+    assert.equal(answersRealCustomers(fresh()), false);
+    const page = link.linkPageState(fresh(), false);
+    assert.equal(page.kind, "refused");
+    const said = page.kind === "refused" ? page.message : "";
+    assert.equal(said, link.LINK_NOT_LIVE);
+    for (const leak of [fresh().name, "Link Only", fresh().agent.displayName, fresh().phone, "4555", "salon", "Dubai"]) {
+      assert.ok(!said.toLowerCase().includes(String(leak).toLowerCase()), `the not-live page leaked "${leak}"`);
+    }
+    // The page's title and robots name nothing either, and the page only opens through the same gate as the widget.
+    const pageSrc = src("src", "app", "c", "[key]", "page.tsx");
+    assert.match(pageSrc, /title: "Chat",\s*robots: \{ index: false, follow: false \}/);
+    assert.match(pageSrc, /linkPageState\(location, await widgetOpenFor\(location\)\)/);
+    // Every turn goes through the web chat's own resolver, which refuses a venue that is not open.
+    const turn = src("src", "lib", "webchat-turn.ts");
+    assert.match(turn, /const found = findChatVenue\(key\);/);
+    assert.match(turn, /if \(!\(await open\(location\)\)\) \{\s*return NextResponse\.json\(\{ error: "Chat is not available here\." \}, \{ status: 404 \}\);/);
+    assert.match(turn, /chatGate\(location, \{ via \}\)/);
+  });
+
+  await test("it counts as a channel for going live, and is waiting, not live, until Go live", () => {
+    const j = journey(fresh());
+    assert.ok(j.steps.find((s) => s.id === "channels")!.done, "the chat link did not count as a channel");
+    assert.ok(!j.blockers.some((b) => b.step === "channels"));
+    assert.equal(channelStatuses(fresh()).find((c) => c.id === "link")!.state, "waiting");
+    const o = fresh().onboarding!;
+    upsertLocation({ ...fresh(), onboarding: { ...o, activatedAt: "2026-09-16T09:00:00.000Z" } });
+    assert.equal(channelStatuses(fresh()).find((c) => c.id === "link")!.state, "live");
+    assert.equal(link.linkPageState(fresh(), true).kind, "chat");
+  });
+
+  await test("once live, the venue's daily conversation ceiling applies, shared with the widget", () => {
+    upsertLocation({ ...fresh(), embed: { enabled: false, key: "be_link_only", mode: "chat", allowedOrigins: [], maxChatsPerDay: 3 } as never });
+    assert.equal(chatGate(fresh(), { via: "link" }).allowed, true);
+    for (let i = 0; i < 3; i++) {
+      const c = startCall(fresh(), "webchat", "Website");
+      saveCall({ ...c, transcript: [] });
+    }
+    const gate = chatGate(fresh(), { via: "link" });
+    assert.equal(gate.allowed, false, "the link went past the day's ceiling");
+    const page = link.linkPageState(fresh(), true);
+    assert.equal(page.kind, "refused");
+    // The widget, switched off here, is not a way in, and the link is not a way round its ceiling.
+    assert.equal(chatGate(fresh()).allowed, false);
+  });
+
+  await test("once live, the trial's text conversations stop it like the widget, and the visitor hears nothing about money", async () => {
+    const other = await signUp({ businessName: "Link Trial Nails", email: "owner@linktrial.ae", password: "Correct-Horse-Battery-9", timezone: "Asia/Dubai", vertical: "salon" });
+    if (!other.ok) throw new Error("could not create the trial venue");
+    const v = () => getLocation(other.location.id)!;
+    const o = v().onboarding!;
+    upsertLocation({ ...link.ensureChatLink(v()), onboarding: { ...o, activatedAt: "2026-09-16T09:00:00.000Z" }, embed: { enabled: false, key: "be_link_trial", mode: "chat", allowedOrigins: [], maxChatsPerDay: 1000 } as never });
+    const allowance = v().subscription!.trial!.conversations ?? 50;
+    for (let i = 0; i < allowance; i++) {
+      const c = startCall(v(), "webchat", "Website");
+      const at = new Date(Date.now() - 60_000).toISOString();
+      saveCall({ ...c, transcript: [{ role: "caller", text: "Hi", at } as never, { role: "agent", text: "Hello", at } as never] });
+    }
+    const gate = chatGate(v(), { via: "link" });
+    assert.equal(gate.allowed, false, "the trial's conversations did not stop the link");
+    assert.doesNotMatch(gate.message ?? "", /trial|plan|pay|subscri|charge|AED/i);
+    assert.equal(link.linkPageState(v(), true).kind, "refused");
+  });
+
+  await test("the channels step and the Channels screen show it with a copy button, behind a signed-in owner's route", () => {
+    const step = src("src", "app", "setup", "[step]", "page.tsx");
+    const screen = src("src", "app", "(app)", "channels", "page.tsx");
+    const card = src("src", "app", "(app)", "channels", "ChatLinkCard.tsx");
+    assert.match(step, /<ChatLinkCard locationId=\{venue\.id\} url=\{chatLinkUrl\(venue\)\}/);
+    assert.match(screen, /<ChatLinkCard locationId=\{location\.id\} url=\{chatLinkUrl\(location\)\}/);
+    assert.match(card, /navigator\.clipboard\.writeText\(url\)/);
+    assert.match(card, /Copy link/);
+    const route = src("src", "app", "api", "chat-link", "route.ts");
+    assert.match(route, /requireApiUser\(\)/);
+    assert.match(route, /canEditAgent\(user, location\.id\)/);
+    // The same conversation code as the widget: the page is the widget's Chat, posting to the web chat routes.
+    assert.match(src("src", "app", "c", "[key]", "page.tsx"), /import Chat from "@\/app\/embed\/\[key\]\/chat\/Chat";/);
+    assert.match(src("src", "app", "embed", "[key]", "chat", "Chat.tsx"), /fetch\(`\/api\/webchat\/\$\{encodeURIComponent\(embedKey\)\}`/);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // The database half.
 // ---------------------------------------------------------------------------

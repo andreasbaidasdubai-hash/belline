@@ -7,6 +7,7 @@ import { raiseException } from "@/lib/errors/customer";
 import { openException } from "@/lib/exceptions";
 import { ownerNotice } from "@/lib/billing/entitlement";
 import { raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
+import { bellineNumberOf } from "@/lib/telephony/number";
 import { todayIn } from "@/lib/time";
 import { flag } from "@/lib/flags";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -56,7 +57,8 @@ export default async function GoLivePage({
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
 
   const setup = readiness(location);
-  const number = location.phone.trim();
+  // Belline's number only, never the business's own phone saved on review.
+  const number = bellineNumberOf(location);
   const dial = number.replace(/[^\d+]/g, "");
   const abroad = Boolean(dial) && !/^\+?971/.test(dial);
   const today = todayIn(location.timezone);

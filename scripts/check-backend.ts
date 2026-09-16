@@ -59,7 +59,7 @@ console.log("\n\x1b[1mLocations\x1b[0m\n");
 let branch = "";
 
 await test("an owner adds a second location, in their own business, with its own trial and history", () => {
-  const out = createLocation(me(), { name: "Palm Clinic — Marina", vertical: "clinic", address: "Marina Walk, Dubai", phone: "04 555 0199" });
+  const out = createLocation(me(), { name: "Palm Clinic — Marina", vertical: "clinic", address: "Marina Walk, Dubai", phone: "+971 4 555 0199" });
   assert.ok(out.ok, out.ok ? "" : out.error);
   branch = out.ok ? out.location.id : "";
   const loc = getLocation(branch)!;
@@ -85,6 +85,8 @@ await test("bad details are refused with the field named", () => {
     [{ name: "Palm Two", vertical: "clinic", timezone: "Mars/Olympus" }, "timezone"],
     [{ name: "Palm Two", vertical: "clinic", currency: "dirhams" }, "currency"],
     [{ name: "Palm Two", vertical: "clinic", phone: "call me" }, "phone"],
+    // Without its country code (2026-09-16): refused, not guessed.
+    [{ name: "Palm Two", vertical: "clinic", phone: "04 555 0199" }, "phone"],
   ] as const) {
     const out = createLocation(me(), input);
     assert.equal(out.ok, false, JSON.stringify(input));

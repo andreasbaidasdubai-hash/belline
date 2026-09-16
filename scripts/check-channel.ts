@@ -356,6 +356,42 @@ console.log("\n\x1b[1mThe forwarding test call\x1b[0m\n");
     }
   });
 
+  t("a real call to a venue that has not gone live is not answered: no stream, no agent; once live, it is", async () => {
+    const crypto = await import("node:crypto");
+    const { POST } = await import("../src/app/api/twilio/voice/route");
+    const venueD = getLocation("loc_lumiere")!;
+    upsertLocation({ ...venueD, phone: "+97140000004", onboarding: { version: 1, channels: { phone: { forwardingVerifiedAt: "2026-09-15T10:00:00.000Z" } } } });
+    const keep = { ...process.env };
+    process.env.TWILIO_AUTH_TOKEN = "test-token";
+    try {
+      const url = "https://app.belline.ai/api/twilio/voice";
+      const call = async (sid: string) => {
+        const form = { To: "+97140000004", From: "+971506666666", CallSid: sid };
+        const payload = url + Object.keys(form).sort().map((k) => k + form[k as keyof typeof form]).join("");
+        const signature = crypto.createHmac("sha1", "test-token").update(payload, "utf8").digest("base64");
+        const res = await POST(
+          new Request(url, {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": signature, host: "app.belline.ai", "x-forwarded-proto": "https" },
+            body: new URLSearchParams(form).toString(),
+          }),
+        );
+        assert.equal(res.status, 200);
+        return res.text();
+      };
+      const before = await quiet(() => call("CA_not_live_1"));
+      assert.ok(!before.includes("<Stream"), "a real customer reached the agent before Go live");
+      assert.ok(before.includes("<Hangup/>"));
+      assert.doesNotMatch(before, /setup|trial|checks|go live|plan/i, "the caller was told about the owner's setup");
+      const live = getLocation(venueD.id)!;
+      upsertLocation({ ...live, onboarding: { ...live.onboarding!, activatedAt: "2026-09-15T11:00:00.000Z" } });
+      const after = await quiet(() => call("CA_live_1"));
+      assert.ok(after.includes("<Stream"), after);
+    } finally {
+      process.env = keep;
+    }
+  });
+
   for (const [name, fn] of tests) {
     try {
       await fn();
