@@ -7,8 +7,21 @@ import { useState } from "react";
  *
  * Buy it in Twilio, point its voice webhook at /api/twilio/voice, then record
  * it here. Until this exists for a venue, its forwarded calls reach nobody.
+ *
+ * Recording is the whole of it: nothing here buys a number, configures Twilio
+ * or dials anything. What it writes is `location.phone`, which is the field
+ * the voice webhook routes on — so a wrong value silently points a live
+ * venue's calls at the wrong diary. Hence the confirmation and the audit row.
  */
-export default function NumberCell({ venueId, phone }: { venueId: string; phone: string }) {
+export default function NumberCell({
+  venueId,
+  venueName,
+  phone,
+}: {
+  venueId: string;
+  venueName: string;
+  phone: string;
+}) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,9 +29,20 @@ export default function NumberCell({ venueId, phone }: { venueId: string; phone:
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (busy) return;
+
+    const form = new FormData(e.currentTarget);
+    const next = String(form.get("phone") ?? "").trim();
+    // Named, and quoting both numbers. This row is one of twenty and the wrong
+    // one is a keystroke away; "are you sure?" would not tell anybody which
+    // venue they were about to redirect.
+    const question = phone
+      ? `Change the recorded number for ${venueName} from ${phone} to ${next || "none"}?\n\n` +
+        `Calls forwarded to ${phone} will stop reaching this venue.`
+      : `Record ${next || "no number"} as the Belline number for ${venueName}?`;
+    if (!window.confirm(question)) return;
+
     setBusy(true);
     setError(null);
-    const form = new FormData(e.currentTarget);
     try {
       const res = await fetch("/api/sales/clients/number", {
         method: "POST",
@@ -48,7 +72,7 @@ export default function NumberCell({ venueId, phone }: { venueId: string; phone:
       </div>
     ) : (
       <button className="btn btn-row" onClick={() => setOpen(true)}>
-        Assign a number
+        Record a number
       </button>
     );
   }

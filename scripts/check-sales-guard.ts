@@ -132,6 +132,57 @@ test("it is the tenant that decides, not the role", async () => {
   assert.equal(typeof isBellineStaff, "function");
 });
 
+console.log("\n\x1b[1mClicks with a live effect\x1b[0m\n");
+
+/** Buttons that change something outside this console, and what drives them. */
+const LIVE_EFFECTS = [
+  {
+    what: "a venue's phone number",
+    route: path.join("src", "app", "api", "sales", "clients", "number", "route.ts"),
+    cell: path.join("src", "app", "(internal)", "sales", "clients", "NumberCell.tsx"),
+  },
+  {
+    what: "a venue's WhatsApp",
+    route: path.join("src", "app", "api", "sales", "whatsapp", "route.ts"),
+    cell: path.join("src", "app", "(internal)", "sales", "clients", "WhatsAppCell.tsx"),
+  },
+];
+
+test("nothing with a live effect happens without asking first", () => {
+  const silent = LIVE_EFFECTS.filter(
+    (l) => !/window\.confirm/.test(fs.readFileSync(l.cell, "utf8")),
+  ).map((l) => l.what);
+  assert.deepEqual(silent, [], `changed without asking: ${silent.join(", ")}`);
+});
+
+test("the confirmation names the venue", () => {
+  // "Are you sure?" over a table of twenty venues is not a confirmation — the
+  // thing the operator needs to check is which row they are on.
+  const unnamed = LIVE_EFFECTS.filter(
+    (l) => !/venueName/.test(fs.readFileSync(l.cell, "utf8")),
+  ).map((l) => l.what);
+  assert.deepEqual(unnamed, [], `confirmed without naming the venue: ${unnamed.join(", ")}`);
+});
+
+test("connecting WhatsApp asks, not only pausing it", () => {
+  // Pausing already asked before it stopped answering. Starting to answer a
+  // real number in a customer's name did not.
+  const cell = fs.readFileSync(LIVE_EFFECTS[1].cell, "utf8");
+  const asks = (cell.match(/window\.confirm/g) ?? []).length;
+  assert.ok(asks >= 2, `only ${asks} confirmation(s) in WhatsAppCell`);
+});
+
+test("every live effect leaves an audit row behind", () => {
+  const traced = [
+    ...LIVE_EFFECTS.map((l) => l.route),
+    // The client book is not a live effect, but it is the most sensitive
+    // export here and it left no trace of who took it.
+    path.join("src", "app", "api", "sales", "clients", "route.ts"),
+  ];
+  const untraced = traced.filter((r) => !/\btryAudit\(|\baudit\(/.test(fs.readFileSync(r, "utf8")));
+  assert.deepEqual(untraced, [], `no audit row written by: ${untraced.join(", ")}`);
+});
+
 // Run it. The unconfigured path answers before the auth check, so this needs
 // no session and no database — which is also the guarantee being tested.
 {

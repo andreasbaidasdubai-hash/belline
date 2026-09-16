@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { query } from "../client";
+import { isConfigured, query } from "../client";
 
 /**
  * The lead timeline. Append-only, forever.
@@ -63,6 +63,32 @@ export async function log(input: ActivityInput): Promise<void> {
     return;
   }
   await query(sql, params);
+}
+
+/**
+ * Audit, from a caller that may have no database.
+ *
+ * `audit` below needs Postgres. Three of the things most worth recording —
+ * recording a venue's phone number, connecting its WhatsApp, exporting the
+ * client book — happen in routes that work off the JSON store and are expected
+ * to keep working when the sales database is not configured at all.
+ *
+ * So the row is written where there is somewhere to write it, and a reporting
+ * database that is missing or briefly down never turns into a failed action.
+ * It swallows deliberately and says so in the log: the alternative is a staff
+ * member pressing Save, being shown an error, pressing it again, and the
+ * number having changed both times.
+ */
+export async function tryAudit(input: Parameters<typeof audit>[0]): Promise<void> {
+  if (!isConfigured()) return;
+  try {
+    await audit(input);
+  } catch (err) {
+    console.error(
+      "[sales] audit row not written:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 }
 
 /** Configuration and approval changes, kept separately from the lead timeline. */

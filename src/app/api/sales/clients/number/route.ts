@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { getLocation, listLocations, upsertLocation } from "@/lib/store";
+import { tryAudit } from "@/lib/sales/db/repo/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,21 @@ export async function POST(request: Request) {
     }
   }
 
-  upsertLocation({ ...venue, phone: digits ? `+${digits}` : "" });
-  return NextResponse.json({ ok: true, phone: digits ? `+${digits}` : "" });
+  const before = venue.phone;
+  const after = digits ? `+${digits}` : "";
+  upsertLocation({ ...venue, phone: after });
+
+  // Who pointed which venue's calls where. The JSON store keeps no history of
+  // its own, so without this row "when did this venue's number change, and who
+  // changed it" is answerable nowhere.
+  await tryAudit({
+    actor: `user:${auth.user.id}`,
+    action: "venue_number_recorded",
+    entity: "location",
+    entityId: venue.id,
+    before: { phone: before },
+    after: { phone: after },
+  });
+
+  return NextResponse.json({ ok: true, phone: after });
 }

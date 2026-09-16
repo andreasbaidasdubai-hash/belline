@@ -238,10 +238,15 @@ export default async function ClientsPage() {
                       {r.mrrFils ? aed(r.mrrFils) : <span className="muted">—</span>}
                     </td>
                     <td>
-                      <NumberCell venueId={r.venueId} phone={r.phone} />
+                      <NumberCell venueId={r.venueId} venueName={r.venueName} phone={r.phone} />
                     </td>
                     <td>
-                      <WhatsAppCell venueId={r.venueId} number={whatsapp.get(r.venueId) ?? null} ready={whatsappReady} />
+                      <WhatsAppCell
+                        venueId={r.venueId}
+                        venueName={r.venueName}
+                        number={whatsapp.get(r.venueId) ?? null}
+                        ready={whatsappReady}
+                      />
                     </td>
                   </tr>
                 ))}

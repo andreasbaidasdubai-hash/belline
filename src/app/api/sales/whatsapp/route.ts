@@ -3,6 +3,7 @@ import { requireApiUser } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { getLocation } from "@/lib/store";
 import { connectVenueNumber, disconnectVenueNumber } from "@/lib/whatsapp";
+import { tryAudit } from "@/lib/sales/db/repo/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,16 @@ export async function POST(req: Request) {
     phoneNumberId: String(body.phoneNumberId ?? ""),
   });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+
+  await tryAudit({
+    actor: `user:${auth.user.id}`,
+    action: "venue_whatsapp_connected",
+    entity: "location",
+    entityId: location.id,
+    before: { whatsapp: null },
+    after: { whatsapp: result.account.phoneE164, aiEnabled: result.account.aiEnabled },
+  });
+
   return NextResponse.json({ ok: true, number: result.account.phoneE164 });
 }
 
@@ -43,5 +54,15 @@ export async function DELETE(req: Request) {
   if (!location) return NextResponse.json({ error: "Unknown venue." }, { status: 404 });
 
   const paused = await disconnectVenueNumber(location);
+
+  await tryAudit({
+    actor: `user:${auth.user.id}`,
+    action: "venue_whatsapp_paused",
+    entity: "location",
+    entityId: location.id,
+    before: { answering: true },
+    after: { answering: false, paused },
+  });
+
   return NextResponse.json({ ok: true, paused });
 }
