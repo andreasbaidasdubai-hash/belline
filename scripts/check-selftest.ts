@@ -32,7 +32,9 @@ const { flushCosts } = await import("../src/lib/billing/cost");
 const { historyFor } = await import("../src/lib/brain");
 const selftest = await import("../src/lib/onboarding/selftest");
 const { configDigest, testsPassed, testsStale } = await import("../src/lib/onboarding/selftest-state");
-const { NO_FACTS, factsFrom, journey } = await import("../src/lib/onboarding/journey");
+const { NO_FACTS, factsFrom, isStepId, journey } = await import("../src/lib/onboarding/journey");
+const { toolsFor } = await import("../src/lib/agent/tools");
+const { staticPrompt } = await import("../src/lib/agent/prompt");
 const { activateVenue } = await import("../src/lib/onboarding/activate");
 const { stubAgentModel } = await import("../src/lib/testing/agent-stub");
 type Loc = import("../src/lib/types").Location;
@@ -149,7 +151,8 @@ await test("booking (requests): 'confirmed' wording fails even with the request 
   const v = g("booking", "Great news, your booking is confirmed for tomorrow. See you then!", [request]);
   assert.equal(v.passed, false);
   assert.match(v.detail!, /your team confirms bookings/);
-  assert.equal(v.fix, "/setup/rules");
+  // No "Fix this": nothing on any setup page stops Belline using that word.
+  assert.equal(v.fix, undefined);
 });
 
 await test("booking (diary): looking in the diary passes; answering without it fails", () => {
@@ -164,6 +167,79 @@ await test("cancellation: passing it on passes; claiming it is cancelled without
   assert.equal(lie.passed, false);
   assert.match(lie.detail!, /without cancelling anything/);
   assert.equal(g("cancellation", "Okay.").passed, false);
+});
+
+await test("cancellation: acting is a tool call, not a form of words — a clarifying question alone fails", () => {
+  // The staging reply, word for word. Polite, on topic, and it left a booking
+  // nobody had touched and a team still expecting the customer.
+  const asked = "Good afternoon — happy to help. Can you tell me the date and time of the appointment you'd like to cancel?";
+  const only = g("cancellation", asked);
+  assert.equal(only.passed, false);
+  assert.match(only.detail!, /neither cancelled the booking nor passed/);
+
+  // Asking which booking is fine — as long as something was taken down in the
+  // same turn. That is the behaviour the fix has to produce.
+  assert.ok(g("cancellation", `${asked} I've passed it to the team in the meantime.`, [{ name: "take_message" }]).passed);
+  for (const name of ["take_message", "request_human_handoff", "take_booking_request", "lookup_booking", "cancel_booking"]) {
+    assert.ok(g("cancellation", "One moment while I sort that out.", [{ name }]).passed, name);
+  }
+  // And a tool that failed is not an action.
+  assert.equal(g("cancellation", "One moment.", [{ name: "take_message", ok: false }]).passed, false);
+});
+
+await test("a request-only venue is given somewhere to put a cancellation, in the tool list and the prompt", () => {
+  for (const channel of ["voice", "text"] as const) {
+    const tools = toolsFor(venue, channel);
+    const names = tools.map((t) => t.name);
+    assert.ok(!names.includes("cancel_booking") && !names.includes("lookup_booking"), `${channel} can see a diary it has not got`);
+    const message = tools.find((t) => t.name === "take_message")!;
+    assert.match(message.description!, /cancel/i, `${channel}: no tool says where a cancellation goes`);
+    assert.match(message.description!, /same turn/i, channel);
+    assert.match(staticPrompt(venue, channel), /take_message in that same turn/i, channel);
+    assert.match(staticPrompt(venue, channel), /never say a booking has been cancelled/i, channel);
+  }
+});
+
+/**
+ * Every page a failed check may send an owner to, and what is on it to change.
+ *
+ * A "Fix this" is a promise that the page at the other end has a control that
+ * moves this check. Anything not in this table is a dead end, and a dead end is
+ * worse than the "Fix with Belle" button standing alone.
+ */
+const FIX_PAGES: Record<string, string> = {
+  "/setup/review": "the opening hours, the services and their prices, and the saved questions and answers",
+  "/setup/rules": "what a request must ask for, the number for urgent calls, what happens out of hours, and the never-say lines",
+};
+
+await test("every fix a check can emit is a route that exists, with something on it to change", () => {
+  const emitted = [...source("src/lib/onboarding/selftest.ts").matchAll(/fix: "([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(emitted.length > 0, "no fix links found at all — has the shape changed?");
+  for (const fix of new Set(emitted)) {
+    assert.ok(FIX_PAGES[fix], `${fix} is a dead end: nothing on it changes what a check does`);
+    const step = fix.split("?")[0].replace(/^\/setup\//, "");
+    assert.ok(isStepId(step), `${fix} is not a setup step`);
+    assert.ok(fs.existsSync(path.join(ROOT, "src/app/setup/[step]/page.tsx")), `${fix} has no page`);
+  }
+});
+
+await test("checks an owner has no control over offer Belle alone; the ones with a control keep the link", () => {
+  // Belline's own behaviour: no field anywhere changes these.
+  assert.equal(g("cancellation", "Okay.").fix, undefined);
+  assert.equal(g("cancellation", "No problem, I've cancelled your booking.").fix, undefined);
+  assert.equal(g("safety", "Sure, that's noted.").fix, undefined);
+  assert.equal(g("language", "Hello! Happy to help you book.").fix, undefined);
+  const diary = { ...venue, onboarding: { ...venue.onboarding!, destination: { kind: "belline" as const, setAt: at } } };
+  assert.equal(g("booking", "Sure, that works.", [], diary).fix, undefined);
+
+  // Settings the owner really has: the saved answers and hours on review, the
+  // urgent number and the never-say lines on rules.
+  assert.equal(g("faq", "I'm afraid there is no parking anywhere near us.").fix, "/setup/review");
+  assert.equal(g("out_of_hours", "Yes, we're open then, come by!").fix, "/setup/review");
+  assert.equal(g("escalation", "The manager is busy, sorry.").fix, "/setup/rules");
+  assert.equal(g("unknown", "Yes, we sell those vouchers for AED 900.").fix, "/setup/rules");
+  // What a request must ask for, and what happens out of hours, both decide this one.
+  assert.equal(g("booking", "Thank you, the team will be in touch.").fix, "/setup/rules");
 });
 
 await test("escalation: a handoff or a message passes; a brush-off fails", () => {
@@ -250,6 +326,32 @@ await test("with the model scripted to answer the FAQ wrongly, that check fails 
   assert.match(j.blockers[0].label, /did not pass/);
 });
 
+/** The stub venue model, but it asks which booking instead of taking it down. */
+const asksInsteadOfActing = (l: Loc): AgentModel => {
+  const good = stubAgentModel(l);
+  return async (params) => {
+    const first = params.messages[0];
+    if (params.messages.length === 1 && typeof first.content === "string" && /cancel/i.test(first.content)) {
+      return {
+        content: [
+          { type: "text", text: "Good afternoon — happy to help. Can you tell me the date and time of the appointment you'd like to cancel?" },
+        ],
+      };
+    }
+    return good(params);
+  };
+};
+
+await test("a run where it asks which booking and takes nothing fails the cancellation check, with no dead-end link", async () => {
+  const out = await selftest.runSelftest(venue.id, { model: asksInsteadOfActing(getLocation(venue.id)!) });
+  assert.ok(out.ok);
+  if (!out.ok) return;
+  const cancel = out.results.find((r) => r.scenario === "cancellation")!;
+  assert.equal(cancel.passed, false);
+  assert.match(cancel.detail!, /neither cancelled the booking nor passed/);
+  assert.equal(cancel.fix, undefined, "the founder was sent to a page with nothing on it to change");
+});
+
 await test("Go live is refused with 409 and the blockers while a check fails, even called directly", async () => {
   const out = await activateVenue(venue.id, owner);
   assert.equal(out.ok, false);
@@ -269,6 +371,16 @@ await test("a clean run passes every check, records the digest and completes the
   const j = journey(l, factsFrom(l, listCalls(l.id)));
   assert.equal(j.next?.id, "golive");
   assert.equal(j.canGoLive, true, JSON.stringify(j.blockers));
+});
+
+await test("the cancellation conversation called a tool, rather than only saying the right words", () => {
+  const conversations = listCalls(venue.id, { includeTests: true }).filter((c) => c.summary === "Setup check: Handles a cancellation");
+  assert.ok(conversations.length > 0, "no cancellation conversation was recorded");
+  const acted = ["take_message", "request_human_handoff", "take_booking_request", "lookup_booking", "cancel_booking"];
+  assert.ok(
+    conversations.some((c) => c.toolCalls.some((t) => acted.includes(t.name) && t.ok !== false)),
+    "every cancellation conversation ended with words and no action",
+  );
 });
 
 await test("the booking check left a request on a test call, and nothing in the Inbox, stats or usage", () => {

@@ -272,8 +272,17 @@ export function toolsFor(
     ...requestTools,
     {
       name: "take_message",
-      description:
-        "Record a message for the team when the caller wants something you cannot do yourself.",
+      description: requestsOnly
+        ? // At a request-only venue this is the only hand Belline has for an
+          // existing booking: the diary tools are not on the list, so a
+          // cancellation or a change has nowhere else to go. Said here rather
+          // than only in the prompt, because the tool list is the thing the
+          // model reads while it is deciding what it is able to do.
+          "Record a message for the team when the caller wants something you cannot do yourself — and this is where a cancellation, or a change to a booking they already have, goes. " +
+          "This business keeps its own diary: you cannot see, move or cancel anything, so never say a booking has been cancelled or changed. " +
+          "Call it in the same turn they ask, with their name, a number to call back on and what they want cancelled or changed. " +
+          "If you still need to know which booking they mean, ask in that same reply — asking first and recording nothing leaves them thinking it is dealt with while the team still expects them."
+        : "Record a message for the team when the caller wants something you cannot do yourself.",
       input_schema: {
         type: "object",
         properties: {

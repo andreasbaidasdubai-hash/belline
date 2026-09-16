@@ -446,6 +446,63 @@ await test("the message path runs the slot guard before the invention check", ()
 });
 
 // ---------------------------------------------------------------------------
+head("A cancellation at a business that cannot cancel anything");
+
+/**
+ * The other half of the instinct commit 5a7b383 gave bookings.
+ *
+ * A request-only venue has no diary tools at all, so a cancellation has exactly
+ * one place to go: take_message. Asked to cancel on staging, Belline asked
+ * which booking and took nothing down — polite, on topic, and the customer went
+ * away believing it was dealt with while the team still expected them.
+ *
+ * Pinned at the tool layer as well as the prompt, because the tool list is what
+ * the model reads while it decides what it is able to do.
+ */
+const { toolsFor } = await import("../src/lib/agent/tools");
+const { staticPrompt } = await import("../src/lib/agent/prompt");
+
+await test("the tool list gives a cancellation somewhere to go, on both channels", () => {
+  for (const channel of ["voice", "text"] as const) {
+    const tools = toolsFor(requestVenue, channel);
+    const names = tools.map((t) => t.name);
+    assert.ok(!names.includes("cancel_booking") && !names.includes("lookup_booking"), `${channel} can see a diary it has not got`);
+    const message = tools.find((t) => t.name === "take_message")!;
+    assert.match(message.description!, /cancel/i, `${channel}: no tool says where a cancellation goes`);
+    assert.match(message.description!, /same turn/i, `${channel}: nothing says to take it down in the turn they ask`);
+    assert.match(message.description!, /never say/i, channel);
+  }
+});
+
+await test("the prompt says take it down in the same turn, and never call it cancelled", () => {
+  for (const channel of ["voice", "text"] as const) {
+    const prompt = staticPrompt(requestVenue, channel);
+    assert.match(prompt, /take_message in that same turn/i, channel);
+    assert.match(prompt, /never say a booking has been cancelled/i, channel);
+  }
+});
+
+await test("the cancellation transcript: asking which booking and taking nothing fails; taking it passes", () => {
+  const asked = "Good afternoon — happy to help. Can you tell me the date and time of the appointment you'd like to cancel?";
+  const only = graded("cancellation", asked);
+  assert.equal(only.passed, false);
+  assert.match(only.detail!, /neither cancelled the booking nor passed/);
+  // And nowhere to send the owner: no setup page cancels a booking.
+  assert.equal(only.fix, undefined);
+
+  const took = graded("cancellation", `${asked} I've passed it to the team in the meantime.`, [trace("take_message", { saved: true })]);
+  assert.equal(took.passed, true, JSON.stringify(took));
+});
+
+await test("the slot verdict sends nobody to a page that has no such control either", () => {
+  const echoed = [trace("take_booking_request", { requested: true, requested_time: "20:00" })];
+  const v = graded("booking", "I have 8:00 PM for you on Friday.", echoed);
+  assert.equal(v.passed, false);
+  assert.match(v.detail!, /It offered the customer a time/);
+  assert.equal(v.fix, undefined);
+});
+
+// ---------------------------------------------------------------------------
 
 void listCalls;
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
