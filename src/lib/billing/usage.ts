@@ -579,6 +579,10 @@ function atLimitSentence(
   const policy = sub.usagePolicy;
   switch (policy?.mode) {
     case "packs": {
+      if (!stripeEnabled()) {
+        // No pack is added while nothing could be charged for it (usage-policy.ts).
+        return `You chose to add a pack automatically, but card payments are not open yet, so no pack can be added. ${stopped} The Belline team has been told and will contact you to keep it going.`;
+      }
       const price = packFor(pool).prices[market] ?? 0;
       const spent = packs.reduce((sum, p) => sum + p.priceMinor, 0);
       if (policy.monthlyCapMinor !== undefined && spent + price > policy.monthlyCapMinor) {

@@ -6,7 +6,7 @@ import { readiness } from "@/lib/onboarding";
 import { raiseException } from "@/lib/errors/customer";
 import { openException } from "@/lib/exceptions";
 import { ownerNotice } from "@/lib/billing/entitlement";
-import { raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
+import { raisePacksHeldIfPaymentsClosed, raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
 import { bellineNumberOf } from "@/lib/telephony/number";
 import { todayIn } from "@/lib/time";
 import { flag } from "@/lib/flags";
@@ -63,6 +63,7 @@ export default async function GoLivePage({
   const abroad = Boolean(dial) && !/^\+?971/.test(dial);
   const today = todayIn(location.timezone);
   raiseTrialCapIfPaymentsClosed(location, today);
+  raisePacksHeldIfPaymentsClosed(location, today);
   const notice = ownerNotice(location, today);
   const phoneCalls = listCalls(location.id).filter((c) => c.channel === "phone" && !c.isDemo);
   const lastCall = phoneCalls.reduce<string | null>((a, c) => (!a || c.startedAt > a ? c.startedAt : a), null);

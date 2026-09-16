@@ -7,7 +7,7 @@ import { readiness } from "@/lib/onboarding";
 import { channelStatuses, checklistOf, factsFrom, isActivated, journeyFor } from "@/lib/onboarding/journey";
 import { testsStale } from "@/lib/onboarding/selftest-state";
 import { ownerNotice } from "@/lib/billing/entitlement";
-import { raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
+import { raisePacksHeldIfPaymentsClosed, raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
 import { todayIn } from "@/lib/time";
 import { callDurationSeconds } from "@/lib/calls";
 import { listCalls } from "@/lib/store";
@@ -73,6 +73,7 @@ export default async function OverviewPage({
   const today = todayIn(location.timezone);
   // Before the sentence that says the team has been told, so it is true.
   raiseTrialCapIfPaymentsClosed(location, today);
+  raisePacksHeldIfPaymentsClosed(location, today);
   const notice = ownerNotice(location, today);
   // Before going live the home page leads with what is left of setup, as a
   // checklist: every item opens its step, in any order. A live venue keeps the

@@ -1,9 +1,9 @@
 import type { Location } from "../types";
 import { getTenant } from "../store";
 import { accountFor, isPooledTrial, meterFor, periodFor, productsOf } from "./usage";
-import { channelsOf, grandfatherExpires, poolOf, type Channel } from "./plans";
+import { channelsOf, grandfatherExpires, poolOf, poolPlaces, type Channel, type Pool } from "./plans";
 import { stripeEnabled } from "./stripe";
-import { applyUsagePolicy, governs, markAlertsSent, notifyAlerts, poolExhausted, settlePacks } from "./usage-policy";
+import { applyUsagePolicy, governs, markAlertsSent, notifyAlerts, packsHeldPools, poolExhausted, settlePacks } from "./usage-policy";
 
 /**
  * Is this venue entitled to be answered — at all, and on this channel?
@@ -29,7 +29,10 @@ import { applyUsagePolicy, governs, markAlertsSent, notifyAlerts, poolExhausted,
  * **Units** — on a 2026-10 plan a pool at 100% is decided by the owner's usage
  * policy (billing/usage-policy.ts): a pack is added if they chose packs and it
  * fits their cap; otherwise that pool's channels stop with
- * `allowance_exhausted`. Older products keep the terms they were sold on.
+ * `allowance_exhausted`. While card payments are closed no pack is added at
+ * all — it could never be charged — so a `packs` policy stops like `cap`,
+ * the owner is told why, and the team gets a `packs_held_payments_off` row.
+ * Older products keep the terms they were sold on.
  *
  * **Exempt** — Belline's own venues (loc_belline, the website's "Speak to
  * Belline"), the demo lines (loc_azure, loc_lumiere, loc_meridian), prospect
@@ -264,11 +267,35 @@ export function ownerNotice(location: Location, today: string): OwnerNotice | nu
     // A date lapse that is enforced already stops everything.
     return { sentence: lapseSentence(service.lapsed, true), choosePlan, stopped: true };
   }
+  const held = packsHeld(location, today);
   const lines: string[] = [];
   if (service.lapsed) lines.push(lapseSentence(service.lapsed, !service.answering));
   if (conversations) lines.push(conversationsSentence());
+  if (held.length) lines.push(packsHeldSentence(held));
   if (lines.length === 0) return null;
-  return { sentence: lines.join(" "), choosePlan, stopped: !service.answering || conversations };
+  return { sentence: lines.join(" "), choosePlan, stopped: !service.answering || conversations || held.length > 0 };
+}
+
+const POOL_WORDS: Record<Pool, string> = { minutes: "voice minutes", conversations: "text conversations" };
+
+/**
+ * The pools a `packs` policy could not refill because card payments are
+ * closed (usage-policy.ts). Empty with payments open, and for exempt venues.
+ */
+export function packsHeld(location: Location, today: string, opts: { payments?: boolean } = {}): Pool[] {
+  if (exempt(location)) return [];
+  return packsHeldPools(location, today, { stripe: opts.payments ?? stripeEnabled() });
+}
+
+/** The owner's sentence for an allowance a pack would have refilled. No button: there is nothing to press. */
+export function packsHeldSentence(pools: readonly Pool[]): string {
+  const words = pools.map((p) => POOL_WORDS[p]).join(" and ");
+  const places = pools.map((p) => poolPlaces(p)).join(" and on ");
+  return (
+    `This period's ${words} are used up. You chose to add a pack automatically, but card payments are not open yet, ` +
+    `so no pack can be added and Belline has stopped answering on ${places} until the next period. ` +
+    "The Belline team has been told and will contact you to keep it going."
+  );
 }
 
 /** Does this venue need the team told that a trial cap stopped it while payments are closed? */

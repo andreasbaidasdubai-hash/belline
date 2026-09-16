@@ -458,5 +458,133 @@ test("STRIPE OFF: Belline's own line and the three demo lines keep answering on 
   assert.equal(mayStreamTo(getLocation("loc_belline")!), true, "the website's Speak to Belline was refused");
 });
 
+console.log("\n\x1b[1mA paid plan that chose packs, while card payments are closed\x1b[0m\n");
+
+const { applyUsagePolicy, decide: decidePolicy } = await import("../src/lib/billing/usage-policy");
+const { raisePacksHeldIfPaymentsClosed } = await import("../src/lib/billing/trial-end");
+const { packsHeld } = await import("../src/lib/billing/entitlement");
+
+/** A venue on a paid 2026-10 plan, owner chose "add a pack automatically", voice minutes used past the allowance. */
+async function packsVenue(name: string, email: string) {
+  const out = await signUp({ businessName: name, email, password: "Correct-Horse-Battery-9", vertical: "salon", timezone: "Asia/Dubai" });
+  assert.ok(out.ok, "signup failed");
+  const id = out.ok ? out.location.id : "";
+  upsertLocation({
+    ...getLocation(id)!,
+    phone: "+97145550188",
+    subscription: {
+      products: ["v2_starter"],
+      market: "AE",
+      cycle: "monthly",
+      startedOn: addDays(today, -2),
+      status: "active",
+      usagePolicy: { mode: "packs", chosenAt: new Date().toISOString(), chosenBy: "usr_owner" },
+    },
+  } as never);
+  const get = () => getLocation(id)!;
+  phoneCall(get, 90);
+  return get;
+}
+
+const packsOff = await packsVenue("Palm Brows", "owner@palm-brows.test");
+
+test("PAYMENTS OFF: packs policy at 100% refuses the pool's channels and adds no pack", () => {
+  assert.equal(stripeEnabled(), false, "this test must run with card payments off");
+  for (const channel of ["phone", "web_voice"] as const) {
+    const state = serviceState(packsOff(), today, { channel });
+    assert.equal(state.answering, false, `${channel} kept answering on a pack nobody can be charged for`);
+    assert.equal(state.refused, "allowance_exhausted", channel);
+    assert.doesNotMatch(state.callerMessage ?? "", /trial|plan|pay|subscri|charge|AED|pack/i);
+  }
+  assert.equal(serviceState(packsOff(), today, { channel: "chat" }).answering, true, "chat stopped over voice minutes");
+  applyUsagePolicy(packsOff(), today, { stripe: false });
+  assert.equal(packsOff().subscription!.packs, undefined, "a pack was added with card payments off");
+  assert.deepEqual(packsHeld(packsOff(), today), ["minutes"]);
+});
+
+test("PAYMENTS OFF: the owner is told why, with no plan or pack button, and that the team has been told", () => {
+  const notice = ownerNotice(packsOff(), today);
+  assert.ok(notice, "no notice for a paid pool that stopped");
+  assert.equal(notice.stopped, true);
+  assert.equal(notice.choosePlan, false, "a Choose a plan button that cannot be pressed");
+  assert.match(notice.sentence, /voice minutes are used up/);
+  assert.match(notice.sentence, /card payments are not open yet, so no pack can be added/);
+  assert.match(notice.sentence, /Belline has stopped answering on/);
+  assert.match(notice.sentence, /Belline team has been told/);
+  assert.doesNotMatch(notice.sentence, /Choose a plan|buy a pack|@|mailto|keeps answering/i);
+});
+
+test("PAYMENTS OFF: a ticket is raised for the team once a day per pool, like trial_cap_reached", () => {
+  const tickets = () => listExceptions({ kind: "packs_held_payments_off", locationId: packsOff().id });
+  assert.equal(raisePacksHeldIfPaymentsClosed(packsOff(), today, { payments: true }), false, "raised with card payments open");
+  assert.equal(tickets().length, 0);
+  assert.equal(raisePacksHeldIfPaymentsClosed(packsOff(), today, { payments: false }), true);
+  assert.equal(raisePacksHeldIfPaymentsClosed(packsOff(), today, { payments: false }), false, "raised twice in a day");
+  assert.equal(tickets().length, 1);
+  assert.equal(tickets()[0].count, 1);
+  assert.equal(tickets()[0].context.pool, "minutes");
+  // The sweep reaches it too, and does not add to the day's row.
+  sweepTrialEnds();
+  assert.equal(tickets().length, 1);
+  assert.equal(tickets()[0].count, 1);
+  // A venue on packs still inside its allowance raises nothing.
+  assert.equal(raisePacksHeldIfPaymentsClosed(fresh(), today, { payments: false }), false);
+  assert.equal(packsOff().subscription!.packs, undefined);
+});
+
+test("PAYMENTS ON: the same venue gets its pack as before, and nothing is held or raised", () => {
+  const d = decidePolicy(packsOff(), today, { stripe: true });
+  assert.equal(d.packs.length, 1, "no pack with card payments open");
+  assert.equal(d.pools.minutes.action, "pack_added");
+  assert.equal(d.pools.minutes.exhausted, false);
+  assert.deepEqual(packsHeld(packsOff(), today, { payments: true }), []);
+  const applied = applyUsagePolicy(packsOff(), today, { stripe: true });
+  assert.equal(applied.added.length, 1);
+  assert.equal(applied.added[0].pending, undefined);
+  assert.equal(decidePolicy(packsOff(), today, { stripe: true }).pools.minutes.exhausted, false);
+});
+
+// Each exempt kind of venue, set up exactly like Palm Brows (packs, minutes past the allowance).
+const packsProspect = await packsVenue("Prospect Brows", "owner@prospect-brows.test");
+upsertLocation({ ...packsProspect(), prospect: { id: "prs_test" } } as never);
+const packsInternal = await packsVenue("Internal Brows", "owner@internal-brows.test");
+upsertLocation({ ...packsInternal(), internal: true } as never);
+const packsDemo = await packsVenue("Demo Brows", "owner@demo-brows.test");
+upsertLocation({ ...packsDemo(), demo: { ...(getLocation("loc_azure")!.demo ?? {}), enabled: true } } as never);
+for (const id of ["loc_belline", "loc_azure"]) {
+  upsertLocation({
+    ...getLocation(id)!,
+    subscription: {
+      products: ["v2_starter"],
+      market: "AE",
+      cycle: "monthly",
+      startedOn: addDays(today, -2),
+      status: "active",
+      usagePolicy: { mode: "packs", chosenAt: new Date().toISOString(), chosenBy: "usr_owner" },
+    },
+  } as never);
+  phoneCall(() => getLocation(id)!, 200);
+}
+
+test("PAYMENTS OFF: internal, demo and prospect venues on packs are never held, stopped or ticketed", () => {
+  const venues: Array<[string, () => ReturnType<typeof fresh>]> = [
+    ["prospect", packsProspect],
+    ["internal venue", packsInternal],
+    ["demo", packsDemo],
+    ["loc_belline", () => getLocation("loc_belline")!],
+    ["loc_azure", () => getLocation("loc_azure")!],
+  ];
+  for (const [label, venue] of venues) {
+    assert.deepEqual(packsHeld(venue(), today), [], label);
+    for (const channel of ["phone", "web_voice"] as const) {
+      assert.equal(serviceState(venue(), today, { channel }).answering, true, `${label} stopped on ${channel}`);
+    }
+    assert.equal(ownerNotice(venue(), today), null, label);
+    assert.equal(raisePacksHeldIfPaymentsClosed(venue(), today, { payments: false }), false, label);
+    assert.equal(listExceptions({ kind: "packs_held_payments_off", locationId: venue().id }).length, 0, label);
+    assert.equal(venue().subscription!.packs, undefined, `${label} got a pack`);
+  }
+});
+
 console.log(`\n${failed ? "\x1b[31m" : "\x1b[32m"}✓ ${passed} passed, ${failed} failed\x1b[0m\n`);
 if (failed > 0) process.exitCode = 1;

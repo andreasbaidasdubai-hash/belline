@@ -12,7 +12,7 @@ import {
   meterWords,
   type Meter,
 } from "@/lib/billing/usage";
-import { extendTrialIfPaymentsClosed, raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
+import { extendTrialIfPaymentsClosed, raisePacksHeldIfPaymentsClosed, raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
 import { ALERT_THRESHOLDS, CHANNELS, isPooled, money, nextPlanUp, productById } from "@/lib/billing/plans";
 import { packsSentence } from "@/lib/billing/speak";
 import { canManageUsers } from "@/lib/auth";
@@ -139,6 +139,7 @@ export default async function BillingPage({
   // The trial note says the team has been told when a cap stops a channel with
   // payments closed; this is what tells them.
   raiseTrialCapIfPaymentsClosed(venue, today);
+  raisePacksHeldIfPaymentsClosed(venue, today);
   const account = accountFor(venue, today);
 
   if (!account) {

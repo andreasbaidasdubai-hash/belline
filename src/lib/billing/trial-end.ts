@@ -3,7 +3,7 @@ import { getTenant, listLocations, upsertLocation } from "../store";
 import { listExceptions, openException } from "../exceptions";
 import { addDays, todayIn } from "../time";
 import { stripeEnabled } from "./stripe";
-import { trialCapReached } from "./entitlement";
+import { packsHeld, trialCapReached } from "./entitlement";
 
 /**
  * A trial that reaches its end while card payments are closed.
@@ -127,6 +127,44 @@ export function raiseTrialCapIfPaymentsClosed(
   return true;
 }
 
+/**
+ * A paid plan whose owner chose "add a pack automatically" has used up an
+ * allowance while card payments are closed. No pack is added — it could never
+ * be charged — so the pool has stopped (usage-policy.ts), and the owner is
+ * told the team has been told. This makes that true, the same way
+ * `raiseTrialCapIfPaymentsClosed` does: one open row per venue and pool,
+ * counted at most once a day.
+ */
+export function raisePacksHeldIfPaymentsClosed(
+  venue: Location,
+  today: string = todayIn(venue.timezone),
+  opts: { payments?: boolean; now?: Date } = {},
+): boolean {
+  const payments = opts.payments ?? stripeEnabled();
+  if (payments || exempt(venue)) return false;
+  let raised = false;
+  for (const pool of packsHeld(venue, today, { payments: false })) {
+    const already = listExceptions({ kind: "packs_held_payments_off" }).some(
+      (e) => e.locationId === venue.id && e.status !== "resolved" && e.context.day === today && e.context.pool === pool,
+    );
+    if (already) continue;
+    const words = pool === "minutes" ? "voice minutes" : "text conversations";
+    openException(
+      {
+        tenantId: venue.tenantId,
+        locationId: venue.id,
+        kind: "packs_held_payments_off",
+        reason: `${venue.name} has used this period's ${words}. The owner chose to add packs automatically, but card payments are closed, so no pack was added and Belline has stopped answering on those channels.`,
+        context: { pool, day: today },
+        source: "system",
+      },
+      opts.now ?? new Date(),
+    );
+    raised = true;
+  }
+  return raised;
+}
+
 /** Every venue, for the billing sweep. */
 export function sweepTrialEnds(now: Date = new Date()): { extended: number; raised: number } {
   if (stripeEnabled()) return { extended: 0, raised: 0 };
@@ -138,6 +176,7 @@ export function sweepTrialEnds(now: Date = new Date()): { extended: number; rais
     if (out.action === "extended") extended++;
     if (out.action === "raised") raised++;
     if (raiseTrialCapIfPaymentsClosed(out.location, today, { payments: false, now })) raised++;
+    if (raisePacksHeldIfPaymentsClosed(out.location, today, { payments: false, now })) raised++;
   }
   return { extended, raised };
 }

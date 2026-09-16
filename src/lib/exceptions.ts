@@ -32,6 +32,7 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "payment_failed_final",
   "stripe_off_trial_end",
   "trial_cap_reached",
+  "packs_held_payments_off",
   "whatsapp_assisted_setup",
   "deletion_legal_hold",
   "owner_requested_human",
@@ -66,6 +67,11 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
   trial_cap_reached: {
     label: "Trial allowance used, payments off",
     next: "Belline has stopped the used-up channels. Contact the owner and plan their first payment.",
+    belle: false,
+  },
+  packs_held_payments_off: {
+    label: "Allowance used, no pack while payments off",
+    next: "The owner chose packs, but none can be charged yet, so Belline has stopped that allowance's channels. Contact the owner and plan their first payment.",
     belle: false,
   },
   whatsapp_assisted_setup: {

@@ -24,7 +24,10 @@ import { stripe, stripeEnabled } from "./stripe";
  *
  *   packs   — add a pack automatically when a pool runs out, as many times
  *             as it takes, up to an optional monthly spending cap. Past the
- *             cap it stops like `cap`.
+ *             cap it stops like `cap`. Only while card payments are open: a
+ *             pack nobody can be charged for is free usage with no ceiling,
+ *             so with payments closed it stops like `cap` too (`packsHeld`)
+ *             and the team is told (trial-end.ts, packs_held_payments_off).
  *   upgrade — recommend the next plan. Changing a plan is the owner's to
  *             confirm (Change plan → checkout); until then it behaves as `cap`.
  *   cap     — stop answering on that pool's channels until the next period.
@@ -33,8 +36,9 @@ import { stripe, stripeEnabled } from "./stripe";
  * a choice at the top of every note.
  *
  * Stopping is enforced by entitlement.ts whether or not card payments are
- * switched on: an allowance is cost protection, not billing. (With payments
- * off a `packs` policy still records packs as pending and uncharged.)
+ * switched on: an allowance is cost protection, not billing. With payments
+ * off a `packs` policy adds nothing. (Packs recorded as `pending` by earlier
+ * builds, which did add uncharged packs, are still read and shown as such.)
  *
  * Applies to catalogue 2026-10 plans only. Older products were sold on other
  * terms and keep them; trials have their own caps.
@@ -62,6 +66,12 @@ export interface PoolDecision {
   exhausted: boolean;
   action: "none" | "pack_added" | "cap_reached" | "upgrade_recommended" | "choose_policy";
   upgradeTo?: ProductId;
+  /**
+   * The owner chose packs, but card payments are closed: no pack was added and
+   * the pool stopped at its allowance, as `cap` does. Only ever set together
+   * with `exhausted` and `cap_reached`.
+   */
+  packsHeld?: true;
 }
 
 export interface Decision {
@@ -144,6 +154,13 @@ export function decide(location: Location, today: string, opts: { stripe?: boole
 
     switch (policy?.mode) {
       case "packs": {
+        if (!chargeable) {
+          // Nothing could ever be charged for it: stop exactly as `cap` does.
+          out.exhausted = true;
+          out.action = "cap_reached";
+          out.packsHeld = true;
+          break;
+        }
         const pack = packFor(pool);
         const price = pack.prices[market];
         let added = 0;
@@ -158,7 +175,6 @@ export function decide(location: Location, today: string, opts: { stripe?: boole
             priceMinor: price,
             key: `${location.id}:${periodStart}:${pool}:${n}`,
             at: new Date().toISOString(),
-            ...(chargeable ? {} : { pending: true as const }),
           });
           spent += price;
           allowance += pack.units;
@@ -188,6 +204,16 @@ export function decide(location: Location, today: string, opts: { stripe?: boole
   }
 
   return decision;
+}
+
+/**
+ * The pools a `packs` policy would have refilled but did not, because card
+ * payments are closed. Empty for anything the policy does not govern, which
+ * includes demo, prospect and internal venues.
+ */
+export function packsHeldPools(location: Location, today: string, opts: { stripe?: boolean } = {}): Pool[] {
+  const d = decide(location, today, opts);
+  return d.applies ? POOL_ORDER.filter((pool) => d.pools[pool].packsHeld) : [];
 }
 
 /** Is the pool this channel draws on used up, after the policy has done what it may? */
@@ -370,7 +396,9 @@ export async function notifyAlerts(location: Location, alerts: Alert[]): Promise
   const mode = location.subscription?.usagePolicy?.mode;
   const next =
     mode === "packs"
-      ? "At 100% a pack is added, as you chose, within your monthly cap."
+      ? stripeEnabled()
+        ? "At 100% a pack is added, as you chose, within your monthly cap."
+        : "Card payments are not open yet, so no pack can be added: at 100% Belline stops at the allowance, and the Belline team will contact you to keep it going."
       : mode === "upgrade"
         ? "At 100% we recommend the next plan; until you confirm it, Belline stops at the allowance."
         : mode === "cap"
