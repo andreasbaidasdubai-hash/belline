@@ -326,6 +326,50 @@ await testAsync("cancelling twice is one cancellation, and the event stays gone"
   assert.equal(getBooking(booking.id)!.status, "cancelled");
 });
 
+await testAsync("the same move across calendars, replayed, leaves exactly one event, on the new calendar", async () => {
+  const clinicGoogle = fakeGoogleApi({
+    calendars: [
+      { id: "primary", name: "Clinic", primary: true },
+      { id: "dr-two@group.calendar.google.com", name: "Second practitioner", primary: false },
+    ],
+  });
+  googleLib.setGoogleApi(clinicGoogle.api);
+  try {
+    const [one, two] = clinic.salon!.staff;
+    assert.ok(one && two, "the clinic fixture needs two practitioners");
+    const connected = await googleLib.completeConnection(clinic, "stub-code", "http://localhost/cb", "user_owner");
+    const venue = upsertLocation({
+      ...connected,
+      google: { ...connected.google!, staffCalendars: { [two.id]: "dr-two@group.calendar.google.com" } },
+      onboarding: { version: 1, channels: {}, destination: { kind: "google", setAt: new Date().toISOString() } },
+    });
+    const serviceIds = [clinic.salon!.services[0].id];
+    let made: ReturnType<typeof createBooking> | undefined;
+    let slotDate = "";
+    for (let i = 23; i < 80 && !made?.ok; i++) {
+      slotDate = futureDate(i);
+      const shared = findAvailability(venue, { locationId: venue.id, date: slotDate, serviceIds, staffId: one.id }, { limit: 200 }).find((s) =>
+        findAvailability(venue, { locationId: venue.id, date: slotDate, serviceIds, staffId: two.id }, { limit: 200 }).some((o) => o.startMin === s.startMin),
+      );
+      if (!shared) continue;
+      made = createBooking(venue, { date: slotDate, startMin: shared.startMin, serviceIds, staffId: one.id, guestName: "Replay Move", guestPhone: "+971 50 555 6666", source: "manual", staffOverride: true });
+    }
+    assert.ok(made?.ok, "no shared time for the two practitioners");
+    if (!made?.ok) return;
+    await settleSync();
+    const calendars = ["primary", "dr-two@group.calendar.google.com"];
+    assert.deepEqual(eventsFor(clinicGoogle, calendars, made.booking.id).map((e) => e.calendarId), ["primary"]);
+    for (let i = 0; i < 2; i++) {
+      const moved = modifyBooking(venue, getBooking(made.booking.id)!, { staffId: two.id, staffOverride: true });
+      assert.ok(moved.ok, moved.ok ? "" : moved.detail);
+    }
+    await settleSync();
+    assert.deepEqual(eventsFor(clinicGoogle, calendars, made.booking.id).map((e) => e.calendarId), ["dr-two@group.calendar.google.com"]);
+  } finally {
+    googleLib.setGoogleApi(fakeGoogle.api);
+  }
+});
+
 await testAsync("nothing reached a real host", async () => {
   assert.deepEqual(blockedFetches(), []);
 });

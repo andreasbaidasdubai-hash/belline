@@ -1,9 +1,10 @@
-import type { Booking, CalendarSync, Location } from "../types";
+import type { Booking, CalendarEventRef, CalendarSync, Location } from "../types";
 import { getBooking, getLocation, listBookings, saveBooking } from "../store";
 import { googleUsable } from "../booking/destination";
 import { openException } from "../exceptions";
 import { bookingEventId, calendarFor, eventFor, noteWriteFailure, noteWriteSuccess, withAccess } from "./google";
 import { GoogleAuthError } from "./google-api";
+import { todayIn } from "../time";
 
 /**
  * Every booking at a venue with a Google Calendar, in the calendar.
@@ -115,24 +116,51 @@ async function run(bookingId: string, now = new Date()): Promise<SyncResult> {
 
   const link = location.google;
   const eventId = booking.calendarEventId ?? bookingEventId(booking);
-  const calendarId = booking.calendarId ?? calendarFor(link, booking.staffId);
+  // Where the event belongs now: the person's own calendar, or the venue's.
+  // Not where it was last written — a booking moved to somebody with their
+  // own calendar has to leave the first one.
+  const target = calendarFor(link, booking.staffId);
   const rev = sync.rev;
-  patch(bookingId, {}, { lastTriedAt: now.toISOString() });
+
+  // Everything that may exist in Google for this booking and must not: events
+  // already known to be left behind, the calendar it was last written to when
+  // that is not the target, and a write that started and was never confirmed.
+  const remove: CalendarEventRef[] = [];
+  const add = (ref: CalendarEventRef | undefined) => {
+    if (!ref) return;
+    if (booking.status === "confirmed" && ref.calendarId === target && ref.eventId === eventId) return;
+    if (!remove.some((r) => r.calendarId === ref.calendarId && r.eventId === ref.eventId)) remove.push(ref);
+  };
+  for (const ref of sync.stale ?? []) add(ref);
+  add(sync.inflight);
+  if (booking.calendarId) add({ calendarId: booking.calendarId, eventId });
+  if (booking.status === "cancelled") add({ calendarId: target, eventId });
+  // Recorded before Google is asked, so a crash between the new write and the
+  // clean-up still knows what to clean up.
+  patch(bookingId, {}, { lastTriedAt: now.toISOString(), stale: remove.length ? remove : undefined });
 
   try {
     if (booking.status === "confirmed") {
-      await withAccess(location, (token, api) => api.putEvent(token, calendarId, eventFor(location, booking, eventId)));
-      patch(bookingId, { calendarEventId: eventId, calendarId }, {});
-    } else if (booking.status === "cancelled") {
-      await withAccess(location, (token, api) => api.cancelEvent(token, calendarId, eventId));
+      // New before old: the time is never free in Google while it moves.
+      patch(bookingId, {}, { inflight: { calendarId: target, eventId } });
+      await withAccess(location, (token, api) => api.putEvent(token, target, eventFor(location, booking, eventId)));
+      patch(bookingId, { calendarEventId: eventId, calendarId: target }, { inflight: undefined });
     }
     // Arrived, left or not shown: the time was the guest's either way, so the event stays.
+
+    const left = [...remove];
+    for (const ref of remove) {
+      await withAccess(location, (token, api) => api.cancelEvent(token, ref.calendarId, ref.eventId));
+      left.splice(left.indexOf(ref), 1);
+      patch(bookingId, {}, { stale: left.length ? [...left] : undefined });
+    }
 
     const fresh = getBooking(bookingId);
     const newer = fresh?.calendarSync?.rev !== rev;
     patch(bookingId, {}, {
       // A change that arrived while this ran is written by the run queued behind it.
       state: newer ? "pending" : "synced",
+      inflight: undefined,
       attempts: 0,
       lastError: undefined,
       nextAttemptAt: undefined,
@@ -171,6 +199,24 @@ async function run(bookingId: string, now = new Date()): Promise<SyncResult> {
     }
     return "failed";
   }
+}
+
+/**
+ * The owner changed which calendar someone uses: their upcoming bookings'
+ * events move with them, off the old calendar and onto the new one.
+ */
+export function resyncMovedCalendars(location: Location): number {
+  const link = location.google;
+  if (!link) return 0;
+  const today = todayIn(location.timezone);
+  let queued = 0;
+  for (const booking of listBookings({ locationId: location.id, status: "confirmed" })) {
+    if (booking.date < today || !booking.calendarId) continue;
+    if (booking.calendarId === calendarFor(link, booking.staffId)) continue;
+    queueGoogleSync(location, booking);
+    queued++;
+  }
+  return queued;
 }
 
 /**

@@ -18,7 +18,7 @@ import {
   type Outcome,
   type ReturnTo,
 } from "@/lib/integrations/google";
-import { queueGoogleSync, settleGoogleSync } from "@/lib/integrations/google-sync";
+import { queueGoogleSync, resyncMovedCalendars, settleGoogleSync } from "@/lib/integrations/google-sync";
 import { todayIn } from "@/lib/time";
 import { appOrigin } from "@/lib/origin";
 import { customerError, raiseException } from "@/lib/errors/customer";
@@ -155,7 +155,8 @@ export async function POST(request: Request) {
       staffCalendars: body.staffCalendars && typeof body.staffCalendars === "object" ? body.staffCalendars : {},
     });
     if (!out.ok) return NextResponse.json({ error: out.error }, { status: 422 });
-    upsertLocation(out.location);
+    // Someone's bookings follow them to the calendar they now use.
+    resyncMovedCalendars(upsertLocation(out.location));
     return NextResponse.json({ ok: true });
   } catch (err) {
     const said = customerError("google", err, "failed", location.id);

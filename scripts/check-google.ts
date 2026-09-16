@@ -590,6 +590,110 @@ await test("Google failing does not lose the booking: recorded, the owner told, 
 });
 
 // ---------------------------------------------------------------------------
+head("Moving a booking to a person with another calendar moves the event");
+
+await test("to a person with their own calendar: gone from the first, exactly one on the second", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const [first, second] = loc.salon!.staff;
+  assert.equal(google.calendarFor(loc.google!, first.id), "staff-a@group.calendar.google.com");
+  assert.equal(google.calendarFor(loc.google!, second.id), "primary");
+  const { date, startMin } = sharedSlot(loc);
+  const serviceIds = [loc.salon!.services[0].id];
+  const made = await googleCalendarProvider.createBooking({ location: loc }, { date, startMin, guestName: "Mover Guest", guestPhone: "+971500000105", serviceIds, staffId: second.id }, "call_61:book:1");
+  assert.ok(made.ok, made.ok ? "" : made.detail);
+  if (!made.ok) return;
+  assert.deepEqual(liveEventsOf(made.booking.id).map((e) => e.calendarId), ["primary"]);
+
+  const moved = modifyLocal(getLocation(loc.id)!, getBooking(made.booking.id)!, { staffId: first.id, staffOverride: true });
+  assert.ok(moved.ok, moved.ok ? "" : moved.detail);
+  await settle();
+  const events = liveEventsOf(made.booking.id);
+  assert.deepEqual(events.map((e) => e.calendarId), ["staff-a@group.calendar.google.com"], `after the move: ${JSON.stringify(events.map((e) => e.calendarId))}`);
+  assert.equal(getBooking(made.booking.id)!.calendarId, "staff-a@group.calendar.google.com");
+});
+
+await test("and back again through the agent's reschedule: one event, on the first calendar, none stranded", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const [, second] = loc.salon!.staff;
+  const booking = listBookings({ locationId: loc.id, status: "confirmed" }).find((b) => b.guestName === "Mover Guest")!;
+  const out = await googleCalendarProvider.rescheduleBooking({ location: loc }, booking, { staffId: second.id });
+  assert.ok(out.ok, out.ok ? "" : out.detail);
+  await settle();
+  assert.deepEqual(liveEventsOf(booking.id).map((e) => e.calendarId), ["primary"]);
+  assert.equal(getBooking(booking.id)!.calendarId, "primary");
+});
+
+await test("cancelling after a move cancels the event where it is now", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const booking = listBookings({ locationId: loc.id, status: "confirmed" }).find((b) => b.guestName === "Mover Guest")!;
+  const out = await googleCalendarProvider.cancelBooking({ location: loc }, booking, "Guest asked");
+  assert.ok(out.ok);
+  await settle();
+  assert.deepEqual(liveEventsOf(booking.id), []);
+});
+
+await test("an old event Google would not delete is retried until it is gone, never left as a duplicate", async () => {
+  assert.ok(sync, "no sync module");
+  const loc = getLocation(salonBase.id)!;
+  const [first, second] = loc.salon!.staff;
+  const { date, startMin } = sharedSlot(loc);
+  const made = createFromDesk(loc, { date, startMin, serviceIds: [loc.salon!.services[0].id], staffId: second.id, guestName: "Stuck Guest", guestPhone: "+971500000106" });
+  assert.ok(made.ok);
+  if (!made.ok) return;
+  await settle();
+  fake.failNext("cancelEvent", 1);
+  await errorsDuring(async () => {
+    updateFromDesk(getLocation(loc.id)!, getBooking(made.booking.id)!, { staffId: first.id });
+    await settle();
+  });
+  const stuck = getBooking(made.booking.id)!;
+  assert.equal(stuck.calendarSync?.state, "failed");
+  assert.deepEqual(stuck.calendarSync?.stale, [{ calendarId: "primary", eventId: stuck.calendarEventId }], "the old event is not recorded for clean-up");
+  await sync!.retryGoogleSyncs(new Date(Date.now() + 60 * 60_000));
+  assert.deepEqual(liveEventsOf(made.booking.id).map((e) => e.calendarId), ["staff-a@group.calendar.google.com"]);
+  assert.equal(getBooking(made.booking.id)!.calendarSync?.stale, undefined);
+});
+
+await test("a write that reached Google but whose answer was lost is cleaned up when the booking moves again", async () => {
+  assert.ok(sync, "no sync module");
+  const loc = getLocation(salonBase.id)!;
+  const [first, second] = loc.salon!.staff;
+  const booking = listBookings({ locationId: loc.id, status: "confirmed" }).find((b) => b.guestName === "Stuck Guest")!;
+  // Written to the second calendar, then the connection dropped before Google answered.
+  fake.failNext("putEvent", 1, { afterWrite: true });
+  await errorsDuring(async () => {
+    updateFromDesk(getLocation(loc.id)!, getBooking(booking.id)!, { staffId: second.id });
+    await settle();
+  });
+  assert.equal(getBooking(booking.id)!.calendarSync?.inflight?.calendarId, "primary");
+  // Before any retry, the booking moves back to the first person.
+  updateFromDesk(getLocation(loc.id)!, getBooking(booking.id)!, { staffId: first.id });
+  await settle();
+  assert.deepEqual(liveEventsOf(booking.id).map((e) => e.calendarId), ["staff-a@group.calendar.google.com"], "an orphan was left on the calendar the write reached");
+});
+
+await test("changing which calendar a person uses moves their upcoming bookings' events", async () => {
+  assert.ok(sync, "no sync module");
+  const loc = getLocation(salonBase.id)!;
+  const [first] = loc.salon!.staff;
+  const booking = listBookings({ locationId: loc.id, status: "confirmed" }).find((b) => b.guestName === "Stuck Guest")!;
+  assert.equal(booking.staffId, first.id);
+  const picked = await google.chooseCalendars(loc, { calendarId: "primary", staffCalendars: {} });
+  assert.ok(picked.ok);
+  if (!picked.ok) return;
+  const saved = upsertLocation(picked.location);
+  sync!.resyncMovedCalendars(saved);
+  await settle();
+  assert.deepEqual(liveEventsOf(booking.id).map((e) => e.calendarId), ["primary"]);
+  // Put the person's own calendar back for the tests after this one.
+  const back = await google.chooseCalendars(getLocation(loc.id)!, { calendarId: "primary", staffCalendars: { [first.id]: "staff-a@group.calendar.google.com" } });
+  assert.ok(back.ok);
+  if (back.ok) sync!.resyncMovedCalendars(upsertLocation(back.location));
+  await settle();
+  assert.deepEqual(liveEventsOf(booking.id).map((e) => e.calendarId), ["staff-a@group.calendar.google.com"]);
+});
+
+// ---------------------------------------------------------------------------
 head("Choosing Google on the bookings step");
 
 await test("Google can be chosen with a working connection, is refused unconnected (with the way to connect), and not at all with the flag off", async () => {
