@@ -21,8 +21,11 @@ const { seedIfEmpty } = await import("../src/lib/seed");
 const { signUp } = await import("../src/lib/onboarding");
 const { getLocation, upsertLocation, saveCall, listLocations } = await import("../src/lib/store");
 const { startCall } = await import("../src/lib/calls");
-const { lapseOf, lapseSentence, serviceState } = await import("../src/lib/billing/entitlement");
-const { extendTrialIfPaymentsClosed, paymentsSoonSentence, sweepTrialEnds, TRIAL_EXTENSION_DAYS } = await import("../src/lib/billing/trial-end");
+const { lapseOf, lapseSentence, ownerNotice, serviceState } = await import("../src/lib/billing/entitlement");
+const { extendTrialIfPaymentsClosed, paymentsSoonSentence, raiseTrialCapIfPaymentsClosed, sweepTrialEnds, TRIAL_EXTENSION_DAYS } = await import(
+  "../src/lib/billing/trial-end"
+);
+const { stripeEnabled } = await import("../src/lib/billing/stripe");
 const { listExceptions } = await import("../src/lib/exceptions");
 const { accountFor } = await import("../src/lib/billing/usage");
 const { checkEmbedGate } = await import("../src/lib/embed");
@@ -104,6 +107,7 @@ async function trialVenue(name: string, email: string) {
 
 const closed = await trialVenue("Marina Nails", "owner@marina-nails.test");
 const openPay = await trialVenue("Creek Barbers", "owner@creek-barbers.test");
+const lateTrial = await trialVenue("Late Lashes", "owner@late-lashes.test");
 const tickets = (id: string) => listExceptions({ kind: "stripe_off_trial_end", locationId: id });
 
 test("the day before a trial's last day, nothing is extended or raised", () => {
@@ -215,7 +219,7 @@ const chatty = await signUp({
 assert.ok(chatty.ok);
 const chattyVenue = () => getLocation(chatty.ok ? chatty.location.id : "")!;
 
-test("fifty text conversations use up the trial's chat, and only its chat — enforced only with card payments on", () => {
+test("fifty text conversations use up the trial's chat and WhatsApp, and only those — with card payments on", () => {
   chats(chattyVenue, 49);
   assert.equal(serviceState(chattyVenue(), today, { enforce: true, channel: "chat" }).answering, true);
   chats(chattyVenue, 1);
@@ -223,8 +227,44 @@ test("fifty text conversations use up the trial's chat, and only its chat — en
   assert.equal(chat.answering, false);
   assert.equal(chat.refused, "trial_conversations_used");
   assert.doesNotMatch(chat.callerMessage ?? "", /trial|plan|pay|subscri|charge|AED/i);
+  assert.equal(serviceState(chattyVenue(), today, { enforce: true, channel: "whatsapp" }).refused, "trial_conversations_used");
   assert.equal(serviceState(chattyVenue(), today, { enforce: true, channel: "phone" }).answering, true, "the phone stopped over chats");
-  assert.equal(serviceState(chattyVenue(), today, { channel: "chat" }).answering, true, "stopped with card payments off");
+});
+
+test("STRIPE OFF: a trial past its conversation cap refuses chat and WhatsApp — a cost cap, not billing", () => {
+  assert.equal(stripeEnabled(), false, "this test must run with card payments off");
+  for (const channel of ["chat", "whatsapp"] as const) {
+    const state = serviceState(chattyVenue(), today, { channel });
+    assert.equal(state.answering, false, `${channel} still answered with card payments off`);
+    assert.equal(state.refused, "trial_conversations_used", channel);
+    assert.doesNotMatch(state.callerMessage ?? "", /trial|plan|pay|subscri|charge|AED/i);
+  }
+  // An explicit enforce:false governs only the end date, never a cap.
+  assert.equal(serviceState(chattyVenue(), today, { enforce: false, channel: "chat" }).answering, false);
+  assert.equal(serviceState(chattyVenue(), today, { channel: "phone" }).answering, true, "the phone stopped over chats");
+  assert.equal(serviceState(chattyVenue(), today, { channel: "web_voice" }).answering, true, "the voice button stopped over chats");
+});
+
+test("STRIPE OFF: the owner is told what stopped and what happens next, with no plan button and no email address", () => {
+  const notice = ownerNotice(chattyVenue(), today)!;
+  assert.ok(notice, "no notice for a trial whose chat stopped");
+  assert.equal(notice.stopped, true);
+  assert.equal(notice.choosePlan, false, "a Choose a plan button that cannot be pressed");
+  assert.match(notice.sentence, /text conversations are used up/);
+  assert.match(notice.sentence, /website chat and WhatsApp/);
+  assert.match(notice.sentence, /Belline team has been told/);
+  assert.doesNotMatch(notice.sentence, /Choose a plan|@|mailto|email us|keeps answering/i);
+});
+
+test("STRIPE OFF: the team is told once a day when a trial cap stops a channel — which is what makes that sentence true", () => {
+  const capTickets = () => listExceptions({ kind: "trial_cap_reached", locationId: chattyVenue().id });
+  assert.equal(raiseTrialCapIfPaymentsClosed(chattyVenue(), today, { payments: true }), false, "raised with card payments open");
+  assert.equal(capTickets().length, 0);
+  assert.equal(raiseTrialCapIfPaymentsClosed(chattyVenue(), today, { payments: false }), true);
+  assert.equal(raiseTrialCapIfPaymentsClosed(chattyVenue(), today, { payments: false }), false, "raised twice in a day");
+  assert.equal(capTickets().length, 1);
+  assert.equal(capTickets()[0].count, 1);
+  assert.equal(raiseTrialCapIfPaymentsClosed(openPay.get(), today, { payments: false }), false, "raised for a trial inside its caps");
 });
 
 test("a trial that began before 2026-10 keeps the cap it was given: phone minutes only, no chat cap", () => {
@@ -234,11 +274,55 @@ test("a trial that began before 2026-10 keeps the cap it was given: phone minute
   assert.equal(lapseOf(chattyVenue(), today), null);
 });
 
+test("STRIPE OFF: a trial past its minute cap refuses the phone and the voice button, and chat still answers", () => {
+  assert.equal(stripeEnabled(), false, "this test must run with card payments off");
+  for (const channel of ["phone", "web_voice"] as const) {
+    const state = serviceState(fresh(), today, { channel });
+    assert.equal(state.answering, false, `${channel} still answered with card payments off`);
+    assert.equal(state.refused, "trial_minutes_used", channel);
+    assert.doesNotMatch(state.callerMessage ?? "", /trial|plan|pay|subscri|charge|AED/i);
+  }
+  assert.equal(serviceState(fresh(), today, { enforce: false, channel: "phone" }).answering, false, "enforce:false switched a cap off");
+  assert.equal(serviceState(fresh(), today, { channel: "chat" }).answering, true, "chat stopped over minutes");
+  // With payments open, the end date still stops chat of a trial whose minutes went first.
+  const past = addDays(fresh().subscription!.trial!.endsOn, 1);
+  assert.equal(serviceState(fresh(), past, { enforce: true, channel: "chat" }).refused, "trial_ended");
+  const v = fresh();
+  upsertLocation({ ...v, embed: { enabled: true, key: `k_${v.id}`, mode: "both", allowedOrigins: ["https://example.test"], maxCallsPerDay: 20, maxCallSeconds: 300 } } as never);
+  const gate = checkEmbedGate(fresh());
+  assert.equal(gate.allowed, false, "the voice button still opened");
+  assert.doesNotMatch(gate.message ?? "", /trial|plan|pay|subscri|charge|AED/i);
+  const said = lapseSentence("trial_minutes_used", true);
+  assert.match(said, /voice minutes are used up/);
+  assert.match(said, /Belline team has been told/);
+  assert.doesNotMatch(said, /Choose a plan|@|mailto|keeps answering/i);
+  const notice = ownerNotice(fresh(), today)!;
+  assert.equal(notice.choosePlan, false);
+  assert.equal(notice.stopped, true);
+});
+
+test("STRIPE OFF: a trial past its end date but inside its caps still answers on every channel", () => {
+  const out = lateTrial;
+  const after = addDays(out.endsOn, 60);
+  const v = out.get();
+  // Past even the one extension: nothing about the date stops it.
+  upsertLocation({ ...v, subscription: { ...v.subscription!, trial: { ...v.subscription!.trial!, endsOn: out.endsOn, extendedFrom: addDays(out.endsOn, -14) } } });
+  assert.equal(lapseOf(out.get(), after), "trial_ended");
+  for (const channel of ["phone", "web_voice", "chat", "whatsapp"] as const) {
+    assert.equal(serviceState(out.get(), after, { channel }).answering, true, channel);
+  }
+  const notice = ownerNotice(out.get(), after)!;
+  assert.equal(notice.stopped, false);
+  assert.equal(notice.choosePlan, false);
+  assert.doesNotMatch(notice.sentence, /Choose a plan/);
+  assert.match(notice.sentence, /voice minutes or text conversations/);
+});
+
 console.log("\n\x1b[1mAnd when nothing stops\x1b[0m\n");
 
-test("with card payments off, a lapsed trial keeps answering — and still says it lapsed", () => {
+test("with card payments off, a lapsed trial still says it lapsed", () => {
   const state = serviceState(fresh(), today);
-  assert.equal(state.answering, true);
+  assert.equal(state.answering, false);
   assert.equal(state.lapsed, "trial_minutes_used");
 });
 
@@ -339,6 +423,39 @@ test("demo lines and our own venues are never lapsed", () => {
     };
     assert.equal(lapseOf(expired, today), null, l.name);
   }
+});
+
+test("STRIPE OFF: Belline's own line and the three demo lines keep answering on every channel, however far past any trial cap", () => {
+  assert.equal(stripeEnabled(), false);
+  for (const id of ["loc_belline", "loc_azure", "loc_lumiere", "loc_meridian"]) {
+    const stored = getLocation(id);
+    assert.ok(stored, `${id} is not seeded`);
+    // The worst case: a pooled trial that ended long ago, with its minutes and
+    // conversations used many times over.
+    upsertLocation({
+      ...stored,
+      subscription: {
+        products: ["v2_starter"],
+        market: "AE",
+        cycle: "monthly",
+        startedOn: addDays(today, -40),
+        status: "trialing",
+        trial: { endsOn: addDays(today, -20), minutes: 30, conversations: 50 },
+      },
+    } as never);
+    const venue = () => getLocation(id)!;
+    phoneCall(venue, 90);
+    chats(venue, 120);
+    assert.equal(lapseOf(venue(), today), null, id);
+    for (const channel of ["phone", "web_voice", "chat", "whatsapp"] as const) {
+      const state = serviceState(venue(), today, { channel });
+      assert.equal(state.answering, true, `${id} stopped on ${channel}`);
+      assert.equal(serviceState(venue(), today, { enforce: true, channel }).answering, true, `${id} stopped on ${channel} with payments on`);
+    }
+    assert.equal(ownerNotice(venue(), today), null, id);
+    assert.equal(raiseTrialCapIfPaymentsClosed(venue(), today, { payments: false }), false, id);
+  }
+  assert.equal(mayStreamTo(getLocation("loc_belline")!), true, "the website's Speak to Belline was refused");
 });
 
 console.log(`\n${failed ? "\x1b[31m" : "\x1b[32m"}✓ ${passed} passed, ${failed} failed\x1b[0m\n`);

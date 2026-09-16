@@ -271,6 +271,58 @@
     </div>
   </section>
 
+  <!--
+    The integrations strip. Directly under the hero, because the first thing
+    an operator asks after "what does it do" is "does it fit the system I
+    already book with", and the hero's lead has just said "soon". Quiet on
+    purpose: grey wordmarks on the hero's fading tint, no buttons, so it
+    answers that question without competing with the hero's one CTA.
+
+    Honest on purpose too. Nothing here is connected today, so the heading
+    says "Connecting to", never "Works with" or "Integrates with", and each
+    name says where it stands in words. The tags are generated from the flags
+    (scripts/site-integrations.ts); the names are text wordmarks in the site's
+    own typeface. Official logos may replace them only once a partnership or
+    that company's brand guidelines permit it.
+  -->
+  <section id="connects" class="connects" aria-labelledby="connects-h">
+    <div class="wrap">
+      <h2 class="connects-h" id="connects-h">Connecting to the tools you already use</h2>
+<!-- integrations:start — generated from src/lib/flags.ts by scripts/site-integrations.ts. Tags follow the flags at build time; do not edit by hand. Text wordmarks only: no company logo until a partnership or its brand guidelines permit it. -->
+      <ul class="connects-list" aria-label="Booking systems and calendars, and where each connection stands">
+        <li class="connect" data-integration="booking.google" data-state="soon">
+          <span class="connect-name">Google Calendar</span>
+          <span class="state state-soon">Coming soon</span>
+        </li>
+        <li class="connect" data-integration="booking.outlook" data-state="soon">
+          <span class="connect-name">Outlook</span>
+          <span class="state state-soon">Coming soon</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.fresha" data-state="roadmap">
+          <span class="connect-name">Fresha</span>
+          <span class="state state-roadmap">On our roadmap</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.sevenrooms" data-state="roadmap">
+          <span class="connect-name">SevenRooms</span>
+          <span class="state state-roadmap">On our roadmap</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.opentable" data-state="roadmap">
+          <span class="connect-name">OpenTable</span>
+          <span class="state state-roadmap">On our roadmap</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.treatwell" data-state="roadmap">
+          <span class="connect-name">Treatwell</span>
+          <span class="state state-roadmap">On our roadmap</span>
+        </li>
+      </ul>
+<!-- integrations:end -->
+      <p class="connects-ask">
+        Using a booking system we don’t list yet?
+        <a href="mailto:hello@belline.ai">Tell us</a>.
+      </p>
+    </div>
+  </section>
+
   <section class="rule problem">
     <div class="wrap">
       <h2 class="display problem-h">The customer who can’t get through goes to the next place.</h2>

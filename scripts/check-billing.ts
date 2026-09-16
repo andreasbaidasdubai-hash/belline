@@ -531,6 +531,26 @@ siteCopy("the trial on the landing page and in the terms is the catalogue's", ()
  * terms.html is static, so the catalogue's sentences are pasted into it — and
  * pinned here, strictly, so a catalogue change cannot leave the terms behind.
  */
+test("the terms say a trial's minutes and conversations stop it whether or not card payments are open, and never that it keeps answering past them", () => {
+  const terms = publicPages.find((p) => p.file === "terms.html")!.html;
+  assert.doesNotMatch(terms, /keeps answering after a trial ends/i, "the terms still promise answering after a trial with payments closed");
+  assert.match(terms, /voice minutes and text conversations are a limit, whether or not card payments are open/);
+  assert.match(terms, /stops answering calls and the voice button/);
+  assert.match(terms, /stops replying on your website chat and WhatsApp/);
+  assert.match(terms, /not stopped by its end date alone/);
+});
+
+test("with card payments off, a trial past both caps says it stopped and offers no plan it cannot sell", () => {
+  // A period of its own, far from the other tests' March 2026 invoices.
+  const loc = subscribe({ status: "trialing", products: ["v2_starter"], startedOn: "2031-05-01", trial: { endsOn: "2031-05-31", minutes: 30, conversations: 50 } });
+  for (let i = 0; i < 3; i++) call(600, "2031-05-03");
+  const notes = accountFor(getLocation(loc.id)!, "2031-05-10")!.notes.join(" ");
+  assert.match(notes, /Belline has stopped answering on calls and the voice button/);
+  assert.doesNotMatch(notes, /choose a plan/i);
+  assert.match(notes, /Belline team has been told/);
+  subscribe({ status: "active" });
+});
+
 test("the terms carry the catalogue's trial and over-limit sentences word for word", () => {
   const terms = publicPages.find((p) => p.file === "terms.html")!.html;
   assert.ok(terms.includes(trialSentence()), `terms.html does not carry the catalogue's trial sentence: "${trialSentence()}"`);

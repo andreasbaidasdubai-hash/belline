@@ -3,6 +3,7 @@ import { getTenant, listLocations, upsertLocation } from "../store";
 import { listExceptions, openException } from "../exceptions";
 import { addDays, todayIn } from "../time";
 import { stripeEnabled } from "./stripe";
+import { trialCapReached } from "./entitlement";
 
 /**
  * A trial that reaches its end while card payments are closed.
@@ -14,7 +15,11 @@ import { stripeEnabled } from "./stripe";
  *
  * Not extended twice: after the extension runs out with payments still closed,
  * the exception is raised again (the open row counts it) and entitlement.ts
- * keeps answering anyway, because nothing is enforced while payments are off.
+ * keeps answering anyway, because the end date is not enforced while payments
+ * are off. Only the date: a trial's voice minutes and text conversations stop
+ * their channels always (entitlement.ts), and `raiseTrialCapIfPaymentsClosed`
+ * tells the team when that happens with payments closed, because the owner has
+ * no plan to choose.
  *
  * With card payments open, nothing here happens: the trial ends, the owner
  * chooses a plan, and the lapse is enforced as before.
@@ -59,7 +64,7 @@ export function extendTrialIfPaymentsClosed(
         tenantId: venue.tenantId,
         locationId: venue.id,
         kind: "stripe_off_trial_end",
-        reason: `The extended trial for ${venue.name} ended on ${sub.trial.endsOn} and card payments are still closed. Belline keeps answering.`,
+        reason: `The extended trial for ${venue.name} ended on ${sub.trial.endsOn} and card payments are still closed. Belline keeps answering while the trial's voice minutes and text conversations last.`,
         context: { endsOn: sub.trial.endsOn, extendedFrom: sub.trial.extendedFrom, day: today },
         source: "system",
       },
@@ -88,15 +93,51 @@ export function extendTrialIfPaymentsClosed(
   return { location: saved, action: "extended" };
 }
 
+/**
+ * A trial cap (voice minutes or text conversations) has stopped a channel while
+ * card payments are closed. The owner is told "the Belline team has been told",
+ * so this is what makes that true: one open `trial_cap_reached` row per venue,
+ * counted at most once a day however often the dashboard is opened.
+ */
+export function raiseTrialCapIfPaymentsClosed(
+  venue: Location,
+  today: string = todayIn(venue.timezone),
+  opts: { payments?: boolean; now?: Date } = {},
+): boolean {
+  const payments = opts.payments ?? stripeEnabled();
+  if (payments || exempt(venue)) return false;
+  const cap = trialCapReached(venue, today);
+  if (!cap) return false;
+  const already = listExceptions({ kind: "trial_cap_reached" }).some(
+    (e) => e.locationId === venue.id && e.status !== "resolved" && e.context.day === today && e.context.cap === cap,
+  );
+  if (already) return false;
+  const words = cap === "trial_minutes_used" ? "voice minutes" : "text conversations";
+  openException(
+    {
+      tenantId: venue.tenantId,
+      locationId: venue.id,
+      kind: "trial_cap_reached",
+      reason: `The trial for ${venue.name} has used all its ${words} and card payments are closed, so Belline has stopped answering on those channels.`,
+      context: { cap, day: today },
+      source: "system",
+    },
+    opts.now ?? new Date(),
+  );
+  return true;
+}
+
 /** Every venue, for the billing sweep. */
 export function sweepTrialEnds(now: Date = new Date()): { extended: number; raised: number } {
   if (stripeEnabled()) return { extended: 0, raised: 0 };
   let extended = 0;
   let raised = 0;
   for (const venue of listLocations()) {
-    const out = extendTrialIfPaymentsClosed(venue, todayIn(venue.timezone), { payments: false, now });
+    const today = todayIn(venue.timezone);
+    const out = extendTrialIfPaymentsClosed(venue, today, { payments: false, now });
     if (out.action === "extended") extended++;
     if (out.action === "raised") raised++;
+    if (raiseTrialCapIfPaymentsClosed(out.location, today, { payments: false, now })) raised++;
   }
   return { extended, raised };
 }

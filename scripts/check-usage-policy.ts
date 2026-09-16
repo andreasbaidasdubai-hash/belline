@@ -5,9 +5,9 @@
  * The owner picks one of three: add a pack automatically (up to an optional
  * monthly cap), move up to the next plan, or stop at the allowance. Until they
  * pick, it behaves as a stop, and says "choose what happens at 100%". Alerts
- * go at 70%, 90% and 100%, once per unit per period. Stopping is enforced
- * only while card payments are on — a customer who cannot pay us must not
- * lose their phone over it.
+ * go at 70%, 90% and 100%, once per unit per period. Stopping at an allowance
+ * is enforced whether or not card payments are on: it is cost protection, not
+ * billing. Only date-based lapses wait for card payments.
  *
  *   npm run check:usage-policy
  */
@@ -155,7 +155,7 @@ await test("behaves as a stop at 100%, adds nothing, and asks the owner to choos
   assert.match(accountFor(v.fresh(), TODAY)!.notes.join(" "), /Choose what happens at 100%/);
 });
 
-await test("stops that unit only while card payments are on, and never tells the caller about money", async () => {
+await test("stops that unit whether or not card payments are on — a cost cap — and never tells the caller about money", async () => {
   const v = await venue();
   talk(v.id, 75);
   const phone = serviceState(v.fresh(), TODAY, { enforce: true, channel: "phone" });
@@ -165,8 +165,25 @@ await test("stops that unit only while card payments are on, and never tells the
   const bell = serviceState(v.fresh(), TODAY, { enforce: true, channel: "web_voice" });
   assert.equal(bell.refused, "allowance_exhausted", "voice minutes are pooled: the voice button shares the stop");
   assert.equal(serviceState(v.fresh(), TODAY, { enforce: true, channel: "chat" }).answering, true, "chat stopped over minutes");
-  assert.equal(serviceState(v.fresh(), TODAY, { channel: "phone" }).answering, true, "stopped with card payments off");
-  assert.equal(serviceState(v.fresh(), TODAY, { enforce: false, channel: "phone" }).answering, true);
+  assert.equal(serviceState(v.fresh(), TODAY, { channel: "phone" }).refused, "allowance_exhausted", "kept answering with card payments off");
+  assert.equal(serviceState(v.fresh(), TODAY, { enforce: false, channel: "phone" }).refused, "allowance_exhausted", "enforce:false switched a cap off");
+  assert.match(accountFor(v.fresh(), TODAY)!.notes.join(" "), /Belline has stopped answering/);
+  assert.doesNotMatch(accountFor(v.fresh(), TODAY)!.notes.join(" "), /nothing has stopped/i);
+});
+
+await test("STRIPE OFF: a trial past its minute cap refuses voice, past its conversation cap refuses chat and WhatsApp", async () => {
+  const v = await venue({ status: "trialing", trial: { endsOn: "2026-11-30", minutes: 30, conversations: 50 } });
+  talk(v.id, 30);
+  for (const channel of ["phone", "web_voice"] as const) {
+    assert.equal(serviceState(v.fresh(), TODAY, { channel }).refused, "trial_minutes_used", channel);
+  }
+  assert.equal(serviceState(v.fresh(), TODAY, { channel: "chat" }).answering, true);
+  chats(v.id, 50);
+  for (const channel of ["chat", "whatsapp"] as const) {
+    assert.equal(serviceState(v.fresh(), TODAY, { channel }).refused, "trial_conversations_used", channel);
+  }
+  assert.match(accountFor(v.fresh(), TODAY)!.notes.join(" "), /Belline has stopped answering/);
+  assert.doesNotMatch(accountFor(v.fresh(), TODAY)!.notes.join(" "), /choose a plan/i, "a plan offered with card payments closed");
 });
 
 console.log("\n\x1b[1mCap\x1b[0m\n");

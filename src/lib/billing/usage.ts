@@ -573,9 +573,9 @@ function atLimitSentence(
   packs: UsagePack[],
 ): string {
   const places = poolPlaces(pool);
-  const stopped = stripeEnabled()
-    ? `Belline has stopped answering on ${places} until the next period.`
-    : "Card payments are not switched on yet, so nothing has stopped.";
+  // Stopped whether or not card payments are open: an allowance is a cost cap,
+  // not a billing switch (entitlement.ts).
+  const stopped = `Belline has stopped answering on ${places} until the next period.`;
   const policy = sub.usagePolicy;
   switch (policy?.mode) {
     case "packs": {
@@ -623,7 +623,11 @@ function notesFor(
     notes.push(
       spent.length === 0
         ? `Trial: ${parts.map((p) => `${p.left} of ${p.m.included} ${meterWords(p.m.id)}`).join(" and ")} left. Nothing is charged during the trial.`
-        : `Trial: all ${spent.map((p) => `${p.m.included} ${meterWords(p.m.id)}`).join(" and ")} used. Nothing has been charged — choose a plan to keep going.`,
+        : `Trial: all ${spent.map((p) => `${p.m.included} ${meterWords(p.m.id)}`).join(" and ")} used, so Belline has stopped answering on ${spent.map((p) => (p.m.id === "conversations" ? "chat and WhatsApp" : "calls and the voice button")).join(" and on ")}. Nothing has been charged — ${
+            stripeEnabled()
+              ? "choose a plan to keep going."
+              : "card payments are not open yet, so the Belline team has been told and will contact you to keep it going."
+          }`,
     );
     return notes;
   }
