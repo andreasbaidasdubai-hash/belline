@@ -24,7 +24,8 @@
  * the two together. `npm run site` re-renders it from the build's own env.
  */
 
-import { flag, type FlagName } from "../src/lib/flags";
+import type { FlagName } from "../src/lib/flags";
+import { publicFlag } from "../src/lib/site-flags";
 
 type Env = Record<string, string | undefined>;
 
@@ -63,21 +64,12 @@ const STATE_CLASS: Record<IntegrationState, string> = {
 };
 
 /**
- * The flags as a public page may read them.
- *
- * `FLAG_STUBS=on` stands fake providers in for missing credentials so a local
- * end-to-end run can exercise a capability. That is a test harness, not a
- * product: a site built on a machine with stubs on must not tell the public a
- * connection is available. So the site reads the flags without it.
+ * The flags as a public page may read them: without `FLAG_STUBS`, which is a
+ * test harness and never a reason to tell the public a connection is
+ * available. One definition, shared with the page copy in src/lib/site-flags.ts.
  */
-function publicEnv(env: Env): Env {
-  const rest = { ...env };
-  delete rest.FLAG_STUBS;
-  return rest;
-}
-
 export function integrationState(item: Integration, env: Env): IntegrationState {
-  return flag(item.flag, publicEnv(env)) ? "available" : item.pending;
+  return publicFlag(item.flag, env) ? "available" : item.pending;
 }
 
 function esc(text: string): string {

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { applySiteFlags } from "./site-flags";
+import { applyIntegrations } from "../../scripts/site-integrations";
 
 /**
  * Serving the marketing site from the app's own process.
@@ -49,14 +50,20 @@ function cacheFor(ext: string): string {
 }
 
 /**
- * A built page with the copy for switched-on flags swapped in (site-flags.ts).
- * `index.html` at the root is the landing page; the rest keep their names.
+ * A built page as this server's flags say it: the integrations strip's tags
+ * (scripts/site-integrations.ts) and the hand-written flag copy
+ * (site-flags.ts). The same functions the build ran, again, because the image
+ * was built without the service's variables and would otherwise say "Coming
+ * soon" whatever the flag is. `index.html` at the root is the landing page.
  */
 export function pageWithFlags(relPath: string, bytes: Buffer, env: Record<string, string | undefined> = process.env): Buffer {
   const name = relPath.split(path.sep).join("/");
   const source = name === "index.html" ? "landing.html" : name;
   const html = bytes.toString("utf8");
-  const out = applySiteFlags(source, html, env);
+  let out = applySiteFlags(source, html, env);
+  if (source === "landing.html" && out.includes("<!-- integrations:start") && out.includes("<!-- integrations:end -->")) {
+    out = applyIntegrations(out, env);
+  }
   return out === html ? bytes : Buffer.from(out, "utf8");
 }
 

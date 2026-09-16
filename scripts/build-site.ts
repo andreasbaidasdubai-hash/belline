@@ -16,6 +16,7 @@ import crypto from "node:crypto";
 import { VERTICALS, type Vertical } from "./site-content";
 import { applyPricing, trialSentence } from "./site-pricing";
 import { applyIntegrations } from "./site-integrations";
+import { applySiteFlags } from "../src/lib/site-flags";
 import { TRIAL } from "../src/lib/billing/plans";
 
 const SOURCE = "public";
@@ -293,6 +294,11 @@ for (const page of pages) {
   // booking.google on is what turns Google Calendar "Available", and nothing
   // else does. Throws if the strip's markers are gone.
   if (page === "landing.html") html = applyIntegrations(html, process.env);
+  // The hand-written sentences about a flagged capability — the hero's
+  // calendar badge and lead, "Whatever you book with", the privacy page's
+  // Google section — follow the same flags (src/lib/site-flags.ts). The app's
+  // server applies both again as it serves, from its own env.
+  html = applySiteFlags(page, html, process.env);
   if (page === "terms.html") html = fillTrial(html);
 
   html = repoint(fillLegal(html));

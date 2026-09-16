@@ -1,22 +1,30 @@
 import { flag, type FlagName } from "./flags";
 
+type Env = Record<string, string | undefined>;
+
 /**
  * The public website's copy for capabilities behind a flag.
  *
- * The pages in `public/` say what is true with every flag off: that is what
- * the checks read, what a static host serves, and the honest default. Each
+ * The pages in `public/` are written as every flag-off build renders them:
+ * that is what the checks read and the honest default. Each hand-written
  * sentence that has to change when a capability is switched on is listed here
- * with its replacement, and the app's own server swaps them as it serves the
- * page (marketing.ts), from the same `flag()` the product reads. So turning
- * `FLAG_BOOKING_GOOGLE` on changes the website with it, and turning it off
- * again changes it back, with nobody editing copy by hand.
+ * with its replacement, and nobody edits it in step with an environment
+ * variable. Two places apply it, from the same `flag()` the product reads:
  *
- * At serve time rather than build time on purpose: the Docker build runs
- * without the service's variables, so a build-time switch would bake in "off"
- * whatever production says.
+ * - `scripts/build-site.ts`, at build time, like the integrations strip
+ *   (scripts/site-integrations.ts), so a static build is right for its env;
+ * - `marketing.ts`, as the app's own server serves the built site, because the
+ *   Docker build on Railway runs without the service's variables (there is no
+ *   ARG for them, and the flag also needs the Google secrets, which do not
+ *   belong in an image). A build-time switch alone would say "Coming soon" in
+ *   production whatever the flag says.
  *
- * A sentence that no longer appears in its page is an error (see
- * `check:google`), so rewording the page cannot silently strand the "on" copy.
+ * Both directions: applying "off" to a page built with the flag on puts the
+ * flag-off sentences back, so the page served always matches the flag the
+ * server has now.
+ *
+ * A sentence that no longer appears in its page is an error (`check:google`),
+ * so rewording a page cannot silently strand its flag-on copy.
  */
 
 export interface SiteSwap {
@@ -57,19 +65,39 @@ export const SITE_FLAG_COPY: Partial<Record<FlagName, SiteSwap[]>> = {
   ],
 };
 
-/** The page's copy with every flag as it is in `env`. Unchanged with them all off. */
-export function applySiteFlags(file: string, html: string, env: Record<string, string | undefined> = process.env): string {
+/**
+ * The flags as a public page may read them.
+ *
+ * `FLAG_STUBS=on` stands fake providers in for missing credentials so a local
+ * end-to-end run can exercise a capability. That is a test harness, not a
+ * product: a site built or served with stubs on must not tell the public a
+ * connection is available.
+ */
+export function publicEnv(env: Env): Env {
+  const rest = { ...env };
+  delete rest.FLAG_STUBS;
+  return rest;
+}
+
+/** Is this flag on, as the public website may say so? */
+export function publicFlag(name: FlagName, env: Env = process.env): boolean {
+  return flag(name, publicEnv(env));
+}
+
+/** The page's hand-written flag copy as the flags in `env` say it. */
+export function applySiteFlags(file: string, html: string, env: Env = process.env): string {
   let out = html;
   for (const [name, swaps] of Object.entries(SITE_FLAG_COPY) as [FlagName, SiteSwap[]][]) {
-    if (!flag(name, env)) continue;
+    const on = publicFlag(name, env);
     for (const swap of swaps) {
-      if (swap.file === file) out = out.split(swap.off).join(swap.on);
+      if (swap.file !== file) continue;
+      out = on ? out.split(swap.off).join(swap.on) : out.split(swap.on).join(swap.off);
     }
   }
   return out;
 }
 
-/** Swaps whose `off` sentence is no longer in its page, as "file: sentence". Empty when all are found. */
+/** Swaps whose `off` sentence is not in its page exactly once, as "file: sentence". Empty when all are found. */
 export function strandedSiteCopy(read: (file: string) => string): string[] {
   const out: string[] = [];
   for (const swaps of Object.values(SITE_FLAG_COPY)) {

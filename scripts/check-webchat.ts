@@ -858,6 +858,9 @@ const connectionClaims = (text: string, notLive: string[]) =>
     .map((m) => m[0].trim())
     .filter((sentence) => notLive.some((name) => sentence.toLowerCase().includes(name.toLowerCase())));
 
+/** The privacy page from the same builds, by flag state. */
+const builtPrivacy = new Map<"off" | "on", string>();
+
 /** Build the whole site into a throwaway folder with exactly this env on top of a scrubbed one. */
 function buildLanding(extra: Record<string, string>): string {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "belline-site-"));
@@ -874,6 +877,7 @@ function buildLanding(extra: Record<string, string>): string {
   });
   try {
     assert.equal(run.status, 0, `the site build failed:\n${run.stdout}\n${run.stderr}`);
+    builtPrivacy.set(extra.FLAG_BOOKING_GOOGLE === "on" ? "on" : "off", fs.readFileSync(path.join(out, "privacy.html"), "utf8"));
     return fs.readFileSync(path.join(out, "index.html"), "utf8");
   } finally {
     fs.rmSync(out, { recursive: true, force: true });
@@ -942,6 +946,73 @@ await test("built with booking.google on, Google Calendar reads Available and no
     ["Treatwell", "On our roadmap"],
   ]);
   assert.match(stripOf(built("on")), /<span class="state state-available">Available<\/span>/);
+});
+
+/**
+ * The hand-written Google Calendar lines outside the strip: the hero's lead
+ * and calendar badge, "Whatever you book with", and the privacy page. Each
+ * reads right in both builds (src/lib/site-flags.ts).
+ */
+const heroOf = (html: string) => {
+  const start = html.indexOf('<section class="hero">');
+  return html.slice(start, html.indexOf("</section>", start));
+};
+const bookWithOf = (html: string) => {
+  const at = html.indexOf("<dt>Google Calendar or Outlook</dt>");
+  return html.slice(at, html.indexOf("</div>", at));
+};
+
+await test("built with booking.google off, the hero, 'Whatever you book with' and the privacy page say Google Calendar is coming", () => {
+  const html = built("off");
+  const hero = heroOf(html);
+  assert.match(hero, /<span class="state state-soon cal-soon">Coming soon: books into your calendar<\/span>/);
+  assert.match(plainText(hero), /Soon, it will also book straight into the calendar you already use\./);
+  assert.doesNotMatch(hero, /state-available|Books into Google Calendar/);
+  assert.match(bookWithOf(html), /Booking straight into Google Calendar is coming soon\./);
+  const privacy = builtPrivacy.get("off")!;
+  assert.match(privacy, /No calendar can be connected yet/);
+  assert.match(privacy, /Connecting a Google Calendar is not available yet/);
+});
+
+await test("built with booking.google on, each of those lines says it works, with no 'soon' left beside a calendar", () => {
+  const html = built("on");
+  const hero = heroOf(html);
+  assert.match(hero, /<span class="state state-available cal-soon">Books into Google Calendar<\/span>/);
+  assert.doesNotMatch(hero, /Coming soon: books into your calendar/);
+  assert.match(plainText(hero), /It can also book straight into your Google Calendar, after checking it for times already taken\./);
+  assert.deepEqual(
+    [...plainText(hero).matchAll(/[^.?!]*\bcalendar\b[^.?!]*/gi)].map((m) => m[0]).filter((s) => /\bsoon\b/i.test(s)),
+    [],
+    "a hero sentence about the calendar still says soon",
+  );
+  const bookWith = plainText(bookWithOf(html));
+  assert.match(bookWith, /Connect Google Calendar and Belline checks it for times already taken, then books straight into it\./);
+  assert.match(bookWith, /Outlook isn’t connected yet, so for Outlook Belline takes booking requests\./, "Outlook is not kept honest");
+  assert.doesNotMatch(bookWith, /soon/i);
+  const privacy = builtPrivacy.get("on")!;
+  assert.doesNotMatch(privacy, /No calendar can be connected yet|Connecting a Google Calendar is not available yet/);
+  assert.match(privacy, /Connecting a Google Calendar is optional\./);
+  assert.match(privacy, /including the Limited Use requirements/);
+  // The legal-page rule check:billing holds the templates to still holds when it is on.
+  assert.doesNotMatch(privacy.replace(/<!--[\s\S]*?-->/g, ""), /\b(?:books?|booking|booked) (?:straight |directly )?(?:into|against|in) (?:your|the|their) (?:real |existing )?(?:diary|calendar)\b/i);
+});
+
+await test("the app's server re-applies the strip and the Google lines from its own flags, whatever the image was built with", async () => {
+  const { pageWithFlags } = await import("../src/lib/marketing");
+  // Railway builds the image without the service's variables: the built page is the flag-off one.
+  const off = Buffer.from(built("off"));
+  const served = pageWithFlags("index.html", off, GOOGLE_ON).toString("utf8");
+  assert.deepEqual(tagsIn(stripOf(served))[0], ["Google Calendar", "Available"]);
+  assert.match(heroOf(served), /Books into Google Calendar/);
+  assert.match(bookWithOf(served), /books straight into it/);
+  // And back: a page built with it on, served with it off.
+  const back = pageWithFlags("index.html", Buffer.from(built("on")), {}).toString("utf8");
+  assert.deepEqual(tagsIn(stripOf(back))[0], ["Google Calendar", "Coming soon"]);
+  assert.match(heroOf(back), /Coming soon: books into your calendar/);
+  assert.match(bookWithOf(back), /coming soon/);
+  assert.match(pageWithFlags("privacy.html", Buffer.from(builtPrivacy.get("off")!), GOOGLE_ON).toString("utf8"), /Connecting a Google Calendar is optional\./);
+  // Stubs are a test harness: never a reason to tell the public it is on.
+  assert.match(heroOf(pageWithFlags("index.html", off, { FLAG_STUBS: "on", FLAG_BOOKING_GOOGLE: "on" }).toString("utf8")), /Coming soon: books into your calendar/);
 });
 
 await test("Outlook and each booking platform follow their own flags, and stubs never make one Available", () => {

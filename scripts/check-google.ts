@@ -1061,12 +1061,18 @@ head("'Coming soon' follows the flag: the website, the setup step, the app and B
 
 const { applySiteFlags, strandedSiteCopy, SITE_FLAG_COPY } = await import("../src/lib/site-flags");
 const OFF = { FLAG_BOOKING_GOOGLE: "off" } as Record<string, string>;
-const ON = { FLAG_STUBS: "on", FLAG_BOOKING_GOOGLE: "on" } as Record<string, string>;
+/** On as production would have it. FLAG_STUBS alone never turns the public copy on. */
+const ON = { GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret", CREDENTIALS_KEY: "key", FLAG_BOOKING_GOOGLE: "on" } as Record<string, string>;
 const publicPage = (file: string) => source(`public/${file}`);
 /** The parts of a page a visitor reads: no comments. */
 const visible = (html: string) => html.replace(/<!--[\s\S]*?-->/g, "");
-/** Only the words: a class name like `cal-soon` is not a sentence. */
-const words = (html: string) => visible(html).replace(/<[^>]+>/g, " ");
+/**
+ * Only the words: a class name like `cal-soon` is not a sentence. The
+ * integrations strip is left out: it is a list of tags, one per system, and
+ * check:webchat holds it to the flags on its own.
+ */
+const words = (html: string) =>
+  visible(html.replace(/<section id="connects"[\s\S]*?<\/section>/g, "")).replace(/<[^>]+>/g, " ");
 const SOON_CALENDAR = /\bsoon\b[^.<]{0,80}\bcalendar\b|\bcalendar\b[^.<]{0,80}\bsoon\b|not available yet|No calendar can be connected yet/i;
 
 await test("every sentence the flag swaps is still in its page, exactly once", () => {
@@ -1114,6 +1120,10 @@ await test("the server swaps the copy as it serves the built site, by the flag i
     return body;
   };
   process.chdir(dir);
+  // The public site ignores FLAG_STUBS, so this is the flag as production has it: credentials and the switch.
+  const saved = { ...process.env };
+  delete process.env.FLAG_STUBS;
+  Object.assign(process.env, { GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret" });
   try {
     process.env.FLAG_BOOKING_GOOGLE = "off";
     assert.match(get("/"), /Coming soon: books into your calendar/);
@@ -1123,7 +1133,10 @@ await test("the server swaps the copy as it serves the built site, by the flag i
     assert.match(get("/"), /Books into Google Calendar/);
     assert.doesNotMatch(words(get("/privacy")), SOON_CALENDAR);
   } finally {
-    process.env.FLAG_BOOKING_GOOGLE = "on";
+    for (const k of ["FLAG_STUBS", "FLAG_BOOKING_GOOGLE", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
     process.chdir(cwd);
     fs.rmSync(dir, { recursive: true, force: true });
   }
