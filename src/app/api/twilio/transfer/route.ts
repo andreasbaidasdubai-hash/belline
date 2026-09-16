@@ -1,4 +1,8 @@
 import { twilioSignatureValid } from "@/lib/voice/twilio-signature";
+import { findCallBySid, getLocation } from "@/lib/store";
+import { answersIn } from "@/lib/language";
+import { copy } from "@/lib/customer-copy";
+import { sayTwiml } from "@/lib/telephony/voicemail";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +34,15 @@ export async function POST(request: Request) {
   if (!valid) return new Response("Invalid signature", { status: 403 });
 
   const answered = params.DialCallStatus === "completed";
+  // The venue, through the call this transfer belongs to, for its language.
+  const call = params.CallSid ? findCallBySid(params.CallSid) : undefined;
+  const location = call ? getLocation(call.locationId) : undefined;
+  const german = location ? answersIn(location) === "de" : false;
   const body = answered
     ? `<Response><Hangup/></Response>`
-    : `<Response><Say voice="Polly.Joanna">I'm sorry, nobody could get to the phone just now. The team has your number and what you told me, and they will call you back as soon as they can.</Say><Hangup/></Response>`;
+    : german
+      ? `<Response>${sayTwiml("de", copy("de", "transfer.no_answer"))}<Hangup/></Response>`
+      : `<Response><Say voice="Polly.Joanna">I'm sorry, nobody could get to the phone just now. The team has your number and what you told me, and they will call you back as soon as they can.</Say><Hangup/></Response>`;
 
   return new Response(`<?xml version="1.0" encoding="UTF-8"?>${body}`, {
     headers: { "Content-Type": "text/xml; charset=utf-8" },

@@ -18,6 +18,9 @@
  * says the same thing — only pronounceable.
  */
 
+import type { VenueLanguage } from "../types";
+import { carriesDetailDe, toSpokenGerman } from "./spoken-de";
+
 export interface SpokenFragment {
   /** What the voice should say. */
   text: string;
@@ -178,9 +181,14 @@ function carriesDetail(text: string): boolean {
 /**
  * Turn a written fragment into a spoken one.
  *
- * Called on every fragment between the model and the voice.
+ * Called on every fragment between the model and the voice. `language` is the
+ * venue's, from language.ts `answersIn`; German has its own layer, because
+ * German numbers are said differently and have to be written out as words.
  */
-export function toSpoken(text: string): SpokenFragment {
+export function toSpoken(text: string, language: VenueLanguage = "en"): SpokenFragment {
+  if (language === "de") {
+    return { text: toSpokenGerman(text), speed: carriesDetailDe(text) ? PACE_CAREFUL : PACE_TALK };
+  }
   let out = text;
 
   // Markdown and symbols the model should not have produced but sometimes

@@ -36,6 +36,23 @@ const BACKCHANNELS = new Set([
   "thanks", "thank you", "cheers",
 ]);
 
+/**
+ * The same, as German callers make them.
+ *
+ * "Ja", "genau", "mhm", "okay", "ah ja", "ähm". Deepgram's German model writes
+ * the hesitation sounds with their umlauts, so the list keeps them; a caller
+ * saying "ja, genau" over a read-back of their booking is agreeing, not
+ * interrupting. English's own list still applies — "okay" and "mhm" cross the
+ * border unchanged, and a German caller says "sorry" and "perfect" too.
+ */
+const BACKCHANNELS_DE = new Set([
+  "ja", "ja ja", "jaja", "jo", "jup", "jep", "jawohl", "genau", "ja genau", "genau genau",
+  "mhm", "mhmm", "mm", "hm", "hmm", "aha", "ah", "ah ja", "ach so", "achso", "ach ja", "ah okay", "ah ok",
+  "okay", "ok", "okay okay", "alles klar", "klar", "gut", "gut gut", "sehr gut", "super", "prima", "perfekt", "wunderbar",
+  "stimmt", "richtig", "verstehe", "ich verstehe", "verstanden", "in ordnung", "passt", "passt gut", "gern", "gerne",
+  "ähm", "äh", "öhm", "hmhm", "danke", "danke schön", "dankeschön", "vielen dank", "ja danke",
+]);
+
 /** The longest a backchannel ever is. Past this, somebody is talking. */
 const MAX_WORDS = 3;
 
@@ -46,7 +63,9 @@ const MAX_WORDS = 3;
  * backchannel mid-sentence and an answer straight after a question, and only
  * the caller of this function knows which of those just happened.
  */
-export function isBackchannel(text: string): boolean {
+export function isBackchannel(text: string, language: "en" | "de" = "en"): boolean {
+  if (language === "de") return isGermanBackchannel(text) || isBackchannel(text);
+
   const normal = text
     .toLowerCase()
     // Hyphens and apostrophes are how "mm-hmm" and "uh-huh" get written down;
@@ -59,6 +78,21 @@ export function isBackchannel(text: string): boolean {
   if (!normal) return false;
   if (normal.split(" ").length > MAX_WORDS) return false;
   return BACKCHANNELS.has(normal);
+}
+
+function isGermanBackchannel(text: string): boolean {
+  const normal = text
+    .toLowerCase()
+    .replace(/[-']/g, " ")
+    // Letters with their umlauts: stripping to a-z would make "ähm" into "hm"
+    // by accident and "schön" into "schn".
+    .replace(/[^a-zäöüß\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normal) return false;
+  if (normal.split(" ").length > MAX_WORDS) return false;
+  return BACKCHANNELS_DE.has(normal);
 }
 
 /**

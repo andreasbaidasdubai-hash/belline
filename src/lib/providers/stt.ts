@@ -38,7 +38,24 @@ export interface SttOptions {
    * "a table on the Terrace" stops coming back as "on the terrorist".
    */
   keyterms?: string[];
+  /**
+   * What the caller is expected to speak: "en", "de", or "de-CH" for Swiss
+   * German, which nova-3 has its own model for. From language.ts `localeOf`.
+   * Absent is English.
+   */
+  language?: SttLanguage;
 }
+
+/**
+ * The recogniser's language tag.
+ *
+ * `de` rather than `multi`: nova-3's multilingual mode code-switches between
+ * ten languages, which a German venue does not need and pays for in accuracy
+ * on the language it does. Swiss venues get `de-CH`, trained on Swiss
+ * speakers' Standard German. Keyterms, numerals and smart formatting are all
+ * supported on nova-3 German (Deepgram, Nova-3 German launch notes).
+ */
+export type SttLanguage = "en" | "de" | "de-CH";
 
 export interface SttStream {
   send(chunk: Buffer): void;
@@ -81,7 +98,10 @@ export const NOVA_ENDPOINTING_MS = {
  */
 export type SttEngine = "nova-3" | "flux";
 
-export function sttEngine(): SttEngine {
+export function sttEngine(language: SttLanguage = "en"): SttEngine {
+  // Flux's turn-taking was measured on English callers, on `flux-general-en`.
+  // A German caller stays on nova-3 until somebody has measured it in German.
+  if (language !== "en") return "nova-3";
   return process.env.STT_ENGINE === "flux" ? "flux" : "nova-3";
 }
 
@@ -100,8 +120,19 @@ export function createSttStream(opts: SttOptions): SttStream {
     };
   }
 
-  if (sttEngine() === "flux") return createFluxStream(opts, key);
+  if (sttEngine(opts.language) === "flux") return createFluxStream(opts, key);
 
+  const params = novaStreamParams(opts);
+
+  const socket = new WebSocket(`wss://api.deepgram.com/v1/listen?${params}`, {
+    headers: { Authorization: `Token ${key}` },
+  });
+
+  return novaStream(socket, opts);
+}
+
+/** Exactly what nova-3 is asked for on a live line. Exported for check:german. */
+export function novaStreamParams(opts: Pick<SttOptions, "encoding" | "sampleRate" | "keyterms" | "language">): URLSearchParams {
   // A phone line is 8 kHz µ-law over a lossy network and callers on one pause
   // more — mid-sentence, to check a diary, because the line lags. The browser
   // console is clean 16 kHz audio from someone sitting at a desk. Holding a
@@ -111,7 +142,7 @@ export function createSttStream(opts: SttOptions): SttStream {
 
   const params = new URLSearchParams({
     model: "nova-3",
-    language: "en",
+    language: opts.language ?? "en",
     encoding: opts.encoding,
     sample_rate: String(opts.sampleRate),
     channels: "1",
@@ -139,11 +170,10 @@ export function createSttStream(opts: SttOptions): SttStream {
   for (const term of opts.keyterms ?? []) {
     if (term.trim()) params.append("keyterm", term.trim());
   }
+  return params;
+}
 
-  const socket = new WebSocket(`wss://api.deepgram.com/v1/listen?${params}`, {
-    headers: { Authorization: `Token ${key}` },
-  });
-
+function novaStream(socket: WebSocket, opts: SttOptions): SttStream {
   let open = false;
   const pending: Buffer[] = [];
   /** Finalised words not yet flushed — Deepgram sends a thought in pieces. */
@@ -253,14 +283,14 @@ export function createSttStream(opts: SttOptions): SttStream {
 export async function transcribeClip(
   audio: Buffer,
   mime: string,
-  opts: { keyterms?: string[]; signal?: AbortSignal } = {},
+  opts: { keyterms?: string[]; signal?: AbortSignal; language?: SttLanguage } = {},
 ): Promise<string> {
   const key = process.env.DEEPGRAM_API_KEY;
   if (!key) throw new Error("DEEPGRAM_API_KEY is not set.");
 
   const params = new URLSearchParams({
     model: "nova-3",
-    language: "en",
+    language: opts.language ?? "en",
     smart_format: "true",
     punctuate: "true",
     numerals: "true",

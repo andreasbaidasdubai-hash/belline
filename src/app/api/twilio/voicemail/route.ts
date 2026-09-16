@@ -1,7 +1,9 @@
 import { getLocation } from "@/lib/store";
 import { seedIfEmpty } from "@/lib/seed";
 import { publicRequestUrl, twilioSignatureValid } from "@/lib/voice/twilio-signature";
-import { VOICEMAIL_THANKS, recordVoicemail } from "@/lib/telephony/voicemail";
+import { VOICEMAIL_THANKS, recordVoicemail, sayTwiml } from "@/lib/telephony/voicemail";
+import { answersIn } from "@/lib/language";
+import { copy } from "@/lib/customer-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -41,11 +43,12 @@ export async function POST(request: Request) {
 
   // The action request's answer is what the caller hears last; the status
   // callback's answer is ignored by Twilio.
+  const german = location ? answersIn(location) === "de" : false;
   return new Response(
     action
       ? `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">${VOICEMAIL_THANKS}</Say>
+  ${german ? sayTwiml("de", copy("de", "voicemail.thanks")) : `<Say voice="Polly.Joanna">${VOICEMAIL_THANKS}</Say>`}
   <Hangup/>
 </Response>`
       : `<?xml version="1.0" encoding="UTF-8"?>

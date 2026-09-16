@@ -1,7 +1,9 @@
 import type { Call, DateStr, Location, ToolTrace } from "../types";
 import { AgentSession } from "../agent/runtime";
-import { createSttStream, type SttStream } from "../providers/stt";
-import { speak, speakClip, ttsEnabled, type TtsFormat } from "../providers/tts";
+import { createSttStream, type SttLanguage, type SttStream } from "../providers/stt";
+import { speak, speakClip, ttsEnabled, voiceIdFor, type TtsFormat } from "../providers/tts";
+import { answersIn, lineFor, localeOf } from "../language";
+import { copy } from "../customer-copy";
 import { saveCall } from "../store";
 import { costChannelOf, meterCallTime, meterTts } from "../billing/cost";
 import { maxCallSeconds } from "../demo";
@@ -11,7 +13,7 @@ import { toSpoken } from "./spoken";
 import { isBackchannel, invitesAnswer } from "./backchannel";
 import { findAvailability } from "../booking";
 import { releaseCall } from "../booking/holds";
-import { todayIn, minutesToClock, minutesToSpoken } from "../time";
+import { todayIn, minutesToClock, minutesToGerman, minutesToSpoken } from "../time";
 
 /**
  * One live call.
@@ -159,14 +161,18 @@ export function voiceParams(
   spoken: { text: string; speed: number },
   format: TtsFormat,
 ) {
+  const language = answersIn(location);
   return {
     text: spoken.text,
-    voiceId: location.agent.voiceId,
+    voiceId: voiceIdFor(location.agent, language),
     modelId: location.agent.voiceModel,
     // A venue's configured pace shifts the whole range rather than overriding
     // it, so "slower for numbers" survives being tuned.
     speed: spoken.speed * ((location.agent.voiceSpeed ?? 1.05) / 1.05),
     format,
+    // Pinned for German, so a two-word fragment is not read with an English
+    // accent. Absent for English, which leaves the request as it always was.
+    ...(language === "de" ? { languageCode: "de" as const } : {}),
   };
 }
 
@@ -177,7 +183,13 @@ export function voiceParams(
  * cache — but only if the key matches to the character and the decimal.
  */
 export function greetingClip(location: Location, greeting: string, format: TtsFormat) {
-  return voiceParams(location, toSpoken(greeting), format);
+  return voiceParams(location, toSpoken(greeting, answersIn(location)), format);
+}
+
+/** What the recogniser listens for at this venue: English, German, or Swiss German. */
+export function sttLanguageOf(location: Location): SttLanguage {
+  const locale = localeOf(location);
+  return locale === "en" ? "en" : locale === "de-CH" ? "de-CH" : "de";
 }
 
 /**
@@ -198,6 +210,12 @@ export function greetingClip(location: Location, greeting: string, format: TtsFo
  */
 export const ACKNOWLEDGEMENTS = ["Sure.", "Okay.", "Right.", "Let me see."] as const;
 
+/** The acknowledgements in the venue's language: customer-copy.ts `voice.ack.*`. */
+export function acknowledgementsFor(location: Location): readonly string[] {
+  if (answersIn(location) === "en") return ACKNOWLEDGEMENTS;
+  return ([0, 1, 2, 3] as const).map((i) => copy("de", `voice.ack.${i}`));
+}
+
 /**
  * How long a turn may be silent before an acknowledgement is said.
  *
@@ -209,7 +227,7 @@ const ACKNOWLEDGE_AFTER_MS = 250;
 
 /** The acknowledgement clips, as the session will ask for them — for warming. */
 export function acknowledgementClips(location: Location, format: TtsFormat) {
-  return ACKNOWLEDGEMENTS.map((line) => voiceParams(location, toSpoken(line), format));
+  return acknowledgementsFor(location).map((line) => voiceParams(location, toSpoken(line, answersIn(location)), format));
 }
 
 export class VoiceSession {
@@ -271,6 +289,8 @@ export class VoiceSession {
   private answered = false;
   /** Caller turns so far, to rotate the acknowledgements. */
   private turns = 0;
+  /** What this call is answered in, fixed at pickup so a call never changes language half way. */
+  private readonly language: ReturnType<typeof answersIn>;
 
   constructor(
     location: Location,
@@ -278,6 +298,7 @@ export class VoiceSession {
     transport: Transport,
     callerNumber?: string,
   ) {
+    this.language = answersIn(location);
     this.location = location;
     this.call = call;
     this.transport = transport;
@@ -312,6 +333,8 @@ export class VoiceSession {
       onTurnResumed: () => this.dropGuess(),
       onError: (message) => this.transport.sendEvent({ type: "stt_error", message }),
       keyterms: speechKeyterms(this.location),
+      // Only set for German, so an English call asks exactly what it did.
+      ...(this.language === "en" ? {} : { language: sttLanguageOf(this.location) }),
     });
 
     this.transport.sendEvent({
@@ -398,7 +421,7 @@ export class VoiceSession {
     //
     // Unless a question has just been put to them, in which case even a bare
     // "yes" is an answer, and ignoring it would leave both sides waiting.
-    if (isBackchannel(text) && !invitesAnswer(this.spokenThisTurn)) {
+    if (isBackchannel(text, this.language) && !invitesAnswer(this.spokenThisTurn)) {
       if (this.bargeInTimer) {
         clearTimeout(this.bargeInTimer);
         this.bargeInTimer = null;
@@ -478,12 +501,11 @@ export class VoiceSession {
           if (event.type !== "sentence") continue;
 
           // Synthesised now, held back. This is the half second being bought.
-          const spoken = toSpoken(event.text);
+          const spoken = toSpoken(event.text, this.language);
           const chunks: Buffer[] = [];
+          const { text: _said, format: _format, ...voice } = voiceParams(this.location, spoken, this.transport.output);
           for await (const chunk of speak(spoken.text, {
-            voiceId: this.location.agent.voiceId,
-            modelId: this.location.agent.voiceModel,
-            speed: spoken.speed * ((this.location.agent.voiceSpeed ?? 1.05) / 1.05),
+            ...voice,
             format: this.transport.output,
             signal: abort.signal,
             onBilled: this.billed,
@@ -632,7 +654,7 @@ export class VoiceSession {
     // two arrive by different routes and either one alone leaves a hole.
     if (
       (this.speaking || this.thinking) &&
-      isBackchannel(text) &&
+      isBackchannel(text, this.language) &&
       !invitesAnswer(this.spokenThisTurn)
     ) {
       this.pushTranscript("caller", text);
@@ -835,7 +857,7 @@ export class VoiceSession {
         // reads, and the agent is only going to speak two or three anyway.
         options: slots.slice(0, 18).map((s) => ({
           time: minutesToClock(s.startMin),
-          spoken: minutesToSpoken(s.startMin),
+          spoken: this.language === "de" ? minutesToGerman(s.startMin) : minutesToSpoken(s.startMin),
           ...(s.staffName ? { with: s.staffName } : {}),
         })),
       });
@@ -908,7 +930,7 @@ export class VoiceSession {
     // references are spelled out, and a fragment carrying a time or a total
     // is delivered slower than the talk around it — because the caller is
     // writing it down. See spoken.ts.
-    const spoken = toSpoken(text);
+    const spoken = toSpoken(text, this.language);
 
     const voice = {
       ...voiceParams(this.location, spoken, this.transport.output),
@@ -998,8 +1020,9 @@ export class VoiceSession {
 
   private async acknowledge(gen: number): Promise<void> {
     if (gen !== this.generation || this.answered || this.closed) return;
-    const line = ACKNOWLEDGEMENTS[this.turns % ACKNOWLEDGEMENTS.length];
-    const spoken = toSpoken(line);
+    const lines = acknowledgementsFor(this.location);
+    const line = lines[this.turns % lines.length];
+    const spoken = toSpoken(line, this.language);
     let audio: Buffer;
     try {
       audio = await speakClip(spoken.text, {
@@ -1064,8 +1087,7 @@ export class VoiceSession {
       if (!result.ok) {
         console.warn("[transfer] failed for %s: %s", this.call.id, result.detail);
         // Never a silent hang-up after "putting you through".
-        const sorry =
-          "I'm sorry, I couldn't put you through just now. The team has your number and what you told me, and they'll call you back.";
+        const sorry = lineFor(this.location, "transfer.failed");
         this.pushTranscript("agent", sorry);
         saveCall(this.call);
         await this.say(sorry, this.generation).catch(() => undefined);
