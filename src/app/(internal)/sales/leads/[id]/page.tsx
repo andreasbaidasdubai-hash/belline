@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth-server";
+import { isBellineStaff } from "@/lib/auth";
 import { PageHeader } from "@/components/LocationTabs";
 import {
   getLead,
@@ -26,7 +27,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
-  if (user.role !== "owner") return null;
+  if (!isBellineStaff(user)) return null; // the tenant, not the role
 
   const id = Number((await params).id);
   if (!Number.isFinite(id)) notFound();

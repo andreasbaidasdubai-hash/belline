@@ -11,10 +11,12 @@ import { useState } from "react";
  */
 export default function WhatsAppCell({
   venueId,
+  venueName,
   number,
   ready,
 }: {
   venueId: string;
+  venueName: string;
   number: string | null;
   /** Whether our own WhatsApp account is connected — a venue's number lives inside it. */
   ready: boolean;
@@ -26,9 +28,23 @@ export default function WhatsAppCell({
   async function connect(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (busy) return;
+
+    const form = new FormData(e.currentTarget);
+    const next = String(form.get("number") ?? "").trim();
+    // Pausing already asked before it stopped answering. Connecting starts
+    // answering — a real number, real customers, in this venue's name — and
+    // asked nothing at all.
+    if (
+      !window.confirm(
+        `Connect ${next} to ${venueName}?\n\n` +
+          `Belline will start answering WhatsApp messages sent to that number, as ${venueName}.`,
+      )
+    ) {
+      return;
+    }
+
     setBusy(true);
     setError(null);
-    const form = new FormData(e.currentTarget);
     try {
       const res = await fetch("/api/sales/whatsapp", {
         method: "POST",

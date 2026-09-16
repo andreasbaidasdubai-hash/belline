@@ -97,6 +97,52 @@ export function resolveFrame(input: {
   );
 }
 
+/**
+ * What stands in for the unsubscribe URL while nothing can send.
+ *
+ * Deliberately not a link. A drafted body is stored, shown in the approval
+ * queue, and occasionally copied out by hand, so a plausible-looking dead URL
+ * is the one thing that must not be in it — and `{token}`, written literally,
+ * was exactly that. The reply-STOP sentence in front of this is a real opt-out
+ * and `looksLikeOptOut` honours it, so the draft still offers a way out. It
+ * just stops pretending to a mechanism nobody has built.
+ */
+export const NO_UNSUBSCRIBE_LINK = "[no unsubscribe link — nothing is sent from here yet]";
+
+/**
+ * Where a demo link must point.
+ *
+ * This defaulted to https://belline.ai, which is the marketing site, so every
+ * demo link in every draft sent a prospect to the homepage instead of to their
+ * own recording on the app. That is not a degraded email; it is a broken
+ * promise in the first message a business ever gets from us, and the email has
+ * no other job than earning that one click.
+ *
+ * So a run refuses to start rather than write a hundred of them. It lives here
+ * rather than in run.ts so that it can be tested without dragging in the
+ * database client and the model call.
+ */
+export function resolvePublicOrigin(env: Record<string, string | undefined> = process.env): string {
+  const origin = (env.PUBLIC_ORIGIN ?? "").trim().replace(/\/+$/, "");
+  if (!origin) {
+    throw new Error(
+      "PUBLIC_ORIGIN is not set, so every demo link in this run would point nowhere. " +
+        "Set it to the origin that serves the demos (https://app.belline.ai) and run again.",
+    );
+  }
+  if (!/^https?:\/\//i.test(origin)) {
+    throw new Error(`PUBLIC_ORIGIN is not a URL: ${origin}`);
+  }
+  if (/^https?:\/\/(www\.)?belline\.ai$/i.test(origin)) {
+    throw new Error(
+      "PUBLIC_ORIGIN is the marketing site (belline.ai), which does not serve demos. " +
+        "Every prospect would land on the homepage instead of their own recording. " +
+        "Use the app origin (https://app.belline.ai).",
+    );
+  }
+  return origin;
+}
+
 export interface AssembleInput {
   frame: Frame;
   firstName?: string | null;
@@ -108,7 +154,8 @@ export interface AssembleInput {
   demoUrl: string;
   /** Shown under the demo link — what to try on the live line. */
   tryThis?: string | null;
-  unsubscribeUrl: string;
+  /** Null until there is a sender that can mint a token and honour a click. */
+  unsubscribeUrl: string | null;
   senderAddress: string;
 }
 
@@ -149,7 +196,7 @@ export function assemble(input: AssembleInput): { body: string; plain: string } 
     "",
     "—",
     input.senderAddress,
-    `${input.frame.unsubscribe} ${input.unsubscribeUrl}`,
+    `${input.frame.unsubscribe} ${input.unsubscribeUrl ?? NO_UNSUBSCRIBE_LINK}`,
   );
 
   const plain = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();

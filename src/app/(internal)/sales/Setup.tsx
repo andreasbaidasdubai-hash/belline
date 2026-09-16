@@ -95,7 +95,10 @@ export default function Setup({ state }: { state: SetupState }) {
         </Step>
 
         <Step n={state === "no_database" ? 4 : 3} title="Start the worker">
-          A separate process from the voice server. Every pipeline stage runs here.
+          A separate process from the voice server. It claims and retries jobs, but no
+          pipeline stage is registered against it yet — only{" "}
+          <code className="mono">noop</code> and <code className="mono">always_fails</code>.
+          Discovery, research, scoring, demos and drafting are run by hand.
           <Command>npm run worker</Command>
         </Step>
       </ol>

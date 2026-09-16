@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth-server";
-import { canManageUsers } from "@/lib/auth";
+import { isBellineStaff } from "@/lib/auth";
 import { PageHeader } from "@/components/LocationTabs";
 import { resolveAgentConfig, ConfigError } from "@/lib/sales/config/agents";
 import {
@@ -28,8 +28,9 @@ export const dynamic = "force-dynamic";
  */
 export default async function AgentPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
-  if (!canManageUsers(user)) {
-    return <p className="muted">The sales engine is owner-only.</p>;
+  // See isBellineStaff: owning a tenant is not working here.
+  if (!isBellineStaff(user)) {
+    return <p className="muted">Belline staff only.</p>;
   }
 
   const state = await setupState();
@@ -72,9 +73,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
         title={agent.name}
         subtitle={
           agent.kind === "vertical_agent"
-            ? `${agent.vertical_slug} · ${agent.country_code} · autonomy mode ${
-                agent.autonomy_mode === "review" ? "1 (review)" : agent.autonomy_mode === "semi" ? "2 (semi)" : "3 (autonomous)"
-              }`
+            ? `${agent.vertical_slug} · ${agent.country_code}`
             : agent.kind === "country_manager"
               ? `Country manager · ${agent.country_code}`
               : "Sales Director"
@@ -192,12 +191,18 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
 
                 {/* Compliance is the half of the config a country manager
                     imposes, and the half you most need to be able to read
-                    off a screen before an agent goes live. */}
+                    off a screen before an agent goes live.
+
+                    Read, resolved and shown — and enforced by nothing. No code
+                    under src/lib/sales reads `config.compliance`, so none of
+                    the four rows below stops a draft being written. They are
+                    what the hierarchy resolved to, which is worth seeing, and
+                    they are not a control. */}
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
                   <Field label="Email consent">
                     {resolved.config.compliance.email_requires_prior_consent ? (
                       <span style={{ color: "var(--warn)" }}>
-                        prior consent required — cold email is gated
+                        prior consent required — recorded, not enforced
                       </span>
                     ) : (
                       "not required for business contacts"

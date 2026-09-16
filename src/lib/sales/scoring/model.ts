@@ -54,6 +54,13 @@ export interface ScoreTerm {
 
 export interface ScoreResult {
   score: number;
+  /**
+   * The same sum with every behavioural term removed — see `BEHAVIOURAL`.
+   *
+   * What the pipeline qualifies on. The full `score` is what gets shown and
+   * sorted by, because a prospect who listened really is warmer.
+   */
+  scoreWithoutBehavioural: number;
   priority: "hot" | "warm" | "low";
   breakdown: ScoreTerm[];
   reason: string;
@@ -110,6 +117,18 @@ const BOOLEAN_WHY: Record<string, string> = {
   demo_used: "used the demo",
 };
 
+/**
+ * Signals a stranger can cause.
+ *
+ * `demo_used` is set through /api/demo-play, which is public and
+ * unauthenticated because the prospect pressing play has never signed in — and
+ * therefore forgeable. At 20 points it is heavy enough to carry a mid-table
+ * lead across the threshold the agent contacts at, which would let anyone with
+ * the URL choose who we write to. It still scores and still sorts; it is held
+ * out of the number that decides contact.
+ */
+const BEHAVIOURAL = new Set(["demo_used"]);
+
 export function scoreLead(input: ScoringInput): ScoreResult {
   const breakdown: ScoreTerm[] = [];
   let raw = 0;
@@ -153,11 +172,16 @@ export function scoreLead(input: ScoringInput): ScoreResult {
   }
 
   const score = Math.max(0, Math.min(100, Math.round(raw)));
+  const behavioural = breakdown
+    .filter((t) => BEHAVIOURAL.has(t.signal))
+    .reduce((n, t) => n + t.points, 0);
+  const scoreWithoutBehavioural = Math.max(0, Math.min(100, Math.round(raw - behavioural)));
   const bands = input.scoring.bands ?? { hot: 75, warm: 55 };
   const priority = score >= bands.hot ? "hot" : score >= bands.warm ? "warm" : "low";
 
   return {
     score,
+    scoreWithoutBehavioural,
     priority,
     breakdown: breakdown.sort((a, b) => Math.abs(b.points) - Math.abs(a.points)),
     reason: explain(breakdown, score),

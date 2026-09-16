@@ -1,5 +1,6 @@
-import { one, query, tx } from "../db/client";
+import { query, tx } from "../db/client";
 import { resolveAgentConfig } from "../config/agents";
+import { vocabularyFor } from "../config/defaults";
 import { log } from "../db/repo/activity";
 import { record } from "../cost/meter";
 import { slugify } from "../../prospect";
@@ -24,13 +25,8 @@ import { renderScript, ttsAvailable, ttsCostUsd } from "./render";
 
 const DEMO_TTL_DAYS = 14;
 
-/** How the vertical refers to its customers, for the script's vocabulary. */
-const CUSTOMER_WORD: Record<string, string> = {
-  dentists: "patient",
-  clinics: "patient",
-  salons: "client",
-  restaurants: "guest",
-};
+/** A demo runs about forty seconds. Longer is a broken player or a forged number. */
+const MAX_PLAY_SECONDS = 120;
 
 export interface DemoRunResult {
   built: number;
@@ -119,7 +115,7 @@ export async function buildDemos(options: {
         city: candidate.city,
         vertical: candidate.vertical_slug,
         grounding,
-        customerWord: CUSTOMER_WORD[candidate.vertical_slug ?? ""] ?? "customer",
+        customerWord: vocabularyFor(candidate.vertical_slug).word,
       });
       result.llmCostUsd += written.costUsd;
 
@@ -286,31 +282,54 @@ export async function findDemoBySlug(slug: string): Promise<StoredDemo | undefin
  * listened is orders of magnitude warmer than someone who opened. First play
  * is logged separately from repeat plays, because "they listened" and "they
  * listened four times" are different facts.
+ *
+ * Counted at most once an hour per demo. /api/demo-play is public and
+ * unauthenticated by necessity — the prospect pressing play has never signed
+ * in — so a loop against it could otherwise run `use_count` and
+ * `total_seconds` to any number. The activity row was already deduplicated on
+ * this window and the counters were not, which meant the two disagreed and the
+ * forgeable one was the one that fed the score. They move together now, or not
+ * at all, and the seconds are clamped before they are believed.
  */
 export async function recordDemoPlay(demoId: number, seconds: number): Promise<void> {
-  const row = await one<{ lead_id: number; first: boolean }>(
-    `update sales.demo
-        set use_count = use_count + 1,
-            total_seconds = total_seconds + $2,
-            first_used_at = coalesce(first_used_at, now())
-      where id = $1
-      returning lead_id, (use_count = 1) as first`,
-    [demoId, Math.max(0, Math.round(seconds))],
-  );
-  if (!row) return;
+  const listened = Math.min(Math.max(0, Math.round(seconds)), MAX_PLAY_SECONDS);
 
-  await query(
-    `insert into sales.activity (lead_id, actor, type, summary, data)
-     select $1, 'system', 'demo_used', $2, $3
-      where not exists (
-        select 1 from sales.activity
-         where lead_id = $1 and type = 'demo_used' and at > now() - interval '1 hour')`,
-    [
-      row.lead_id,
-      row.first ? "Played their demo for the first time" : "Played their demo again",
-      JSON.stringify({ seconds, first: row.first }),
-    ],
-  );
+  await tx(async (c) => {
+    const found = await c.query<{ lead_id: number; countable: boolean }>(
+      `select d.lead_id,
+              not exists (
+                select 1 from sales.activity a
+                 where a.lead_id = d.lead_id and a.type = 'demo_used'
+                   and a.at > now() - interval '1 hour'
+              ) as countable
+         from sales.demo d
+        where d.id = $1`,
+      [demoId],
+    );
+    const row = found.rows[0];
+    if (!row || !row.countable) return;
+
+    const updated = await c.query<{ first: boolean }>(
+      `update sales.demo
+          set use_count = use_count + 1,
+              total_seconds = total_seconds + $2,
+              first_used_at = coalesce(first_used_at, now())
+        where id = $1
+        returning (use_count = 1) as first`,
+      [demoId, listened],
+    );
+    const first = updated.rows[0]?.first ?? false;
+
+    await c.query(
+      `insert into sales.activity (lead_id, actor, type, summary, data)
+       values ($1, 'system', 'demo_used', $2, $3)`,
+      [
+        row.lead_id,
+        first ? "Played their demo for the first time" : "Played their demo again",
+        JSON.stringify({ seconds: listened, first }),
+      ],
+    );
+  });
 }
 
 export type { DemoScript };

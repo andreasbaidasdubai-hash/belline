@@ -10,6 +10,7 @@
  */
 
 import assert from "node:assert";
+import fs from "node:fs";
 import { scoreLead, versionOf, type ScoringInput } from "../src/lib/sales/scoring/model";
 import { FIRST_AGENT_CONFIG } from "../src/lib/sales/config/defaults";
 import type { Scoring } from "../src/lib/sales/config/schema";
@@ -211,6 +212,51 @@ test("demo usage is worth more than any single researched signal", () => {
   const withDemo = scoreLead(input({ signals: { phone_first: true }, demoUsed: true }));
   const without = scoreLead(input({ signals: { phone_first: true }, demoUsed: false }));
   assert.ok(withDemo.score - without.score >= 15, "demo_used should move the needle hard");
+});
+
+console.log("\n  A stranger must not be able to qualify a lead\n");
+
+test("a demo play scores and shows, and is held out of the qualifying number", () => {
+  const r = scoreLead(input({ signals: { phone_first: true }, demoUsed: true }));
+  const demo = r.breakdown.find((t) => t.signal === "demo_used");
+  assert.ok(demo, "the demo must still score");
+  assert.strictEqual(r.score - r.scoreWithoutBehavioural, demo.points);
+});
+
+test("a demo play alone cannot carry a lead over the contact threshold", () => {
+  // /api/demo-play is public and forgeable, and demo_used is worth 20 — enough
+  // to move a mid-table lead across the 55 the UAE agent contacts at.
+  const signals = { phone_first: true, multi_location: true, long_hours: true };
+  const without = scoreLead(input({ signals }));
+  const played = scoreLead(input({ signals, demoUsed: true }));
+  const bar = 55;
+  assert.ok(without.score < bar, `expected the lead under the bar, got ${without.score}`);
+  assert.ok(played.score >= bar, "the demo should still lift the visible score");
+  assert.ok(
+    played.scoreWithoutBehavioural < bar,
+    "a forged play qualified the lead anyway",
+  );
+  assert.strictEqual(played.scoreWithoutBehavioural, without.score);
+});
+
+test("nothing else is treated as behavioural", () => {
+  const r = scoreLead(input({ signals: { phone_first: true, multi_location: true } }));
+  assert.strictEqual(r.scoreWithoutBehavioural, r.score);
+});
+
+test("the pipeline qualifies on the number a stranger cannot move", () => {
+  // scoring/run.ts needs a database, so it cannot be exercised here. This is
+  // the one property of it worth pinning anyway: holding demo_used out of the
+  // score is pointless if the decision still reads the other one.
+  const src = fs.readFileSync("src/lib/sales/scoring/run.ts", "utf8");
+  const at = src.indexOf("const qualifies =");
+  assert.ok(at >= 0, "could not find the qualification decision");
+  const decision = src.slice(at, src.indexOf(";", at) + 1);
+  assert.match(
+    decision,
+    /scoreWithoutBehavioural/,
+    "qualification reads the score a forged demo play can move",
+  );
 });
 
 console.log("\n  Versioning\n");

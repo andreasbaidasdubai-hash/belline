@@ -32,6 +32,14 @@ export interface GuardContext {
   maxWords: number;
   /** Bodies of the last N sent messages, for the anti-template check. */
   recentBodies: string[];
+  /**
+   * Whether a feature flag is on.
+   *
+   * Absent means everything is off, which is the safe direction: a claim gated
+   * behind a flag stays refused unless a caller explicitly says the thing it
+   * describes exists.
+   */
+  flagOn?: (flag: string) => boolean;
 }
 
 export interface GuardResult {
@@ -96,7 +104,7 @@ const TECH_TALK = [
  * Live transfer is not on this list: it works wherever the business sets a
  * team number (agent/tools.ts transfer_call), so saying it is true.
  */
-const NOT_LIVE: { pattern: RegExp; why: string }[] = [
+const NOT_LIVE: { pattern: RegExp; why: string; unlessFlag?: string }[] = [
   { pattern: /\b(?:arabic|bilingual|multilingual|multiple languages|any language|in (?:their|your) (?:own )?language)\b/i, why: "English only" },
   // WhatsApp is live on the second-number model, so "a second WhatsApp number"
   // is honest. What is not: Belline answering the business's existing number.
@@ -107,16 +115,39 @@ const NOT_LIVE: { pattern: RegExp; why: string }[] = [
   },
   { pattern: /\b(?:fresha|sevenrooms|opentable|treatwell|dentally|dentrix|zenoti|phorest|booksy|eat app)\b/i, why: "no booking-system integrations" },
   { pattern: /\b(?:reminders?|sms|texts? (?:them|you|patients?|clients?|guests?|callers?))\b/i, why: "no reminders or texts" },
-  { pattern: /\b(?:google calendar|google cal|outlook|microsoft 365|office 365|ical)\b/i, why: "no calendar integration live" },
+  // Naming a calendar is the company's own positioning now, but only once the
+  // integration it names exists. Each is refused while its own flag is off,
+  // and each unlocks separately — Google being live says nothing about Outlook.
+  {
+    pattern: /\b(?:google calendar|google cal)\b/i,
+    why: "Google Calendar booking is not switched on",
+    unlessFlag: "booking.google",
+  },
+  {
+    pattern: /\b(?:outlook|microsoft 365|office 365)\b/i,
+    why: "Outlook booking is not switched on",
+    unlessFlag: "booking.outlook",
+  },
+  { pattern: /\bical\b/i, why: "no iCal integration" },
   {
     // The strategy's pattern, widened for "the same diary" and "their own
     // system", plus "books the patient in": the same claim in fewer words.
     pattern:
       /\b(?:(?:books?|booking|booked|syncs?|synced|writes?) (?:straight |directly )?(?:into|in|to|with) (?:your |the |their )?(?:same |own |existing )?(?:calendar|diary|booking system|system)|books? (?:the |a |your |their )?(?:patient|client|guest|customer|caller)s? in)\b/i,
-    why: "no booking into external systems",
+    why: "booking into their calendar is not switched on",
+    unlessFlag: "booking.google",
   },
-  { pattern: /\b(?:no (?:migration|second calendar|double entry)|keep your (?:calendar|booking system))\b/i, why: "platform-route claim, integration not live" },
-  { pattern: /\b(?:integrat(?:es?|ion)s? with|connects? (?:to|with) (?:your )?(?:booking|calendar))/i, why: "no integrations live" },
+  // "Keep your booking system", "no second calendar" and "no migration" were
+  // banned here as platform-route claims. They are the company's positioning
+  // now, and they are true: Belline answers, takes the request and hands over
+  // the business's own link, so nothing migrates and there is no second diary
+  // to keep. Refusing the truth trained the personaliser away from the single
+  // strongest honest thing it can say.
+  {
+    pattern: /\b(?:integrat(?:es?|ion)s? with|connects? (?:to|with) (?:your )?(?:booking|calendar))/i,
+    why: "no integrations live",
+    unlessFlag: "booking.google",
+  },
   { pattern: /\b(?:confirmation (?:texts?|emails?|messages?)|confirms? by (?:text|email|sms))\b/i, why: "no confirmations sent" },
   { pattern: /\b(?:deposits?|payment links?|pay(?:s|ing)? online)\b/i, why: "deposits not live" },
   { pattern: /\bvoice notes?\b/i, why: "voice notes refused on WhatsApp" },
@@ -128,10 +159,12 @@ const NOT_LIVE: { pattern: RegExp; why: string }[] = [
  * a product with allowances and packs. Checked everywhere, subject included.
  */
 const HYPE: RegExp[] = [
-  /\b24\s?\/\s?7\b/i,
+  // 24/7 and the thirty-minute setup were both refused here. Neither is hype:
+  // the line does answer at any hour, and both are the company's own published
+  // claims on the marketing site. A guard that refuses the approved
+  // positioning teaches the personaliser to avoid what we most want said.
   /\blive in (?:minutes|\d+ ?(?:min|hours?|days?))\b/i,
   /\b(?:set ?up|up and running|ready) in (?:minutes|\d+ ?(?:min|minutes|hours?))\b/i,
-  /\b(?:30|thirty)[- ]minute setup\b/i,
   /\bhuman[- ]like\b/i,
   /\bsounds? (?:just )?like a (?:real )?(?:person|human)\b/i,
   /#1\b|\bnumber one\b/i,
@@ -212,7 +245,10 @@ export function checkDraft(parts: DraftParts, ctx: GuardContext): GuardResult {
   // about us. A research agent drafted exactly that sentence to a Dubai
   // practice, and nothing stopped it.
   const aboutUs = `${parts.solution} ${parts.cta}`;
-  for (const { pattern, why } of NOT_LIVE) {
+  // No reader means no flags: a claim gated behind one stays refused.
+  const flagOn = ctx.flagOn ?? (() => false);
+  for (const { pattern, why, unlessFlag } of NOT_LIVE) {
+    if (unlessFlag && flagOn(unlessFlag)) continue;
     const hit = aboutUs.match(pattern);
     if (hit) problems.push(`promises something that is not live yet (${why}): "${hit[0]}"`);
   }

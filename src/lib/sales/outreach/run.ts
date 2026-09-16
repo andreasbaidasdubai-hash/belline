@@ -1,9 +1,11 @@
 import { query, tx } from "../db/client";
 import { resolveAgentConfig } from "../config/agents";
+import { SERVICES, vocabularyFor } from "../config/defaults";
+import { flag as isFlagOn, type FlagName } from "../../flags";
 import { log } from "../db/repo/activity";
 import { isSuppressed } from "../compliance/suppression";
 import { personalise } from "./personalise";
-import { assemble, resolveFrame } from "./templates";
+import { assemble, resolveFrame, resolvePublicOrigin } from "./templates";
 
 /**
  * Draft first-touch outreach for qualified leads.
@@ -18,12 +20,21 @@ import { assemble, resolveFrame } from "./templates";
  * the prompt has drifted.
  */
 
-const CUSTOMER_WORD: Record<string, { word: string; forbidden: string[] }> = {
-  dentists: { word: "patient", forbidden: ["guest", "client", "customer"] },
-  clinics: { word: "patient", forbidden: ["guest", "client", "customer"] },
-  salons: { word: "client", forbidden: ["patient", "guest"] },
-  restaurants: { word: "guest", forbidden: ["patient", "client"] },
-};
+/**
+ * The claims this run may cite.
+ *
+ * The catalogue is the only place a draft may take a capability claim from, so
+ * a service whose flag is off must not reach the personaliser at all. Handing
+ * the model "booking into their calendar" and relying on the guard to catch it
+ * afterwards is the wrong way round: it spends a model call to produce a draft
+ * that is refused, and teaches nothing.
+ */
+function sellableServices(slugs: string[]): string[] {
+  return slugs.filter((slug) => {
+    const service = SERVICES.find((s) => s.slug === slug);
+    return !service?.flag || isFlagOn(service.flag);
+  });
+}
 
 export interface DraftRunResult {
   drafted: number;
@@ -50,7 +61,10 @@ export async function draftOutreach(options: {
 }): Promise<DraftRunResult> {
   const { agent, config } = await resolveAgentConfig(options.agentId);
   const actor = options.actor ?? `agent:${agent.id}`;
-  const publicOrigin = process.env.PUBLIC_ORIGIN ?? "https://belline.ai";
+  // Throws. Checked before any candidate is loaded or any token is spent,
+  // because the alternative is a run that succeeds and produces a hundred
+  // drafts all pointing at the wrong site.
+  const publicOrigin = resolvePublicOrigin();
   const senderAddress = process.env.SENDER_POSTAL_ADDRESS ?? "Belline · Dubai, United Arab Emirates";
 
   const candidates = await query<{
@@ -142,10 +156,10 @@ export async function draftOutreach(options: {
       continue;
     }
 
-    const vocab = CUSTOMER_WORD[candidate.vertical_slug ?? ""] ?? {
-      word: "customer",
-      forbidden: [],
-    };
+    // From the vertical registry. The map this replaces covered four slugs and
+    // fell back to an empty forbidden list, so for every other trade the
+    // wrong-word guard ran against nothing while appearing to work.
+    const vocab = vocabularyFor(candidate.vertical_slug);
 
     try {
       const grounding = [
@@ -170,7 +184,8 @@ export async function draftOutreach(options: {
         forbiddenCustomerWords: vocab.forbidden,
         grounding,
         demoScenario: candidate.demo_scenario,
-        allowedServices: config.belline_services,
+        allowedServices: sellableServices(config.belline_services),
+        flagOn: (name) => isFlagOn(name as FlagName),
         tone: config.outreach_strategy.tone,
         maxWords: config.outreach_strategy.max_words_first_touch,
         recentBodies,
@@ -186,9 +201,12 @@ export async function draftOutreach(options: {
         ? `${publicOrigin}/demo/${candidate.demo_slug}`
         : `${publicOrigin}/`;
 
-      // Signed at send time; a placeholder here would be a dead link in a
-      // draft someone might copy out of the approval queue by hand.
-      const unsubscribeUrl = `${publicOrigin}/u/{token}`;
+      // No sender exists, so there is no token to sign and nothing that could
+      // honour a click. This used to write the literal "{token}" into the
+      // stored body, which is worse than writing nothing: a dead link, in a
+      // queue a person copies out of by hand. The frame's reply-STOP sentence
+      // stays and is a real opt-out.
+      const unsubscribeUrl = null;
 
       const { body } = assemble({
         frame,

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth-server";
+import { isBellineStaff } from "@/lib/auth";
 import { PageHeader } from "@/components/LocationTabs";
 import { isConfigured, query } from "@/lib/sales/db/client";
 import { setupState } from "@/lib/sales/kpi/overview";
@@ -9,12 +10,18 @@ import ApprovalActions from "./ApprovalActions";
 export const dynamic = "force-dynamic";
 
 /**
- * The approval queue — MODE 1's centre of gravity.
+ * The draft queue.
  *
- * Everything the agents do converges here, and in the first weeks this is the
- * page you live in. It shows the message exactly as it will be sent, beside
- * the research that produced it, so the question "is this claim true?" can be
- * answered without leaving the screen.
+ * Every draft the agents write converges here beside the research that
+ * produced it, so the question "is this claim true?" can be answered without
+ * leaving the screen.
+ *
+ * Nothing on this page can be sent. There is no sender: the queue registers
+ * only `noop` and `always_fails`, and nothing anywhere reads a message back
+ * out of `status = 'approved'`. Approving moves a row to `approved` and stops
+ * there. The queue is kept, and the word "approve" with it, because the
+ * judgement being recorded is real and is the corpus the personaliser is tuned
+ * against — but the page must not imply a delivery that cannot happen.
  *
  * Flagged drafts are listed separately and cannot be approved in bulk. A guard
  * failure is a signal that the prompt has drifted, and burying it in a list of
@@ -76,7 +83,7 @@ async function load(): Promise<Row[]> {
 
 export default async function ApprovalsPage() {
   const user = await requireUser();
-  if (user.role !== "owner") return null;
+  if (!isBellineStaff(user)) return null; // the tenant, not the role
 
   const state = await setupState();
   if (state !== "ready") {
@@ -99,9 +106,24 @@ export default async function ApprovalsPage() {
         subtitle={
           rows.length === 0
             ? "Nothing waiting."
-            : `${ready.length} ready to send · ${flagged.length} held back by a guard`
+            : `${ready.length} cleared · ${flagged.length} held back by a guard`
         }
       />
+
+      {/* Said once, plainly, at the top: the queue is not an outbox. */}
+      <div className="panel" style={{ padding: "14px 18px", marginBottom: 18, borderColor: "var(--warn)" }}>
+        <div style={{ fontWeight: 600, fontSize: 13, color: "var(--warn)", marginBottom: 5 }}>
+          Nothing here can be sent
+        </div>
+        <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6, margin: 0, maxWidth: "78ch" }}>
+          There is no sender. Approving records the decision and marks the draft
+          <span className="mono"> approved</span> — no email leaves, because nothing reads that
+          status and the job queue has no handler that could. What is missing: an email provider
+          bound to <span className="mono">sales.message</span>, a send handler in
+          <span className="mono"> queue/handlers</span>, and the pre-send guards re-run at send
+          time. Until those exist, treat this as a review of what the agents wrote.
+        </p>
+      </div>
 
       {rows.length === 0 && (
         <div className="panel" style={{ padding: "28px 24px" }}>
@@ -131,7 +153,7 @@ export default async function ApprovalsPage() {
       {ready.length > 0 && (
         <section>
           <h2 style={{ fontSize: 13, fontWeight: 700, margin: "0 0 12px" }}>
-            Ready to send — {ready.length}
+            Cleared — {ready.length}
           </h2>
           {ready.map((row) => (
             <Draft key={row.id} row={row} />

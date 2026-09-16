@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth-server";
+import { isBellineStaff } from "@/lib/auth";
 import { PageHeader } from "@/components/LocationTabs";
 import { agentSummaries, setupState, STAGE_ORDER, pipelineCounts } from "@/lib/sales/kpi/overview";
 import { listLeads } from "@/lib/sales/kpi/leads";
@@ -22,7 +23,9 @@ export default async function LeadsPage({
   searchParams: Promise<{ stage?: string; agent?: string }>;
 }) {
   const user = await requireUser();
-  if (user.role !== "owner") return null; // layout already refused; belt and braces
+  // Belt and braces behind the layout — but the tenant, not the role: an
+  // owner is what every self-serve signup is.
+  if (!isBellineStaff(user)) return null;
 
   const state = await setupState();
   if (state !== "ready") {

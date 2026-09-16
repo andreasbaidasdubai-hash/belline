@@ -11,9 +11,16 @@
  */
 
 import assert from "node:assert";
+import fs from "node:fs";
 import { checkDraft, similarity, type GuardContext } from "../src/lib/sales/outreach/guards";
-import { assemble, resolveFrame, personalisedWordCount } from "../src/lib/sales/outreach/templates";
+import {
+  assemble,
+  resolveFrame,
+  personalisedWordCount,
+  resolvePublicOrigin,
+} from "../src/lib/sales/outreach/templates";
 import { looksLikeOptOut } from "../src/lib/sales/compliance/suppression";
+import { VERTICALS, vocabularyFor } from "../src/lib/sales/config/defaults";
 
 let passed = 0;
 let failed = 0;
@@ -334,20 +341,16 @@ test("live transfer is no longer refused: it works where a team number is set", 
 
 test("every calendar, booking-system, confirmation, deposit and voice-note claim is refused", () => {
   for (const [solution, why] of [
-    // Calendars by name.
-    ["Belline answers after hours and checks your Google Calendar.", "no calendar integration live"],
-    ["Belline answers and keeps Outlook up to date for the front desk.", "no calendar integration live"],
-    ["Belline works with Microsoft 365 alongside your front desk.", "no calendar integration live"],
-    ["Belline answers and adds the visit to iCal for your team.", "no calendar integration live"],
+    // Calendars by name. Each refused while its own flag is off.
+    ["Belline answers after hours and checks your Google Calendar.", "Google Calendar booking is not switched on"],
+    ["Belline answers and keeps Outlook up to date for the front desk.", "Outlook booking is not switched on"],
+    ["Belline works with Microsoft 365 alongside your front desk.", "Outlook booking is not switched on"],
+    ["Belline answers and adds the visit to iCal for your team.", "no iCal integration"],
     // Booking into a system.
-    ["Belline answers those calls, books into the same diary, and works alongside your front desk.", "no booking into external systems"],
-    ["Belline answers and books straight into your calendar.", "no booking into external systems"],
-    ["Belline answers and syncs with your booking system.", "no booking into external systems"],
-    ["Belline picks up when the desk is busy and books the patient in.", "no booking into external systems"],
-    // Platform-route claims.
-    ["Belline answers the phone, with no migration for your team.", "platform-route claim"],
-    ["Belline answers the phone, and there is no second calendar to keep.", "platform-route claim"],
-    ["Belline answers and you keep your booking system.", "platform-route claim"],
+    ["Belline answers those calls, books into the same diary, and works alongside your front desk.", "booking into their calendar is not switched on"],
+    ["Belline answers and books straight into your calendar.", "booking into their calendar is not switched on"],
+    ["Belline answers and syncs with your booking system.", "booking into their calendar is not switched on"],
+    ["Belline picks up when the desk is busy and books the patient in.", "booking into their calendar is not switched on"],
     // Integrations.
     ["Belline integrates with the tools your front desk uses.", "no integrations live"],
     ["Belline connects to your booking software and answers after hours.", "no integrations live"],
@@ -367,14 +370,11 @@ test("every calendar, booking-system, confirmation, deposit and voice-note claim
 
 test("every hype pattern is refused, in the subject as well as the body", () => {
   for (const line of [
-    "Answering 24/7 for your clinics",
     "Belline is live in minutes",
     "Belline is live in 2 days",
     "You can be set up in minutes",
     "up and running in 30 min",
     "ready in 10 minutes",
-    "a 30-minute setup",
-    "a thirty minute setup",
     "a human-like receptionist",
     "it sounds just like a real person",
     "the #1 answering service",
@@ -392,6 +392,96 @@ test("every hype pattern is refused, in the subject as well as the body", () => 
     const inSubject = checkDraft({ ...GOOD, subject: line }, CTX);
     assert.ok(inSubject.problems.some((p) => /hype/.test(p)), `subject: "${line}" → ${JSON.stringify(inSubject.problems)}`);
   }
+});
+
+console.log("\n  The positioning the company actually uses\n");
+
+test("keeping their own booking system is no longer refused", () => {
+  // Banned as a "platform-route claim" until the route became the product. It
+  // is true: Belline answers, takes the request and hands over their own link,
+  // so nothing migrates and there is no second diary to keep.
+  for (const solution of [
+    "Belline answers the phone, with no migration for your team.",
+    "Belline answers the phone, and there is no second calendar to keep.",
+    "Belline answers and you keep your booking system.",
+  ]) {
+    const r = checkDraft({ ...GOOD, solution }, CTX);
+    assert.ok(
+      !r.problems.some((p) => p.includes("not live")),
+      `${solution} → ${JSON.stringify(r.problems)}`,
+    );
+  }
+});
+
+test("24/7 and the thirty-minute setup are the site's own words, not hype", () => {
+  for (const line of [
+    "Answering 24/7 for your clinics",
+    "a 30-minute setup",
+    "a thirty minute setup",
+  ]) {
+    const r = checkDraft({ ...GOOD, cta: line }, CTX);
+    assert.ok(!r.problems.some((p) => /hype/.test(p)), `${line} → ${JSON.stringify(r.problems)}`);
+  }
+});
+
+console.log("\n  Claims that unlock with a flag\n");
+
+const GOOGLE_CLAIM =
+  "Belline answers after hours and checks your Google Calendar before offering a time.";
+
+test("with booking.google off, naming Google Calendar is refused", () => {
+  const r = checkDraft({ ...GOOD, solution: GOOGLE_CLAIM }, CTX);
+  assert.ok(
+    r.problems.some((p) => p.includes("Google Calendar booking is not switched on")),
+    JSON.stringify(r.problems),
+  );
+});
+
+test("with booking.google on, the same claim passes", () => {
+  const r = checkDraft(
+    { ...GOOD, solution: GOOGLE_CLAIM },
+    { ...CTX, flagOn: (flag: string) => flag === "booking.google" },
+  );
+  assert.ok(!r.problems.some((p) => p.includes("not live")), JSON.stringify(r.problems));
+});
+
+test("a flag unlocks its own claim and nobody else's", () => {
+  // Outlook has its own flag and its own approval. Google's must not carry it.
+  const r = checkDraft(
+    { ...GOOD, solution: "Belline answers and keeps Outlook up to date for the front desk." },
+    { ...CTX, flagOn: (flag: string) => flag === "booking.google" },
+  );
+  assert.ok(
+    r.problems.some((p) => p.includes("Outlook booking is not switched on")),
+    JSON.stringify(r.problems),
+  );
+});
+
+console.log("\n  Vocabulary for any trade, not only four\n");
+
+test("every vertical has a non-empty forbidden list, the generic one included", () => {
+  for (const v of VERTICALS) {
+    const vocab = vocabularyFor(v.slug);
+    assert.strictEqual(vocab.word, v.terms.customer, v.slug);
+    assert.ok(vocab.forbidden.length > 0, `${v.slug} has an empty forbidden list`);
+    assert.ok(!vocab.forbidden.includes(vocab.word), `${v.slug} forbids its own word`);
+  }
+});
+
+test("a trade nobody has listed still gets a guard that fires", () => {
+  // The old map returned forbidden: [] for anything outside the four, so the
+  // vocabulary guard ran and checked nothing at all.
+  const vocab = vocabularyFor("locksmiths");
+  assert.strictEqual(vocab.word, "customer");
+  assert.ok(vocab.forbidden.includes("patient"), JSON.stringify(vocab.forbidden));
+  const r = checkDraft(
+    { ...GOOD, problem: "Your patients wait until someone answers." },
+    { ...CTX, customerWord: vocab.word, forbiddenCustomerWords: vocab.forbidden },
+  );
+  assert.ok(
+    r.problems.some((p) => p.includes('calls their customers "patients"')),
+    JSON.stringify(r.problems),
+  );
 });
 
 test("the strategy's today templates pass the guards", () => {
@@ -425,6 +515,65 @@ test("a true fact about their own team is not a claim about us", () => {
     CTX,
   );
   assert.ok(!r.problems.some((p) => p.includes("not live")), JSON.stringify(r.problems));
+});
+
+test("with no sender there is no link, and no fake one either", () => {
+  const draft = assemble({
+    frame: resolveFrame({ countryCode: "AE", language: "en" }),
+    firstName: "Ahmed",
+    ...GOOD,
+    demoUrl: "https://app.belline.ai/demo/dr-joy-9",
+    unsubscribeUrl: null,
+    senderAddress: "Belline · Dubai, UAE",
+  });
+  assert.match(draft.body, /reply STOP/i, "the opt-out sentence must survive");
+  assert.match(draft.body, /\[no unsubscribe link/, "it must say why there is no link");
+  assert.ok(!/\{token\}/.test(draft.body), "the placeholder must never reach a stored body");
+  assert.ok(!/\/u\//.test(draft.body), "a dead unsubscribe URL must not be written");
+});
+
+console.log("\n  Where a demo link points\n");
+
+test("a missing PUBLIC_ORIGIN fails the run rather than guessing", () => {
+  assert.throws(() => resolvePublicOrigin({}), /PUBLIC_ORIGIN is not set/);
+  assert.throws(() => resolvePublicOrigin({ PUBLIC_ORIGIN: "   " }), /PUBLIC_ORIGIN is not set/);
+});
+
+test("the marketing site is refused, because it does not serve demos", () => {
+  // The old default. Every demo link in every draft went to the homepage.
+  for (const origin of ["https://belline.ai", "https://www.belline.ai", "https://belline.ai/"]) {
+    assert.throws(() => resolvePublicOrigin({ PUBLIC_ORIGIN: origin }), /marketing site/, origin);
+  }
+});
+
+test("something that is not a URL is refused", () => {
+  assert.throws(() => resolvePublicOrigin({ PUBLIC_ORIGIN: "app.belline.ai" }), /not a URL/);
+});
+
+test("the app origin is accepted, without its trailing slash", () => {
+  assert.strictEqual(
+    resolvePublicOrigin({ PUBLIC_ORIGIN: "https://app.belline.ai/" }),
+    "https://app.belline.ai",
+  );
+  // A staging host is a perfectly good origin and must not be second-guessed.
+  assert.strictEqual(
+    resolvePublicOrigin({ PUBLIC_ORIGIN: "https://belline-staging.up.railway.app" }),
+    "https://belline-staging.up.railway.app",
+  );
+});
+
+test("the draft run resolves the origin rather than defaulting it", () => {
+  // resolvePublicOrigin is only worth having if run.ts calls it, and
+  // draftOutreach needs a database — so the wiring is pinned statically.
+  const src = fs.readFileSync("src/lib/sales/outreach/run.ts", "utf8");
+  assert.ok(
+    src.includes("resolvePublicOrigin()"),
+    "run.ts must resolve the origin, not read the variable itself",
+  );
+  assert.ok(
+    !src.includes("PUBLIC_ORIGIN ??"),
+    "run.ts still falls back to a default origin instead of failing the run",
+  );
 });
 
 console.log("\n  Opt-out detection\n");

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth-server";
-import { canManageUsers } from "@/lib/auth";
+import { isBellineStaff } from "@/lib/auth";
 import { PageHeader } from "@/components/LocationTabs";
 import {
   agentSummaries,
@@ -26,8 +26,10 @@ export const dynamic = "force-dynamic";
  */
 export default async function SalesOverview() {
   const user = await requireUser();
-  if (!canManageUsers(user)) {
-    return <p className="muted">The sales engine is owner-only.</p>;
+  // The tenant, not the role: every self-serve signup is the owner of its
+  // own tenant, so `canManageUsers` let any customer read the pipeline.
+  if (!isBellineStaff(user)) {
+    return <p className="muted">Belline staff only.</p>;
   }
 
   const state = await setupState();
@@ -57,7 +59,6 @@ export default async function SalesOverview() {
   const pendingApproval = agents.reduce((n, a) => n + a.pending_approval, 0);
   const totalLeads = workers.reduce((n, a) => n + a.leads, 0);
   const totalQualified = workers.reduce((n, a) => n + a.qualified, 0);
-  const totalMeetings = workers.reduce((n, a) => n + a.meetings, 0);
   const spentMonth = spend.reduce((n, s) => n + Number(s.amount_usd), 0);
   const stageMap = new Map(stages.map((s) => [s.stage, s.n]));
 
@@ -88,10 +89,9 @@ export default async function SalesOverview() {
         <Stat
           label="Awaiting approval"
           value={String(pendingApproval)}
-          hint="drafted, not sent"
+          hint="drafted — there is no sender"
           tone={pendingApproval > 0 ? "warn" : undefined}
         />
-        <Stat label="Meetings" value={String(totalMeetings)} hint="booked" />
         <Stat
           label="Spend"
           value={`$${spentMonth.toFixed(2)}`}
@@ -248,7 +248,7 @@ export default async function SalesOverview() {
                 See all
               </Link>
             </div>
-            <ActivityFeed rows={activity} empty="Nothing has happened yet. Start the worker and run an agent." />
+            <ActivityFeed rows={activity} empty="Nothing has happened yet. Run an agent from the command line." />
           </div>
         </div>
 
@@ -269,6 +269,14 @@ export default async function SalesOverview() {
                   running. Start the worker: <code className="mono">npm run worker</code>
                 </p>
               )}
+              {/* The worker is real and the queue is real; the pipeline stages
+                  are not registered against it yet. Staff told to start it
+                  otherwise wait for work that cannot arrive. */}
+              <p className="muted" style={{ fontSize: 11.5, margin: "6px 0 0", lineHeight: 1.5 }}>
+                The worker runs only <code className="mono">noop</code> and{" "}
+                <code className="mono">always_fails</code> today. Discovery, research, scoring,
+                demos and drafting are run by hand from the command line.
+              </p>
             </div>
           </div>
 
@@ -337,9 +345,7 @@ function AgentRow({ agent, depth }: { agent: AgentSummary; depth: number }) {
             ? "director"
             : agent.kind === "country_manager"
               ? `country manager · ${agent.country_code}`
-              : `${agent.vertical_slug} · ${agent.country_code} · mode ${
-                  agent.autonomy_mode === "review" ? "1" : agent.autonomy_mode === "semi" ? "2" : "3"
-                }`}
+              : `${agent.vertical_slug} · ${agent.country_code}`}
           {agent.paused_reason ? ` · ${agent.paused_reason}` : ""}
         </div>
       </td>

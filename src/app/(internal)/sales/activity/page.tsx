@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth-server";
-import { canManageUsers } from "@/lib/auth";
+import { isBellineStaff } from "@/lib/auth";
 import { PageHeader } from "@/components/LocationTabs";
 import { agentSummaries, recentActivity, setupState } from "@/lib/sales/kpi/overview";
 import Setup from "../Setup";
@@ -17,18 +17,29 @@ export const dynamic = "force-dynamic";
  * answer within the hour.
  */
 
+/**
+ * Only the types something actually writes.
+ *
+ * `sent`, `replied`, `meeting_booked` and `suppressed` were offered as filters
+ * and can never match: nothing sends, nothing classifies a reply, nothing
+ * inserts into `sales.meeting`, and suppressing a company writes a row to
+ * `sales.suppression` plus an `approved`/`rejected` activity — never a
+ * `suppressed` one. A filter that always returns nothing reads as "no replies
+ * yet" rather than "this cannot happen", which is the more expensive of the
+ * two misunderstandings. They come back when their writers do — the activity
+ * types themselves still exist in the repo.
+ */
 const TYPES = [
   "discovered",
   "researched",
   "scored",
   "drafted",
   "approved",
-  "sent",
-  "replied",
+  "rejected",
+  "demo_issued",
   "demo_used",
-  "meeting_booked",
-  "suppressed",
   "agent_paused",
+  "error",
 ];
 
 export default async function ActivityPage({
@@ -37,8 +48,9 @@ export default async function ActivityPage({
   searchParams: Promise<{ agent?: string; type?: string }>;
 }) {
   const user = await requireUser();
-  if (!canManageUsers(user)) {
-    return <p className="muted">The sales engine is owner-only.</p>;
+  // See isBellineStaff: owning a tenant is not working here.
+  if (!isBellineStaff(user)) {
+    return <p className="muted">Belline staff only.</p>;
   }
 
   const state = await setupState();
@@ -114,7 +126,7 @@ export default async function ActivityPage({
           empty={
             agent || type
               ? "Nothing matches that filter."
-              : "Nothing has happened yet. Start the worker and run an agent."
+              : "Nothing has happened yet. Run an agent from the command line."
           }
         />
       </div>

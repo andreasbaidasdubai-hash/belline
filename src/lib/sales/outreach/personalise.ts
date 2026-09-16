@@ -113,6 +113,8 @@ export interface PersonaliseInput {
   maxWords: number;
   /** Recently sent bodies, for the anti-template check. */
   recentBodies: string[];
+  /** Whether a feature flag is on, for the claims that unlock with one. */
+  flagOn?: (flag: string) => boolean;
 }
 
 export interface PersonaliseOutput {
@@ -166,6 +168,7 @@ export async function personalise(input: PersonaliseInput): Promise<PersonaliseO
     forbiddenCustomerWords: input.forbiddenCustomerWords,
     maxWords: input.maxWords,
     recentBodies: input.recentBodies,
+    flagOn: input.flagOn,
   };
 
   // Both subjects go through the guards; the worse of the two decides, because

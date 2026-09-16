@@ -4,6 +4,7 @@ import { isBellineStaff } from "@/lib/auth";
 import { getLocation, listLocations, upsertLocation } from "@/lib/store";
 import { recordManualAssignment, releaseNumber } from "@/lib/telephony/pool";
 import { listExceptions, updateException } from "@/lib/exceptions";
+import { tryAudit } from "@/lib/sales/db/repo/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
     }
   }
 
+  const before = venue.phone;
   const phone = digits ? `+${digits}` : "";
   // The pool follows what staff set: a number cleared from a venue is
   // quarantined, a number set by hand is marked taken so code never hands it
@@ -64,5 +66,19 @@ export async function POST(request: Request) {
       updateException(row.id, { kind: "resolve", note: `Number ${phone} assigned by hand.`, minutes: 0, by: auth.user.id });
     }
   }
+
+  // Who pointed which venue's calls where. The JSON store keeps no history of
+  // its own, so without this row "when did this venue's number change, and who
+  // changed it" is answerable nowhere. The pool has its own ledger, but it only
+  // sees numbers it handed out; this row covers the ones typed in by hand too.
+  await tryAudit({
+    actor: `user:${auth.user.id}`,
+    action: "venue_number_recorded",
+    entity: "location",
+    entityId: venue.id,
+    before: { phone: before },
+    after: { phone },
+  });
+
   return NextResponse.json({ ok: true, phone });
 }
