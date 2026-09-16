@@ -101,8 +101,8 @@ await test("the annual per-month figure is a price, not a minor-unit count, and 
 });
 
 await test("a lookup key names the plan, market, cycle and amount — so a new price is a new key", () => {
-  assert.equal(lookupKeyFor("v2_starter", "AE", "monthly"), "belline_v2_starter_ae_monthly_19900");
-  assert.equal(lookupKeyFor("v2_starter", "AE", "annual"), "belline_v2_starter_ae_annual_199000");
+  assert.equal(lookupKeyFor("v2_starter", "AE", "monthly"), "belline_v2_starter_ae_monthly_24900");
+  assert.equal(lookupKeyFor("v2_starter", "AE", "annual"), "belline_v2_starter_ae_annual_273900");
 });
 
 await test("the keys already in Stripe have not moved: a September bundle's key is exactly what it was", () => {
@@ -205,7 +205,7 @@ await test("a completed checkout puts the venue on the plan it bought", () => {
         belline_products: "v2_growth",
         belline_market: "AE",
         belline_cycle: "annual",
-        belline_amount: "399000",
+        belline_amount: "548900",
         belline_catalogue: CATALOGUE_VERSION,
       },
     }),

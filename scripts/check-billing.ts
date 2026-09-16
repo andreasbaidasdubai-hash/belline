@@ -241,9 +241,9 @@ test("inside the allowance the invoice is just the plan", () => {
 test("a v2 plan shows two pooled meters: voice minutes and text conversations, each against its pool", () => {
   const account = accountFor(subscribe({}), "2026-03-15")!;
   assert.deepEqual(account.usage.meters.map((m) => m.id), ["minutes", "conversations"]);
-  assert.equal(meterOf(account, "minutes").included, 300);
+  assert.equal(meterOf(account, "minutes").included, 250);
   assert.deepEqual(meterOf(account, "minutes").channels, ["phone", "web_voice"]);
-  assert.equal(meterOf(account, "conversations").included, 750);
+  assert.equal(meterOf(account, "conversations").included, 600);
   assert.deepEqual(meterOf(account, "conversations").channels, ["chat", "whatsapp"]);
 });
 
@@ -343,7 +343,7 @@ test("the annual cycle is prepaid at the stored annual price, so nothing is invo
   assert.equal(account.bill.prepaid, true);
   assert.equal(account.bill.dueNow, 0, "an annual plan was billed twice");
   assert.equal(account.bill.planFee, annualPerMonth(["v2_growth"], "AE"));
-  assert.equal(periodFee(["v2_growth"], "AE", "annual"), 399000);
+  assert.equal(periodFee(["v2_growth"], "AE", "annual"), 548900);
 });
 
 test("a trial charges nothing, caps both units and does not upsell", () => {

@@ -104,8 +104,9 @@ test("it describes live transfer honestly, including when nobody picks up", () =
 
 test("it quotes the real prices and no others", () => {
   const price = faq(/cost/i);
-  // The three plans, from the catalogue (2026-10): 199, 399 and 799 dirhams.
-  for (const said of ["one hundred and ninety-nine", "three hundred and ninety-nine", "seven hundred and ninety-nine"]) {
+  // The three plans, from the catalogue (2026-10), at pricing v3: 249, 499 and
+  // 999 dirhams.
+  for (const said of ["two hundred and forty-nine", "four hundred and ninety-nine", "nine hundred and ninety-nine"]) {
     assert.ok(price.includes(said), `the price answer is missing "${said}"`);
   }
   // And none of the ladders it replaced, or anything that is not sold yet.

@@ -33,7 +33,7 @@ import PayButton from "./PayButton";
 // src/app/layout.tsx), with the text face and system fonts behind it.
 const serif = { fontFamily: '"Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif', fontWeight: 600, letterSpacing: "-0.025em" } as const;
 
-/** "300 voice min · 750 text conversations", or an older product's per-channel list, live channels only. */
+/** "250 voice min · 600 text conversations · 5 users", or an older product's per-channel list, live channels only. */
 function shortAllowances(product: Product): string {
   if (product.pools) {
     const parts: string[] = [];

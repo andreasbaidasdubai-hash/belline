@@ -121,8 +121,8 @@ await test("a conversion or churn outside 0..1 is clamped, not obeyed", () => {
 
 await test("defaults come from the book where the book has numbers, and from the plan table where not", () => {
   const empty = defaultAssumptions({ paying: 0, trialing: 0, arpaFils: null, minutesPerVenue: null, trialsLast30Days: 0 });
-  // The plan the website marks as the one most take, read from the catalogue: Growth, AED 399.
-  assert.equal(empty.arpaFils, 39900);
+  // The plan the website marks as the one most take, read from the catalogue: Growth, AED 499.
+  assert.equal(empty.arpaFils, 49900);
   assert.equal(empty.minutesPerVenue, 120);
   assert.equal(empty.newTrialsPerMonth, 3, "a floor, so an empty book still projects something");
   const real = defaultAssumptions({ paying: 4, trialing: 2, arpaFils: 20000, minutesPerVenue: 55, trialsLast30Days: 9 });

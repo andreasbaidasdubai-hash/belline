@@ -1,13 +1,13 @@
 /**
  * The catalogue, and whether it makes money.
  *
- * Pinned here: catalogue v2 (2026-10) — three UAE plans at AED 199 / 399 /
- * 799 with pooled allowances and explicit annual prices; the packs, assisted
+ * Pinned here: catalogue v2 (2026-10) — three UAE plans at AED 249 / 499 /
+ * 999 with pooled allowances and explicit annual prices; the packs, assisted
  * setup and volume terms; the trial; what a customer may buy (v2 only); that
  * every older product is kept exactly as it was sold and the September bundles
  * never lapse; and that every v2 plan and pack clears 30% gross margin at full
  * use on the conservative UAE basis, computed from the rate card the meter
- * uses.
+ * uses — on the annual cycle as well as the monthly one.
  *
  *   npm run check:plans
  */
@@ -40,6 +40,7 @@ const {
   CHANNELS,
   TRIAL,
   allowanceText,
+  annualMonthsSaved,
   annualPerMonth,
   checkSelection,
   grandfatherOf,
@@ -102,15 +103,22 @@ test("exactly the three v2 plans are sold in the UAE, and nothing is sold anywhe
   for (const id of V2) assert.deepEqual(Object.keys(productById(id).prices), ["AE"], `${id} is priced outside the UAE`);
 });
 
-test("the UAE prices are the ones decided: AED 199 / 399 / 799 a month", () => {
-  assert.deepEqual(V2.map((id) => major(id, "AE")), [199, 399, 799]);
+test("the UAE prices are the ones decided: AED 249 / 499 / 999 a month", () => {
+  assert.deepEqual(V2.map((id) => major(id, "AE")), [249, 499, 999]);
   for (const id of V2) assert.equal(productById(id).kind, "plan");
 });
 
-test("annual prices are stored, not derived: AED 1,990 / 3,990 / 7,990 billed yearly", () => {
-  assert.deepEqual(V2.map((id) => productById(id).annualPrices?.AE), [199000, 399000, 799000]);
-  assert.deepEqual(V2.map((id) => periodFee([id], "AE", "annual")), [199000, 399000, 799000]);
+test("annual prices are stored, not derived: AED 2,739 / 5,489 / 10,989 billed yearly", () => {
+  assert.deepEqual(V2.map((id) => productById(id).annualPrices?.AE), [273900, 548900, 1098900]);
+  assert.deepEqual(V2.map((id) => periodFee([id], "AE", "annual")), [273900, 548900, 1098900]);
   for (const id of V2) assert.ok(annualPerMonth([id], "AE") * 12 <= periodFee([id], "AE", "annual"), `${id} overstates`);
+});
+
+test("annual is eleven months for twelve: the customer saves exactly one month, on every plan", () => {
+  for (const id of V2) {
+    assert.equal(periodFee([id], "AE", "annual"), priceOf(id, "AE") * 11, `${id} is not eleven months`);
+    assert.equal(annualMonthsSaved([id], "AE"), 1, `${id} does not save a whole month`);
+  }
 });
 
 test("Growth is the one marked most popular", () => {
@@ -123,8 +131,8 @@ test("allowances are pooled: voice minutes across phone and the voice button, te
   assert.equal(poolOf("chat"), "conversations");
   assert.equal(poolOf("whatsapp"), "conversations");
   assert.deepEqual(productById("v2_starter").pools, { minutes: 75, conversations: 200 });
-  assert.deepEqual(productById("v2_growth").pools, { minutes: 300, conversations: 750 });
-  assert.deepEqual(productById("v2_scale").pools, { minutes: 600, conversations: 2000 });
+  assert.deepEqual(productById("v2_growth").pools, { minutes: 250, conversations: 600 });
+  assert.deepEqual(productById("v2_scale").pools, { minutes: 500, conversations: 1500 });
 });
 
 test("users per plan are stored as a limit: 2 / 5 / 15", () => {
@@ -287,10 +295,12 @@ test("a plan that fits recommends nothing, and nothing is ever recommended downw
 });
 
 test("a September bundle past its allowance is pointed at the v2 plan that carries it", () => {
-  // Growth matches the bundle's pooled 300 minutes rather than shrinking it,
-  // and carries the usage: since the allowances were raised it is the cheapest
-  // plan that does both, where it used to take Scale.
-  assert.deepEqual(recommend({ phone: 240, chat: 100 }, ["everything_starter"], "AE")?.products, ["v2_growth"]);
+  // The bundle pools 300 voice minutes (200 phone + 100 voice button). Growth
+  // is back to 250 under pricing v3, so recommending it would shrink what the
+  // venue already has — the never-shrink rule skips it — and Scale is the
+  // cheapest plan that both carries the usage and keeps the capacity. This
+  // briefly said Growth, while Growth was a 300-minute plan.
+  assert.deepEqual(recommend({ phone: 240, chat: 100 }, ["everything_starter"], "AE")?.products, ["v2_scale"]);
 });
 
 console.log("\n\x1b[1mUnit costs agree with the strategy doc (§1.3)\x1b[0m\n");
@@ -361,7 +371,14 @@ for (const id of V2) {
   for (const cycle of ["monthly", "annual"] as const) {
     const cells = SHARES.map((s) => margin.marginOf(p, "AE", "conservative", s, cycle));
     const full = cells[cells.length - 1].margin!;
-    if (cycle === "monthly" && full < margin.MARGIN_FLOOR.bundle) under.push(`${p.name} monthly at 100%: ${pct(full)}`);
+    // Both cycles, not just monthly. The floor used to be enforced only where
+    // cycle === "monthly", which silently exempted annual — and annual is the
+    // thinner of the two, because eleven months of revenue carry twelve months
+    // of allowance. That exemption is how the old Scale annual sat near 18% at
+    // full use without anything failing. marginOf already models the cycle
+    // honestly: revenue is the annual price over twelve, and the card fee is
+    // charged once a year and spread over the same twelve.
+    if (full < margin.MARGIN_FLOOR.bundle) under.push(`${p.name} ${cycle} at 100%: ${pct(full)}`);
     console.log(`  ${`${p.name} ${cycle}`.padEnd(26)}${cells.map((c) => pct(c.margin).padStart(9)).join("")}`);
   }
 }
@@ -373,7 +390,7 @@ for (const pack of PACKS) {
 }
 console.log("");
 
-test("every v2 plan clears 30% at full use, monthly, on the conservative UAE basis — and so does every pack", () => {
+test("every v2 plan clears 30% at full use on both cycles, on the conservative UAE basis — and so does every pack", () => {
   assert.deepEqual(under, []);
 });
 

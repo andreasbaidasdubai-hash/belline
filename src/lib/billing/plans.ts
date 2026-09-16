@@ -364,16 +364,30 @@ const V2_SCALE_FEATURES: Feature[] = [
 export const PRODUCTS: Product[] = [
   // --- 2026-10: the three plans ----------------------------------------------
   //
-  // Decided by the founder: AED 199 / 399 / 799 per location per month, annual
-  // stored at 1,990 / 3,990 / 7,990, and the allowances 75 / 300 / 600 voice
-  // minutes and 200 / 750 / 2,000 text conversations. UAE only; no other
+  // Decided by the founder: AED 249 / 499 / 999 per location per month, annual
+  // stored at 2,739 / 5,489 / 10,989, and the allowances 75 / 250 / 500 voice
+  // minutes and 200 / 600 / 1,500 text conversations. UAE only; no other
   // market is priced until it opens.
   //
-  // Raised on 16 September 2026, text first: at the planning cost of 40 fils a
-  // voice minute all-in and about 6 fils a text conversation, Growth and Scale
-  // keep roughly 59% and 55% at full use. The voice allowance stays where it
-  // is — a 750-minute Scale would have left about 47% — until there is
-  // measured cost data to move it on (cost.ts MIN_SAMPLES).
+  // Pricing v3 ("Option C"), decided 16 September 2026. It supersedes the
+  // allowances merged earlier the same day (Growth 300/750, Scale 600/2,000),
+  // which were set before the cost model was corrected. Prices go up and the
+  // two upper allowances come back down together, because the pair is what
+  // buys the margin: on the conservative UAE basis this targets 60-65% at
+  // typical use, and every plan clears the floor at full use on both cycles.
+  //
+  // Annual is eleven months for twelve — the customer saves one month — and
+  // it is now held to the same floor as monthly (check-plans.ts). It was not
+  // before, which is how the old Scale annual sat near 18% at full use
+  // unnoticed.
+  //
+  // Unchanged: users per plan, the trial, the packs, the usage policy and its
+  // alerts, and every feature list.
+  //
+  // The UAE rates underneath these margins are still estimates, not quotes —
+  // TWILIO_INBOUND_AE and TWILIO_NUMBER_AE above all (margin.ts
+  // unverifiedLines). A real carrier quote is the last input needed to trust
+  // this table.
   {
     id: "v2_starter",
     kind: "plan",
@@ -384,8 +398,8 @@ export const PRODUCTS: Product[] = [
     allowances: {},
     pools: { minutes: 75, conversations: 200 },
     users: 2,
-    prices: { AE: 199 * 100 },
-    annualPrices: { AE: 1990 * 100 },
+    prices: { AE: 249 * 100 },
+    annualPrices: { AE: 2739 * 100 },
     features: V2_STARTER_FEATURES,
   },
   {
@@ -397,10 +411,10 @@ export const PRODUCTS: Product[] = [
     status: "live",
     recommended: true,
     allowances: {},
-    pools: { minutes: 300, conversations: 750 },
+    pools: { minutes: 250, conversations: 600 },
     users: 5,
-    prices: { AE: 399 * 100 },
-    annualPrices: { AE: 3990 * 100 },
+    prices: { AE: 499 * 100 },
+    annualPrices: { AE: 5489 * 100 },
     features: V2_GROWTH_FEATURES,
   },
   {
@@ -411,10 +425,10 @@ export const PRODUCTS: Product[] = [
     summary: "For higher-volume teams with more complex reception rules.",
     status: "live",
     allowances: {},
-    pools: { minutes: 600, conversations: 2000 },
+    pools: { minutes: 500, conversations: 1500 },
     users: 15,
-    prices: { AE: 799 * 100 },
-    annualPrices: { AE: 7990 * 100 },
+    prices: { AE: 999 * 100 },
+    annualPrices: { AE: 10989 * 100 },
     features: V2_SCALE_FEATURES,
   },
 

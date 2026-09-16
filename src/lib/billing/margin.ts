@@ -21,11 +21,18 @@ import { toUsd, type Market } from "../markets";
  * same `RATE_CARD` the meter uses, with the shapes written down below, so a
  * vendor price change moves the margin table without anybody re-typing it.
  *
- * `scripts/check-plans.ts` fails the build if a bundle's margin at typical use
- * falls under 30% or a module's under 45% — on the lean basis in every
- * market, and on the conservative basis in the UAE, the launch market, whose
- * line it describes. Its UAE rates are still estimates; the check prints which,
- * and setting RATE_<KEY> replaces them.
+ * `scripts/check-plans.ts` fails the build if a plan's margin at **full** use —
+ * 100% of every allowance, not typical use — falls under the bundle floor of
+ * 30%, on both the monthly and the annual cycle, and it holds every pack to
+ * the same floor. It applies this on the conservative UAE basis, the launch
+ * market, whose line that basis describes. The `module` floor is unused: the
+ * single-channel modules it was written for were removed before launch.
+ *
+ * Full use rather than typical is the deliberately harsher test — a plan that
+ * only clears the floor when customers underuse it is priced on a hope — and
+ * `TYPICAL_USE` below is retained for reporting, not enforcement. The check
+ * prints the whole 25/50/75/100% table either way. Its UAE rates are still
+ * estimates; the check prints which, and setting RATE_<KEY> replaces them.
  */
 
 export type Basis = "lean" | "conservative";
@@ -34,7 +41,7 @@ export const BASIS_ORDER: Basis[] = ["lean", "conservative"];
 /** "Typical" use, per §2.2: sixty percent of every allowance. */
 export const TYPICAL_USE = 0.6;
 
-/** The floors check-plans enforces, at typical use. */
+/** The floors check-plans enforces, at full use. `module` is unused; see above. */
 export const MARGIN_FLOOR = { bundle: 0.3, module: 0.45 } as const;
 
 const PER_MILLION = 1_000_000;
