@@ -35,6 +35,7 @@
  */
 
 import { MARKETS, MARKET_CODES, formatMoney, type Market } from "../markets";
+import { calendarConnectionText, publicFlag } from "../site-flags";
 
 export type { Market } from "../markets";
 
@@ -236,13 +237,46 @@ const DEPOSITS: Feature = {
     "and a Connect webhook are set and a venue has finished Stripe onboarding.",
 };
 
+/**
+ * Whether a calendar connection works, as the public pages may say it: the
+ * flags themselves (`booking.google`, `booking.outlook`), read when the
+ * catalogue is read, never typed here. The website ignores FLAG_STUBS, and so
+ * does this. Getters rather than values, so a feature follows the flag it has
+ * now: the pricing page (built and served), Belle's not-yet list and the gaps
+ * report all read the same answer.
+ */
+const calendarsLive = () => ({ google: publicFlag("booking.google"), outlook: publicFlag("booking.outlook") });
+
 const INTEGRATIONS: Feature = {
   text: "Google Calendar and booking-system integrations",
+  // Fresha, SevenRooms, OpenTable and Treatwell are still missing, so never live on Google alone.
   status: "not-yet",
-  gap:
-    "Google Calendar is written and tested but has never run — it needs GOOGLE_CLIENT_ID and " +
-    "GOOGLE_CLIENT_SECRET in Railway. Fresha, SevenRooms, OpenTable and Treatwell are " +
-    "partner-gated and issue no credentials without a signed agreement.",
+  get gap() {
+    const { google } = calendarsLive();
+    return (
+      (google ? "Google Calendar is live (booking.google is on). " : "Google Calendar is built and tested; it goes live when booking.google is switched on. ") +
+      "Fresha, SevenRooms, OpenTable and Treatwell are partner-gated and issue no credentials without a signed agreement."
+    );
+  },
+};
+
+/** One calendar connection: live while either calendar's flag is on, and naming only what is live. */
+const CALENDAR_CONNECTION: Feature = {
+  get text() {
+    return calendarConnectionText(calendarsLive());
+  },
+  get status(): Feature["status"] {
+    const { google, outlook } = calendarsLive();
+    return google || outlook ? "live" : "not-yet";
+  },
+  get gap() {
+    const { google, outlook } = calendarsLive();
+    if (google || outlook) return undefined;
+    return (
+      "Google Calendar and Microsoft Outlook are both built and tested (check:google, check:outlook); " +
+      "each goes live when its flag, booking.google or booking.outlook, is switched on in Railway."
+    );
+  },
 };
 
 // --- 2026-09 bundle features (frozen: these customers were sold them) --------
@@ -298,13 +332,7 @@ const V2_STARTER_FEATURES: Feature[] = [
   { text: "Summary and full transcript of every call and chat", status: "live" },
   { text: "Your team can take over any chat from the inbox", status: "live" },
   { text: "Your own words and colours on the website buttons", status: "live" },
-  {
-    text: "One Google Calendar or Microsoft Outlook connection",
-    status: "not-yet",
-    gap:
-      "Google Calendar is written and tested but has never run — it needs GOOGLE_CLIENT_ID and " +
-      "GOOGLE_CLIENT_SECRET in Railway. There is no Microsoft Outlook integration in the codebase.",
-  },
+  CALENDAR_CONNECTION,
   DEPOSITS,
 ];
 
@@ -342,8 +370,8 @@ const V2_SCALE_FEATURES: Feature[] = [
     text: "Several booking and calendar connections on one location",
     status: "not-yet",
     gap:
-      "A venue has one calendar source today. Multiple connections need the Google and partner " +
-      "integrations above to exist first.",
+      "A venue has one calendar connection today, Google Calendar or Outlook, and the routes refuse a " +
+      "second. Several need the partner integrations and availability merged across sources.",
   },
   {
     text: "Advanced routing and staff rules for calls",

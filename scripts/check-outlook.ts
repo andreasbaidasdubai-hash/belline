@@ -1309,14 +1309,98 @@ await test("the flag itself is never switched on in code, and outreach may not n
   assert.match(source("src/lib/sales/outreach/guards.ts"), /unlessFlag: "booking\.outlook"/);
 });
 
-// __MORE__
+// ---------------------------------------------------------------------------
+head("The catalogue and the privacy page follow the flags, and name the hosts that really serve the site");
+
+/** Run `fn` with these env vars set, and the flags' env put back afterwards. */
+async function withEnv(vars: Record<string, string | undefined>, fn: () => void | Promise<void>) {
+  const keys = ["FLAG_STUBS", "FLAG_BOOKING_GOOGLE", "FLAG_BOOKING_OUTLOOK", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET", "CREDENTIALS_KEY"];
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  for (const k of keys) delete process.env[k];
+  Object.assign(process.env, Object.fromEntries(Object.entries(vars).filter(([, v]) => v !== undefined)));
+  try {
+    await fn();
+  } finally {
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  }
+}
+
+await test("the plans' calendar connection is not-yet with both flags off, and live, naming only what works, with either on", async () => {
+  const { productById, publicLines, notYetLive } = await import("../src/lib/billing/plans");
+  const starter = () => productById("v2_starter");
+  const calendarLine = () => starter().features.find((f) => /Calendar|Outlook/.test(f.text) && /connection$/.test(f.text))!;
+  await withEnv({}, () => {
+    assert.equal(calendarLine().status, "not-yet");
+    assert.equal(calendarLine().text, "One Google Calendar or Microsoft Outlook connection");
+    assert.ok((calendarLine().gap ?? "").length > 40);
+    assert.ok(!publicLines(starter()).some((l) => /Calendar|Outlook/.test(l)));
+    assert.ok(notYetLive().some((g) => g.feature === "One Google Calendar or Microsoft Outlook connection"));
+  });
+  await withEnv({ ...OUTLOOK_ON }, () => {
+    assert.equal(calendarLine().status, "live");
+    assert.equal(calendarLine().text, "One Microsoft Outlook connection");
+    assert.ok(publicLines(starter()).includes("One Microsoft Outlook connection"));
+    assert.ok(!notYetLive().some((g) => /Outlook connection/.test(g.feature)));
+  });
+  await withEnv({ ...GOOGLE_ON }, () => {
+    assert.equal(calendarLine().text, "One Google Calendar connection");
+    assert.equal(calendarLine().status, "live");
+    // The old bundle still lists partners, so it stays not-yet, and no longer says Google Calendar has never run.
+    const pro = productById("everything_pro").features.find((f) => f.text === "Google Calendar and booking-system integrations")!;
+    assert.equal(pro.status, "not-yet");
+    assert.match(pro.gap!, /Google Calendar is live/);
+  });
+  await withEnv({ ...BOTH_ON }, () => assert.equal(calendarLine().text, "One Google Calendar or Microsoft Outlook connection"));
+  // Stubs never make it live.
+  await withEnv({ FLAG_STUBS: "on", FLAG_BOOKING_OUTLOOK: "on" }, () => assert.equal(calendarLine().status, "not-yet"));
+  assert.doesNotMatch(source("src/lib/billing/plans.ts"), /There is no Microsoft Outlook integration|has never run/, "the hard-coded 'not live' gap is back");
+});
+
+await test("the pricing cards the server serves carry the calendar line exactly as a build with the same flags renders it", async () => {
+  const { applyPricing } = await import("./site-pricing");
+  const { applyCalendarPricing } = await import("../src/lib/site-flags");
+  // A Windows checkout gives the page CRLF endings; the generator writes LF. Compared as text.
+  const lf = (s: string) => s.replace(/\r\n/g, "\n");
+  const landing = lf(publicPage("landing.html"));
+  for (const vars of [{}, OUTLOOK_ON, GOOGLE_ON, BOTH_ON]) {
+    await withEnv(vars, () => {
+      const built = lf(applyPricing(landing));
+      assert.equal(lf(applyCalendarPricing(landing, vars)), built, `serve-time pricing differs from a build with ${JSON.stringify(vars)}`);
+      // And from any page built with other flags.
+      for (const other of [{}, OUTLOOK_ON, BOTH_ON]) assert.equal(lf(applyCalendarPricing(applyCalendarPricing(landing, other), vars)), built);
+    });
+  }
+  await withEnv({}, () => assert.equal(lf(applyPricing(landing)), landing, "public/landing.html pricing is stale"));
+  assert.match(applyCalendarPricing(landing, OUTLOOK_ON), /<li>One Microsoft Outlook connection<\/li>/);
+});
+
+await test("the privacy page: Railway hosts the website, Vercel is gone, and Microsoft is named for Outlook, as it will be and as it is", () => {
+  const html = publicPage("privacy.html");
+  assert.doesNotMatch(visible(html), /Vercel/, "Vercel is still named as a processor");
+  assert.match(html, /<li><strong>Railway<\/strong> — hosting for the application, its data and this website\.<\/li>/);
+  assert.match(html, /<h2>Outlook calendar data<\/h2>/);
+  assert.match(html, /Outlook calendars cannot be connected to Belline yet\./);
+  assert.equal(applySiteFlags("privacy.html", html, OUTLOOK_OFF), html);
+  const on = visible(applySiteFlags("privacy.html", html, OUTLOOK_ON));
+  assert.match(on, /<li><strong>Microsoft<\/strong> — only if a business connects an Outlook calendar, through Microsoft Graph\.<\/li>/);
+  assert.match(on, /<p>Connecting an Outlook calendar is optional\./);
+  assert.doesNotMatch(on, /cannot be connected to Belline yet/);
+  const both = visible(applySiteFlags("privacy.html", html, BOTH_ON));
+  assert.doesNotMatch(words(both), SOON_CALENDAR, "the privacy page still says a calendar cannot be connected");
+  // check:billing's rule for the legal pages holds in every state.
+  for (const page of [html, on, both]) {
+    assert.doesNotMatch(visible(page), /\b(?:books?|booking|booked) (?:straight |directly )?(?:into|against|in) (?:your|the|their) (?:real |existing )?(?:diary|calendar)\b/i);
+  }
+  assert.match(html, /Last updated 16 September 2026/);
+});
 
 await test("nothing in this run reached a real host", () => {
   assert.deepEqual(blockedFetches(), []);
 });
 
-void resetCustomerErrors;
-void errorsDuring;
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 console.log(`\n${failed ? "\x1b[31m" : "\x1b[32m"}✓ ${passed} passed, ${failed} failed\x1b[0m\n`);
 process.exit(failed === 0 ? 0 : 1);

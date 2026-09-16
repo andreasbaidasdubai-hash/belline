@@ -105,6 +105,17 @@ export const SITE_FLAG_COPY: Partial<Record<FlagName, SiteSwap[]>> = {
       off: "<dd>Connect Google Calendar and Belline checks it for times already taken, then books straight into it. Outlook isn’t connected yet, so for Outlook Belline takes booking requests.</dd>",
       on: "<dd>Connect Google Calendar or Outlook and Belline checks it for times already taken, then books straight into it.</dd>",
     },
+    // The privacy page: Microsoft as a processor, and its section's lead.
+    {
+      file: "privacy.html",
+      off: "<li><strong>Microsoft</strong> — only if a business connects an Outlook calendar, once that connection is available. Outlook calendars cannot be connected to Belline yet.</li>",
+      on: "<li><strong>Microsoft</strong> — only if a business connects an Outlook calendar, through Microsoft Graph.</li>",
+    },
+    {
+      file: "privacy.html",
+      off: "<p>Outlook calendars cannot be connected to Belline yet. When they can, and only if a business chooses to connect one, this is how Belline treats the information it receives from Microsoft:</p>",
+      on: "<p>Connecting an Outlook calendar is optional. Only if a business chooses to connect one, this is how Belline treats the information it receives from Microsoft:</p>",
+    },
   ],
 };
 
@@ -129,10 +140,40 @@ export function publicFlag(name: FlagName, env: Env = process.env): boolean {
 
 const swap = (html: string, from: string, to: string) => html.split(from).join(to);
 
+/**
+ * The pricing catalogue's calendar line, by the flags (billing/plans.ts reads
+ * it from here). Live while either calendar works, naming only what works.
+ */
+export function calendarConnectionText(on: { google: boolean; outlook: boolean }): string {
+  if (on.google && !on.outlook) return "One Google Calendar connection";
+  if (on.outlook && !on.google) return "One Microsoft Outlook connection";
+  return "One Google Calendar or Microsoft Outlook connection";
+}
+
+/** The Starter card's last line before the calendar connection, as scripts/site-pricing.ts renders it. */
+const PRICING_ANCHOR = "<li>Your own words and colours on the website buttons</li>";
+const CALENDAR_LINE = /(\r?\n[ \t]*<li>One (?:Google Calendar or Microsoft Outlook|Google Calendar|Microsoft Outlook) connection<\/li>)/g;
+
+/**
+ * The pricing cards' calendar line, as the flags say it now.
+ *
+ * The pricing block is generated from the catalogue at build time
+ * (scripts/site-pricing.ts), and the Railway image is built without the flags,
+ * so a built page never lists the calendar connection. The app's server puts
+ * the line in, or takes it out, exactly where a build with the flags on would
+ * have rendered it, without loading the catalogue into the static server.
+ */
+export function applyCalendarPricing(html: string, env: Env = process.env): string {
+  const on = { google: publicFlag("booking.google", env), outlook: publicFlag("booking.outlook", env) };
+  let out = html.split(PRICING_ANCHOR).map((part, i) => (i === 0 ? part : part.replace(new RegExp(`^${CALENDAR_LINE.source}`), ""))).join(PRICING_ANCHOR);
+  if (on.google || on.outlook) out = out.split(PRICING_ANCHOR).join(`${PRICING_ANCHOR}\n            <li>${calendarConnectionText(on)}</li>`);
+  return out;
+}
+
 /** The page's hand-written flag copy as the flags in `env` say it. */
 export function applySiteFlags(file: string, html: string, env: Env = process.env): string {
   const flags = Object.entries(SITE_FLAG_COPY) as [FlagName, SiteSwap[]][];
-  let out = html;
+  let out = file === "landing.html" ? applyCalendarPricing(html, env) : html;
   // Back to the page as written: last flag first, each swap in reverse.
   for (const [, swaps] of [...flags].reverse()) {
     for (const s of [...swaps].reverse()) if (s.file === file) out = swap(out, s.on, s.off);
