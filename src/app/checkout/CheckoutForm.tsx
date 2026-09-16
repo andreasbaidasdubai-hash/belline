@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ProductId } from "@/lib/billing/plans";
 import type { Market } from "@/lib/markets";
+import { TRADES, TRADE_GROUPS } from "@/lib/signup-rules";
 
 /**
  * Four fields, on the same page as the price.
@@ -17,13 +18,15 @@ import type { Market } from "@/lib/markets";
  * remembered on the trial, so the end of it can offer the same thing back.
  */
 
-const TRADES = [
-  { value: "salon", label: "Salon or spa" },
-  { value: "clinic", label: "Clinic or dental practice" },
-  { value: "restaurant", label: "Restaurant" },
-] as const;
-
-export default function CheckoutForm({ products, market }: { products: ProductId[]; market: Market }) {
+export default function CheckoutForm({
+  products,
+  market,
+  trade,
+}: {
+  products: ProductId[];
+  market: Market;
+  trade: string;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ field?: string; message: string } | null>(null);
 
@@ -40,7 +43,7 @@ export default function CheckoutForm({ products, market }: { products: ProductId
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           businessName: form.get("businessName"),
-          vertical: form.get("vertical"),
+          trade: form.get("trade"),
           email: form.get("email"),
           password: form.get("password"),
           // Their clock, not the server's. "Tomorrow at four" has to mean
@@ -90,12 +93,23 @@ export default function CheckoutForm({ products, market }: { products: ProductId
       </div>
 
       <div>
-        <label htmlFor="vertical">What do you do?</label>
-        <select id="vertical" name="vertical" defaultValue="salon" style={bad("vertical")}>
-          {TRADES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
+        <label htmlFor="trade">What do you do?</label>
+        {/*
+          Grouped, because seventeen options in one flat list is a scroll on a
+          phone. The engine only tells a table from an appointment; the rest
+          of the difference is kept for reports, so the list can be as long as
+          it needs to be without the engine growing a case for each entry.
+        */}
+        <select id="trade" name="trade" defaultValue={trade} style={bad("vertical")}>
+          <option value="">Something else</option>
+          {TRADE_GROUPS.map((group) => (
+            <optgroup key={group} label={group}>
+              {TRADES.filter((t) => t.group === group).map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </div>

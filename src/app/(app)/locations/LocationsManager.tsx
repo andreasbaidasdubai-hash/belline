@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Vertical, WeeklyHours } from "@/lib/types";
+import { TRADES, TRADE_GROUPS, tradeLabel } from "@/lib/signup-rules";
 import { minutesToClock } from "@/lib/time";
 
 /**
@@ -18,6 +19,7 @@ interface Venue {
   id: string;
   name: string;
   vertical: Vertical;
+  tradeKey?: string;
   timezone: string;
   address: string;
   phone: string;
@@ -29,8 +31,6 @@ interface Venue {
 }
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const KIND: Record<Vertical, string> = { salon: "Salon or spa", clinic: "Clinic", restaurant: "Restaurant" };
-
 function toMinutes(clock: string): number {
   const [h, m] = clock.split(":").map(Number);
   return h * 60 + (m || 0);
@@ -141,7 +141,7 @@ function VenueCard({
     <div className="panel" style={{ padding: "16px 18px", opacity: venue.archivedAt ? 0.8 : 1 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
         <strong style={{ fontSize: 15 }}>{venue.name}</strong>
-        <span className="pill">{KIND[venue.vertical]}</span>
+        <span className="pill">{tradeLabel(venue.tradeKey, venue.vertical)}</span>
       </div>
       <p className="muted" style={{ fontSize: 12.5, margin: "6px 0 0", lineHeight: 1.55 }}>
         {venue.address || "No address yet"}
@@ -217,7 +217,7 @@ function VenueDrawer({
   onSaved: (message: string, newLocationId?: string) => void;
 }) {
   const [name, setName] = useState(venue?.name ?? "");
-  const [vertical, setVertical] = useState<Vertical>(venue?.vertical ?? "salon");
+  const [trade, setTrade] = useState<string>(venue?.tradeKey ?? "");
   const [timezone, setTimezone] = useState(venue?.timezone ?? "Asia/Dubai");
   const [address, setAddress] = useState(venue?.address ?? "");
   const [phone, setPhone] = useState(venue?.phone ?? "");
@@ -244,7 +244,7 @@ function VenueDrawer({
       action: venue ? "update" : "create",
       locationId: venue?.id,
       name,
-      ...(venue ? {} : { vertical }),
+      ...(venue ? {} : { trade }),
       timezone,
       address,
       phone,
@@ -272,10 +272,15 @@ function VenueDrawer({
           {!venue && (
             <label>
               Kind of business
-              <select value={vertical} onChange={(e) => setVertical(e.target.value as Vertical)}>
-                <option value="salon">Salon, spa or studio</option>
-                <option value="clinic">Clinic, dental or physio</option>
-                <option value="restaurant">Restaurant or café</option>
+              <select value={trade} onChange={(e) => setTrade(e.target.value)}>
+                <option value="">Something else</option>
+                {TRADE_GROUPS.map((group) => (
+                  <optgroup key={group} label={group}>
+                    {TRADES.filter((t) => t.group === group).map((t) => (
+                      <option key={t.key} value={t.key}>{t.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </label>
           )}

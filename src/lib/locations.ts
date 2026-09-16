@@ -1,4 +1,5 @@
 import type { Location, User, Vertical, WeeklyHours } from "./types";
+import { tradeFromParam, verticalForTrade } from "./signup-rules";
 import {
   getLocation,
   listBookings,
@@ -56,6 +57,8 @@ export const COMMON_TIMEZONES = [
 
 export interface LocationInput {
   name?: unknown;
+  /** What the owner picked from the checkout's list (signup-rules.ts `TRADES`). */
+  trade?: unknown;
   vertical?: unknown;
   timezone?: unknown;
   address?: unknown;
@@ -165,7 +168,14 @@ function ownVenue(location: Location | undefined, user: User): location is Locat
 
 export function createLocation(user: User, input: LocationInput): LocationResult {
   if (!canManageUsers(user)) return { ok: false, error: "Only the owner can add a location." };
-  const vertical = String(input.vertical ?? "") as Vertical;
+  // The dashboard's list sends `trade`, which is worked back to an engine.
+  // An explicit `vertical` still has to be one the engine actually has, so a
+  // trade key can never arrive dressed as one.
+  const tradeKey = tradeFromParam(input.trade);
+  const vertical =
+    input.vertical === undefined && input.trade !== undefined
+      ? verticalForTrade(input.trade)
+      : (String(input.vertical ?? "") as Vertical);
   if (!["salon", "clinic", "restaurant"].includes(vertical)) {
     return { ok: false, field: "vertical", error: "Choose what kind of business this location is." };
   }
@@ -177,7 +187,7 @@ export function createLocation(user: User, input: LocationInput): LocationResult
   if (!validTimezone(timezone)) return { ok: false, field: "timezone", error: "That is not a timezone we recognise." };
 
   const base = blankVenue(
-    { businessName: String(input.name ?? "").trim() || "New location", email: user.email, password: "", vertical, timezone },
+    { businessName: String(input.name ?? "").trim() || "New location", email: user.email, password: "", vertical, trade: tradeKey, timezone },
     user.tenantId,
     businessId,
   );

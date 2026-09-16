@@ -3,7 +3,6 @@ import { signUp } from "@/lib/onboarding";
 import { seedIfEmpty } from "@/lib/seed";
 import { SESSION_COOKIE, login } from "@/lib/auth";
 import { sessionCookieOptions } from "@/lib/auth-server";
-import type { Vertical } from "@/lib/types";
 import { isMarket } from "@/lib/markets";
 
 export const dynamic = "force-dynamic";
@@ -82,7 +81,9 @@ export async function POST(req: Request) {
     businessName: String(body.businessName ?? ""),
     email: String(body.email ?? ""),
     password: String(body.password ?? ""),
-    vertical: String(body.vertical ?? "") as Vertical,
+    // What they picked from the checkout's list. The engine it runs on is
+    // worked out in signUp; anything unrecognised is "Something else".
+    trade: body.trade === undefined ? undefined : String(body.trade),
     timezone: body.timezone ? String(body.timezone) : undefined,
     // What they had picked on the checkout page. Validated against the
     // catalogue in signUp; anything else falls back to the trial's own bundle.
