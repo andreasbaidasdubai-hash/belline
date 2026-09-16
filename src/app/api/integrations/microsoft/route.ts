@@ -23,7 +23,7 @@ import {
 } from "@/lib/integrations/outlook";
 import { MicrosoftConfigError } from "@/lib/integrations/microsoft-api";
 import type { ReturnTo } from "@/lib/integrations/oauth-state";
-import { resyncMovedCalendars } from "@/lib/integrations/calendar-sync";
+import { copyUpcoming, resyncMovedCalendars } from "@/lib/integrations/calendar-sync";
 import { appOrigin } from "@/lib/origin";
 import { customerError, raiseException } from "@/lib/errors/customer";
 
@@ -112,7 +112,11 @@ export async function GET(request: Request) {
   if (location.google) return land(checked.returnTo, location.id, "outlook_in_use");
 
   try {
-    upsertLocation(await completeOutlookConnection(location, code, redirectUri(request), auth.user.id));
+    const saved = upsertLocation(await completeOutlookConnection(location, code, redirectUri(request), auth.user.id));
+    // A venue on Belline's diary gets what is already booked copied out, so the
+    // calendar is not empty on the day they connect it. A venue booking into
+    // Outlook starts with what it books from here on.
+    await copyUpcoming(saved);
     return land(checked.returnTo, location.id, "connected");
   } catch (err) {
     // The raw error is logged with a trace id; the owner gets a sentence.

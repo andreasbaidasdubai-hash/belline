@@ -23,7 +23,7 @@ import {
 } from "./policy";
 import { asBookings as holdsAsBookings, releaseCall } from "./holds";
 import { bookingKey, describeWhat, findDuplicate, type BookingIdentity } from "./idempotency";
-import { queueGoogleSync } from "../integrations/google-sync";
+import { queueCalendarSync } from "../integrations/calendar-sync";
 import { getLocation, listWaitlist } from "../store";
 import { markConverted } from "../waitlist";
 
@@ -64,7 +64,7 @@ export interface CreateInput {
   /** Freeze the clock. Tests only — a notice-period rule is untestable without it. */
   now?: Now;
   /**
-   * Set only by the Google provider, which writes the event itself with the
+   * Set only by a calendar provider, which writes the event itself with the
    * caller's idempotency key. Everything else leaves it unset, and the booking
    * is written to a connected calendar here.
    */
@@ -634,7 +634,7 @@ function settled(location: Location, booking: Booking, input: Pick<CreateInput, 
   const saved = saveBooking(booking);
   if (input.callId) releaseCall(input.callId);
   convertWaitlist(saved);
-  // The Google provider writes its own event, keyed by the caller's
+  // A calendar provider writes its own event, keyed by the caller's
   // idempotency key; writing it here as well would make a second one.
   return input.calendarWrittenBy === "provider" ? saved : mirrored(location, saved);
 }
@@ -664,12 +664,12 @@ function convertWaitlist(booking: Booking): void {
  * whether the venue books into it or only mirrors to it.
  *
  * Not awaited on purpose. The booking is already saved and is real either way;
- * a slow or broken Google must never hold a caller on the line or a
+ * a slow or broken calendar must never hold a caller on the line or a
  * receptionist at the desk. The change is marked on the booking first, so a
- * failure is retried and raised rather than lost. See integrations/google-sync.ts.
+ * failure is retried and raised rather than lost. See integrations/calendar-sync.ts.
  */
 function mirrored(location: Location, booking: Booking): Booking {
-  return location.google ? queueGoogleSync(location, booking) : booking;
+  return queueCalendarSync(location, booking);
 }
 
 export { chainDuration, resolveServices };

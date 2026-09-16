@@ -2,7 +2,7 @@ import type { Booking, Location } from "../types";
 import { saveBooking } from "../store";
 import { checkShape } from "../leads/email";
 import { createBooking, describeBookingShort, modifyBooking } from "./index";
-import { queueGoogleSync } from "../integrations/google-sync";
+import { queueCalendarSync } from "../integrations/calendar-sync";
 
 /**
  * Taking and changing bookings at the desk.
@@ -117,7 +117,7 @@ export function updateFromDesk(location: Location, booking: Booking, input: Desk
   if (guest.guestName !== current.guestName || guest.guestPhone !== current.guestPhone || guest.guestEmail !== current.guestEmail) {
     current = saveBooking({ ...current, ...guest, updatedAt: new Date().toISOString() });
     // The name and number are in the calendar event's text.
-    if (guest.guestName !== booking.guestName || guest.guestPhone !== booking.guestPhone) current = queueGoogleSync(location, current);
+    if (guest.guestName !== booking.guestName || guest.guestPhone !== booking.guestPhone) current = queueCalendarSync(location, current);
   }
   return { ok: true, booking: current, summary: describeBookingShort(location, current) };
 }

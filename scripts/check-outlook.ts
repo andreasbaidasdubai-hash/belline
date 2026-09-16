@@ -508,6 +508,424 @@ await test("Google's provider is the same shared provider, still named google", 
   assert.match(source("src/lib/booking/google-provider.ts"), /calendarProvider\(\(\) => googleConnector\)/);
 });
 
+// ---------------------------------------------------------------------------
+head("Bookings made anywhere else reach Outlook: the desk, a guest's link, the sweep");
+
+const { createFromDesk, updateFromDesk } = await import("../src/lib/booking/desk");
+const { cancelBooking: cancelLocal, createBooking: createLocal, modifyBooking: modifyLocal } = await import("../src/lib/booking");
+const { getBooking } = await import("../src/lib/store");
+const sync = await import("../src/lib/integrations/calendar-sync");
+const { listExceptions } = await import("../src/lib/exceptions");
+const settle = () => sync.settleCalendarSync();
+
+/** A day, not used yet, when both of the salon's first two people can take the first service at the same time. */
+function sharedSlot(l: Loc): { date: string; startMin: number } {
+  const [first, second] = l.salon!.staff;
+  const serviceIds = [l.salon!.services[0].id];
+  for (let i = 3; i < 90; i++) {
+    const date = addDays(todayIn(l.timezone), i);
+    if (usedDays.has(date)) continue;
+    const a = findAvailability(l, { locationId: l.id, date, serviceIds, staffId: first.id }, { limit: 200 });
+    const b = findAvailability(l, { locationId: l.id, date, serviceIds, staffId: second.id }, { limit: 200 });
+    const both = a.find((s) => b.some((o) => o.startMin === s.startMin));
+    if (both) {
+      usedDays.add(date);
+      return { date, startMin: both.startMin };
+    }
+  }
+  throw new Error("no time in the next three months when both people are free");
+}
+
+await test("a booking taken at the desk becomes an Outlook event, with Graph's id stored, and blocks the time for the agent", async () => {
+  const loc = getLocation(salonBase.id)!;
+  assert.equal(providerFor(loc), outlookCalendarProvider, "the salon should be booking into Outlook here");
+  const [, second] = loc.salon!.staff;
+  const { date, startMin } = sharedSlot(loc);
+  const out = createFromDesk(loc, { date, startMin, serviceIds: [loc.salon!.services[0].id], staffId: second.id, guestName: "Desk Guest One", guestPhone: "+971500000101" });
+  assert.ok(out.ok, out.ok ? "" : out.error);
+  if (!out.ok) return;
+  await settle();
+  const saved = getBooking(out.booking.id)!;
+  const events = liveEventsOf(saved.id);
+  assert.equal(events.length, 1, `expected one Outlook event for the desk booking, found ${events.length}`);
+  assert.equal(events[0].calendarId, "AAMkAD-default");
+  assert.equal(saved.calendarEventId, events[0].id, "Graph's id is not stored on the booking");
+  assert.equal(saved.calendarEventKey, events[0].key);
+  assert.equal(saved.calendarSync?.state, "synced");
+  assert.equal(Date.parse(events[0].start), zonedInstant(date, startMin, loc.timezone));
+  const offered = await outlookCalendarProvider.checkAvailability(
+    { location: getLocation(loc.id)! },
+    { locationId: loc.id, date, serviceIds: [loc.salon!.services[0].id], staffId: second.id },
+  );
+  assert.ok(!offered.some((s) => s.startMin === startMin), "the agent is still offered the desk booking's time");
+});
+
+await test("moving it at the desk updates that event by its id; renaming the guest changes its subject; never a second event", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const booking = listBookingsAt(loc.id).find((b) => b.guestName === "Desk Guest One")!;
+  const later = findAvailability(loc, { locationId: loc.id, date: booking.date, serviceIds: booking.serviceIds, staffId: booking.staffId, excludeBookingId: booking.id }, { limit: 200 })
+    .find((s) => s.startMin > booking.startMin + 60);
+  assert.ok(later, "no later time that day to move to");
+  const creates = fake.calls.filter((c) => c.method === "createEvent").length;
+  assert.ok(updateFromDesk(loc, booking, { startMin: later!.startMin }).ok);
+  await settle();
+  let events = liveEventsOf(booking.id);
+  assert.equal(events.length, 1, `a move left ${events.length} events`);
+  assert.equal(events[0].id, booking.calendarEventId, "the move made a new event instead of updating the stored one");
+  assert.equal(Date.parse(events[0].start), zonedInstant(booking.date, later!.startMin, loc.timezone), "the event did not move");
+  assert.ok(updateFromDesk(getLocation(loc.id)!, getBooking(booking.id)!, { guestName: "Desk Guest Renamed" }).ok);
+  await settle();
+  events = liveEventsOf(booking.id);
+  assert.equal(events.length, 1);
+  assert.match(events[0].subject ?? "", /^Desk Guest Renamed/);
+  assert.equal(fake.calls.filter((c) => c.method === "createEvent").length, creates);
+});
+
+await test("cancelling at the desk deletes the event", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const booking = listBookingsAt(loc.id).find((b) => b.guestName === "Desk Guest Renamed")!;
+  cancelLocal(booking, loc, "Cancelled at the desk");
+  await settle();
+  assert.deepEqual(liveEventsOf(booking.id), [], "the cancelled desk booking is still an event in Outlook");
+});
+
+await test("a guest moving and then cancelling from their manage link: one event that follows, then none", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const { date, startMin } = sharedSlot(loc);
+  const serviceIds = [loc.salon!.services[0].id];
+  const made = createLocal(loc, { date, startMin, serviceIds, guestName: "Link Guest", guestPhone: "+971500000102", source: "manual", staffOverride: true });
+  assert.ok(made.ok, made.ok ? "" : made.detail);
+  if (!made.ok) return;
+  await settle();
+  assert.equal(liveEventsOf(made.booking.id).length, 1, "the booking never reached Outlook");
+  const next = findAvailability(loc, { locationId: loc.id, date, serviceIds, staffId: made.booking.staffId, excludeBookingId: made.booking.id }, { limit: 200 })
+    .find((s) => s.startMin !== made.booking.startMin && s.staffId === made.booking.staffId);
+  assert.ok(next, "nowhere to move the guest to");
+  assert.ok(modifyLocal(getLocation(loc.id)!, getBooking(made.booking.id)!, { date, startMin: next!.startMin }).ok);
+  await settle();
+  const events = liveEventsOf(made.booking.id);
+  assert.equal(events.length, 1);
+  assert.equal(Date.parse(events[0].start), zonedInstant(date, next!.startMin, loc.timezone));
+  cancelLocal(getBooking(made.booking.id)!, getLocation(loc.id)!, "Cancelled by the guest from their confirmation link");
+  await settle();
+  assert.deepEqual(liveEventsOf(made.booking.id), []);
+});
+
+await test("the agent's own booking is written once: the same booking typed in at the desk adds no second event", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const { date, startMin } = sharedSlot(loc);
+  const serviceIds = [loc.salon!.services[0].id];
+  const [, second] = loc.salon!.staff;
+  const made = await outlookCalendarProvider.createBooking({ location: loc }, { date, startMin, guestName: "Agent Guest", guestPhone: "+971500000103", serviceIds, staffId: second.id }, "call_60:book:1");
+  assert.ok(made.ok, made.ok ? "" : made.detail);
+  if (!made.ok) return;
+  await settle();
+  const desk = createFromDesk(getLocation(loc.id)!, { date, startMin, serviceIds, staffId: second.id, guestName: "Agent Guest", guestPhone: "+971500000103" });
+  assert.ok(desk.ok && desk.duplicate);
+  await settle();
+  assert.equal(liveEventsOf(made.booking.id).length, 1);
+});
+
+await test("Outlook failing does not lose the booking: recorded, the owner told, retried with back-off, raised on the second failure", async () => {
+  resetCustomerErrors();
+  const loc = getLocation(salonBase.id)!;
+  const { date, startMin } = sharedSlot(loc);
+  const [, second] = loc.salon!.staff;
+  fake.failNext("createEvent", 2);
+  let bookingId = "";
+  await errorsDuring(async () => {
+    const out = createFromDesk(loc, { date, startMin, serviceIds: [loc.salon!.services[0].id], staffId: second.id, guestName: "Retry Guest", guestPhone: "+971500000104" });
+    assert.ok(out.ok, out.ok ? "" : out.error);
+    if (out.ok) bookingId = out.booking.id;
+    await settle();
+  });
+  let saved = getBooking(bookingId)!;
+  assert.equal(saved.status, "confirmed", "the booking was lost with the calendar write");
+  assert.equal(saved.calendarSync?.state, "failed");
+  assert.equal(saved.calendarSync?.attempts, 1);
+  assert.equal(liveEventsOf(bookingId).length, 0);
+  const state = outlook.outlookConnectionState(getLocation(loc.id)!);
+  assert.ok(!state.healthy && /Outlook did not accept/.test(state.detail), `the owner is not told: ${state.detail}`);
+  assert.equal(listExceptions({ locationId: loc.id, kind: "outlook_sync_failed" }).length, 0, "one blip is not yet the team's problem");
+
+  assert.equal((await sync.retryCalendarSyncs(new Date())).attempted, 0, "retried before the back-off");
+  await errorsDuring(() => sync.retryCalendarSyncs(new Date(Date.now() + 2 * 60_000)));
+  saved = getBooking(bookingId)!;
+  assert.equal(saved.calendarSync?.attempts, 2);
+  const raised = listExceptions({ locationId: loc.id, kind: "outlook_sync_failed" });
+  assert.equal(raised.length, 1, "a second failure should be in the team's queue");
+  assert.equal(listExceptions({ locationId: loc.id, kind: "google_sync_failed" }).length, 0, "raised under Google's name");
+
+  const later = await sync.retryCalendarSyncs(new Date(Date.now() + 60 * 60_000));
+  assert.equal(later.synced, 1);
+  assert.equal(getBooking(bookingId)!.calendarSync?.state, "synced");
+  assert.equal(liveEventsOf(bookingId).length, 1, "the retry did not write the event");
+  assert.ok(outlook.outlookConnectionState(getLocation(loc.id)!).healthy, "the owner's warning outlived the fix");
+});
+
+// ---------------------------------------------------------------------------
+head("Moving a booking to a person with another calendar moves the event");
+
+await test("to a person with their own calendar: deleted from the first, exactly one on the second, and back through the agent", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const [first, second] = loc.salon!.staff;
+  assert.equal(outlook.outlookCalendarFor(loc.outlook!, first.id), STAFF_CAL);
+  const { date, startMin } = sharedSlot(loc);
+  const serviceIds = [loc.salon!.services[0].id];
+  const made = await outlookCalendarProvider.createBooking({ location: loc }, { date, startMin, guestName: "Mover Guest", guestPhone: "+971500000105", serviceIds, staffId: second.id }, "call_61:book:1");
+  assert.ok(made.ok, made.ok ? "" : made.detail);
+  if (!made.ok) return;
+  assert.deepEqual(liveEventsOf(made.booking.id).map((e) => e.calendarId), ["AAMkAD-default"]);
+
+  assert.ok(modifyLocal(getLocation(loc.id)!, getBooking(made.booking.id)!, { staffId: first.id, staffOverride: true }).ok);
+  await settle();
+  assert.deepEqual(liveEventsOf(made.booking.id).map((e) => e.calendarId), [STAFF_CAL], "after the move");
+  assert.equal(getBooking(made.booking.id)!.calendarId, STAFF_CAL);
+
+  const back = await outlookCalendarProvider.rescheduleBooking({ location: getLocation(loc.id)! }, getBooking(made.booking.id)!, { staffId: second.id });
+  assert.ok(back.ok, back.ok ? "" : back.detail);
+  await settle();
+  assert.deepEqual(liveEventsOf(made.booking.id).map((e) => e.calendarId), ["AAMkAD-default"], "after moving back");
+
+  const cancelled = await outlookCalendarProvider.cancelBooking({ location: getLocation(loc.id)! }, getBooking(made.booking.id)!, "Guest asked");
+  assert.ok(cancelled.ok);
+  await settle();
+  assert.deepEqual(liveEventsOf(made.booking.id), []);
+});
+
+await test("an old event Outlook would not delete is retried until it is gone, never left as a duplicate", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const [first, second] = loc.salon!.staff;
+  const { date, startMin } = sharedSlot(loc);
+  const made = createFromDesk(loc, { date, startMin, serviceIds: [loc.salon!.services[0].id], staffId: second.id, guestName: "Stuck Guest", guestPhone: "+971500000106" });
+  assert.ok(made.ok);
+  if (!made.ok) return;
+  await settle();
+  fake.failNext("deleteEvent", 1);
+  await errorsDuring(async () => {
+    updateFromDesk(getLocation(loc.id)!, getBooking(made.booking.id)!, { staffId: first.id });
+    await settle();
+  });
+  const stuck = getBooking(made.booking.id)!;
+  assert.equal(stuck.calendarSync?.state, "failed");
+  assert.deepEqual(stuck.calendarSync?.stale, [{ calendarId: "AAMkAD-default", eventId: stuck.calendarEventKey }], "the old event is not recorded for clean-up");
+  await sync.retryCalendarSyncs(new Date(Date.now() + 60 * 60_000));
+  assert.deepEqual(liveEventsOf(made.booking.id).map((e) => e.calendarId), [STAFF_CAL]);
+  assert.equal(getBooking(made.booking.id)!.calendarSync?.stale, undefined);
+});
+
+await test("a write that reached Outlook but whose answer was lost is cleaned up when the booking moves again", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const [first, second] = loc.salon!.staff;
+  const booking = listBookingsAt(loc.id).find((b) => b.guestName === "Stuck Guest")!;
+  fake.failNext("createEvent", 1, { afterWrite: true });
+  await errorsDuring(async () => {
+    updateFromDesk(getLocation(loc.id)!, getBooking(booking.id)!, { staffId: second.id });
+    await settle();
+  });
+  assert.equal(getBooking(booking.id)!.calendarSync?.inflight?.calendarId, "AAMkAD-default");
+  assert.equal(fake.events("AAMkAD-default").filter((e) => e.bellineBookingId === booking.id).length, 1, "the fixture did not land the write");
+  updateFromDesk(getLocation(loc.id)!, getBooking(booking.id)!, { staffId: first.id });
+  await settle();
+  assert.deepEqual(liveEventsOf(booking.id).map((e) => e.calendarId), [STAFF_CAL], "an orphan was left on the calendar the write reached");
+});
+
+await test("changing which calendar a person uses moves their upcoming bookings' events", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const [first] = loc.salon!.staff;
+  const booking = listBookingsAt(loc.id).find((b) => b.guestName === "Stuck Guest")!;
+  const picked = await outlook.chooseOutlookCalendars(loc, { calendarId: "AAMkAD-default", staffCalendars: {} });
+  assert.ok(picked.ok);
+  if (!picked.ok) return;
+  sync.resyncMovedCalendars(upsertLocation(picked.location));
+  await settle();
+  assert.deepEqual(liveEventsOf(booking.id).map((e) => e.calendarId), ["AAMkAD-default"]);
+  const back = await outlook.chooseOutlookCalendars(getLocation(loc.id)!, { calendarId: "AAMkAD-default", staffCalendars: { [first.id]: STAFF_CAL } });
+  assert.ok(back.ok);
+  if (back.ok) sync.resyncMovedCalendars(upsertLocation(back.location));
+  await settle();
+  assert.deepEqual(liveEventsOf(booking.id).map((e) => e.calendarId), [STAFF_CAL]);
+});
+
+await test("a booking last written to Google, at a venue now on Outlook, starts clean: nothing of Google's is asked of Microsoft", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const { date, startMin } = sharedSlot(loc);
+  const made = createLocal(loc, { date, startMin, serviceIds: [loc.salon!.services[0].id], guestName: "Switched Guest", guestPhone: "+971500000109", source: "manual", staffOverride: true });
+  assert.ok(made.ok);
+  if (!made.ok) return;
+  await settle();
+  // As if Google had written it: a Google id and calendar, stale Google refs, no provider mark.
+  const { saveBooking } = await import("../src/lib/store");
+  const googleShaped = saveBooking({
+    ...getBooking(made.booking.id)!,
+    calendarEventId: "bellinegoogleid",
+    calendarId: "primary",
+    calendarEventKey: undefined,
+    calendarSync: { state: "pending", attempts: 0, rev: 5, stale: [{ calendarId: "primary", eventId: "bellinegoogleid" }] },
+  });
+  for (const id of fake.events("AAMkAD-default").filter((e) => e.bellineBookingId === googleShaped.id).map((e) => e.id)) {
+    await fake.api.deleteEvent(`stub-ms-access-${fake.issued[0]}`, "AAMkAD-default", id);
+  }
+  const before = fake.calls.length;
+  await sync.syncBooking(googleShaped.id);
+  const asked = fake.calls.slice(before);
+  assert.ok(!asked.some((c) => c.calendarId === "primary"), `Google's calendar was asked of Microsoft: ${JSON.stringify(asked)}`);
+  const after = getBooking(googleShaped.id)!;
+  assert.equal(after.calendarSync?.state, "synced");
+  assert.equal(after.calendarSync?.provider, "outlook");
+  assert.equal(liveEventsOf(googleShaped.id).length, 1);
+});
+
+// ---------------------------------------------------------------------------
+head("An expired token: exception, owner banner, requests, and back after reconnecting");
+
+await test("Microsoft refusing the token marks the link, raises one exception, offers nothing, and falls back to requests", async () => {
+  resetCustomerErrors();
+  const loc = getLocation(salonBase.id)!;
+  assert.equal(providerFor(loc), outlookCalendarProvider);
+  fake.expire();
+  outlook.setMicrosoftApi(fake.api); // clears the cached access token
+  try {
+    const query = { locationId: loc.id, date: openDay(loc), serviceIds: [loc.salon!.services[0].id] };
+    let offered: unknown[] = ["unset"];
+    const lines = await errorsDuring(async () => {
+      offered = await outlookCalendarProvider.checkAvailability({ location: loc }, query);
+      await outlookCalendarProvider.checkAvailability({ location: loc }, query);
+    });
+    assert.deepEqual(offered, []);
+    assert.equal(lines.filter((l) => l.startsWith(`[exception] outlook:expired:${loc.id}`)).length, 1);
+    const after = getLocation(loc.id)!;
+    assert.ok(after.outlook!.expiredAt);
+    assert.equal(providerFor(after), requestOnlyProvider);
+    assert.equal(takesRequestsOnly(after), true);
+    const state = outlook.outlookConnectionState(after);
+    assert.ok(state.connected && !state.healthy && state.expired);
+    assert.equal(state.detail, outlook.OUTLOOK_EXPIRED_TEXT);
+    assert.doesNotMatch(state.detail, /invalid_grant|AADSTS|401|token/i);
+    const created = await outlookCalendarProvider.createBooking({ location: after }, { date: query.date, startMin: 600, guestName: "Nadia", guestPhone: "+971500000001", serviceIds: query.serviceIds }, "call_45:book:1");
+    assert.ok(!created.ok);
+    assert.equal(listExceptions({ locationId: loc.id, kind: "outlook_token_expired" }).length, 1, "no outlook_token_expired exception for the team");
+  } finally {
+    fake.restore();
+  }
+});
+
+await test("a desk booking while the connection is down is kept and waits; the owner's home banner carries the calendar line", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const { date, startMin } = sharedSlot(loc);
+  const out = createFromDesk(loc, { date, startMin, serviceIds: [loc.salon!.services[0].id], staffId: loc.salon!.staff[1].id, guestName: "While Down", guestPhone: "+971500000107" });
+  assert.ok(out.ok, out.ok ? "" : out.error);
+  await settle();
+  const saved = listBookingsAt(loc.id).find((b) => b.guestName === "While Down")!;
+  assert.equal(saved.calendarSync?.state, "pending");
+  assert.match(saved.calendarSync?.lastError ?? "", /Waiting for Outlook/);
+  assert.equal(liveEventsOf(saved.id).length, 0);
+  const { overviewFor, visibleHealth } = await import("../src/lib/overview");
+  const line = visibleHealth((await overviewFor(loc)).health, false).find((h) => h.label === "Calendar");
+  assert.ok(line && !line.ok && line.detail === outlook.OUTLOOK_EXPIRED_TEXT, `the banner says: ${line?.detail}`);
+});
+
+await test("reconnecting keeps the calendars picked and clears the expiry; the sweep then writes what was booked while down", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const again = upsertLocation(await outlook.completeOutlookConnection(loc, "stub-code", CALLBACK, "user_owner", now));
+  assert.equal(again.outlook!.expiredAt, undefined);
+  assert.equal(again.outlook!.calendarId, "AAMkAD-default");
+  assert.equal(Object.keys(again.outlook!.staffCalendars ?? {}).length, 1);
+  assert.equal(providerFor(again), outlookCalendarProvider);
+  await sync.sweepCalendars(new Date());
+  const booking = listBookingsAt(salonBase.id).find((b) => b.guestName === "While Down")!;
+  assert.equal(getBooking(booking.id)!.calendarSync?.state, "synced");
+  assert.equal(liveEventsOf(booking.id).length, 1);
+});
+
+await test("a wrong client secret is ours: requests, the owner told it is Belline's to fix, the team given the fix, and back once it answers", async () => {
+  resetCustomerErrors();
+  const loc = getLocation(restaurantBase.id)!;
+  assert.equal(providerFor(loc), outlookCalendarProvider);
+  fake.failTokens({
+    status: 401,
+    body: { error: "invalid_client", error_description: "AADSTS7000215: Invalid client secret provided. Ensure the secret being sent in the request is the client secret value, not the client secret ID.", error_codes: [7000215] },
+  });
+  outlook.setMicrosoftApi(fake.api);
+  try {
+    const lines = await errorsDuring(async () => {
+      const offered = await outlookCalendarProvider.checkAvailability({ location: loc }, { locationId: loc.id, date: addDays(todayIn(loc.timezone), 9), partySize: 2 });
+      assert.deepEqual(offered, []);
+    });
+    const after = getLocation(loc.id)!;
+    assert.ok(after.outlook!.misconfiguredAt, "the venue is not marked");
+    assert.equal(after.outlook!.expiredAt, undefined, "a bad secret was read as the owner's expired connection");
+    assert.equal(providerFor(after), requestOnlyProvider);
+    const state = outlook.outlookConnectionState(after);
+    assert.equal(state.detail, outlook.OUTLOOK_MISCONFIGURED_TEXT);
+    assert.doesNotMatch(state.detail, /AADSTS|secret|client|Entra/i);
+    assert.equal(lines.filter((l) => l.startsWith(`[exception] outlook:misconfigured:${loc.id}`)).length, 1);
+    const queued = listExceptions({ locationId: loc.id, kind: "outlook_misconfigured" });
+    assert.equal(queued.length, 1);
+    assert.match(queued[0].reason, /AADSTS7000215[\s\S]*Certificates & secrets/);
+    assert.equal((await sync.sweepCalendars(new Date())).recovered, 0, "cleared while Microsoft still refuses");
+  } finally {
+    fake.failTokens(null);
+  }
+  assert.equal((await sync.sweepCalendars(new Date())).recovered, 1);
+  assert.equal(getLocation(loc.id)!.outlook!.misconfiguredAt, undefined);
+  assert.equal(providerFor(getLocation(loc.id)!), outlookCalendarProvider);
+});
+
+await test("a connection that never came back is raised once, after ten minutes, with the IT admin's approval link", async () => {
+  const venue = spareVenue();
+  const started = Date.now();
+  outlook.signOutlookState({ locationId: venue.id, userId: "user_owner", returnTo: "setup" }, started);
+  const other = outlook.signOutlookState({ locationId: restaurantBase.id, userId: "user_owner", returnTo: "integrations" }, started);
+  assert.ok(outlook.verifyOutlookState(other.state, { userId: "user_owner", cookieNonce: other.nonce, now: started }).ok);
+  // A Google connection pending at the same time is Google's sweep's, not this one's.
+  google.signState({ locationId: venue.id, userId: "user_owner", returnTo: "setup" }, started);
+  assert.equal(outlook.sweepAbandonedOutlookConnects(new Date(started + 5 * 60_000)), 0, "raised before the ten minutes were up");
+  let raised = 0;
+  await errorsDuring(() => {
+    raised = outlook.sweepAbandonedOutlookConnects(new Date(started + 11 * 60_000));
+  });
+  // Other connections this run started and never finished count too.
+  assert.ok(raised >= 1);
+  assert.equal(listExceptions({ locationId: restaurantBase.id, kind: "outlook_connect_abandoned" }).length, 0, "a connection that came back was raised");
+  const queued = listExceptions({ locationId: venue.id, kind: "outlook_connect_abandoned" });
+  assert.equal(queued.length, 1);
+  assert.match(queued[0].reason, /Need admin approval[\s\S]*login\.microsoftonline\.com\/organizations\/v2\.0\/adminconsent\?client_id=/);
+  assert.equal(listExceptions({ locationId: venue.id, kind: "google_connect_abandoned" }).length, 0, "Outlook's sweep took Google's pending row");
+  assert.ok(getLocation(venue.id)!.outlookConnectAbandonedAt);
+  assert.match(outlook.OUTLOOK_ABANDONED_TEXT, /IT admin/);
+  assert.doesNotMatch(outlook.OUTLOOK_ABANDONED_TEXT, /AADSTS|consent|tenant|Entra|OAuth/i);
+  const connected = await outlook.completeOutlookConnection(getLocation(venue.id)!, "stub-code", CALLBACK, "user_owner", now);
+  assert.equal(connected.outlookConnectAbandonedAt, undefined);
+  upsertLocation(venue);
+});
+
+await test("a quiet venue's token is refreshed by the sweep before Microsoft idles it out, and the new one kept", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const eightDays = new Date(Date.now() - 8 * 24 * 60 * 60_000).toISOString();
+  upsertLocation({ ...loc, outlook: { ...loc.outlook!, refreshedAt: eightDays } });
+  const before = openCredentials(getLocation(loc.id)!.outlook!.sealedToken!).refreshToken;
+  fake.revokeOnRotate(true);
+  try {
+    assert.equal(await outlook.keepOutlookTokensFresh(new Date()), 1);
+    const link = getLocation(loc.id)!.outlook!;
+    assert.notEqual(openCredentials(link.sealedToken!).refreshToken, before, "the rotated token was not kept");
+    assert.ok(Date.parse(link.refreshedAt!) > Date.parse(eightDays));
+    assert.equal(await outlook.keepOutlookTokensFresh(new Date()), 0, "refreshed again inside the week");
+    outlook.setMicrosoftApi(fake.api);
+    await outlook.listOutlookCalendarsFor(getLocation(loc.id)!);
+    assert.equal(getLocation(loc.id)!.outlook!.expiredAt, undefined);
+  } finally {
+    fake.revokeOnRotate(false);
+  }
+});
+
+await test("the server runs one sweep for both calendars", () => {
+  const server = source("server.ts");
+  assert.match(server, /import\("\.\/src\/lib\/integrations\/calendar-sync"\)/);
+  assert.match(server, /sweepCalendars/);
+});
+
 // __MORE__
 
 await test("nothing in this run reached a real host", () => {

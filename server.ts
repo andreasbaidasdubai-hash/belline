@@ -103,21 +103,22 @@ function sweepReminders(): void {
 setTimeout(sweepReminders, 30_000).unref?.();
 setInterval(sweepReminders, REMINDER_SWEEP_MS).unref?.();
 
-// Bookings whose change has not reached the venue's Google Calendar yet —
-// Google refused, timed out, or the process restarted mid-write — are tried
-// again every few minutes, each on its own back-off. Idempotent by event id.
-// The same sweep notices connections that never came back from Google and
-// venues Google refused because of our project that it now accepts.
-const GOOGLE_SWEEP_MS = 3 * 60 * 1000;
-async function sweepGoogle(): Promise<void> {
-  const { sweepGoogle: sweep } = await import("./src/lib/integrations/google-sync");
+// Bookings whose change has not reached the venue's Google Calendar or Outlook
+// yet — the calendar refused, timed out, or the process restarted mid-write —
+// are tried again every few minutes, each on its own back-off. Idempotent by
+// event key. The same sweep notices connections that never came back, venues
+// refused because of our own Google project or Entra app that are accepted
+// again, and keeps quiet Outlook connections from idling out.
+const CALENDAR_SWEEP_MS = 3 * 60 * 1000;
+async function sweepCalendars(): Promise<void> {
+  const { sweepCalendars: sweep } = await import("./src/lib/integrations/calendar-sync");
   const r = await sweep();
-  if (r.attempted || r.abandoned || r.recovered) {
-    console.log(`[google] sweep: ${r.abandoned} abandoned connects, ${r.recovered} venues recovered; retried ${r.attempted}: ${r.synced} written, ${r.failed} failed (${r.waiting} waiting on a reconnect)`);
+  if (r.attempted || r.abandoned || r.recovered || r.refreshed) {
+    console.log(`[calendar] sweep: ${r.abandoned} abandoned connects, ${r.recovered} venues recovered, ${r.refreshed} Outlook tokens refreshed; retried ${r.attempted}: ${r.synced} written, ${r.failed} failed (${r.waiting} waiting on a reconnect)`);
   }
 }
-setTimeout(() => void sweepGoogle().catch((err) => console.error("[google] sweep failed:", err)), 45_000).unref?.();
-setInterval(() => void sweepGoogle().catch((err) => console.error("[google] sweep failed:", err)), GOOGLE_SWEEP_MS).unref?.();
+setTimeout(() => void sweepCalendars().catch((err) => console.error("[calendar] sweep failed:", err)), 45_000).unref?.();
+setInterval(() => void sweepCalendars().catch((err) => console.error("[calendar] sweep failed:", err)), CALENDAR_SWEEP_MS).unref?.();
 
 // WhatsApp numbers waiting on Meta's display-name review, asked about every
 // ten minutes. Only with self-serve WhatsApp on; the fake Graph under stubs.

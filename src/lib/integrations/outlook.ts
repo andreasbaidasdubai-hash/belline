@@ -328,12 +328,11 @@ export async function completeOutlookConnection(
  * older than it needs to be. A new refresh token is stored only over the one
  * it replaced — if somebody reconnected in the meantime, theirs stands.
  */
-async function refreshAccess(locationId: string, fallback: OutlookLink | undefined, api: MicrosoftApi): Promise<AccessHit> {
+async function refreshAccess(locationId: string, fallback: OutlookLink | undefined, api: MicrosoftApi, now = new Date()): Promise<AccessHit> {
   const link = getLocation(locationId)?.outlook ?? fallback;
   if (!link) throw new MicrosoftAuthError("not connected");
   const old = openToken(link);
   const tokens = await api.refresh(old);
-  const now = new Date();
   let sealed = link.sealedToken ?? "";
   const fresh = getLocation(locationId);
   const rotated = Boolean(tokens.refreshToken && tokens.refreshToken !== old);
@@ -446,6 +445,38 @@ export async function recheckOutlookMisconfigured(): Promise<number> {
     cleared++;
   }
   return cleared;
+}
+
+/** A refresh token idle this long is refreshed by the sweep. Microsoft expires one after 90 days unused. */
+export const OUTLOOK_KEEPALIVE_MS = 7 * 24 * 60 * 60_000;
+
+/**
+ * Refresh every working Outlook connection that has not been used for a week.
+ *
+ * A venue with no bookings for three months would otherwise find Microsoft had
+ * let its refresh token idle out, and learn it from a caller being told the
+ * calendar cannot be checked. Refreshing also rotates the token (stored as it
+ * arrives), so a quiet venue always holds a recent one. Returns how many were
+ * refreshed.
+ */
+export async function keepOutlookTokensFresh(now = new Date()): Promise<number> {
+  if (!flag("booking.outlook")) return 0;
+  let refreshed = 0;
+  for (const location of listLocations({ includeInternal: true })) {
+    const link = location.outlook;
+    if (!link?.sealedToken || link.expiredAt || link.misconfiguredAt) continue;
+    const last = Date.parse(link.refreshedAt ?? link.connectedAt);
+    if (now.getTime() - last < OUTLOOK_KEEPALIVE_MS) continue;
+    try {
+      await refreshAccess(location.id, link, microsoftApi(), now);
+      refreshed++;
+    } catch (err) {
+      if (err instanceof MicrosoftAuthError) markOutlookExpired(location.id, err.message);
+      else if (err instanceof MicrosoftConfigError) markOutlookMisconfigured(location.id, err);
+      else console.warn(`[outlook] ${location.name}: keep-alive refresh failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return refreshed;
 }
 
 /** What the dashboard shows about the connection. Our sentences only. */

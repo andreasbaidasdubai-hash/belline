@@ -4,8 +4,13 @@ import { destinationOf } from "../booking/destination";
 import { openException } from "../exceptions";
 import { todayIn } from "../time";
 import type { CalendarConnector } from "./calendar-connector";
-import { googleConnector } from "./google";
-import { outlookConnector } from "./outlook";
+import { googleConnector, recheckMisconfigured, sweepAbandonedConnects } from "./google";
+import {
+  keepOutlookTokensFresh,
+  outlookConnector,
+  recheckOutlookMisconfigured,
+  sweepAbandonedOutlookConnects,
+} from "./outlook";
 
 /**
  * Every booking at a venue with a connected calendar, in the calendar.
@@ -292,6 +297,21 @@ export async function retryCalendarSyncs(now = new Date()): Promise<{ attempted:
     else out.failed++;
   }
   return out;
+}
+
+/**
+ * Everything the server does for connected calendars every few minutes, for
+ * Google and Outlook alike: connections that never came back, venues the
+ * service was refusing that it may accept again, Outlook tokens kept from
+ * idling out, and then bookings still waiting to be written — last, so a venue
+ * cleared by a recheck has its waiting bookings written in the same sweep.
+ */
+export async function sweepCalendars(now = new Date()) {
+  const abandoned = sweepAbandonedConnects(now) + sweepAbandonedOutlookConnects(now);
+  const recovered = (await recheckMisconfigured()) + (await recheckOutlookMisconfigured());
+  const refreshed = await keepOutlookTokensFresh(now);
+  const bookings = await retryCalendarSyncs(now);
+  return { abandoned, recovered, refreshed, ...bookings };
 }
 
 /** As `syncBooking`, with the sweep's clock. */
