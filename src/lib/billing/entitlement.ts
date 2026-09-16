@@ -1,5 +1,6 @@
 import type { Location } from "../types";
 import { getTenant } from "../store";
+import { answersIn, lineFor } from "../language";
 import { accountFor, isPooledTrial, meterFor, periodFor, productsOf } from "./usage";
 import { channelsOf, grandfatherExpires, poolOf, poolPlaces, type Channel, type Pool } from "./plans";
 import { stripeEnabled } from "./stripe";
@@ -127,6 +128,17 @@ export function unitRefusal(location: Location, today: string, channel: Channel)
 }
 
 function messageFor(location: Location, channel: Channel | undefined): string {
+  // A German venue's callers and customers are refused in German; the lines
+  // are customer-copy.ts's, and the English below is the same table's English.
+  if (answersIn(location) !== "en") {
+    if (channel === "web_voice") return lineFor(location, "web_voice.not_answering");
+    if (channel === "chat" || channel === "whatsapp") {
+      return location.businessPhone
+        ? lineFor(location, "messages.not_answering_ring", { phone: location.businessPhone })
+        : lineFor(location, "messages.not_answering");
+    }
+    return lineFor(location, "phone.not_answering", { name: location.name });
+  }
   switch (channel) {
     case "web_voice":
       return "Nobody can take a call through the website just now. Please try again a little later.";

@@ -3,6 +3,7 @@ import type { EmbedConfig, EmbedMode, Location } from "./types";
 import { listCalls } from "./store";
 import { dateIn, todayIn } from "./time";
 import { serviceState } from "./billing/entitlement";
+import { lineFor } from "./language";
 import type { ChannelAccount } from "./reception/types";
 import { listAccounts, saveAccount } from "./reception/repo";
 
@@ -184,8 +185,7 @@ export function chatGate(location: Location, opts: { via?: "widget" | "link" } =
     allowed: false,
     used,
     limit,
-    message:
-      "We've had a lot of messages through the website today. Please ring us instead — we'd rather not keep you waiting.",
+    message: lineFor(location, "webchat.busy"),
   };
 }
 
@@ -249,6 +249,7 @@ export function messageCeiling(location: Location): number {
  * a name and a number than by "rate limit exceeded".
  */
 export function ceilingMessage(location: Location): string {
-  const number = location.businessPhone ? ` on ${location.businessPhone}` : "";
-  return `I've taken this as far as I can here. Please give us a ring${number} and someone will pick it up from where we left off.`;
+  return location.businessPhone
+    ? lineFor(location, "webchat.ceiling_ring", { phone: location.businessPhone })
+    : lineFor(location, "webchat.ceiling");
 }

@@ -4,6 +4,7 @@ import { getLocation } from "@/lib/store";
 import { checkDemoGate } from "@/lib/demo";
 import { mayStreamTo } from "@/lib/voice/entitlement";
 import { seedIfEmpty } from "@/lib/seed";
+import { lineFor } from "@/lib/language";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
   const location = getLocation(locationId);
   if (!location || !mayStreamTo(location)) {
     return NextResponse.json(
-      { ok: false, reason: "forbidden", say: "This line is not taking calls." },
+      { ok: false, reason: "forbidden", say: location ? lineFor(location, "call.not_taking") : "This line is not taking calls." },
       { headers: { "cache-control": "no-store" } },
     );
   }

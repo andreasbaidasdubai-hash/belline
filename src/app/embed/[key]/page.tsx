@@ -7,6 +7,8 @@ import { listLocations } from "@/lib/store";
 import { checkEmbedGate, originAllowed } from "@/lib/embed";
 import { chatAllowed } from "@/lib/webchat";
 import { widgetOpenFor } from "@/lib/embed-preview";
+import { answersIn, lineFor } from "@/lib/language";
+import { CALL_KEYS, copyTable } from "@/lib/customer-copy";
 import Console from "../../(app)/test/Console";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +57,7 @@ export default async function EmbedPage({
 
   // Before Go live, only the owner, signed in, can open it.
   if (!(await widgetOpenFor(location))) {
-    return <Refused reason={`${location.name} has not switched this on yet.`} />;
+    return <Refused reason={lineFor(location, "embed.not_switched_on", { name: location.name })} />;
   }
 
   // Who is framing us. `sec-fetch-site` tells us whether we are framed at all;
@@ -68,12 +70,12 @@ export default async function EmbedPage({
   // rather than allowed: the widget is for the venue's site, and a public URL
   // anybody can open is a public URL anybody can spend.
   if (!originAllowed(location.embed, framedBy)) {
-    return <Refused reason="This page can only be opened from the website it belongs to." />;
+    return <Refused reason={lineFor(location, "embed.wrong_site")} />;
   }
 
   const gate = checkEmbedGate(location);
   if (!gate.allowed) {
-    return <Refused reason={gate.message ?? "Not available just now."} />;
+    return <Refused reason={gate.message ?? lineFor(location, "embed.unavailable")} />;
   }
 
   const token = signStreamToken(location.id, 60 * 60);
@@ -87,6 +89,8 @@ export default async function EmbedPage({
       minimal
       auto
       logoUrl={location.logoUrl}
+      // The visitor's words, for a German venue. English keeps Console's own.
+      {...(answersIn(location) === "de" ? { language: "de" as const, copy: copyTable("de", CALL_KEYS) } : {})}
       // The 2-in-1, offered only where the venue switched both on. The framing
       // origin has to ride along: the middleware builds frame-ancestors from
       // it on every response, and without it the browser refuses the page.

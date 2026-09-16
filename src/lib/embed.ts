@@ -3,6 +3,7 @@ import type { EmbedAppearance, EmbedConfig, EmbedMode, Location } from "./types"
 import { listCalls, upsertLocation } from "./store";
 import { dateIn, todayIn } from "./time";
 import { serviceState } from "./billing/entitlement";
+import { lineFor } from "./language";
 
 /**
  * What a venue's widget offers a visitor: the bell, the chat, or both.
@@ -198,7 +199,7 @@ export function checkEmbedGate(location: Location): EmbedGate {
       allowed: false,
       used: 0,
       limit: 0,
-      message: "Calling isn't switched on for this website. Send a message instead and we'll reply.",
+      message: lineFor(location, "embed.voice_off"),
     };
   }
 
@@ -219,8 +220,7 @@ export function checkEmbedGate(location: Location): EmbedGate {
     allowed: false,
     used,
     limit: config.maxCallsPerDay,
-    message:
-      "We've had a lot of calls through the website today. Please ring us instead — we'd rather not keep you waiting.",
+    message: lineFor(location, "embed.voice_busy"),
   };
 }
 
@@ -306,8 +306,8 @@ import { resolveAppearance } from "./embed-look";
  * so it is built from a whitelist. The origins list, the ceilings and the
  * key's owner are not in it and must not be.
  */
-export function widgetConfig(config: EmbedConfig, whatsappLink: string | null) {
-  const look = resolveAppearance(config.appearance);
+export function widgetConfig(config: EmbedConfig, whatsappLink: string | null, language: "en" | "de" = "en") {
+  const look = resolveAppearance(config.appearance, language);
   return {
     mode: modeOf(config) ?? "voice",
     ...look,

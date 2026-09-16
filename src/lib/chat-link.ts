@@ -4,6 +4,8 @@ import { listLocations, upsertLocation } from "./store";
 import { chatAllowed } from "./embed";
 import { appOrigin } from "./origin";
 import { chatGate } from "./webchat";
+import { lineFor } from "./language";
+import { copy } from "./customer-copy";
 
 /**
  * The Belline chat link: a channel that needs no website.
@@ -63,7 +65,7 @@ export function ensureChatLink(location: Location, by?: string, now: Date = new 
 }
 
 /** Said to anybody who opens a link that is not answering yet. Nothing about the venue. */
-export const LINK_NOT_LIVE = "This chat isn't available yet. Please check back soon.";
+export const LINK_NOT_LIVE = copy("en", "chatlink.not_live");
 
 export type LinkPage =
   | { kind: "chat" }
@@ -75,8 +77,8 @@ export type LinkPage =
  * Before that, the refusal names nothing.
  */
 export function linkPageState(location: Location, open: boolean): LinkPage {
-  if (!location.chatLink || !open) return { kind: "refused", message: LINK_NOT_LIVE };
+  if (!location.chatLink || !open) return { kind: "refused", message: lineFor(location, "chatlink.not_live") };
   const gate = chatGate(location, { via: "link" });
-  if (!gate.allowed) return { kind: "refused", message: gate.message ?? "Not available just now. Please try again later." };
+  if (!gate.allowed) return { kind: "refused", message: gate.message ?? lineFor(location, "chatlink.unavailable") };
   return { kind: "chat" };
 }

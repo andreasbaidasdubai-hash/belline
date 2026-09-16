@@ -2,7 +2,9 @@ import type { Booking, Location } from "./types";
 import { getBooking, getTenant, listBookings, listLocations, saveBooking } from "./store";
 import { sendSms, smsEnabled } from "./providers/sms";
 import { serviceState } from "./billing/entitlement";
-import { dateToSpoken, minutesToSpoken, todayIn } from "./time";
+import { dateToGerman, dateToSpoken, minutesToGerman, minutesToSpoken, todayIn } from "./time";
+import { answersIn, inHouseSpelling } from "./language";
+import { copy } from "./customer-copy";
 
 /**
  * The text the day before.
@@ -95,22 +97,33 @@ export function dueReminders(location: Location, bookings: Booking[], now: numbe
 }
 
 export function reminderMessage(location: Location, booking: Booking): string {
-  const when = `${dateToSpoken(booking.date, location.timezone)} at ${minutesToSpoken(booking.startMin)}`;
+  const language = answersIn(location);
+  const when =
+    language === "de"
+      ? copy("de", "booking.when", { date: dateToGerman(booking.date, location.timezone), time: minutesToGerman(booking.startMin) })
+      : copy("en", "booking.when", { date: dateToSpoken(booking.date, location.timezone), time: minutesToSpoken(booking.startMin) });
   const what =
     booking.vertical === "restaurant"
-      ? `table for ${booking.partySize ?? ""}`.trim()
+      ? copy(language, "booking.table", { n: booking.partySize ?? "" }).trim()
       : (booking.serviceIds ?? [])
           .map((id) => location.salon?.services.find((s) => s.id === id)?.name)
           .filter(Boolean)
-          .join(" + ") || "appointment";
+          .join(" + ") || copy(language, "booking.appointment");
 
   const deposit =
     booking.deposit?.status === "required" && booking.deposit.link
-      ? ` The ${booking.deposit.currency} ${booking.deposit.amount} deposit is still open: ${booking.deposit.link}`
+      ? copy(language, "booking.reminder_deposit", {
+          currency: booking.deposit.currency,
+          amount: booking.deposit.amount,
+          link: booking.deposit.link,
+        })
       : "";
-  const change = location.businessPhone ? ` To change or cancel, call ${location.businessPhone}.` : "";
+  const change = location.businessPhone ? copy(language, "booking.reminder_change", { phone: location.businessPhone }) : "";
 
-  return `${location.name}: a reminder of your ${what} ${when}. Reference ${booking.ref}.${change}${deposit}`;
+  return inHouseSpelling(
+    location,
+    copy(language, "booking.reminder_text", { name: location.name, what, when, ref: booking.ref, change, deposit }),
+  );
 }
 
 function textsFor(location: Location): boolean {

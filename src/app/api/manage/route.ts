@@ -6,6 +6,8 @@ import { alternativeTimes, manageable, sendBookingEmail } from "@/lib/booking/ma
 import { lateCancelNotice } from "@/lib/booking/policy";
 import { serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
+import { answersIn, inHouseSpelling, lineFor } from "@/lib/language";
+import { copy, type CopyKey } from "@/lib/customer-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +38,13 @@ export async function POST(request: Request) {
   const bookingId = verifyBookingToken(body.token);
   const booking = bookingId ? getBooking(bookingId) : undefined;
   const location = booking ? getLocation(booking.locationId) : undefined;
-  if (!booking || !location) return NextResponse.json({ error: "This link is not valid." }, { status: 404 });
-  if (limited(booking.id)) return NextResponse.json({ error: "Too many attempts. Try again shortly." }, { status: 429 });
+  if (!booking || !location) return NextResponse.json({ error: copy("en", "manage.link_invalid") }, { status: 404 });
+  // The guest's language from here on: every error below is shown on their page.
+  const language = answersIn(location);
+  const t = (key: CopyKey, vars?: Record<string, string | number>) => lineFor(location, key, vars);
+  if (limited(booking.id)) return NextResponse.json({ error: t("manage.too_many") }, { status: 429 });
 
-  const state = manageable(location, booking);
+  const state = manageable(location, booking, Date.now(), language);
   if (!state.ok) return NextResponse.json({ error: state.why }, { status: 409 });
 
   if (body.action === "times") {
@@ -52,24 +57,27 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       lateCancel: Boolean(cancelled.lateCancel),
-      notice: cancelled.lateCancel ? lateCancelNotice(location) : null,
+      notice: cancelled.lateCancel ? inHouseSpelling(location, lateCancelNotice(location, language) ?? "") || null : null,
     });
   }
 
   if (body.action === "reschedule") {
     if (!serviceState(location, todayIn(location.timezone)).answering) {
-      return NextResponse.json({ error: `Please call ${location.name} to change this booking.` }, { status: 409 });
+      return NextResponse.json({ error: t("manage.call_to_change", { name: location.name }) }, { status: 409 });
     }
     if (typeof body.date !== "string" || typeof body.startMin !== "number") {
-      return NextResponse.json({ error: "Choose a new time." }, { status: 422 });
+      return NextResponse.json({ error: t("manage.choose_time") }, { status: 422 });
     }
     const result = modifyBooking(location, booking, { date: body.date, startMin: body.startMin });
     if (!result.ok) {
-      return NextResponse.json({ error: result.detail ?? "That time is no longer free." }, { status: 409 });
+      // The engine's reasons are written in English for the agent to rephrase.
+      // A German guest is told the one thing that matters in their own language.
+      const detail = language === "en" ? result.detail : undefined;
+      return NextResponse.json({ error: detail ?? t("manage.no_longer_free") }, { status: 409 });
     }
     await sendBookingEmail(location, result.booking, "changed");
     return NextResponse.json({ ok: true });
   }
 
-  return NextResponse.json({ error: "Unknown action." }, { status: 400 });
+  return NextResponse.json({ error: t("manage.unknown_action") }, { status: 400 });
 }

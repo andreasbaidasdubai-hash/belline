@@ -1,9 +1,11 @@
-import type { Booking, Location, Slot } from "../types";
+import type { Booking, Location, Slot, VenueLanguage } from "../types";
 import { signBookingToken } from "../auth";
 import { findAvailability } from "./index";
 import { lateCancelNotice } from "./policy";
 import { instantOf } from "../reminders";
-import { addDays, dateToSpoken, minutesToClock, minutesToSpoken, todayIn } from "../time";
+import { addDays, dateToGerman, dateToSpoken, minutesToClock, minutesToGerman, minutesToSpoken, todayIn } from "../time";
+import { answersIn, inHouseSpelling } from "../language";
+import { copy, type CopyKey } from "../customer-copy";
 import { emailEnabled, sendEmail } from "../providers/email";
 
 /**
@@ -29,12 +31,23 @@ export function calendarUrl(booking: Booking): string {
 }
 
 /** What was booked, in the words a guest would use. */
-export function whatWasBooked(location: Location, booking: Booking): string {
-  if (booking.vertical === "restaurant") return `Table for ${booking.partySize ?? ""}`.trim();
+export function whatWasBooked(location: Location, booking: Booking, language: VenueLanguage = "en"): string {
+  if (booking.vertical === "restaurant") return copy(language, "booking.table_title", { n: booking.partySize ?? "" }).trim();
   const names = (booking.serviceIds ?? [])
     .map((id) => location.salon?.services.find((s) => s.id === id)?.name)
     .filter(Boolean);
-  return names.join(" + ") || "Appointment";
+  return names.join(" + ") || copy(language, "booking.appointment_title");
+}
+
+/**
+ * "Friday 12 September at 7:30 PM", or "Freitag, 12. September um 19:30 Uhr"
+ * — the day and time of a booking as a confirmation, a reminder or the manage
+ * page writes it, in the venue's language.
+ */
+export function bookingWhen(location: Location, booking: Pick<Booking, "date" | "startMin">, language: VenueLanguage = "en"): string {
+  return language === "de"
+    ? copy("de", "booking.when", { date: dateToGerman(booking.date, location.timezone), time: minutesToGerman(booking.startMin) })
+    : copy("en", "booking.when", { date: dateToSpoken(booking.date, location.timezone), time: minutesToSpoken(booking.startMin) });
 }
 
 export function withWhom(location: Location, booking: Booking): string | null {
@@ -42,11 +55,16 @@ export function withWhom(location: Location, booking: Booking): string | null {
 }
 
 /** Can the guest still act on it from the link? */
-export function manageable(location: Location, booking: Booking, now = Date.now()): { ok: boolean; why?: string } {
-  if (booking.status === "cancelled") return { ok: false, why: "This booking has been cancelled." };
-  if (booking.status !== "confirmed") return { ok: false, why: "This booking has already taken place." };
+export function manageable(
+  location: Location,
+  booking: Booking,
+  now = Date.now(),
+  language: VenueLanguage = "en",
+): { ok: boolean; why?: string } {
+  if (booking.status === "cancelled") return { ok: false, why: copy(language, "booking.cancelled_already") };
+  if (booking.status !== "confirmed") return { ok: false, why: copy(language, "booking.taken_place") };
   if (instantOf(booking.date, booking.startMin, location.timezone) <= now) {
-    return { ok: false, why: "This booking has already started." };
+    return { ok: false, why: copy(language, "booking.started") };
   }
   return { ok: true };
 }
@@ -98,6 +116,8 @@ export function bookingIcs(location: Location, booking: Booking): string {
   const start = instantOf(booking.date, booking.startMin, location.timezone);
   const end = instantOf(booking.date, booking.endMin, location.timezone);
   const who = withWhom(location, booking);
+  const language = answersIn(location);
+  const spell = (text: string) => inHouseSpelling(location, text);
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -108,9 +128,17 @@ export function bookingIcs(location: Location, booking: Booking): string {
     `DTSTAMP:${icsDate(Date.now())}`,
     `DTSTART:${icsDate(start)}`,
     `DTEND:${icsDate(end)}`,
-    `SUMMARY:${icsText(`${whatWasBooked(location, booking)} — ${location.name}`)}`,
+    `SUMMARY:${icsText(`${whatWasBooked(location, booking, language)} — ${location.name}`)}`,
     `LOCATION:${icsText(location.address || location.name)}`,
-    `DESCRIPTION:${icsText(`Reference ${booking.ref}${who ? ` with ${who}` : ""}. Change or cancel: ${manageUrl(booking)}`)}`,
+    `DESCRIPTION:${icsText(
+      spell(
+        copy(language, "booking.ics_description", {
+          ref: booking.ref,
+          with: who ? copy(language, "booking.ics_with", { who }) : "",
+          link: manageUrl(booking),
+        }),
+      ),
+    )}`,
     `STATUS:${booking.status === "cancelled" ? "CANCELLED" : "CONFIRMED"}`,
     "END:VEVENT",
     "END:VCALENDAR",
@@ -129,25 +157,33 @@ function esc(value: string): string {
 }
 
 export function bookingEmail(location: Location, booking: Booking, kind: BookingEmailKind) {
-  const what = whatWasBooked(location, booking);
+  const language = answersIn(location);
+  const t = (key: CopyKey, vars?: Record<string, string | number>) => copy(language, key, vars);
+  const what = whatWasBooked(location, booking, language);
   const who = withWhom(location, booking);
-  const when = `${dateToSpoken(booking.date, location.timezone)} at ${minutesToSpoken(booking.startMin)}`;
-  const heading =
-    kind === "confirmed" ? "Your booking is confirmed" : kind === "changed" ? "Your booking has changed" : "Your booking is cancelled";
-  const subject = `${kind === "cancelled" ? "Cancelled" : kind === "changed" ? "Changed" : "Confirmed"}: ${what}, ${when} — ${location.name}`;
+  const when = bookingWhen(location, booking, language);
+  const heading = t(kind === "confirmed" ? "booking.email_confirmed" : kind === "changed" ? "booking.email_changed" : "booking.email_cancelled");
+  const subject = t(
+    kind === "cancelled" ? "booking.subject_cancelled" : kind === "changed" ? "booking.subject_changed" : "booking.subject_confirmed",
+    { what, when, name: location.name },
+  );
 
-  const policy = kind !== "cancelled" ? lateCancelNotice(location) : null;
+  const policy = kind !== "cancelled" ? lateCancelNotice(location, language) : null;
   const deposit =
     kind !== "cancelled" && booking.deposit?.status === "required"
-      ? `A ${booking.deposit.currency} ${booking.deposit.amount} deposit is due on this booking.${booking.deposit.link ? ` Pay it here: ${booking.deposit.link}` : ""}`
+      ? t("booking.deposit_due_email", {
+          currency: booking.deposit.currency,
+          amount: booking.deposit.amount,
+          pay: booking.deposit.link ? t("booking.deposit_pay_here", { link: booking.deposit.link }) : "",
+        })
       : null;
 
   const rows: [string, string][] = [
-    ["What", what],
-    ...(who ? ([["With", who]] as [string, string][]) : []),
-    ["When", `${when} (${minutesToClock(booking.startMin)})`],
-    ["Where", location.address || location.name],
-    ["Reference", booking.ref],
+    [t("booking.label_what"), what],
+    ...(who ? ([[t("booking.label_with"), who]] as [string, string][]) : []),
+    [t("booking.label_when"), `${when} (${minutesToClock(booking.startMin)})`],
+    [t("booking.label_where"), location.address || location.name],
+    [t("booking.label_reference"), booking.ref],
   ];
 
   const text = [
@@ -155,11 +191,13 @@ export function bookingEmail(location: Location, booking: Booking, kind: Booking
     "",
     ...rows.map(([k, v]) => `${k}: ${v}`),
     "",
-    ...(kind !== "cancelled" ? [`Change or cancel: ${manageUrl(booking)}`, `Add to your calendar: ${calendarUrl(booking)}`] : []),
+    ...(kind !== "cancelled"
+      ? [t("booking.change_or_cancel_link", { link: manageUrl(booking) }), t("booking.add_to_calendar_link", { link: calendarUrl(booking) })]
+      : []),
     ...(deposit ? ["", deposit] : []),
     ...(policy ? ["", policy] : []),
     "",
-    location.businessPhone ? `Questions? Call ${location.name} on ${location.businessPhone}.` : `— ${location.name}`,
+    location.businessPhone ? t("booking.questions", { name: location.name, phone: location.businessPhone }) : `— ${location.name}`,
   ].join("\n");
 
   const button = (href: string, label: string, primary: boolean) =>
@@ -184,19 +222,21 @@ ${rows
 </td></tr>
 ${
   kind !== "cancelled"
-    ? `<tr><td style="padding:18px 28px 6px">${button(manageUrl(booking), "Change or cancel", true)}&nbsp; ${button(calendarUrl(booking), "Add to calendar", false)}</td></tr>`
+    ? `<tr><td style="padding:18px 28px 6px">${button(manageUrl(booking), t("booking.change_or_cancel"), true)}&nbsp; ${button(calendarUrl(booking), t("booking.add_to_calendar"), false)}</td></tr>`
     : ""
 }
 ${deposit ? `<tr><td style="padding:14px 28px 0;font-size:14px;color:#4A443C">${esc(deposit)}</td></tr>` : ""}
 ${policy ? `<tr><td style="padding:14px 28px 0;font-size:13px;color:#746C63">${esc(policy)}</td></tr>` : ""}
 <tr><td style="padding:22px 28px 28px;font-size:13px;color:#746C63">${
-    location.businessPhone ? `Questions? Call ${esc(location.name)} on ${esc(location.businessPhone)}.` : esc(location.name)
+    location.businessPhone ? t("booking.questions", { name: esc(location.name), phone: esc(location.businessPhone) }) : esc(location.name)
   }</td></tr>
 </table>
-<p style="font-size:11px;color:#9A9288;margin:16px 0 0">Sent for ${esc(location.name)} by Belline.</p>
+<p style="font-size:11px;color:#9A9288;margin:16px 0 0">${t("booking.sent_by", { name: esc(location.name) })}</p>
 </td></tr></table></body></html>`;
 
-  return { subject, text, html };
+  // Swiss spelling for a Swiss venue; unchanged for everyone else.
+  const spell = (value: string) => inHouseSpelling(location, value);
+  return { subject: spell(subject), text: spell(text), html: spell(html) };
 }
 
 /** Send the email for this booking, if there is an address and email is on. Never throws. */

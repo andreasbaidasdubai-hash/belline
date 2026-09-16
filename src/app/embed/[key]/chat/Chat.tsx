@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fill, type CHAT_KEYS } from "@/lib/customer-copy";
+
+type ChatKey = (typeof CHAT_KEYS)[number];
 
 /**
  * The chat panel a website visitor sees.
@@ -73,13 +76,24 @@ export default function Chat({
   venueName,
   agentName,
   voiceHref,
+  language = "en",
+  copy,
 }: {
   embedKey: string;
   freshToken: string;
   venueName: string;
   agentName: string;
   voiceHref?: string;
+  /** The venue's language. Set with `copy` for a venue not answered in English. */
+  language?: "en" | "de";
+  /**
+   * This panel's lines in the visitor's language, from customer-copy.ts. Absent
+   * for English, which keeps the lines written below.
+   */
+  copy?: Record<ChatKey, string>;
 }) {
+  /** A line in the visitor's language: the table's where one was handed over, else the English as written. */
+  const tx = (key: ChatKey, english: string, vars?: Record<string, string>) => (copy ? fill(copy[key], vars) : english);
   const [lines, setLines] = useState<Line[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -210,7 +224,7 @@ export default function Chat({
       if (res.status === 401) {
         // The token expired while the panel sat open. Reloading mints a new one,
         // which is what the visitor would try anyway.
-        setTrouble("This conversation timed out. Reload the page to start again.");
+        setTrouble(tx("chat.timed_out", "This conversation timed out. Reload the page to start again."));
         return;
       }
       if (res.status === 429) {
@@ -221,12 +235,12 @@ export default function Chat({
         return;
       }
       if (!res.ok) {
-        setTrouble("That didn't send. Try again in a moment.");
+        setTrouble(tx("chat.send_failed", "That didn't send. Try again in a moment."));
         return;
       }
       absorb(await res.json());
     } catch {
-      setTrouble("That didn't send. Try again in a moment.");
+      setTrouble(tx("chat.send_failed", "That didn't send. Try again in a moment."));
     } finally {
       setBusy(false);
     }
@@ -247,7 +261,7 @@ export default function Chat({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
     } catch {
-      setTrouble("The microphone isn't available here — you can type instead.");
+      setTrouble(tx("chat.mic_unavailable", "The microphone isn't available here — you can type instead."));
       return;
     }
     // The visitor may have let go while the browser was asking permission.
@@ -282,7 +296,7 @@ export default function Chat({
       const ms = Date.now() - entry.startedAt;
       if (entry.discard) return;
       if (ms < NOTE_MIN_MS) {
-        setHint("Hold the microphone to record a voice note.");
+        setHint(tx("chat.hold_to_record", "Hold the microphone to record a voice note."));
         return;
       }
       void sendNote(new Blob(entry.chunks, { type: mime }), Math.max(1, Math.round(ms / 1000)));
@@ -327,7 +341,7 @@ export default function Chat({
       });
 
       if (res.status === 401) {
-        setTrouble("This conversation timed out. Reload the page to start again.");
+        setTrouble(tx("chat.timed_out", "This conversation timed out. Reload the page to start again."));
         return;
       }
       if (res.status === 429) return;
@@ -335,8 +349,8 @@ export default function Chat({
         setLines((prev) => prev.filter((l) => l.id !== mine.id));
         setTrouble(
           res.status === 413
-            ? "That note was too long to send. Keep it under a minute, or type it."
-            : "That didn't send. Try again in a moment.",
+            ? tx("chat.note_too_long", "That note was too long to send. Keep it under a minute, or type it.")
+            : tx("chat.send_failed", "That didn't send. Try again in a moment."),
         );
         return;
       }
@@ -355,8 +369,8 @@ export default function Chat({
         setLines((prev) => prev.filter((l) => l.id !== mine.id));
         setTrouble(
           payload.reason === "empty"
-            ? "I couldn't make that out — try again a little closer to the microphone, or type it."
-            : "I couldn't hear that just now. Could you type it instead?",
+            ? tx("chat.note_unclear", "I couldn't make that out — try again a little closer to the microphone, or type it.")
+            : tx("chat.note_failed", "I couldn't hear that just now. Could you type it instead?"),
         );
         return;
       }
@@ -368,7 +382,7 @@ export default function Chat({
       absorb(payload);
     } catch {
       setLines((prev) => prev.filter((l) => l.id !== mine.id));
-      setTrouble("That didn't send. Try again in a moment.");
+      setTrouble(tx("chat.send_failed", "That didn't send. Try again in a moment."));
     } finally {
       setBusy(false);
     }
@@ -378,7 +392,7 @@ export default function Chat({
   const withPerson = status === "HUMAN_ACTIVE";
 
   return (
-    <div className="bl-wrap">
+    <div className="bl-wrap" lang={language === "en" ? undefined : language}>
       <style>{CSS}</style>
 
       <header>
@@ -397,24 +411,28 @@ export default function Chat({
           <strong>{venueName}</strong>
           <em>
             {withPerson
-              ? "You're talking to the team"
+              ? tx("chat.with_team", "You're talking to the team")
               : waiting
-                ? "Passing you to the team"
-                : `${agentName} · replies in seconds`}
+                ? tx("chat.passing", "Passing you to the team")
+                : tx("chat.replies", `${agentName} · replies in seconds`, { agent: agentName })}
           </em>
         </span>
         {voiceHref && (
           <a className="bl-swap" href={voiceHref}>
-            Rather talk?
+            {tx("chat.rather_talk", "Rather talk?")}
           </a>
         )}
       </header>
 
       <div className="bl-log" role="log" aria-live="polite">
-        <p className="bl-opener">
-          Hi — I&rsquo;m {agentName} at {venueName}. Ask me anything, or tell me what you&rsquo;d
-          like to book.
-        </p>
+        {copy ? (
+          <p className="bl-opener">{fill(copy["chat.opener"], { agent: agentName, venue: venueName })}</p>
+        ) : (
+          <p className="bl-opener">
+            Hi — I&rsquo;m {agentName} at {venueName}. Ask me anything, or tell me what you&rsquo;d
+            like to book.
+          </p>
+        )}
 
         {lines.map((l) =>
           l.who === "note" ? (
@@ -427,7 +445,9 @@ export default function Chat({
                 {l.voice && (
                   <span className="bl-voice">
                     <Mic />
-                    {l.voice.pending ? "Voice note · listening…" : `Voice note · ${clock(l.voice.seconds)}`}
+                    {l.voice.pending
+                      ? tx("chat.note_listening", "Voice note · listening…")
+                      : tx("chat.note_time", `Voice note · ${clock(l.voice.seconds)}`, { time: clock(l.voice.seconds) })}
                   </span>
                 )}
                 {l.text}
@@ -437,7 +457,7 @@ export default function Chat({
         )}
 
         {busy && (
-          <div className="bl-line bl-them bl-thinking" aria-label="typing">
+          <div className="bl-line bl-them bl-thinking" aria-label={tx("chat.typing", "typing")}>
             <p>
               <i />
               <i />
@@ -448,7 +468,7 @@ export default function Chat({
 
         {(waiting || withPerson) && (
           <p className="bl-note">
-            Someone from the team is picking this up. Anything you add here will reach them.
+            {tx("chat.team_joining", "Someone from the team is picking this up. Anything you add here will reach them.")}
           </p>
         )}
 
@@ -470,7 +490,7 @@ export default function Chat({
           <div className="bl-rec" aria-live="polite">
             <i className="bl-rec-dot" aria-hidden="true" />
             <span className="bl-rec-time">{clock(recording)}</span>
-            <span className="bl-rec-say">Release to send · slide off to cancel</span>
+            <span className="bl-rec-say">{tx("chat.release_to_send", "Release to send · slide off to cancel")}</span>
           </div>
         ) : (
           <textarea
@@ -485,8 +505,8 @@ export default function Chat({
                 void send();
               }
             }}
-            placeholder="Type your message"
-            aria-label="Your message"
+            placeholder={tx("chat.placeholder", "Type your message")}
+            aria-label={tx("chat.message_label", "Your message")}
             maxLength={1000}
           />
         )}
@@ -499,7 +519,11 @@ export default function Chat({
             type="button"
             className={`bl-mic${recording !== null ? " is-on" : ""}`}
             disabled={busy}
-            aria-label={recording !== null ? "Recording — release to send" : "Hold to record a voice note"}
+            aria-label={
+              recording !== null
+                ? tx("chat.recording_label", "Recording — release to send")
+                : tx("chat.hold_label", "Hold to record a voice note")
+            }
             aria-pressed={recording !== null}
             onPointerDown={(e) => {
               if (e.button !== 0 && e.pointerType === "mouse") return;
@@ -524,7 +548,7 @@ export default function Chat({
             <Mic />
           </button>
         ) : (
-          <button type="submit" disabled={busy || !draft.trim()} aria-label="Send">
+          <button type="submit" disabled={busy || !draft.trim()} aria-label={tx("chat.send", "Send")}>
             <Send />
           </button>
         )}

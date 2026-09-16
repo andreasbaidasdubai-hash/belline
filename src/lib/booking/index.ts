@@ -7,7 +7,9 @@ import type {
   Slot,
 } from "../types";
 import { bookingRef, id, listBookings, saveBooking } from "../store";
-import { addDays, minutesToSpoken, dateToSpoken } from "../time";
+import { addDays, minutesToSpoken, dateToSpoken, dateToGerman, minutesToGerman } from "../time";
+import { answersIn, inHouseSpelling } from "../language";
+import { copy } from "../customer-copy";
 import { normalisePhone } from "../guests";
 import { signBookingToken } from "../auth";
 import { checkRestaurantSlot, searchRestaurant } from "./restaurant";
@@ -533,10 +535,14 @@ export function describeBookingShort(location: Location, booking: Booking): stri
 
 /** The confirmation text a guest receives. Short — it is read on a lock screen. */
 export function confirmationMessage(location: Location, booking: Booking): string {
-  const when = `${dateToSpoken(booking.date, location.timezone)} at ${minutesToSpoken(booking.startMin)}`;
+  const language = answersIn(location);
+  const when =
+    language === "de"
+      ? copy("de", "booking.when", { date: dateToGerman(booking.date, location.timezone), time: minutesToGerman(booking.startMin) })
+      : copy("en", "booking.when", { date: dateToSpoken(booking.date, location.timezone), time: minutesToSpoken(booking.startMin) });
   const what =
     booking.vertical === "restaurant"
-      ? `table for ${booking.partySize}`
+      ? copy(language, "booking.table", { n: String(booking.partySize) })
       : resolveServices(location.salon!, booking.serviceIds ?? [])
           .services.map((s) => s.name)
           .join(" + ");
@@ -544,7 +550,10 @@ export function confirmationMessage(location: Location, booking: Booking): strin
   // The same link the email carries, so a guest with no email can still change
   // or cancel without ringing.
   const manage = `${(process.env.PUBLIC_ORIGIN || "https://app.belline.ai").replace(/\/$/, "")}/b/${signBookingToken(booking.id)}`;
-  return `${location.name}: ${what} confirmed for ${when}. Reference ${booking.ref}. Change or cancel: ${manage}`;
+  return inHouseSpelling(
+    location,
+    copy(language, "booking.confirmation_text", { name: location.name, what, when, ref: booking.ref, link: manage }),
+  );
 }
 
 export function describeBooking(location: Location, booking: Booking): string {
