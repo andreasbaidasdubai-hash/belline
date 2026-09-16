@@ -15,6 +15,8 @@ import { SELFSERVE_PORT, selfserveEnv } from "./tests/selfserve/helpers";
  */
 export default defineConfig({
   testDir: "./tests/selfserve",
+  // The full journey switches the pool, payments and email on: its own config.
+  testIgnore: "zero-touch.spec.ts",
   fullyParallel: false,
   workers: 1,
   retries: 0,

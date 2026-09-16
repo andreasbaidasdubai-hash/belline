@@ -225,8 +225,6 @@ export default function Order({
 
         <p className="muted" style={{ fontSize: 11, margin: "18px 0 0", textAlign: "center", lineHeight: 1.65 }}>
           {stripe ? "Secure checkout by Stripe · " : ""}Cancel anytime
-          <br />
-          Several venues? <a href="mailto:hello@belline.ai">Email us</a> and we will price it properly.
         </p>
       </section>
     </>

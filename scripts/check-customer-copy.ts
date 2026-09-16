@@ -84,6 +84,9 @@ const rel = (f: string) => path.relative(ROOT, f).replace(/\\/g, "/");
 const owned = [
   ...walk(path.join(ROOT, "src/app/(app)")),
   ...walk(path.join(ROOT, "src/app/setup")),
+  // Signup and sign-in are the first screens an owner sees (zero-touch e2e step 17).
+  ...walk(path.join(ROOT, "src/app/checkout")),
+  ...walk(path.join(ROOT, "src/app/login")),
   ...walk(path.join(ROOT, "src/app/api/setup")),
   ...walk(path.join(ROOT, "src/app/api/integrations")),
   ...walk(path.join(ROOT, "src/app/api/payments")),

@@ -1,0 +1,42 @@
+# NOT ENABLED. GitHub only runs workflows under .github/workflows/, and this
+# file is deliberately outside it. To switch it on, move it there once someone
+# has decided CI should run a browser journey on every pull request.
+#
+# The self-serve journey from signup to live (tests/selfserve/zero-touch.spec.ts),
+# on stub providers. No secrets are needed or given: the database URL points at
+# disabled.invalid, every provider is a fake, and the browser blocks provider
+# hosts. The job must never be given DATABASE_URL, STRIPE_*, TWILIO_* or model
+# keys from repository secrets.
+name: zero-touch-e2e
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NODE_ENV: development
+      DATABASE_URL: postgres://nobody:nothing@disabled.invalid:5432/none
+      FLAG_STUBS: "on"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --config playwright.zero-touch.config.ts
+        env:
+          ZT_SHOTS_DIR: ${{ runner.temp }}/e2e-shots
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zero-touch-shots
+          path: ${{ runner.temp }}/e2e-shots
+          retention-days: 7
