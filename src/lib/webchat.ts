@@ -160,9 +160,12 @@ export interface ChatGate {
  * Counted off the venue's own episode records, so it agrees with what the
  * dashboard shows them.
  */
-export function chatGate(location: Location): ChatGate {
+export function chatGate(location: Location, opts: { via?: "widget" | "link" } = {}): ChatGate {
   const config = location.embed;
-  if (!chatAllowed(config)) return { allowed: false, used: 0, limit: 0 };
+  // The widget needs its chat switched on; the chat link needs a link. The
+  // entitlement and the daily ceiling below are the same for both, and shared:
+  // a link cannot be a way round the widget's budget.
+  if (opts.via === "link" ? !location.chatLink : !chatAllowed(config)) return { allowed: false, used: 0, limit: 0 };
   // Past the trial, or a plan without the chat.
   const service = serviceState(location, todayIn(location.timezone), { channel: "chat" });
   if (!service.answering) {

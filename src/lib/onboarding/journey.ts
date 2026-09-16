@@ -128,9 +128,11 @@ export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now:
     bookings: Boolean(o.destination),
     rules: Boolean(o.rulesConfirmedAt),
     // At least one way in: the widget seen on the site, forwarding proved by a
-    // test call, a real conversation on either, or WhatsApp connected.
+    // test call, a real conversation on either, WhatsApp connected, or the
+    // chat link made (it needs no website, which is the point of it).
     channels: Boolean(
-      o.channels.web?.detectedAt ||
+      location.chatLink ||
+        o.channels.web?.detectedAt ||
         o.channels.phone?.forwardingVerifiedAt ||
         o.channels.whatsapp?.status === "live" ||
         facts.phoneCalls > 0 ||
@@ -251,8 +253,8 @@ export function stepAfter(j: Journey, from: StepId): Step | null {
   return j.steps.find((s) => !s.done && s.id !== from && s.id !== "first-week") ?? null;
 }
 
-export type ChannelId = "phone" | "web" | "whatsapp";
-export const CHANNEL_IDS: readonly ChannelId[] = ["phone", "web", "whatsapp"];
+export type ChannelId = "phone" | "web" | "link" | "whatsapp";
+export const CHANNEL_IDS: readonly ChannelId[] = ["phone", "web", "link", "whatsapp"];
 
 /**
  *   live        answering real customers now
@@ -279,6 +281,8 @@ export function channelConnected(location: Location, id: ChannelId, facts: Journ
       return Boolean(bellineNumberOf(location) && (o?.channels.phone?.forwardingVerifiedAt || facts.phoneCalls > 0));
     case "web":
       return Boolean(location.embed?.enabled && (o?.channels.web?.detectedAt || facts.webConversations > 0));
+    case "link":
+      return Boolean(location.chatLink);
     case "whatsapp":
       return Boolean(opts.whatsappConnected || o?.channels.whatsapp?.status === "live");
   }
@@ -358,7 +362,17 @@ export function channelStatuses(
     return { ...base, state: "not_set_up", detail: "Not set up." };
   })();
 
-  return [phone, web, whatsapp];
+  const link = ((): ChannelStatus => {
+    const base = { id: "link" as const, label: "Chat link", href: "/channels" };
+    if (channelConnected(location, "link", facts)) {
+      return live
+        ? { ...base, state: "live", detail: "Anybody with your chat link can message Belline." }
+        : { ...base, state: "waiting", detail: waitingWhy };
+    }
+    return { ...base, state: "not_set_up", detail: "No chat link yet. It needs no website: share it on Instagram, Google or WhatsApp." };
+  })();
+
+  return [phone, web, link, whatsapp];
 }
 
 /**

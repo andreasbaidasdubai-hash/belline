@@ -343,7 +343,7 @@ await test("nothing answers a real customer before Go live, whatever is connecte
   const connected = { ...passedAll, phone: "+97140000009", embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, channels: { phone: { numberAssignedAt: at, forwardingVerifiedAt: at }, web: { domains: ["https://x.test"], detectedAt: at } } } };
   assert.equal(answersRealCustomers(connected), false);
   const s = channelStatuses(connected, NO_FACTS, { now });
-  assert.deepEqual(s.map((c) => [c.id, c.state]), [["phone", "waiting"], ["web", "waiting"], ["whatsapp", "not_set_up"]]);
+  assert.deepEqual(s.map((c) => [c.id, c.state]), [["phone", "waiting"], ["web", "waiting"], ["link", "not_set_up"], ["whatsapp", "not_set_up"]]);
   assert.ok(s.every((c) => c.state !== "live"));
   assert.match(s[0].detail, /not answering customers yet|when you press Go live/);
 });
@@ -360,11 +360,11 @@ await test("after Go live each channel is live once connected, and one connected
   const live = { ...passedAll, phone: "+97140000009", embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, activatedAt: at, channels: { phone: { numberAssignedAt: at, forwardingVerifiedAt: at } } } };
   assert.equal(answersRealCustomers(live), true);
   const before = channelStatuses(live, NO_FACTS, { now });
-  assert.deepEqual(before.map((c) => [c.id, c.state]), [["phone", "live"], ["web", "waiting"], ["whatsapp", "not_set_up"]]);
+  assert.deepEqual(before.map((c) => [c.id, c.state]), [["phone", "live"], ["web", "waiting"], ["link", "not_set_up"], ["whatsapp", "not_set_up"]]);
   // The widget is seen on the site: live, with no second Go live.
   const later = { ...live, onboarding: { ...live.onboarding, channels: { ...live.onboarding.channels, web: { domains: ["https://x.test"], detectedAt: at } } } };
   assert.equal(channelStatuses(later, NO_FACTS, { now })[1].state, "live");
-  assert.equal(channelStatuses(later, NO_FACTS, { now, whatsappConnected: true })[2].state, "live");
+  assert.equal(channelStatuses(later, NO_FACTS, { now, whatsappConnected: true })[3].state, "live");
 });
 
 await test("no Belline number is not set up, never live", () => {

@@ -6,6 +6,8 @@ import { whatsappStatus } from "@/lib/whatsapp";
 import { connectionState } from "@/lib/integrations/google";
 import { channelStatuses, factsFrom, type ChannelStatus } from "@/lib/onboarding/journey";
 import { listCalls } from "@/lib/store";
+import { chatLinkUrl } from "@/lib/chat-link";
+import ChatLinkCard from "./ChatLinkCard";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
 export const dynamic = "force-dynamic";
@@ -158,6 +160,22 @@ export default async function ChannelsPage({
         href="/website"
         action={webState === "live" ? "Widget settings" : "Set up the widget"}
       />
+      <section className="panel" style={{ marginBottom: 14 }} data-testid="channel-link">
+        <div className="panel-head" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          Chat link
+          <span className="pill" style={{ marginLeft: "auto", color: TONE[status.link.state].colour }}>
+            {TONE[status.link.state].text}
+          </span>
+        </div>
+        <div style={{ padding: "16px 18px", fontSize: 13.5, lineHeight: 1.6 }}>
+          <p style={{ margin: 0, maxWidth: "70ch" }}>
+            {status.link.state === "not_set_up"
+              ? "A link that opens a chat with Belline, with no website needed: put it in your Instagram bio, your Google Business Profile or your WhatsApp status."
+              : status.link.detail}
+          </p>
+          <ChatLinkCard locationId={location.id} url={chatLinkUrl(location)} live={status.link.state === "live"} />
+        </div>
+      </section>
       <Channel
         title="WhatsApp"
         state={whatsappState}

@@ -254,6 +254,7 @@ test("salon-requests: signup to live, then billing and a password reset, with no
   const email = `owner+zt${run}@example.com`;
   const j = new Journey(page, "salon-requests", info);
   const site = await fixtureSite();
+  let chatLinkPath = "";
 
   try {
     await signUp(page, j, { name, email, trade: "salon" });
@@ -279,6 +280,12 @@ test("salon-requests: signup to live, then billing and a password reset, with no
       const res = await page.request.post("/api/setup/activate", { data: {} });
       expect(res.status()).toBe(409);
       expect(((await res.json()) as { blockers: unknown[] }).blockers.length).toBeGreaterThan(0);
+
+      // Added 2026-09-16: setup never blocks the dashboard. Before going live the full
+      // menu is there, with what is left of setup as a checklist on Today.
+      await page.goto("/");
+      await expect(page.locator("nav.nav")).toContainText("Requests");
+      await expect(page.getByTestId("setup-checklist")).toContainText(/\d of 7 done/);
     });
 
     await j.step("phone number and forwarding test", async () => {
@@ -339,6 +346,17 @@ test("salon-requests: signup to live, then billing and a password reset, with no
       await page.goto("/setup/channels");
       // WhatsApp is optional and not switched on here; the journey does not wait for it.
       await expect(page.getByText("Going live does not wait for it.")).toBeVisible();
+
+      // Added 2026-09-16: the chat link, a channel with no website. Before Go live a
+      // stranger who opens it sees one neutral sentence and nothing about the venue.
+      await page.getByTestId("create-chat-link").click();
+      const linkUrl = await page.getByTestId("chat-link-url").inputValue();
+      chatLinkPath = new URL(linkUrl).pathname;
+      expect(chatLinkPath).toMatch(/^\/c\/bc_/);
+      const stranger = await anonymousVisit(browser, `${baseURL}${chatLinkPath}`);
+      await expect(stranger.page.getByTestId("chat-link-refused")).toHaveText("This chat isn't available yet. Please check back soon.");
+      await expect(stranger.page.locator("body")).not.toContainText(name);
+      await stranger.close();
       await page.getByRole("link", { name: "Continue" }).click();
       await page.waitForURL("**/setup/test");
     });
@@ -364,6 +382,12 @@ test("salon-requests: signup to live, then billing and a password reset, with no
       const visitor = await anonymousVisit(browser, site.origin);
       await expect(visitor.page.locator(".belline-dock")).toBeVisible({ timeout: 15_000 });
       await visitor.close();
+
+      // And the chat link opens the chat, with no second Go live.
+      const linkVisitor = await anonymousVisit(browser, `${baseURL}${chatLinkPath}`);
+      await expect(linkVisitor.page.getByTestId("chat-link-refused")).toHaveCount(0);
+      await expect(linkVisitor.page.locator("textarea")).toBeVisible();
+      await linkVisitor.close();
     });
 
     await j.step("billing choice and plan", async () => {

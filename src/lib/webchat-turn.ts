@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { verifyVisitorToken } from "./auth";
 import { seedIfEmpty } from "./seed";
-import { listLocations } from "./store";
 import type { Location } from "./types";
 import { migrateReception } from "./reception/migrate";
 import { isActivated } from "./onboarding/journey";
+import { findChatVenue, type ChatVia } from "./chat-link";
 import { isConfigured } from "./db/client";
 import { acceptInbound } from "./reception/inbound";
 import { respondTo } from "./reception/respond";
@@ -12,7 +12,6 @@ import { findCustomer, listMessages, openConversationFor } from "./reception/rep
 import type { Conversation, Message } from "./reception/types";
 import {
   ceilingMessage,
-  chatAllowed,
   chatGate,
   ensureWebchatAccount,
   messageCeiling,
@@ -53,6 +52,8 @@ export interface Visitor {
   location: Location;
   visitorId: string;
   handle: string;
+  /** The website widget, or the shareable chat link (chat-link.ts). */
+  via: ChatVia;
 }
 
 export async function resolveVisitor(
@@ -83,12 +84,13 @@ export async function resolveVisitor(
   await migrateReception();
   seedIfEmpty();
 
-  const location = listLocations({ includeInternal: true }).find(
-    (l) => l.embed?.enabled && l.embed.key === key,
-  );
-  if (!location || !chatAllowed(location.embed)) {
+  // The widget's key (chat switched on), or the venue's chat link. The same
+  // checks follow for both: the token's venue, activation, the ceilings.
+  const found = findChatVenue(key);
+  if (!found) {
     return NextResponse.json({ error: "Chat is not available here." }, { status: 404 });
   }
+  const { location, via } = found;
   if (claim.locationId !== location.id) {
     return NextResponse.json({ error: "Wrong venue." }, { status: 403 });
   }
@@ -96,7 +98,7 @@ export async function resolveVisitor(
     return NextResponse.json({ error: "Chat is not available here." }, { status: 404 });
   }
 
-  return { location, visitorId: claim.visitorId, handle: visitorHandle(claim.visitorId) };
+  return { location, visitorId: claim.visitorId, handle: visitorHandle(claim.visitorId), via };
 }
 
 /** The dedup key the visitor's page made for this message, cleaned. */
@@ -119,7 +121,7 @@ export interface TurnInput {
  * the reply is anchored on the stored row rather than on a timestamp.
  */
 export async function visitorTurn(visitor: Visitor, input: TurnInput): Promise<NextResponse> {
-  const { location, visitorId, handle } = visitor;
+  const { location, visitorId, handle, via } = visitor;
 
   if (!takeTurnSlot(visitorId)) {
     return NextResponse.json({ error: "One at a time." }, { status: 429 });
@@ -145,7 +147,7 @@ export async function visitorTurn(visitor: Visitor, input: TurnInput): Promise<N
       }
     } else {
       // A brand new conversation, which is what the daily ceiling counts.
-      const gate = chatGate(location);
+      const gate = chatGate(location, { via });
       if (!gate.allowed) {
         return NextResponse.json({
           ok: true,

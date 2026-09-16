@@ -38,6 +38,8 @@ import SetupWizard from "../SetupWizard";
 import SelftestPanel from "../SelftestPanel";
 import WhatsAppAssisted from "@/app/(app)/integrations/WhatsAppAssisted";
 import { bellineNumberOf } from "@/lib/telephony/number";
+import ChatLinkCard from "@/app/(app)/channels/ChatLinkCard";
+import { chatLinkUrl } from "@/lib/chat-link";
 import { ActionButton, DestinationPicker, RulesForm, type DestinationOption } from "../StepActions";
 
 export const dynamic = "force-dynamic";
@@ -396,9 +398,9 @@ function Body({
         <>
           <Heading step={step} title="Let calls and chats reach Belline." />
           <p style={lede}>
-            One is enough to go live: the chat on your website, or your phone. Nothing is switched on until you do it, and
-            you can add the other later. The website counts once the widget loads on your site, and the phone once a test
-            call arrives.
+            One is enough to go live: the chat on your website, your chat link, or your phone. Nothing answers customers until
+            you go live, and you can add the others later. The website counts once the widget loads on your site, the chat
+            link once you make it, and the phone once a test call arrives.
           </p>
           {step.done ? (
             cont
@@ -451,6 +453,10 @@ function Body({
                 </span>
               </>
             )}
+          </Card>
+          <Card title="Your chat link (no website needed)" status={pill(status.link)}>
+            A link that opens a chat with Belline, for your Instagram bio, your Google Business Profile or your WhatsApp status.
+            <ChatLinkCard locationId={venue.id} url={chatLinkUrl(venue)} live={status.link.state === "live"} />
           </Card>
           <Card title="WhatsApp (optional)" status={whatsapp.state === "soon" ? "Available — set up with us" : pill(status.whatsapp)}>
             {whatsapp.state === "soon" ? (

@@ -222,6 +222,13 @@ export interface Location {
    * a default they discover.
    */
   embed?: EmbedConfig;
+  /**
+   * The shareable Belline chat link: a public page, /c/<key>, that opens the
+   * venue's chat full-screen, for an Instagram bio, a Google Business Profile
+   * or a WhatsApp status. The channel for a business with no website. Created
+   * by the owner; answers only once the venue is live. See chat-link.ts.
+   */
+  chatLink?: { key: string; createdAt: string; createdBy?: string };
   /** A WhatsApp number waiting for its code — see whatsapp-provision.ts. */
   whatsappPending?: WhatsAppPending;
   /**
