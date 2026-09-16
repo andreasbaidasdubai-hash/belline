@@ -3,6 +3,7 @@ import Link from "next/link";
 import Brand from "@/components/Brand";
 import BackToSetup from "@/components/BackToSetup";
 import { navCollapsed } from "@/lib/onboarding/journey";
+import { navFor } from "@/lib/nav";
 import { requireUser } from "@/lib/auth-server";
 import { canManageUsers, canSeeLocation, isBellineStaff } from "@/lib/auth";
 import { listLocations } from "@/lib/store";
@@ -43,14 +44,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       return n + overdue + due;
     }, 0);
 
-  // Floor for businesses that book tables, rota for ones that book people.
   const visible = listLocations().filter((l) => canSeeLocation(user, l.id));
-  const hasTables = visible.some((l) => l.restaurant);
-  const hasPeople = visible.some((l) => l.salon);
 
   // Until one of their businesses goes live, an owner sees the three places
   // that move setup forward, not the twenty that assume it is done.
   const collapsed = navCollapsed(visible, isBellineStaff(user));
+
+  // The rest is decided in nav.ts, which holds both shapes: the diary
+  // navigation this product grew, and the seven destinations it is becoming.
+  // A venue actually running on Belline's diary keeps the first whatever the
+  // flag says — see `simplifiedFor`.
+  const shape = navFor(user, visible, { outstanding, dueBack });
 
   const nav = collapsed
     ? [
@@ -58,48 +62,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         { href: "/setup/assistant", label: "Belle" },
         ...(canManageUsers(user) ? [{ href: "/billing", label: "Account" }] : []),
       ]
-    : [
-    { href: "/attention", label: "Needs you", badge: outstanding || undefined },
-    { href: "/", label: "Overview" },
-    { href: "/calendar", label: "Calendar" },
-    ...(hasTables ? [{ href: "/floor", label: "Floor" }] : []),
-    { href: "/calls", label: "Calls" },
-    { href: "/inbox", label: "Messages" },
-    { href: "/bookings", label: "Bookings" },
-    { href: "/waitlist", label: "Waitlist" },
-    ...(dueBack > 0
-      ? [{ href: "/recall", label: "Recall", badge: dueBack, quiet: true }]
-      : []),
-    { href: "/guests", label: "Customers" },
-    { href: "/test", label: "Test console" },
-    { href: "/golive", label: "Go live" },
-    // Floor staff read the book; they do not rewrite the agent's rules.
-    ...(user.role !== "staff"
-      ? [
-          { href: "/agents", label: "Agent" },
-          { href: "/venue", label: "How it works" },
-          { href: "/locations", label: "Locations" },
-          ...(hasPeople ? [{ href: "/rota", label: "Rota" }] : []),
-          { href: "/reports", label: "Reports" },
-          // Beside the other places Belline answers from, not under
-          // integrations: this is a channel the venue switches on, not a
-          // third party it connects to.
-          { href: "/website", label: "Your website" },
-          { href: "/integrations", label: "Integrations" },
-        ]
-      : []),
-    ...(canManageUsers(user)
-      ? [
-          // Money is a manager's concern, not floor staff's.
-          { href: "/billing", label: "Plan and usage" },
-          { href: "/demo", label: "Demo line" },
-          { href: "/team", label: "Team" },
-        ]
-      : []),
-    // Personalised demos are built *for* a prospect but are still a selling
-    // tool, so they stay owner-only.
-    ...(isBellineStaff(user) ? [{ href: "/prospects", label: "Personalised demos" }] : []),
-  ];
+    : shape.items;
+
+  const advanced = collapsed ? null : shape.advanced;
 
   return (
     <div className="shell">
@@ -121,6 +86,44 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <nav className="nav">
           {/* A client component, so the page you are on can be marked. */}
           <SidebarNav items={nav} />
+
+          {/*
+            The way into everything that is not one of the seven.
+
+            Set apart below a rule, like the sales console, because it leads
+            to a list of pages rather than to a page. It is the promise that
+            makes the simplified navigation safe to turn on: nothing was
+            removed, and the way to the rota is one click and a direct link,
+            not a support conversation.
+          */}
+          {advanced && (
+            <div
+              style={{
+                marginTop: 16,
+                paddingTop: 14,
+                borderTop: "1px solid var(--border)",
+              }}
+            >
+              <Link
+                href={advanced.href}
+                className="navlink"
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  fontSize: 12.5,
+                  color: "var(--muted)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                {advanced.label}
+                <span aria-hidden="true" style={{ marginLeft: "auto", opacity: 0.6 }}>
+                  →
+                </span>
+              </Link>
+            </div>
+          )}
 
           {/*
             The way into Belline's own sales console.

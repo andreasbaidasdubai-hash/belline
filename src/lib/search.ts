@@ -1,5 +1,6 @@
 import type { User } from "./types";
 import { canManageUsers, isBellineStaff, visibleLocations } from "./auth";
+import { simplifiedFor } from "./nav";
 import { listBookings } from "./store";
 import { listGuests, normalisePhone } from "./guests";
 import { minutesToClock } from "./time";
@@ -19,10 +20,31 @@ export interface SearchHit {
   href: string;
 }
 
+/**
+ * Every page this person can open, whichever navigation they are on.
+ *
+ * Deliberately the union rather than the current shape. Search is how
+ * somebody reaches a page that is not in front of them, so a venue on the
+ * simplified navigation must still be able to type "rota" and get there —
+ * that is the whole promise of moving pages to Advanced rather than removing
+ * them. The simplified destinations are added on top when they apply, so the
+ * labels somebody has just been reading are the ones that match.
+ */
 function pagesFor(user: User) {
+  const simplified = simplifiedFor(visibleLocations(user));
   return [
-    { label: "Needs you", href: "/attention" },
-    { label: "Overview", href: "/" },
+    ...(simplified
+      ? [
+          { label: "Today", href: "/" },
+          { label: "Conversations", href: "/conversations" },
+          { label: "Requests", href: "/requests" },
+          ...(user.role !== "staff" ? [{ label: "Channels", href: "/channels" }] : []),
+          { label: "Everything else", href: "/advanced" },
+        ]
+      : [
+          { label: "Needs you", href: "/attention" },
+          { label: "Overview", href: "/" },
+        ]),
     { label: "Calendar", href: "/calendar" },
     { label: "Floor", href: "/floor" },
     { label: "Calls", href: "/calls" },
