@@ -129,7 +129,13 @@ async function signUp(page: Page, j: Journey, opts: { name: string; email: strin
   await j.step("signup", async () => {
     await page.goto(`/checkout?trade=${opts.trade}`);
     // The landing page's trade only prefills; nothing offers an email address instead.
-    await expect(page.locator("#vertical")).toHaveValue(opts.trade);
+    // #trade, not #vertical: the field was renamed when the list widened from
+    // three trades to seventeen, and the trade key is deliberately not an
+    // engine vertical — check-backend asserts a trade like "garage" is refused
+    // as one. The rename and this spec landed on separate branches and merged
+    // cleanly without anyone reconciling them, which is why this journey had
+    // never once run past its first assertion.
+    await expect(page.locator("#trade")).toHaveValue(opts.trade);
     await expect(page.getByText(/Email us/i)).toHaveCount(0);
 
     await page.getByLabel("Business name").fill(opts.name);
