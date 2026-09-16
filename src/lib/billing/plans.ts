@@ -689,12 +689,13 @@ export function grandfatherExpires(ids: readonly ProductId[]): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Fourteen days, no card, and a cap on both units so an unattended trial
- * cannot run up a bill. The card is asked for when somebody chooses a plan,
- * never at signup.
+ * Thirty days, no card, and a cap on both units so an unattended trial
+ * cannot run up a bill. The length is the offer; the caps are what stop it
+ * costing us — a longer trial spends no more than a short one. The card is
+ * asked for when somebody chooses a plan, never at signup.
  */
 export const TRIAL = {
-  days: 14,
+  days: 30,
   /** Voice minutes, pooled across the phone and the voice button. */
   minutes: 30,
   /** Text conversations, pooled across website chat and WhatsApp (a trial includes every channel). */

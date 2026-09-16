@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { project, type Assumptions, type Base } from "@/lib/sales/projection";
+import { TRIAL } from "@/lib/billing/plans";
 
 /**
  * The forward view, with the assumptions on the table.
@@ -18,7 +19,7 @@ const aed = (fils: number) =>
 const FIELDS: { key: keyof Assumptions; label: string; hint: string; step: number; pct?: boolean; money?: boolean }[] = [
   { key: "newTrialsPerMonth", label: "New trials, first month", hint: "sign-ups that start a trial", step: 1 },
   { key: "trialGrowth", label: "Growth in new trials", hint: "month on month", step: 1, pct: true },
-  { key: "trialConversion", label: "Trial → paid", hint: "share that stays after fourteen days", step: 1, pct: true },
+  { key: "trialConversion", label: "Trial → paid", hint: `share that stays after ${TRIAL.days} days`, step: 1, pct: true },
   { key: "monthlyChurn", label: "Churn", hint: "share of paying venues lost a month", step: 0.5, pct: true },
   { key: "arpaFils", label: "Average price per venue", hint: "a month, across the plan mix", step: 1, money: true },
   { key: "minutesPerVenue", label: "Minutes per venue", hint: "billable, a month", step: 5 },

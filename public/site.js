@@ -924,22 +924,8 @@
    was scrolled past is gone: the three ways to reach Belle stay where they
    are at every height of the page. */
 
-/* --- floating buttons wait for the hero -----------------------------------
-   The hero has its own "Speak to Belline" button, and the floating three sat
-   on top of its example conversation. While the hero is on screen they stay
-   out of the way; they come back as soon as it scrolls off. Without
-   IntersectionObserver the class is never added and nothing changes. */
-(function () {
-  var hero = document.querySelector(".hero");
-  if (!hero || !("IntersectionObserver" in window)) return;
-  var root = document.documentElement;
-  new IntersectionObserver(
-    function (entries) {
-      root.classList.toggle("fabs-waiting", entries[0].isIntersecting);
-    },
-    // Any part of the hero, not a share of it: on a phone the example cards
-    // make the hero several screens tall, so 35% of it never fit on screen
-    // and the buttons sat on the chat card.
-    { threshold: 0 },
-  ).observe(hero);
-})();
+/* The three floating buttons used to wait for the hero to scroll off before
+   appearing, so that they did not sit on its example cards. That hid the
+   three ways of reaching Belline at the one moment everybody sees — the first
+   paint — so it is gone. They are on screen from the start, and the hero is
+   given the room instead (see "Platz für die Knöpfe" in site.css). */

@@ -11,8 +11,8 @@
  * from a fixture.
  *
  * **The trial is capped.** An account nobody is watching must not be able to
- * run up a vendor bill. Fourteen days and thirty minutes, written at signup
- * rather than assumed by a job that might not run.
+ * run up a vendor bill. The catalogue's length and thirty minutes, written at
+ * signup rather than assumed by a job that might not run.
  *
  * **A new venue is blank, not plausible.** Seeding a fictional stylist and a
  * made-up price list makes a venue that looks configured and answers wrongly.
@@ -41,6 +41,8 @@ const { getLocation, listLocationsFor, listTenants, getBusiness, listUsers } = a
 const { canSeeLocation, visibleLocations } = await import("../src/lib/auth");
 const { DEFAULT_TENANT_ID } = await import("../src/lib/tenancy");
 const { historyFor } = await import("../src/lib/brain");
+const { TRIAL } = await import("../src/lib/billing/plans");
+const { TRADES, tradeFromParam, verticalForTrade } = await import("../src/lib/signup-rules");
 
 let passed = 0;
 let failed = 0;
@@ -89,11 +91,11 @@ await test("the venue starts on a capped trial, not on a plan", () => {
   // Catalogue 2026-10: 30 voice minutes and 50 text conversations.
   assert.equal(sub?.trial?.minutes, 30);
   assert.equal(sub?.trial?.conversations, 50);
-  // Fourteen days from today, so an unattended account expires on its own.
+  // The catalogue's length from today, so an unattended account expires on its own.
   const days =
     (Date.parse(`${sub!.trial!.endsOn}T12:00:00Z`) - Date.parse(`${sub!.startedOn}T12:00:00Z`)) /
     86_400_000;
-  assert.equal(Math.round(days), 14);
+  assert.equal(Math.round(days), TRIAL.days);
 });
 
 await test("the new venue is blank rather than plausibly wrong", () => {
@@ -270,6 +272,81 @@ await test("readiness names what is still missing, in the owner's words", () => 
 
   const done = getLocation(alpha.location.id)!;
   assert.equal(readiness(done).ready, true, `still not ready: ${JSON.stringify(readiness(done))}`);
+});
+
+console.log("\n\x1b[1mWhat kind of business, from a list the engine never sees\x1b[0m\n");
+
+await test("every option the customer can pick runs on an engine that exists", () => {
+  for (const t of TRADES) {
+    assert.ok(["salon", "clinic", "restaurant"].includes(t.vertical), `${t.key} maps to "${t.vertical}", which is not an engine`);
+    assert.ok(t.label.trim(), `${t.key} has no label`);
+    assert.ok(t.group.trim(), `${t.key} has no group, so the checkout cannot place it`);
+  }
+  assert.equal(new Set(TRADES.map((t) => t.key)).size, TRADES.length, "two trades share a key");
+});
+
+await test("the three values venues were signed up with before the list still resolve", () => {
+  for (const old of ["salon", "clinic", "restaurant"] as const) {
+    assert.equal(tradeFromParam(old), old, `a venue stored as "${old}" no longer resolves`);
+    assert.equal(verticalForTrade(old), old, `"${old}" changed engine`);
+  }
+});
+
+await test("a ?trade= link resolves through its aliases, and an unknown one selects nothing", () => {
+  assert.equal(tradeFromParam("dentist"), "clinic");
+  assert.equal(tradeFromParam("  Spa  "), "salon");
+  assert.equal(tradeFromParam("plumber"), "trades");
+  assert.equal(tradeFromParam("nonsense"), "", "an unknown trade guessed at one");
+  assert.equal(tradeFromParam(undefined), "");
+  // Unrecognised still has to be able to open an account.
+  assert.equal(verticalForTrade("nonsense"), "salon");
+});
+
+await test("a trade the engine has no case for signs up on the right engine, and is kept as picked", async () => {
+  const vet = await signUp({
+    businessName: "Marina Vets",
+    email: "owner@marinavets.test",
+    password: PASSWORD,
+    trade: "vet",
+    timezone: "Asia/Dubai",
+  });
+  assert.ok(vet.ok, vet.ok ? "" : vet.error);
+  const venue = getLocation(vet.ok ? vet.location.id : "")!;
+  assert.equal(venue.vertical, "clinic", "a vet is an appointment diary");
+  assert.equal(venue.tradeKey, "vet", "what they actually picked was not kept for reporting");
+
+  const hotel = await signUp({
+    businessName: "Creek Guest House",
+    email: "owner@creekguesthouse.test",
+    password: PASSWORD,
+    trade: "hotel",
+  });
+  assert.ok(hotel.ok);
+  assert.equal(getLocation(hotel.ok ? hotel.location.id : "")!.vertical, "restaurant");
+});
+
+await test("\"Something else\" is a valid answer, and gets the diary most businesses keep", async () => {
+  const other = await signUp({
+    businessName: "Something Else Co",
+    email: "owner@somethingelse.test",
+    password: PASSWORD,
+    trade: "",
+  });
+  assert.ok(other.ok, other.ok ? "" : other.error);
+  const venue = getLocation(other.ok ? other.location.id : "")!;
+  assert.equal(venue.vertical, "salon");
+  assert.equal(venue.tradeKey, undefined, "an empty answer was stored as though it were a trade");
+});
+
+await test("an engine value that does not exist is still refused", async () => {
+  const bad = await signUp({
+    businessName: "Garage Co",
+    email: "owner@garageco.test",
+    password: PASSWORD,
+    vertical: "garage" as never,
+  });
+  assert.equal(bad.ok, false, "a made-up engine was accepted");
+  if (!bad.ok) assert.equal(bad.field, "vertical");
 });
 
 console.log(

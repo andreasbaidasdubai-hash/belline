@@ -112,6 +112,14 @@ export interface Location {
   businessId: string;
   name: string;
   vertical: Vertical;
+  /**
+   * What the owner said they do, from the checkout's list (signup-rules.ts
+   * `TRADES`). The engine reads `vertical`; this is the finer answer, kept so
+   * a report can tell a vet from a car garage when both are the same diary.
+   * Absent on venues that signed up before the list existed, and on anyone
+   * who chose "Something else".
+   */
+  tradeKey?: string;
   timezone: string;
   phone: string;
   address: string;

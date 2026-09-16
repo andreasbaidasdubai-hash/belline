@@ -82,6 +82,19 @@ if (!LEGAL.entity || !LEGAL.address || !LEGAL.law) {
   );
 }
 
+/**
+ * The trial sentence in the terms, from the catalogue.
+ *
+ * §2 states how long the trial runs, so a change to `TRIAL` has to reach the
+ * terms as surely as it reaches the pricing page. Throws rather than ship a
+ * terms page whose trial has quietly drifted from what we are selling.
+ */
+function fillTrial(html: string): string {
+  const slot = /(<p class="gen" data-gen="trial-sentence">)[^<]*(<\/p>)/;
+  if (!slot.test(html)) throw new Error("terms.html has lost its generated trial sentence.");
+  return html.replace(slot, (_m, open: string, close: string) => `${open}${trialSentence()}${close}`);
+}
+
 function fillLegal(html: string): string {
   const put = (key: string, value: string) =>
     value
@@ -270,6 +283,7 @@ for (const page of pages) {
   // catalogue change cannot ship with yesterday's prices even if nobody ran
   // `npm run pricing`; check-billing fails if public/landing.html is stale.
   if (page === "landing.html") html = applyPricing(html);
+  if (page === "terms.html") html = fillTrial(html);
 
   html = repoint(fillLegal(html));
 

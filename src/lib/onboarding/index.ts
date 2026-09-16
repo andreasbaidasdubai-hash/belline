@@ -5,6 +5,7 @@ import { ensureBaseline } from "../brain";
 import { checkShape } from "../leads/email";
 import { extractFromSources, readSite, type Extracted, type ModelCall, type SourceFile } from "../prospect";
 import { TRIAL, checkSelection } from "../billing/plans";
+import { tradeFromParam, tradeLabel, verticalForTrade } from "../signup-rules";
 import { marketOf, type Market } from "../markets";
 import { todayIn } from "../time";
 
@@ -47,8 +48,18 @@ export interface SignupInput {
   businessName: string;
   email: string;
   password: string;
-  /** What they do. Picks the engine: a table is not an appointment. */
-  vertical: Vertical;
+  /**
+   * What they do, from the checkout's list (signup-rules.ts `TRADES`).
+   *
+   * Optional, because the question is: "Something else" and no answer at all
+   * both arrive here as nothing, and both get the appointment diary.
+   */
+  trade?: string;
+  /**
+   * The engine, where the caller already knows it. Belle and the tests name
+   * it directly; the checkout sends `trade` and lets it be worked out.
+   */
+  vertical?: Vertical;
   /** Where they are, so "tomorrow at four" means their four. */
   timezone?: string;
   /** What they picked on the checkout page, remembered as what the trial is trialling. */
@@ -62,9 +73,9 @@ export type SignupResult =
   | { ok: false; field: "businessName" | "email" | "password" | "vertical"; error: string };
 
 /**
- * Fourteen days, every channel on, no card, and a cap on voice minutes and
+ * A month, every channel on, no card, and a cap on voice minutes and
  * text conversations so an unattended trial cannot run up a bill
- * (billing/plans.ts `TRIAL`).
+ * (billing/plans.ts `TRIAL`, which is the only place the length is set).
  */
 function trialSubscription(timezone: string, picked?: unknown[], market?: Market): Subscription {
   const today = todayIn(timezone);
@@ -102,14 +113,17 @@ function everyDay(start: number, end: number): WeeklyHours {
 export function blankVenue(input: SignupInput, tenantId: string, businessId: string): Location {
   const timezone = input.timezone || "Asia/Dubai";
   const name = input.businessName.trim();
-  const isRestaurant = input.vertical === "restaurant";
+  const vertical = input.vertical ?? verticalForTrade(input.trade);
+  const isRestaurant = vertical === "restaurant";
+  const tradeKey = tradeFromParam(input.trade);
 
   return {
     id: id("loc"),
     tenantId,
     businessId,
     name,
-    vertical: input.vertical,
+    vertical,
+    ...(tradeKey ? { tradeKey } : {}),
     timezone,
     phone: "",
     address: "",
@@ -178,9 +192,13 @@ export async function signUp(input: SignupInput): Promise<SignupResult> {
     };
   }
 
-  if (!["restaurant", "salon", "clinic"].includes(input.vertical)) {
+  // Only an explicit answer can be wrong. An absent one is "Something else",
+  // which is a valid thing to be, and gets the appointment diary.
+  if (input.vertical !== undefined && !["restaurant", "salon", "clinic"].includes(input.vertical)) {
     return { ok: false, field: "vertical", error: "Choose the kind of business." };
   }
+  const tradeKey = tradeFromParam(input.trade);
+  const vertical: Vertical = input.vertical ?? verticalForTrade(input.trade);
 
   // A tenant of their own, from the first second. Nothing about this account
   // shares a boundary with anybody else's.
@@ -193,12 +211,7 @@ export async function signUp(input: SignupInput): Promise<SignupResult> {
     id: businessId,
     tenantId,
     name: businessName,
-    category:
-      input.vertical === "restaurant"
-        ? "Restaurant"
-        : input.vertical === "clinic"
-          ? "Clinic"
-          : "Salon & spa",
+    category: tradeLabel(tradeKey, vertical),
     email,
     // Never on by default. Appearing in a consumer search is a decision the
     // merchant makes, not one they discover.
@@ -206,7 +219,7 @@ export async function signUp(input: SignupInput): Promise<SignupResult> {
     createdAt: now,
   });
 
-  const location = upsertLocation(blankVenue(input, tenantId, businessId));
+  const location = upsertLocation(blankVenue({ ...input, vertical, trade: tradeKey }, tenantId, businessId));
   ensureBaseline(location);
 
   const created = createUser({

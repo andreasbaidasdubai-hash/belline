@@ -384,6 +384,31 @@ await test("our own origins are named, and nobody else's", () => {
   assert.equal(ours.embed!.allowedOrigins.some((o) => o.includes("*")), false);
 });
 
+/**
+ * The three ways of reaching Belline are on screen at the first paint.
+ *
+ * They used to wait for the hero to scroll past, so that they did not sit on
+ * its example cards — which hid the call, the chat and WhatsApp at the one
+ * moment every visitor is looking at the page. The cards are kept clear by
+ * leaving room for the buttons in the layout instead, and this fails if the
+ * waiting ever comes back.
+ */
+await test("the floating buttons are visible from the first paint, and the hero leaves them room", () => {
+  const js = fs.readFileSync(path.join(process.cwd(), "public", "site.js"), "utf8");
+  const css = fs.readFileSync(path.join(process.cwd(), "public", "site.css"), "utf8");
+  assert.doesNotMatch(js, /fabs-waiting/, "site.js hides the floating buttons again");
+  assert.doesNotMatch(css, /\.fabs-waiting/, "the .fabs-waiting rules are back");
+  assert.doesNotMatch(
+    js,
+    /IntersectionObserver[\s\S]{0,400}?\.hero\b|\.hero\b[\s\S]{0,400}?IntersectionObserver/,
+    "the floating buttons are watching the hero again",
+  );
+  // The room they are kept clear by. Without it they sit on the example cards.
+  assert.match(css, /\.stage\s*\{[^}]*padding-right/, "the hero stage no longer leaves room for the buttons");
+  // And the footer fix, which the buttons would otherwise cover at the end.
+  assert.match(css, /@media \(max-width: 1100px\) \{ footer \{ padding-bottom/, "the footer no longer leaves room for the buttons");
+});
+
 await test("the landing page's button is inert without JavaScript", () => {
   const html = fs.readFileSync(path.join(process.cwd(), "public", "landing.html"), "utf8");
   assert.ok(html.includes("data-chat="), "no chat button on the front page");

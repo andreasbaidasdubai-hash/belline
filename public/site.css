@@ -921,21 +921,14 @@ footer p { font-size: 0.86rem; color: var(--ink-3); margin: 0; line-height: 1.7;
 @media (max-width: 1100px) { footer { padding-bottom: 220px; } }
 footer a { color: var(--ink-2); text-underline-offset: 3px; }
 
-/* --- Floating buttons wait for the hero ------------------------------------
-   The hero already offers "Speak to Belline", and the three floating buttons
-   sat on top of its example conversation. site.js adds .fabs-waiting while the
-   hero is on screen; without JavaScript the class never appears. */
-.fabs-waiting .bell-fab,
-.fabs-waiting .chat-fab,
-.fabs-waiting .wa-fab {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
+/* The three are on screen from the first paint. They used to wait for the
+   hero to scroll past, which hid every way of reaching Belline at the one
+   moment every visitor is looking; the hero now leaves room for them
+   instead ("Platz für die Knöpfe", below). */
 .bell-fab,
 .chat-fab,
 .wa-fab {
-  transition: opacity 0.2s ease, visibility 0.2s, transform 0.16s ease;
+  transition: transform 0.16s ease;
 }
 
 /* --- Die Glocke ------------------------------------------------------------ */
@@ -2631,6 +2624,27 @@ h2.display {
 @media (max-width: 1100px) {
   .hero-demo { grid-template-columns: minmax(0, 1fr); gap: 52px; }
   .stage { justify-self: start; max-width: 720px; }
+}
+
+/* --- Platz für die Knöpfe ---------------------------------------------------
+   Die drei Knöpfe stehen vom ersten Augenblick an unten rechts. Sie schweben,
+   also schiebt kein Abstand unter dem Hero sie beiseite — der Hero ist
+   mehrere Bildschirme hoch, und was neben den Knöpfen liegt, ist auf jeder
+   Höhe eine Karte. Was hilft, ist Platz rechts: die Karten hören vor der
+   Spalte der Knöpfe auf, statt unter ihr zu verschwinden.
+
+   Gemessen bei 375, 414, 768, 1024 und 1440. Bei 1024 standen die Karten
+   ohnehin 38 px frei, das ist das Maß: rund 40 px Luft neben dem breitesten
+   Knopf, nicht mehr. */
+.stage { padding-right: 104px; }
+@media (max-width: 1100px) {
+  /* Einspaltig und linksbündig: die Karten laufen sonst bis an den Rand. */
+  .stage { padding-right: 76px; }
+}
+@media (max-width: 640px) {
+  /* Auf dem Telefon sind die Knöpfe rund und schmaler (60 px), und die
+     Karten brauchen jede Zeile, die sie kriegen können. */
+  .stage { padding-right: 68px; }
 }
 @media (max-width: 640px) {
   .stage {

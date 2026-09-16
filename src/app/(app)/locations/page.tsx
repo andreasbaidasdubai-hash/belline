@@ -23,6 +23,7 @@ export default async function LocationsPage() {
       id: l.id,
       name: l.name,
       vertical: l.vertical,
+      tradeKey: l.tradeKey,
       timezone: l.timezone,
       address: l.address,
       phone: l.phone,

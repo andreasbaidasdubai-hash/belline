@@ -70,6 +70,7 @@ export default function Order({
   venueName,
   stripe,
   cancelled,
+  trade,
 }: {
   market: Market;
   initial: ProductId[];
@@ -78,6 +79,8 @@ export default function Order({
   venueName: string;
   stripe: boolean;
   cancelled: boolean;
+  /** Preselected from the link's `?trade=`, or "" for nothing chosen. */
+  trade: string;
 }) {
   const plans = sellable(market);
   const [selected, setSelected] = useState<ProductId>(initial[0] ?? plans[0].id);
@@ -212,7 +215,7 @@ export default function Order({
             <p className="muted" style={{ fontSize: 13, margin: "0 0 22px", lineHeight: 1.55 }}>
               Four things and you are set up. No card until you choose a plan.
             </p>
-            <CheckoutForm products={ids} market={market} />
+            <CheckoutForm products={ids} market={market} trade={trade} />
           </>
         )}
 

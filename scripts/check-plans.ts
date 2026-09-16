@@ -170,8 +170,8 @@ test("volume: a subscription per location, 10% off from 5 to 19, custom from 20,
   assert.equal(VOLUME.appliedBy, "person");
 });
 
-test("the trial: fourteen days, 30 voice minutes, 50 text conversations, one calendar connection, of Starter", () => {
-  assert.equal(TRIAL.days, 14);
+test("the trial: thirty days, 30 voice minutes, 50 text conversations, one calendar connection, of Starter", () => {
+  assert.equal(TRIAL.days, 30);
   assert.equal(TRIAL.minutes, 30);
   assert.equal(TRIAL.conversations, 50);
   assert.equal(TRIAL.calendarConnections, 1);

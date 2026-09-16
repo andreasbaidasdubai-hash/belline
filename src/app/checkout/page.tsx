@@ -2,17 +2,18 @@ import Brand from "@/components/Brand";
 import { currentUser } from "@/lib/auth-server";
 import { listLocationsFor } from "@/lib/store";
 import { seedIfEmpty } from "@/lib/seed";
-import { LEGACY_TO_BUNDLE, checkSelection, recommendedPlan, type BillingCycle } from "@/lib/billing/plans";
+import { LEGACY_TO_BUNDLE, TRIAL, checkSelection, recommendedPlan, type BillingCycle } from "@/lib/billing/plans";
 import { productsOf, subscriptionMarket } from "@/lib/billing/usage";
 import { MARKETS, marketOf } from "@/lib/markets";
 import { stripeEnabled } from "@/lib/billing/stripe";
+import { tradeFromParam } from "@/lib/signup-rules";
 import Order from "./Order";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Get Belline",
-  description: "Belline, your AI receptionist. Fourteen days free, no card, cancel anytime.",
+  description: `Belline, your AI receptionist. ${TRIAL.days} days free, no card, cancel anytime.`,
 };
 
 /**
@@ -42,6 +43,7 @@ export default async function CheckoutPage({
     cycle?: string;
     market?: string;
     cancelled?: string;
+    trade?: string;
   }>;
 }) {
   seedIfEmpty();
@@ -68,6 +70,10 @@ export default async function CheckoutPage({
 
   const cycle: BillingCycle = params.cycle === "annual" ? "annual" : "monthly";
 
+  // A campaign link can say who it is for — /checkout?trade=dentist. Anything
+  // we do not recognise selects nothing, rather than guessing at their trade.
+  const trade = tradeFromParam(params.trade);
+
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
       <main className="checkout">
@@ -84,6 +90,7 @@ export default async function CheckoutPage({
           venueName={venue?.name ?? "your venue"}
           stripe={stripeEnabled()}
           cancelled={Boolean(params.cancelled)}
+          trade={trade}
         />
       </main>
     </div>
