@@ -86,6 +86,8 @@ export async function GET(request: Request) {
       raiseException("google:not_configured", "Google Calendar connect opened while booking.google is off or no sealing key is set");
       return land(request, returnTo, location.id, "google_unavailable");
     }
+    // One calendar per venue: an Outlook connection is disconnected first.
+    if (location.outlook) return land(request, returnTo, location.id, "google_in_use");
     const signed = signState({ locationId: location.id, userId: auth.user.id, returnTo });
     const res = NextResponse.redirect(authUrl(signed.state, redirectUri(request)));
     res.cookies.set(STATE_COOKIE, signed.nonce, { ...sessionCookieOptions(600), path: COOKIE_PATH });

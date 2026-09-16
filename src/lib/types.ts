@@ -1,5 +1,6 @@
 import type { BrainVersion } from "./brain";
 import type { GoogleLink } from "./integrations/google";
+import type { OutlookLink } from "./integrations/outlook";
 import type { BillingCycle, LegacyPlanId, ProductId } from "./billing/plans";
 import type { Market } from "./markets";
 
@@ -170,6 +171,10 @@ export interface Location {
    * Google. Cleared by the next connection that does. See integrations/google.ts.
    */
   googleConnectAbandonedAt?: string;
+  /** A connected Outlook calendar (Microsoft 365 or Outlook.com). See integrations/outlook.ts. */
+  outlook?: OutlookLink;
+  /** As `googleConnectAbandonedAt`, for Outlook: a connection that never came back from Microsoft. */
+  outlookConnectAbandonedAt?: string;
   /**
    * What one booking is typically worth here.
    *
@@ -1437,7 +1442,11 @@ export type ExceptionKind =
   | "google_sync_failed"
   | "google_token_expired"
   | "google_misconfigured"
-  | "google_connect_abandoned";
+  | "google_connect_abandoned"
+  | "outlook_sync_failed"
+  | "outlook_token_expired"
+  | "outlook_misconfigured"
+  | "outlook_connect_abandoned";
 
 export interface SupportException {
   id: string;

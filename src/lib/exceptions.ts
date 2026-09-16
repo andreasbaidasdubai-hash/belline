@@ -43,6 +43,10 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "google_token_expired",
   "google_misconfigured",
   "google_connect_abandoned",
+  "outlook_sync_failed",
+  "outlook_token_expired",
+  "outlook_misconfigured",
+  "outlook_connect_abandoned",
 ];
 
 interface KindMeta {
@@ -96,6 +100,26 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
   google_connect_abandoned: {
     label: "Google connection never came back",
     next: "While the Google app is in Testing, add the owner's Google address to the test users, then ask them to connect again.",
+    belle: false,
+  },
+  outlook_sync_failed: {
+    label: "Bookings not reaching Outlook",
+    next: "Check the server log for the venue's [outlook] lines. Belline retries on its own; if Microsoft keeps refusing, ask the owner to reconnect.",
+    belle: false,
+  },
+  outlook_token_expired: {
+    label: "Outlook access expired",
+    next: "The venue is on requests and the owner has a banner. If they do not reconnect within a day, contact them.",
+    belle: false,
+  },
+  outlook_misconfigured: {
+    label: "Microsoft refusing Belline's app",
+    next: "Read the reason: a wrong or expired MICROSOFT_CLIENT_SECRET, a client id Microsoft does not know, or a redirect address missing from the Entra app registration. Fix it in Entra; the sweep clears the venue on its own.",
+    belle: false,
+  },
+  outlook_connect_abandoned: {
+    label: "Outlook connection never came back",
+    next: "Usually a work account whose organisation needs its IT admin to approve Belline. Contact the owner, and send their IT admin the approval link in the reason.",
     belle: false,
   },
 };

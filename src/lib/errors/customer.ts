@@ -15,9 +15,10 @@ import { randomUUID } from "node:crypto";
  * are. Anything else is treated as internal, whatever it says.
  */
 
-export type Provider = "import" | "model" | "google" | "stripe" | "messaging" | "setup";
+export type Provider = "import" | "model" | "google" | "outlook" | "stripe" | "messaging" | "setup";
 
-export type Kind = "unavailable" | "not_configured" | "refused" | "declined" | "failed";
+/** `in_use`: the venue already has the other calendar connected. Belline keeps one per venue. */
+export type Kind = "unavailable" | "not_configured" | "refused" | "declined" | "failed" | "in_use";
 
 export interface CustomerMessage {
   /** One sentence, plain, active voice. Safe to render. */
@@ -59,6 +60,18 @@ const COPY: Record<Provider, Partial<Record<Kind, [string, string]>> & { failed:
     // between "Connect" and Google's answer, or a link opened twice.
     failed: ["Google Calendar could not be connected just now.", "Please connect again. If it happens twice, wait a few minutes first."],
     unavailable: ["Google Calendar could not be reached just now.", "Try again in a few minutes."],
+    in_use: ["Outlook is already connected to this venue.", "Belline uses one calendar per venue. Disconnect Outlook first, then connect Google Calendar."],
+  },
+  outlook: {
+    not_configured: ["Outlook is not available on this account yet.", "Belline takes booking requests in the meantime."],
+    refused: ["Microsoft did not allow the connection.", "Connect again, and choose Accept on Microsoft's screen."],
+    declined: [
+      "No problem — requests for now.",
+      "Belline takes the details and your team confirms. You can connect Outlook whenever you like.",
+    ],
+    failed: ["Outlook could not be connected just now.", "Please connect again. If it happens twice, wait a few minutes first."],
+    unavailable: ["Outlook could not be reached just now.", "Try again in a few minutes."],
+    in_use: ["Google Calendar is already connected to this venue.", "Belline uses one calendar per venue. Disconnect Google Calendar first, then connect Outlook."],
   },
   stripe: {
     not_configured: ["Card payments are not switched on yet.", "Nothing is charged until they are."],
@@ -149,6 +162,12 @@ export const INTEGRATION_ERRORS: Record<string, [Provider, Kind]> = {
   google_refused: ["google", "refused"],
   google_declined: ["google", "declined"],
   google_failed: ["google", "failed"],
+  google_in_use: ["google", "in_use"],
+  outlook_unavailable: ["outlook", "not_configured"],
+  outlook_refused: ["outlook", "refused"],
+  outlook_declined: ["outlook", "declined"],
+  outlook_failed: ["outlook", "failed"],
+  outlook_in_use: ["outlook", "in_use"],
   payments_off: ["stripe", "not_configured"],
   payments_failed: ["stripe", "failed"],
 };
