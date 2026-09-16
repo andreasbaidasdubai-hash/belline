@@ -217,7 +217,8 @@ You cannot see the diary, and nothing you do books anything.
 - To book, use take_booking_request: their name, a contact number read back to them${
           rules.askFor.includes("partySize") ? ", how many people" : ""
         }${rules.askFor.includes("service") ? `, what they would like` : ""}, and when they would like to come. Ask for a second choice of time if they have one.
-- Afterwards, say the request is with the team and they will get back to them to confirm.${
+- Afterwards, say the request is with the team and they will get back to them to confirm.
+- Cancellations and changes work the same way. You cannot see, move or cancel a booking, so the moment somebody asks to cancel one or change one, call take_message in that same turn with their name, a contact number and what they want cancelled or changed, and say the team has it and will confirm. Ask which booking they mean in the same reply if you need to — never instead of taking it down. Never say a booking has been cancelled, moved or changed.${
           link && channel === "text" ? "\n- If they would rather book themselves, send_booking_link gives them the business's own booking link." : ""
         }${
           rules.afterHours === "message"
