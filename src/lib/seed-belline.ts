@@ -3,6 +3,41 @@ import { BELLINE_TENANT_ID } from "./tenancy";
 import { assistedSetupSpoken, priceAnswer, trialAnswer, usageAnswer, volumeAnswer } from "./billing/speak";
 import { notYetLive } from "./billing/plans";
 import { stripeEnabled } from "./billing/stripe";
+import { flag } from "./flags";
+
+type Env = Record<string, string | undefined>;
+
+/**
+ * What Belle says about booking systems, from the same flag the product and
+ * the website read: Google Calendar is "coming soon" exactly while
+ * `booking.google` is off.
+ */
+export function bookingSystemAnswer(env: Env = process.env): string {
+  return flag("booking.google", env)
+    ? "Google Calendar, yes: connect it and Belline checks it for times already taken, then books straight into it. Outlook isn't connected yet, and Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so for those Belline takes the customer's request and your team books it where you always do. Which system do you use?"
+    : "Not yet. Google Calendar is coming soon. Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so I can't give you a date. Today Belline takes the customer's request and your team books it where you always do. Which system do you use? I'll pass that on.";
+}
+
+export function routeLine(env: Env = process.env): string {
+  const calendars = flag("booking.google", env)
+    ? "Google Calendar: once they connect it, Belline checks it for busy times and books straight into it. Outlook: Belline takes requests now."
+    : "Google Calendar or Outlook: Belline takes requests now; booking into Google Calendar is coming soon.";
+  return `Match their route and say only what is true today. A booking platform: Belline answers and takes the request, their team books it in their system; direct connection needs a partner agreement Belline doesn't have. ${calendars} No system: Belline answers, takes messages and requests, and makes sure the right person follows up.`;
+}
+
+/**
+ * The catalogue's not-yet list, as Belle may say it. With Google Calendar
+ * live, the entries that bundle it with what is still missing name only the
+ * missing part, so Belle never tells a prospect Google Calendar does not work.
+ */
+export function notYetForBelle(features: string[], env: Env = process.env): string[] {
+  if (!flag("booking.google", env)) return features;
+  const rename: Record<string, string> = {
+    "Google Calendar and booking-system integrations": "Fresha, SevenRooms, OpenTable and Treatwell integrations",
+    "One Google Calendar or Microsoft Outlook connection": "A Microsoft Outlook connection",
+  };
+  return features.map((f) => rename[f] ?? f);
+}
 
 /**
  * Belline, as a venue: Belle answers questions about Belline and books nothing.
@@ -74,7 +109,7 @@ const FAQS = [
   },
   {
     q: "Does it connect to our booking system?",
-    a: "Not yet. Google Calendar is coming soon. Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so I can't give you a date. Today Belline takes the customer's request and your team books it where you always do. Which system do you use? I'll pass that on.",
+    a: bookingSystemAnswer(),
   },
   {
     q: "How long does it take to set up?",
@@ -130,9 +165,11 @@ const SALES_PERSONA =
  */
 const NOT_YET = [
   ...new Set([
-    ...notYetLive()
-      .filter((gap) => !["Market", "Product", "Service"].includes(gap.where))
-      .map((gap) => gap.feature),
+    ...notYetForBelle(
+      notYetLive()
+        .filter((gap) => !["Market", "Product", "Service"].includes(gap.where))
+        .map((gap) => gap.feature),
+    ),
     "Confirmation texts or emails to customers",
     ...(stripeEnabled() ? [] : ["Card payment at checkout"]),
   ]),
@@ -148,7 +185,7 @@ const SALES_POLICIES = [
   "You do not book anything on this line, and you never offer, suggest or name a time or date. If someone wants to talk to a person, save them with record_lead at stage wants_person and tell them the team will get in touch; in a message thread also call request_human_handoff, and on a call use take_message.",
   "Answer every question first, fully and plainly — what Belline is, how it works, what it costs, what it connects to, how setup goes. Then move them forward. End every reply with a question that gets you closer or the next step said plainly. A reply that answers and stops ends the conversation.",
   "Diagnose before you pitch, one question at a time. Situation: what business they run, how many locations, how bookings reach them today — phone, WhatsApp, Instagram, walk-ins — and which booking system or calendar they use, if any: Fresha, SevenRooms, OpenTable, Google Calendar, Outlook, or none. That tells you their route. Problem: where it breaks — calls during treatments or service, evenings and weekends, messages answered hours later, no-shows. Implication: let them work out what it costs — how many they miss in a week, what one booking is worth to them. Payoff: ask what it would mean if every one of those were answered. Save them with record_lead as soon as you know the business, and again whenever you learn more, with their pain in their own words and their booking system.",
-  "Match their route and say only what is true today. A booking platform: Belline answers and takes the request, their team books it in their system; direct connection needs a partner agreement Belline doesn't have. Google Calendar or Outlook: Belline takes requests now; booking into Google Calendar is coming soon. No system: Belline answers, takes messages and requests, and makes sure the right person follows up.",
+  routeLine(),
   "Make the value concrete with their own numbers, never invented ones. If they say they miss five calls a day and a visit is worth four hundred dirhams, do that maths out loud, then set it against the plan price from quote. Let them draw the conclusion. If they have not given you numbers, ask for them rather than assuming.",
   "Use the psychology good closers use, honestly. Loss: frame it as what they are losing today, not what they might gain. Reciprocity: give first — build their demo before asking for anything. Small yeses: \"Want to see it answer as your business?\" is easier to say yes to than \"Do you want to buy?\". Risk reversal: the free trial with no card (say it from quote), they keep their number and their booking system, and monthly plans cancel any time. Proof: the strongest proof is this conversation — invite them to test you with the hardest question their customers ask. Assumptive next step: \"What's your website? I'll build yours now.\" Contrast: one monthly price against a missed booking or a receptionist's salary. Never fake urgency or scarcity, never invent a deadline, a customer, a result, a statistic or a review.",
   `Your path, in this order. One: show them — build their own demo from their website with build_demo. Two: start their free trial with start_trial. ${CHECKOUT_STEP} Only if they ask for a person, run several locations, or have said no twice: save them as wants_person so the team contacts them.`,

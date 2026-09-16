@@ -1057,6 +1057,113 @@ await test("disconnecting revokes at Google, drops the link and puts the venue b
 });
 
 // ---------------------------------------------------------------------------
+head("'Coming soon' follows the flag: the website, the setup step, the app and Belle");
+
+const { applySiteFlags, strandedSiteCopy, SITE_FLAG_COPY } = await import("../src/lib/site-flags");
+const OFF = { FLAG_BOOKING_GOOGLE: "off" } as Record<string, string>;
+const ON = { FLAG_STUBS: "on", FLAG_BOOKING_GOOGLE: "on" } as Record<string, string>;
+const publicPage = (file: string) => source(`public/${file}`);
+/** The parts of a page a visitor reads: no comments. */
+const visible = (html: string) => html.replace(/<!--[\s\S]*?-->/g, "");
+/** Only the words: a class name like `cal-soon` is not a sentence. */
+const words = (html: string) => visible(html).replace(/<[^>]+>/g, " ");
+const SOON_CALENDAR = /\bsoon\b[^.<]{0,80}\bcalendar\b|\bcalendar\b[^.<]{0,80}\bsoon\b|not available yet|No calendar can be connected yet/i;
+
+await test("every sentence the flag swaps is still in its page, exactly once", () => {
+  assert.ok((SITE_FLAG_COPY["booking.google"] ?? []).length >= 5);
+  assert.deepEqual(strandedSiteCopy(publicPage), []);
+});
+
+await test("flag off, the website is exactly the page as written: Google Calendar is coming soon", () => {
+  for (const file of ["landing.html", "privacy.html"]) {
+    assert.equal(applySiteFlags(file, publicPage(file), OFF), publicPage(file), `${file} changed with the flag off`);
+    assert.equal(applySiteFlags(file, publicPage(file), {}), publicPage(file), `${file} changed with no env at all`);
+  }
+  assert.match(visible(publicPage("landing.html")), /Coming soon: books into your calendar/);
+  assert.match(visible(publicPage("privacy.html")), /No calendar can be connected yet/);
+});
+
+await test("flag on, the website says Google Calendar works, and 'soon' is gone from every calendar sentence", () => {
+  const landing = visible(applySiteFlags("landing.html", publicPage("landing.html"), ON));
+  assert.doesNotMatch(words(landing), SOON_CALENDAR, "the landing page still says the calendar is coming");
+  assert.match(landing, /<span class="state state-available cal-soon">Books into Google Calendar<\/span>/);
+  assert.match(landing, /books straight into it\. Outlook isn’t connected yet/, "Outlook is not kept honest");
+  // What check:webchat holds the hero to, still true: nothing in it is booked or confirmed.
+  const start = landing.indexOf('<section class="hero">');
+  const hero = landing.slice(start, landing.indexOf("</section>", start)).replace(/<[^>]+>/g, " ");
+  assert.doesNotMatch(hero, /\b(?:booked|confirmed)\b/i);
+  const privacy = visible(applySiteFlags("privacy.html", publicPage("privacy.html"), ON));
+  assert.doesNotMatch(words(privacy), SOON_CALENDAR, "the privacy page still says a calendar cannot be connected");
+  assert.match(privacy, /Google API Services User Data Policy<\/a>, including the Limited Use requirements/);
+  // check:billing's rule for the legal pages holds in both states.
+  assert.doesNotMatch(privacy, /\b(?:books?|booking|booked) (?:straight |directly )?(?:into|against|in) (?:your|the|their) (?:real |existing )?(?:diary|calendar)\b/i);
+});
+
+await test("the server swaps the copy as it serves the built site, by the flag it has now", async () => {
+  const { serveMarketing } = await import("../src/lib/marketing");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "belline-site-"));
+  const cwd = process.cwd();
+  fs.mkdirSync(path.join(dir, "site"));
+  fs.writeFileSync(path.join(dir, "site", "index.html"), publicPage("landing.html"));
+  fs.writeFileSync(path.join(dir, "site", "privacy.html"), publicPage("privacy.html"));
+  const get = (url: string) => {
+    let body = "";
+    const res = { writeHead: () => res, end: (b?: Buffer | string) => void (body = b ? String(b) : "") };
+    const served = serveMarketing({ method: "GET", url } as never, res as never);
+    assert.ok(served, `${url} was not served`);
+    return body;
+  };
+  process.chdir(dir);
+  try {
+    process.env.FLAG_BOOKING_GOOGLE = "off";
+    assert.match(get("/"), /Coming soon: books into your calendar/);
+    assert.match(get("/privacy"), /No calendar can be connected yet/);
+    process.env.FLAG_BOOKING_GOOGLE = "on";
+    assert.doesNotMatch(words(get("/")), SOON_CALENDAR);
+    assert.match(get("/"), /Books into Google Calendar/);
+    assert.doesNotMatch(words(get("/privacy")), SOON_CALENDAR);
+  } finally {
+    process.env.FLAG_BOOKING_GOOGLE = "on";
+    process.chdir(cwd);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+await test("in the app, the destination step, integrations and channels read the flag, never fixed copy", () => {
+  const setup = source("src/app/setup/[step]/page.tsx");
+  assert.match(setup, /function googleCard\(venue: Location\): DestinationOption \{[\s\S]{0,120}if \(!flag\("booking\.google"\)\) \{\s*return \{ id: "google", title, state: "soon"/);
+  assert.match(source("src/app/(app)/channels/page.tsx"), /const googleOn = flag\("booking\.google"\);[\s\S]{0,200}!googleOn \? "soon"/);
+  assert.match(source("src/app/(app)/integrations/page.tsx"), /\{googleOn \? \(/);
+  // Nowhere in the app is Google "coming soon" in fixed text outside a flag branch.
+  for (const file of ["src/app/setup/[step]/page.tsx", "src/app/(app)/channels/page.tsx", "src/app/(app)/integrations/page.tsx"]) {
+    const text = source(file);
+    for (const m of text.matchAll(/Google Calendar[^"\n]{0,80}(?:coming soon|isn.t available|not available)/gi)) {
+      const before = text.slice(Math.max(0, m.index! - 600), m.index);
+      assert.match(before, /flag\("booking\.google"\)|googleOn/, `${file}: "${m[0]}" is not behind the flag`);
+    }
+  }
+});
+
+await test("Belle says the same as the website, by the same flag", async () => {
+  const belle = await import("../src/lib/seed-belline");
+  assert.match(belle.bookingSystemAnswer(OFF), /Google Calendar is coming soon/);
+  assert.match(belle.routeLine(OFF), /booking into Google Calendar is coming soon/);
+  assert.doesNotMatch(belle.bookingSystemAnswer(ON), /soon|not yet/i);
+  assert.match(belle.bookingSystemAnswer(ON), /books straight into it/);
+  assert.doesNotMatch(belle.routeLine(ON), /soon/i);
+  const features = ["Google Calendar and booking-system integrations", "One Google Calendar or Microsoft Outlook connection", "Something else"];
+  assert.deepEqual(belle.notYetForBelle(features, OFF), features);
+  assert.ok(belle.notYetForBelle(features, ON).every((f) => !/Google/.test(f)), "Belle would still say Google Calendar does not work");
+});
+
+await test("the flag itself is never switched on in code", () => {
+  assert.match(source("src/lib/flags.ts"), /"booking\.google": \{ needs: \["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "CREDENTIALS_KEY"\], explicit: true \}/);
+  for (const file of ["Dockerfile", "server.ts", "src/lib/site-flags.ts", "src/lib/marketing.ts", "src/lib/seed-belline.ts"]) {
+    assert.doesNotMatch(source(file), /FLAG_BOOKING_GOOGLE\s*[=:]\s*["']?on/, file);
+  }
+});
+
+// ---------------------------------------------------------------------------
 head("The privacy page");
 
 await test("the privacy page carries the Limited Use statement without claiming the connection is live", () => {

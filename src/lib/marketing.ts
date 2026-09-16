@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { applySiteFlags } from "./site-flags";
 
 /**
  * Serving the marketing site from the app's own process.
@@ -45,6 +46,18 @@ function cacheFor(ext: string): string {
     return "public, max-age=31536000, immutable";
   }
   return "public, max-age=3600";
+}
+
+/**
+ * A built page with the copy for switched-on flags swapped in (site-flags.ts).
+ * `index.html` at the root is the landing page; the rest keep their names.
+ */
+export function pageWithFlags(relPath: string, bytes: Buffer, env: Record<string, string | undefined> = process.env): Buffer {
+  const name = relPath.split(path.sep).join("/");
+  const source = name === "index.html" ? "landing.html" : name;
+  const html = bytes.toString("utf8");
+  const out = applySiteFlags(source, html, env);
+  return out === html ? bytes : Buffer.from(out, "utf8");
 }
 
 export function marketingSiteExists(): boolean {
@@ -108,7 +121,8 @@ export function serveMarketing(req: IncomingMessage, res: ServerResponse): boole
     if (req.method === "HEAD") {
       res.end();
     } else {
-      res.end(fs.readFileSync(candidate));
+      const bytes = fs.readFileSync(candidate);
+      res.end(ext === ".html" ? pageWithFlags(path.relative(root, candidate), bytes) : bytes);
     }
     return true;
   }
