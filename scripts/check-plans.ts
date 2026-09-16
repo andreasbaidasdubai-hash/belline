@@ -26,6 +26,10 @@ delete process.env.ELEVENLABS_PLAN;
 const plans = await import("../src/lib/billing/plans");
 const { MARKETS, MARKET_CODES } = await import("../src/lib/markets");
 const margin = await import("../src/lib/billing/margin");
+const { modelKey } = await import("../src/lib/billing/cost");
+const { seedIfEmpty } = await import("../src/lib/seed");
+const { bellineVenue } = await import("../src/lib/seed-belline");
+const { listLocations } = await import("../src/lib/store");
 
 const {
   CATALOGUE_VERSION,
@@ -119,8 +123,8 @@ test("allowances are pooled: voice minutes across phone and the voice button, te
   assert.equal(poolOf("chat"), "conversations");
   assert.equal(poolOf("whatsapp"), "conversations");
   assert.deepEqual(productById("v2_starter").pools, { minutes: 75, conversations: 200 });
-  assert.deepEqual(productById("v2_growth").pools, { minutes: 250, conversations: 600 });
-  assert.deepEqual(productById("v2_scale").pools, { minutes: 600, conversations: 1300 });
+  assert.deepEqual(productById("v2_growth").pools, { minutes: 300, conversations: 750 });
+  assert.deepEqual(productById("v2_scale").pools, { minutes: 600, conversations: 2000 });
 });
 
 test("users per plan are stored as a limit: 2 / 5 / 15", () => {
@@ -274,7 +278,7 @@ test("a busy Starter moves to Growth, not Scale — pooled voice minutes count",
 });
 
 test("text conversations count too, pooled across chat and WhatsApp", () => {
-  assert.deepEqual(recommend({ chat: 500, whatsapp: 200 }, ["v2_growth"], "AE")?.products, ["v2_scale"]);
+  assert.deepEqual(recommend({ chat: 600, whatsapp: 300 }, ["v2_growth"], "AE")?.products, ["v2_scale"]);
 });
 
 test("a plan that fits recommends nothing, and nothing is ever recommended downwards", () => {
@@ -283,14 +287,25 @@ test("a plan that fits recommends nothing, and nothing is ever recommended downw
 });
 
 test("a September bundle past its allowance is pointed at the v2 plan that carries it", () => {
-  assert.deepEqual(recommend({ phone: 240, chat: 100 }, ["everything_starter"], "AE")?.products, ["v2_scale"]);
+  // Growth matches the bundle's pooled 300 minutes rather than shrinking it,
+  // and carries the usage: since the allowances were raised it is the cheapest
+  // plan that does both, where it used to take Scale.
+  assert.deepEqual(recommend({ phone: 240, chat: 100 }, ["everything_starter"], "AE")?.products, ["v2_growth"]);
 });
 
 console.log("\n\x1b[1mUnit costs agree with the strategy doc (§1.3)\x1b[0m\n");
 
+// Re-pinned on 16 September 2026, because the doc became the stale side rather
+// than the code. Three corrections moved these. Meta raised the UAE utility
+// rate on 1 October 2025 and §1.3 still carried the old one; the paid-template
+// share fell to 0.3 conservative / 0.15 lean once the free 24-hour service
+// window was accounted for — together taking lean WhatsApp $0.027 → $0.0231.
+// And the conservative basis now costs text on Haiku, the model reception
+// ships, taking its chat $0.031 → $0.0148 and its WhatsApp $0.049 → $0.0313.
+// The 7% tolerance is untouched: these are the figures §1.3 would print today.
 const DOC_UNIT: Record<"lean" | "conservative", Record<"phone" | "web_voice" | "chat" | "whatsapp", number>> = {
-  lean: { phone: 0.063, web_voice: 0.05, chat: 0.015, whatsapp: 0.027 },
-  conservative: { phone: 0.101, web_voice: 0.06, chat: 0.031, whatsapp: 0.049 },
+  lean: { phone: 0.063, web_voice: 0.05, chat: 0.015, whatsapp: 0.0231 },
+  conservative: { phone: 0.101, web_voice: 0.06, chat: 0.0148, whatsapp: 0.0313 },
 };
 for (const basis of margin.BASIS_ORDER) {
   test(`${basis}: phone, voice button, chat and WhatsApp within 7% of the doc`, () => {
@@ -303,6 +318,22 @@ for (const basis of margin.BASIS_ORDER) {
     console.log(`      ${got.join(" · ")}`);
   });
 }
+
+test("the conservative basis costs text on the model reception actually ships", () => {
+  // Costing text on Haiku is only honest while Haiku is what we run, so the
+  // basis is tied to the seeded venues rather than asserted in a comment. This
+  // fails if a seeded venue moves off Haiku, or if the basis moves off it.
+  seedIfEmpty();
+  const seeded = [...listLocations(), bellineVenue];
+  assert.ok(seeded.length > 3, "nothing was seeded, so this would prove nothing");
+  for (const venue of seeded) {
+    assert.equal(
+      modelKey(venue.agent.model).key,
+      margin.BASES.conservative.textModel,
+      `${venue.name} runs ${venue.agent.model}, which is not what the conservative basis costs text on`,
+    );
+  }
+});
 
 test("a pool is costed at its dearest channel, so the mix can only flatter the margin", () => {
   for (const basis of margin.BASIS_ORDER) {

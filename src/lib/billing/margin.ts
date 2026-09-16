@@ -48,11 +48,20 @@ const CHAT_TOKENS_PER_TURN = { in: 500, out: 170, cacheRead: 5_000 };
 const TTS_CHARS_PER_MINUTE = 400;
 const FLASH_CREDITS_PER_CHAR = 0.5;
 /**
- * Share of WhatsApp conversations that end in a confirmation sent after the
- * 24-hour service window, as a paid UAE utility template. Reproduces §1.3's
- * $0.027 and $0.049 per conversation from the rate card.
+ * Share of WhatsApp conversations that end in a template we actually pay for.
+ *
+ * Corrected 16 September 2026, and the correction is about when a template is
+ * free rather than what one costs. Meta has charged per delivered template
+ * since 1 July 2025, but a service reply inside the 24-hour customer service
+ * window has been free and unlimited since 1 November 2024, and a utility
+ * template sent while that window is open is free with it. Belline answers
+ * what the customer started, so the window is open when the confirmation goes
+ * out and it costs nothing. What we pay for is a template sent after the
+ * window has closed — chiefly a next-day reminder, not a confirmation.
+ *
+ * developers.facebook.com/docs/whatsapp/pricing
  */
-const TEMPLATE_SHARE: Record<Basis, number> = { lean: 0.4, conservative: 0.7 };
+const TEMPLATE_SHARE: Record<Basis, number> = { lean: 0.15, conservative: 0.3 };
 
 export const BASES: Record<
   Basis,
@@ -76,14 +85,40 @@ export const BASES: Record<
     voiceModel: "SONNET_5",
     textModel: "HAIKU_4_5",
   },
+  /**
+   * Every vendor assumption here is the pessimistic one — a UAE line,
+   * ElevenLabs Pro, the top of Meta's UAE template band, the 0.3 paid-template
+   * share — with one correction made on 16 September 2026: text is costed on
+   * Haiku, because Haiku is what reception actually runs. Voice stays Sonnet.
+   *
+   * The evidence, so this can be checked rather than trusted. The reception
+   * agent's model is per venue — `open()` in agent/runtime.ts reads
+   * `this.location.agent.model` — and every venue we ship is Haiku: seed.ts:64,
+   * 262 and 426 for the three demo venues, seed-belline.ts:247 for our own
+   * line, and the dashboard offers Haiku as "fastest (recommended)"
+   * (app/(app)/agents/AgentEditor.tsx:26). Sonnet appears only in
+   * prospect.ts:260 and the onboarding assistant (onboarding/index.ts:124,
+   * onboarding/assistant.ts:344) — one-off setup and prospecting, never
+   * per-conversation reception traffic. Costing text on Sonnet was not a
+   * pessimistic assumption, it was a wrong one, and it overstated a text
+   * conversation by exactly double.
+   *
+   * The exposure this leaves, which is real and not hypothetical: an owner can
+   * switch their venue to Sonnet on the Agent page, which doubles a text
+   * conversation from $0.0148 to $0.0296 and would take Scale to roughly 21%
+   * at full use — under the floor. `check-plans.ts` ties this basis to the
+   * seeded model so the two cannot drift apart unnoticed, but it cannot see
+   * what a customer chooses. If venues start moving to Sonnet, this basis is
+   * wrong and the allowances are what has to give.
+   */
   conservative: {
-    label: "Conservative — UAE line, Sonnet everywhere, ElevenLabs Pro",
+    label: "Conservative — UAE line, Sonnet voice, Haiku text, ElevenLabs Pro",
     markets: ["AE"],
     inbound: "TWILIO_INBOUND_AE",
     number: "TWILIO_NUMBER_AE",
     ttsCredit: "ELEVENLABS_CREDIT_PRO",
     voiceModel: "SONNET_5",
-    textModel: "SONNET_5",
+    textModel: "HAIKU_4_5",
   },
 };
 

@@ -365,9 +365,15 @@ export const PRODUCTS: Product[] = [
   // --- 2026-10: the three plans ----------------------------------------------
   //
   // Decided by the founder: AED 199 / 399 / 799 per location per month, annual
-  // stored at 1,990 / 3,990 / 7,990, and the safer allowances (75 / 250 / 600
-  // voice minutes, 200 / 600 / 1,300 text conversations). UAE only; no other
+  // stored at 1,990 / 3,990 / 7,990, and the allowances 75 / 300 / 600 voice
+  // minutes and 200 / 750 / 2,000 text conversations. UAE only; no other
   // market is priced until it opens.
+  //
+  // Raised on 16 September 2026, text first: at the planning cost of 40 fils a
+  // voice minute all-in and about 6 fils a text conversation, Growth and Scale
+  // keep roughly 59% and 55% at full use. The voice allowance stays where it
+  // is — a 750-minute Scale would have left about 47% — until there is
+  // measured cost data to move it on (cost.ts MIN_SAMPLES).
   {
     id: "v2_starter",
     kind: "plan",
@@ -391,7 +397,7 @@ export const PRODUCTS: Product[] = [
     status: "live",
     recommended: true,
     allowances: {},
-    pools: { minutes: 250, conversations: 600 },
+    pools: { minutes: 300, conversations: 750 },
     users: 5,
     prices: { AE: 399 * 100 },
     annualPrices: { AE: 3990 * 100 },
@@ -405,7 +411,7 @@ export const PRODUCTS: Product[] = [
     summary: "For higher-volume teams with more complex reception rules.",
     status: "live",
     allowances: {},
-    pools: { minutes: 600, conversations: 1300 },
+    pools: { minutes: 600, conversations: 2000 },
     users: 15,
     prices: { AE: 799 * 100 },
     annualPrices: { AE: 7990 * 100 },
