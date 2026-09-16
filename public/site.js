@@ -1139,7 +1139,8 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   form.addEventListener("input", function (e) {
     if (e.target.classList && (e.target.classList.contains("is-bad") || e.target.classList.contains("is-hint"))) clear(e.target);
     // Once nothing is marked any more, the summary under the button goes too.
-    if (note && note.classList.contains("is-bad") && !form.querySelector(".is-bad, .is-hint")) say("");
+    // Fields only: the note itself carries .is-bad while it shows, and matched itself before.
+    if (note && note.classList.contains("is-bad") && !form.querySelector("input.is-bad, select.is-bad, textarea.is-bad, input.is-hint")) say("");
   });
 
   var REQUIRED = {
