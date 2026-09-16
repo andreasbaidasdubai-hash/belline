@@ -113,7 +113,7 @@ async function sweepGoogle(): Promise<void> {
   const { sweepGoogle: sweep } = await import("./src/lib/integrations/google-sync");
   const r = await sweep();
   if (r.attempted || r.abandoned || r.recovered) {
-    console.log(`[google] sweep: ${r.abandoned} abandoned connects, ${r.recovered} venues recovered; retried ${r.attempted}: ${r.synced} written, ${r.failed} failed, ${r.waiting} waiting on a connection`);
+    console.log(`[google] sweep: ${r.abandoned} abandoned connects, ${r.recovered} venues recovered; retried ${r.attempted}: ${r.synced} written, ${r.failed} failed (${r.waiting} waiting on a reconnect)`);
   }
 }
 setTimeout(() => void sweepGoogle().catch((err) => console.error("[google] sweep failed:", err)), 45_000).unref?.();

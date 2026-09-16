@@ -44,6 +44,8 @@ const BACKOFF_MIN = [1, 5, 15, 60, 180, 360];
 
 export type SyncResult = "synced" | "skipped" | "waiting" | "failed";
 
+const WAITING = "Waiting for Google Calendar to be connected again.";
+
 const globalRef = globalThis as unknown as { __bellineGoogleSync?: Map<string, Promise<SyncResult>> };
 const running = () => (globalRef.__bellineGoogleSync ??= new Map());
 
@@ -119,7 +121,9 @@ async function run(bookingId: string, now = new Date()): Promise<SyncResult> {
   // Expired or switched off: kept pending, and written once it is reconnected.
   // The owner already has the banner and the team the exception for that.
   if (!googleUsable(location)) {
-    patch(bookingId, {}, { state: "pending", lastError: "Waiting for Google Calendar to be connected again." });
+    // Written once, not on every sweep: a venue that never reconnects must not
+    // rewrite its book every few minutes.
+    if (sync.state !== "pending" || sync.lastError !== WAITING) patch(bookingId, {}, { state: "pending", lastError: WAITING });
     return "waiting";
   }
 
@@ -183,7 +187,7 @@ async function run(bookingId: string, now = new Date()): Promise<SyncResult> {
       // withAccess has marked the link expired or misconfigured: the venue is
       // on requests, the owner is told, the team has the exception. Written
       // once the connection works again.
-      patch(bookingId, {}, { state: "pending", lastError: "Waiting for Google Calendar to be connected again." });
+      patch(bookingId, {}, { state: "pending", lastError: WAITING });
       return "waiting";
     }
     const attempts = (getBooking(bookingId)?.calendarSync?.attempts ?? 0) + 1;
@@ -244,10 +248,14 @@ export async function retryGoogleSyncs(now = new Date()): Promise<{ attempted: n
     await settleGoogleSync(booking.id);
     const result = await runQueued(booking.id, now);
     if (result === "skipped") continue;
+    // Waiting on a reconnect is not an attempt: nothing was asked of Google.
+    if (result === "waiting") {
+      out.waiting++;
+      continue;
+    }
     out.attempted++;
     if (result === "synced") out.synced++;
-    else if (result === "failed") out.failed++;
-    else out.waiting++;
+    else out.failed++;
   }
   return out;
 }
