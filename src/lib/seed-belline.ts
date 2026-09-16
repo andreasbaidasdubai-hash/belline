@@ -208,7 +208,9 @@ export const bellineVenue: Location = {
   name: "Belline",
   vertical: "clinic",
   timezone: "Asia/Dubai",
-  phone: "+1 571 778 5920",
+  // Our own line: the number Twilio routes to this venue, and the one it gives out.
+  businessPhone: "+15717785920",
+  bellineNumber: { number: "+15717785920", via: "legacy", assignedAt: "2026-09-16T00:00:00.000Z" },
   address: "Dubai",
   currency: "AED",
   // Generous, because the people trying this are in every timezone and a

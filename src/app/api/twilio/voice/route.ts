@@ -7,6 +7,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import { serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
 import { answersRealCustomers, notLiveMessage } from "@/lib/onboarding/journey";
+import { venueForDialledNumber } from "@/lib/telephony/number";
 
 export const dynamic = "force-dynamic";
 
@@ -89,7 +90,10 @@ export async function POST(request: Request) {
   const locations = listLocations({ includeInternal: true });
   const to = params.To ?? "";
 
-  const dialled = locations.find((l) => digitsOnly(l.phone) === digitsOnly(to));
+  // By the Belline number, never the business's own phone: the owner's line
+  // forwards here, and a venue whose own number happened to be dialled is not
+  // one this webhook answers for.
+  const dialled = venueForDialledNumber(locations, to);
   const asked = locations.find((l) => l.id === url.searchParams.get("loc"));
 
   // The last resort is a single-venue convenience, not a default.

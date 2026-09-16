@@ -365,7 +365,7 @@ async function payingOn(name: string, sub: Record<string, unknown>) {
   const loc = getLocation(created.ok ? created.location.id : "")!;
   upsertLocation({
     ...loc,
-    phone: "+97145550199",
+    businessPhone: "+97145550199",
     embed: { enabled: true, key: `k_${loc.id}`, mode: "both", allowedOrigins: ["https://example.test"], maxCallsPerDay: 20, maxCallSeconds: 300 },
     subscription: { market: "AE", cycle: "monthly", startedOn: addDays(today, -3), status: "active", ...sub },
   } as never);
@@ -471,7 +471,7 @@ async function packsVenue(name: string, email: string) {
   const id = out.ok ? out.location.id : "";
   upsertLocation({
     ...getLocation(id)!,
-    phone: "+97145550188",
+    businessPhone: "+97145550188",
     subscription: {
       products: ["v2_starter"],
       market: "AE",

@@ -40,8 +40,12 @@ export interface ClientRow {
   trialEndsOn: string | null;
   /** Past what they have paid for — shown whether or not the line has been stopped. */
   lapsed: Lapse | null;
-  /** The number forwarded calls reach. Empty means no call can arrive at all. */
-  phone: string;
+  /** The Belline number: where forwarded calls reach. Empty means no call can arrive at all. */
+  bellineNumber: string;
+  /** How the Belline number was given: pool, staff or legacy. Null with none. */
+  bellineVia: "pool" | "staff" | "legacy" | null;
+  /** The business's own phone, the one its customers dial. Empty when not given. */
+  businessPhone: string;
   paymentFailedAt: string | null;
   /** Monthly recurring revenue this venue represents today, fils. Zero unless active. */
   mrrFils: number;
@@ -130,7 +134,9 @@ export function clientBook(now = new Date()): ClientRow[] {
         status: sub?.status ?? "none",
         trialEndsOn: sub?.trial?.endsOn ?? null,
         lapsed: lapseOf(location, today),
-        phone: location.phone,
+        bellineNumber: location.bellineNumber?.number ?? "",
+        bellineVia: location.bellineNumber?.via ?? null,
+        businessPhone: location.businessPhone,
         paymentFailedAt: sub?.paymentFailedAt ?? null,
         mrrFils: mrrOf(sub),
         // Phone minutes: the number a venue's cost moves with. No phone on the

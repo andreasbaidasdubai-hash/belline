@@ -48,6 +48,38 @@ const restaurant = getLocation("loc_azure")!;
 const voice = staticPrompt(salon, "voice");
 const text = staticPrompt(salon, "text");
 
+console.log("\n\x1b[1mThe agent gives out the business's own phone\x1b[0m\n");
+
+{
+  const { ceilingMessage } = await import("../src/lib/webchat");
+  const { reminderMessage } = await import("../src/lib/reminders");
+  const split = {
+    ...salon,
+    businessPhone: "+41445550001",
+    bellineNumber: { number: "+97140000777", via: "pool" as const, assignedAt: "2026-09-16T08:00:00.000Z" },
+  };
+  test("the agent's prompt carries the business phone, never the Belline number, on both channels", () => {
+    for (const prompt of [staticPrompt(split, "voice"), staticPrompt(split, "text")]) {
+      assert.match(prompt, /Phone: \+41445550001/);
+      assert.ok(!prompt.includes("40000777"), "the agent was given the Belline number to read out");
+    }
+  });
+  test("'give us a ring', reminders and the refused-channel message name the business phone", () => {
+    assert.match(ceilingMessage(split), /ring on \+41445550001/);
+    assert.ok(!ceilingMessage(split).includes("40000777"));
+    const booking = { id: "b1", ref: "R7K2", locationId: split.id, date: "2026-09-20", startMin: 600, partySize: 1, guestName: "Sara", guestPhone: "+971501234567", status: "confirmed", createdAt: "2026-09-16T08:00:00.000Z" };
+    const reminder = reminderMessage(split, booking as never);
+    assert.ok(reminder.includes("+41445550001") && !reminder.includes("40000777"), reminder);
+    const entitlement = fs.readFileSync(path.join(process.cwd(), "src", "lib", "billing", "entitlement.ts"), "utf8");
+    assert.match(entitlement, /Please ring us on \$\{location\.businessPhone\}/);
+    assert.doesNotMatch(entitlement, /bellineNumber|location\.phone\b/);
+    // With no business phone, the messages say nothing rather than giving out the forwarding line.
+    const noOwn = { ...split, businessPhone: "" };
+    assert.ok(!ceilingMessage(noOwn).includes("40000777"));
+    assert.ok(!staticPrompt(noOwn, "voice").includes("40000777"));
+  });
+}
+
 console.log("\n\x1b[1mThe business is configured once\x1b[0m\n");
 
 test("every house rule appears on both channels", () => {
@@ -67,7 +99,7 @@ test("every FAQ answer appears on both channels", () => {
 });
 
 test("the persona and the venue's own details are the same on both", () => {
-  for (const fragment of [salon.agent.persona, salon.name, salon.address, salon.phone]) {
+  for (const fragment of [salon.agent.persona, salon.name, salon.address, salon.businessPhone]) {
     assert.ok(voice.includes(fragment), `voice is missing: ${fragment.slice(0, 40)}`);
     assert.ok(text.includes(fragment), `text is missing: ${fragment.slice(0, 40)}`);
   }
@@ -230,7 +262,7 @@ console.log("\n\x1b[1mThe forwarding test call\x1b[0m\n");
   const venue = () => getLocation("loc_lumiere")!;
   upsertLocation({
     ...venue(),
-    phone: BELLINE,
+    bellineNumber: { number: BELLINE, via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" },
     agent: { ...venue().agent, transferNumber: OWN },
     onboarding: { version: 1, channels: {} },
   });
@@ -291,7 +323,7 @@ console.log("\n\x1b[1mThe forwarding test call\x1b[0m\n");
 
   t("two windows with no call open a ticket; the owner is shown what to check", () => {
     const salonB = getLocation("loc_azure")!;
-    upsertLocation({ ...salonB, phone: "+97140000002", onboarding: { version: 1, channels: {} } });
+    upsertLocation({ ...salonB, bellineNumber: { number: "+97140000002", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" }, onboarding: { version: 1, channels: {} } });
     const t0 = new Date("2026-09-15T10:00:00.000Z");
     const late = (m: number) => new Date(t0.getTime() + m * 60_000);
     openWindow(getLocation(salonB.id)!, "eand", t0);
@@ -325,7 +357,7 @@ console.log("\n\x1b[1mThe forwarding test call\x1b[0m\n");
     const crypto = await import("node:crypto");
     const { POST } = await import("../src/app/api/twilio/voice/route");
     const salonC = getLocation("loc_azure")!;
-    upsertLocation({ ...salonC, phone: "+97140000003", onboarding: { version: 1, channels: {} } });
+    upsertLocation({ ...salonC, bellineNumber: { number: "+97140000003", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" }, onboarding: { version: 1, channels: {} } });
     openWindow(getLocation(salonC.id)!, "du");
     const keep = { ...process.env };
     process.env.TWILIO_AUTH_TOKEN = "test-token";
@@ -360,7 +392,7 @@ console.log("\n\x1b[1mThe forwarding test call\x1b[0m\n");
     const crypto = await import("node:crypto");
     const { POST } = await import("../src/app/api/twilio/voice/route");
     const venueD = getLocation("loc_lumiere")!;
-    upsertLocation({ ...venueD, phone: "+97140000004", onboarding: { version: 1, channels: { phone: { forwardingVerifiedAt: "2026-09-15T10:00:00.000Z" } } } });
+    upsertLocation({ ...venueD, bellineNumber: { number: "+97140000004", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" }, onboarding: { version: 1, channels: { phone: { forwardingVerifiedAt: "2026-09-15T10:00:00.000Z" } } } });
     const keep = { ...process.env };
     process.env.TWILIO_AUTH_TOKEN = "test-token";
     try {

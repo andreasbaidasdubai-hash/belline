@@ -116,7 +116,8 @@ await test("the venue, the reference and the number to change it", () => {
   assert.match(text, new RegExp(venue.name));
   assert.match(text, /R7K2/);
   assert.match(text, /table for 4/);
-  if (venue.phone) assert.ok(text.includes(venue.phone));
+  assert.ok(venue.businessPhone, "the fixture has no business phone to test with");
+  assert.ok(text.includes(venue.businessPhone));
 });
 
 await test("an unpaid deposit link rides along; a paid one does not", () => {

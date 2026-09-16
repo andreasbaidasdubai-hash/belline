@@ -66,7 +66,8 @@ await test("an owner adds a second location, in their own business, with its own
   assert.equal(loc.tenantId, owner.tenantId);
   assert.equal(loc.businessId, first.businessId);
   assert.equal(loc.subscription?.status, "trialing");
-  assert.match(loc.phone, /^\+9714/);
+  assert.match(loc.businessPhone, /^\+9714/);
+  assert.equal(loc.bellineNumber, undefined, "the business's own phone was taken for its Belline number");
   assert.ok((loc.brainHistory ?? []).length >= 1, "no baseline version");
   assert.equal(listLocationsFor(owner.tenantId).length, 2);
 });

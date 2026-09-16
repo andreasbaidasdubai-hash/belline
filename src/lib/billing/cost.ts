@@ -316,7 +316,8 @@ process.once("beforeExit", () => {
  */
 export function meterCallTime(
   call: Pick<Call, "id" | "locationId" | "channel">,
-  venue: Pick<Location, "phone">,
+  /** The Belline number is the one Twilio answered, so it sets the inbound rate. */
+  venue: Pick<Location, "bellineNumber">,
   seconds: number,
   opts: { stt: boolean },
 ): void {
@@ -326,7 +327,7 @@ export function meterCallTime(
 
   if (call.channel === "phone") {
     const billed = Math.ceil(minutes);
-    const inbound = `TWILIO_INBOUND_${countryOfNumber(venue.phone)}`;
+    const inbound = `TWILIO_INBOUND_${countryOfNumber(venue.bellineNumber?.number ?? "")}`;
     recordCost({ ...ctx, vendor: "twilio", unit: "min", units: billed, usd: billed * rate(inbound), detail: inbound });
     recordCost({ ...ctx, vendor: "twilio", unit: "min", units: billed, usd: billed * rate("TWILIO_MEDIA_STREAMS"), detail: "TWILIO_MEDIA_STREAMS" });
   }

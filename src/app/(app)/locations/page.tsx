@@ -26,7 +26,8 @@ export default async function LocationsPage() {
       tradeKey: l.tradeKey,
       timezone: l.timezone,
       address: l.address,
-      phone: l.phone,
+      // The business's own number. The Belline number is not edited here.
+      phone: l.businessPhone,
       currency: l.currency,
       hours: l.hours,
       closures: l.closures,

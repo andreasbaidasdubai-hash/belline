@@ -249,6 +249,6 @@ export function messageCeiling(location: Location): number {
  * a name and a number than by "rate limit exceeded".
  */
 export function ceilingMessage(location: Location): string {
-  const number = location.phone ? ` on ${location.phone}` : "";
+  const number = location.businessPhone ? ` on ${location.businessPhone}` : "";
   return `I've taken this as far as I can here. Please give us a ring${number} and someone will pick it up from where we left off.`;
 }

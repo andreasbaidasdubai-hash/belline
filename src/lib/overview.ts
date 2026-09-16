@@ -197,7 +197,7 @@ export function overviewFor(location: Location): Overview {
       ok: hoursSinceCall < 72,
       detail: lastCall
         ? `Last call ${new Date(lastCall.startedAt).toLocaleString()}`
-        : location.phone.trim()
+        : location.bellineNumber?.number.trim()
           ? "No calls yet. Check the number is forwarded."
           : "No phone number yet. Add one under How it works.",
     },

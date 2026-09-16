@@ -75,12 +75,12 @@ export default async function BookingPage({ params }: { params: Promise<{ token:
           token={token}
           calendarHref={`/b/${token}/calendar.ics`}
           policy={lateCancelNotice(location)}
-          phone={location.phone}
+          phone={location.businessPhone}
           venueName={location.name}
         />
       ) : (
         <p style={{ marginTop: 24, color: "var(--bl-text-2)", fontSize: 15 }}>
-          {state.why} {location.phone ? `For anything else, call ${location.name} on ${location.phone}.` : ""}
+          {state.why} {location.businessPhone ? `For anything else, call ${location.name} on ${location.businessPhone}.` : ""}
         </p>
       )}
     </>,

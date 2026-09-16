@@ -132,8 +132,10 @@ function messageFor(location: Location, channel: Channel | undefined): string {
       return "Nobody can take a call through the website just now. Please try again a little later.";
     case "chat":
     case "whatsapp":
-      return location.phone
-        ? `We can't reply here just now. Please ring us on ${location.phone}.`
+      // The business's own phone, never the Belline number: that one is
+      // answered by the same service that is refusing here.
+      return location.businessPhone
+        ? `We can't reply here just now. Please ring us on ${location.businessPhone}.`
         : "We can't reply here just now. Please try again a little later.";
     default:
       return `Thank you for calling ${location.name}. Nobody is able to take your call just now. Please try again a little later.`;

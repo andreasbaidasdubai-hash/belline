@@ -400,7 +400,8 @@ export function backfillOnboarding(
       location.internal ||
       location.demo?.enabled ||
       location.prospect ||
-      location.phone.trim() ||
+      bellineNumberOf(location) ||
+      location.businessPhone.trim() ||
       location.subscription?.status === "active" ||
       facts.phoneCalls > 0 ||
       facts.webConversations > 0,

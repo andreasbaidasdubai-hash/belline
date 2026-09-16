@@ -134,7 +134,24 @@ export interface Location {
    */
   tradeKey?: string;
   timezone: string;
-  phone: string;
+  /**
+   * The business's own phone number, E.164, or "" when not given: the number
+   * its customers already dial. Saved on the setup review and the venue's
+   * details, and what the agent and every message give out ("Please ring us
+   * on …"). Never a number calls are forwarded to — that is `bellineNumber`,
+   * and nothing that assigns one may touch this.
+   *
+   * Both used to share one `phone` field, so assigning a Belline number
+   * overwrote the owner's own line and setup told an owner to forward calls
+   * to their own mobile. seed.ts `splitVenuePhones` moved stored venues across.
+   */
+  businessPhone: string;
+  /**
+   * The Belline number: where the business forwards its calls, and the number
+   * /api/twilio/voice finds this venue by. Absent until one is assigned. See
+   * telephony/pool.ts and the staff "Record a number" route.
+   */
+  bellineNumber?: BellineNumber;
   address: string;
   currency: string;
   hours: WeeklyHours;
@@ -263,7 +280,24 @@ export interface Location {
   onboarding?: OnboardingState;
 }
 
-export type DestinationKind = "requests" | "belline" | "google" | "outlook" | "partner";
+/**
+ * A Belline number on a venue, and how it got there.
+ *
+ *   pool    handed out by code from the number pool (telephony/pool.ts)
+ *   staff   recorded by a person at Belline on the sales console
+ *   legacy  the number a demo, internal or pre-journey venue already answered
+ *           on when the phone fields were split (seed.ts `splitVenuePhones`)
+ */
+export interface BellineNumber {
+  /** E.164. */
+  number: string;
+  via: "pool" | "staff" | "legacy";
+  assignedAt: string;
+  /** The staff user id, for `staff`. */
+  by?: string;
+}
+
+export type DestinationKind ="requests" | "belline" | "google" | "outlook" | "partner";
 
 export interface RequestRules {
   /** Details a request needs besides a name and a number. */

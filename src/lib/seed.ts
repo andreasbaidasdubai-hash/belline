@@ -1,5 +1,6 @@
 import type { AgentConfig, Location, StaffMember, WeeklyHours } from "./types";
-import { isEmpty, listCalls, listLocations, replaceAll, upsertLocation } from "./store";
+import { isEmpty, listCalls, listLocations, listPoolRows, replaceAll, upsertLocation } from "./store";
+import { splitLegacyPhone, type LegacyVenue, type PhoneSplit } from "./telephony/number";
 import { backfillOnboarding, factsFrom } from "./onboarding/journey";
 import { BELLINE_TENANT_ID } from "./tenancy";
 import { ensureBaseline } from "./brain";
@@ -9,6 +10,14 @@ import { DEFAULT_TENANT_ID, businessIdForLocation, ensureTenancy } from "./tenan
 import { sealLegacyGoogleTokens } from "./integrations/google";
 
 const H = (h: number, m = 0) => h * 60 + m;
+
+/**
+ * A demo venue's line. The demo venues are fictional, so the number Twilio
+ * routes to them is also the number they give out.
+ */
+function demoLine(number: string): Pick<Location, "businessPhone" | "bellineNumber"> {
+  return { businessPhone: number, bellineNumber: { number, via: "legacy", assignedAt: "2026-09-16T00:00:00.000Z" } };
+}
 
 function everyDay(start: number, end: number): WeeklyHours {
   return Object.fromEntries(
@@ -37,7 +46,7 @@ const restaurant: Location = {
   name: "Azure Table",
   vertical: "restaurant",
   timezone: "Asia/Dubai",
-  phone: "+971 4 555 0142",
+  ...demoLine("+97145550142"),
   address: "Marina Walk, Dubai Marina",
   currency: "AED",
   // A plan, so the billing page has something real to show in a demo. The
@@ -237,7 +246,7 @@ const salon: Location = {
   name: "Lumière Hair & Beauty",
   vertical: "salon",
   timezone: "Europe/Zurich",
-  phone: "+41 44 555 21 80",
+  ...demoLine("+41445552180"),
   address: "Bahnhofstrasse 42, 8001 Zürich",
   currency: "CHF",
   // On trial, and in a venue whose own currency is not the one we bill in —
@@ -411,7 +420,7 @@ const clinic: Location = {
   name: "Meridian Dental & Aesthetics",
   vertical: "clinic",
   timezone: "Asia/Dubai",
-  phone: "+971 4 555 0390",
+  ...demoLine("+97145550390"),
   address: "Al Wasl Road, Jumeirah 1, Dubai",
   currency: "AED",
   hours: weekdaysOnly([0, 1, 2, 3, 4, 6], H(9), H(20)),
@@ -698,6 +707,8 @@ export function seedIfEmpty(): void {
     ensureOnboarding();
     return;
   }
+  // First, before anything reads a venue's numbers.
+  splitVenuePhones();
   addMissingVenues();
   backfillAgentDefaults();
   // Once per venue, on the first boot of the modular catalogue: pilots keep
@@ -712,6 +723,45 @@ export function seedIfEmpty(): void {
   ensureOnboarding();
   // A Google refresh token never stays in plain text past a boot.
   sealLegacyGoogleTokens();
+}
+
+/**
+ * Split each stored venue's single `phone` into `businessPhone` and
+ * `bellineNumber`, once.
+ *
+ * One field used to hold both the business's own line and the number calls are
+ * forwarded to, so assigning a Belline number overwrote the owner's phone. The
+ * rules for which one a stored `phone` was are in telephony/number.ts
+ * `splitLegacyPhone`; they keep every number Twilio routes today routing to
+ * the same venue. A venue that already has `businessPhone` is left alone, so
+ * the second boot writes nothing. Nothing reads `phone` after this; the store
+ * keeps writing it for a rollback only (store.ts `withRollbackPhone`). Each
+ * decision is logged, without the numbers.
+ */
+export function splitVenuePhones(now: Date = new Date()): { id: string; rule: PhoneSplit["rule"] }[] {
+  const decided: { id: string; rule: PhoneSplit["rule"] }[] = [];
+  const pool = listPoolRows();
+  for (const stored of listLocations({ includeInternal: true, includeArchived: true }) as LegacyVenue[]) {
+    if (typeof stored.businessPhone === "string") continue;
+    const phoneCalls = listCalls(stored.id, { includeTests: true }).filter((c) => c.channel === "phone").length;
+    const split = splitLegacyPhone(stored, pool, { phoneCalls }, now);
+    const { bellineNumber: _drop, ...rest } = stored;
+    void _drop;
+    upsertLocation({
+      ...rest,
+      businessPhone: split.businessPhone,
+      ...(split.bellineNumber ? { bellineNumber: split.bellineNumber } : {}),
+    } as Location);
+    decided.push({ id: stored.id, rule: split.rule });
+    console.log(
+      "[seed] phone split for %s: %s (business phone %s, Belline number %s)",
+      stored.id,
+      split.rule,
+      split.businessPhone ? "set" : "none",
+      split.bellineNumber ? `via ${split.bellineNumber.via}` : "none",
+    );
+  }
+  return decided;
 }
 
 /**

@@ -178,7 +178,8 @@ export default async function ClientsPage() {
                   <th style={{ textAlign: "right" }}>Calls</th>
                   <th style={{ textAlign: "right" }}>Bookings 30d</th>
                   <th style={{ textAlign: "right" }}>MRR</th>
-                  <th>Line</th>
+                  <th>Belline number</th>
+                  <th>Business phone</th>
                   <th>WhatsApp</th>
                 </tr>
               </thead>
@@ -239,7 +240,10 @@ export default async function ClientsPage() {
                       {r.mrrFils ? aed(r.mrrFils) : <span className="muted">—</span>}
                     </td>
                     <td>
-                      <NumberCell venueId={r.venueId} venueName={r.venueName} phone={r.phone} />
+                      <NumberCell venueId={r.venueId} venueName={r.venueName} bellineNumber={r.bellineNumber} via={r.bellineVia} market={r.market} />
+                    </td>
+                    <td className="mono" style={{ fontSize: 12 }} title="The business's own number, which its customers dial. Set by the owner.">
+                      {r.businessPhone || <span className="muted">not given</span>}
                     </td>
                     <td>
                       <WhatsAppCell

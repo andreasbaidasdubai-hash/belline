@@ -70,7 +70,7 @@ async function venue(sub: Record<string, unknown> = {}) {
   const { location, user } = signed as Extract<typeof signed, { ok: true }>;
   upsertLocation({
     ...getLocation(location.id)!,
-    phone: "+97145550100",
+    businessPhone: "+97145550100",
     subscription: { products: ["v2_starter"], market: "AE", cycle: "monthly", startedOn: PERIOD, status: "active", ...sub },
   } as never);
   return { id: location.id, owner: user, fresh: () => getLocation(location.id)! };

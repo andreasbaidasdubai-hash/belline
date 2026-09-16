@@ -98,7 +98,7 @@ export default async function DemoPage() {
                       <div style={{ fontWeight: 600 }}>{l.name}</div>
                       <div className="muted" style={{ fontSize: 12 }}>{l.vertical}</div>
                     </td>
-                    <td className="mono" style={{ fontSize: 13 }}>{l.phone}</td>
+                    <td className="mono" style={{ fontSize: 13 }}>{l.bellineNumber?.number ?? ""}</td>
                     <td>
                       <span
                         className="mono"

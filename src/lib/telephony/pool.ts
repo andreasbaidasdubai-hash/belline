@@ -1,10 +1,11 @@
 import type { Location, PoolNumber } from "../types";
 import { getLocation, listLocations, listPoolRows, mutatePool, upsertLocation } from "../store";
 import { flag } from "../flags";
-import { openException } from "../exceptions";
+import { listExceptions, openException, updateException } from "../exceptions";
 import { BELLINE_TENANT_ID } from "../tenancy";
 import { freshOnboarding } from "../onboarding/journey";
-import { bellineNumberOf } from "./number";
+import { requireE164 } from "../phone";
+import { bellineNumberOf, sameNumber } from "./number";
 
 /**
  * Belline numbers, handed out by code.
@@ -43,8 +44,8 @@ export type AssignResult =
 function heldNumbers(except?: string): Set<string> {
   return new Set(
     listLocations({ includeInternal: true, includeArchived: true })
-      .filter((l) => l.id !== except && l.phone.trim())
-      .map((l) => digits(l.phone)),
+      .filter((l) => l.id !== except && bellineNumberOf(l))
+      .map((l) => digits(bellineNumberOf(l))),
   );
 }
 
@@ -116,8 +117,8 @@ function preparing(location: Location, reason: "flag_off" | "pool_empty"): Assig
  */
 export function assignNumber(location: Location, now: Date = new Date(), env: Record<string, string | undefined> = process.env): AssignResult {
   const current = getLocation(location.id) ?? location;
-  // Belline's number, not whatever is in `phone`: the review step saves the
-  // business's own line there, and that is not a number calls forward to.
+  // Belline's number only. The business's own phone is a different field and
+  // is never a number calls forward to.
   const existing = bellineNumberOf(current);
   if (existing) return { state: "assigned", number: existing, created: false };
   if (!flag("numbers.pool", env)) return preparing(current, "flag_off");
@@ -136,10 +137,13 @@ export function assignNumber(location: Location, now: Date = new Date(), env: Re
   if (!claimed) return preparing(current, "pool_empty");
 
   const o = current.onboarding ?? freshOnboarding();
+  // `businessPhone` is carried across untouched: assigning a Belline number
+  // must never change the number the business gives out. `numberAssignedAt` is
+  // still stamped so a rollback to the build before the split reads it right.
   upsertLocation({
     ...current,
-    phone: claimed.number,
-    onboarding: { ...o, channels: { ...o.channels, phone: { ...o.channels.phone, numberAssignedAt: now.toISOString() } } },
+    bellineNumber: { number: claimed.number, via: "pool", assignedAt: now.toISOString() },
+    onboarding:{ ...o, channels: { ...o.channels, phone: { ...o.channels.phone, numberAssignedAt: now.toISOString() } } },
   });
 
   if (claimed.left < lowWater(env)) {
@@ -165,6 +169,66 @@ export function recordManualAssignment(locationId: string, number: string, by: s
     const row = rows.find((r) => digits(r.number) === d);
     if (row) Object.assign(row, { status: "assigned", locationId, assignedAt: now.toISOString(), assignedBy: by });
   });
+}
+
+export type StaffNumberResult =
+  | { ok: true; before: string; bellineNumber: string }
+  | { ok: false; status: 404 | 409 | 422; error: string };
+
+/**
+ * A person at Belline records a venue's Belline number by hand (the sales
+ * console's "Record a number"), or clears it with an empty entry.
+ *
+ * Writes `bellineNumber` and nothing else about the venue's numbers: the
+ * business's own phone is the owner's, and recording a Belline number never
+ * changes it. E.164 only. Refuses a number another venue already holds: two
+ * venues on one number means the webhook answers the first as both.
+ */
+export function recordStaffNumber(venueId: string, raw: unknown, by: string, now: Date = new Date()): StaffNumberResult {
+  const venue = getLocation(venueId);
+  if (!venue) return { ok: false, status: 404, error: "No such venue." };
+
+  const text = String(raw ?? "").trim();
+  let number = "";
+  if (text) {
+    const strict = requireE164(text);
+    if (!strict.ok) return { ok: false, status: 422, error: `${strict.reason} Write it in international form, starting with +, as Twilio shows it.` };
+    number = strict.e164;
+  }
+  if (number) {
+    const holder = listLocations({ includeInternal: true }).find((l) => l.id !== venue.id && sameNumber(bellineNumberOf(l), number));
+    if (holder) return { ok: false, status: 409, error: `${holder.name} already has that number.` };
+  }
+
+  const before = bellineNumberOf(venue);
+  // The pool follows what staff set: a number cleared from a venue is
+  // quarantined, a number set by hand is marked taken so code never hands it
+  // out again.
+  if (before && !sameNumber(before, number)) releaseNumber(venue.id, now);
+  if (number) recordManualAssignment(venue.id, number, by, now);
+  // `numberAssignedAt` is kept in step only so a rollback to the build before
+  // the phone split still reads this number as Belline's.
+  const at = now.toISOString();
+  const o = venue.onboarding;
+  const phoneState = { ...(o?.channels.phone ?? {}) };
+  if (number) phoneState.numberAssignedAt = at;
+  else delete phoneState.numberAssignedAt;
+  const { bellineNumber: _previous, ...rest } = venue;
+  void _previous;
+  upsertLocation({
+    ...rest,
+    ...(number ? { bellineNumber: { number, via: "staff" as const, assignedAt: at, by } } : {}),
+    ...(o ? { onboarding: { ...o, channels: { ...o.channels, phone: phoneState } } } : {}),
+  });
+
+  // The override is the fix for a "being prepared" ticket, so it closes it
+  // with a note saying what was done.
+  if (number) {
+    for (const row of listExceptions({ locationId: venue.id, kind: "pool_empty" })) {
+      updateException(row.id, { kind: "resolve", note: `Number ${number} assigned by hand.`, minutes: 0, by });
+    }
+  }
+  return { ok: true, before, bellineNumber: number };
 }
 
 /** Give a venue's number back. It is quarantined for 30 days before anyone else gets it. */

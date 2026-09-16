@@ -167,7 +167,7 @@ export function blankVenue(input: SignupInput, tenantId: string, businessId: str
     vertical,
     ...(tradeKey ? { tradeKey } : {}),
     timezone,
-    phone: "",
+    businessPhone: "",
     address: "",
     // From the market, never guessed from the timezone: every Europe/* zone
     // used to get pounds, including a UAE business set up from Zurich.
@@ -523,7 +523,8 @@ export function applyDraft(location: Location, confirmed: Confirmed): Location {
     // An empty string is a cleared field, not a missing one: the review form
     // always sends what is on screen.
     address: confirmed.address !== undefined ? confirmed.address.trim() : location.address,
-    phone: confirmed.phone !== undefined ? confirmed.phone.trim() : location.phone,
+    // The business's own phone. The Belline number is not on the review form.
+    businessPhone: confirmed.phone !== undefined ? confirmed.phone.trim() : location.businessPhone,
     hours,
   };
 
@@ -629,7 +630,7 @@ export function currentVenue(location: Location): CurrentVenue {
     vertical: location.vertical,
     greeting: location.agent.greeting,
     address: location.address,
-    phone: location.phone,
+    phone: location.businessPhone,
     hours: location.hours,
     services:
       location.vertical === "restaurant"

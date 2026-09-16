@@ -190,7 +190,7 @@ function persist(key: keyof Db): void {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const file = path.join(DATA_DIR, `${key}.json`);
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  const json = JSON.stringify(db[key], null, 2);
+  const json = JSON.stringify(key === "locations" ? db.locations.map(withRollbackPhone) : db[key], null, 2);
 
   fs.writeFileSync(tmp, json, "utf8");
 
@@ -223,6 +223,24 @@ function persist(key: keyof Db): void {
       }
     }
   }
+}
+
+/**
+ * The venue as written to disk, with the pre-split `phone` beside the two
+ * fields that replaced it.
+ *
+ * Write-only, and nothing in this build reads it: it is there so that rolling
+ * back to a build from before `businessPhone`/`bellineNumber` finds the field
+ * it routes calls by (and calls `.trim()` on) on every venue, including ones
+ * created after this build shipped. It holds what that build meant by it: the
+ * Belline number where there is one, else the business's own phone. Remove it
+ * once a rollback past the split is no longer possible.
+ */
+function withRollbackPhone(location: Location): Location {
+  // A row not split yet keeps the `phone` it was read with: the split reads
+  // it, and a write of some other venue in between must not blank it.
+  if (typeof location.businessPhone !== "string") return location;
+  return { ...location, phone: location.bellineNumber?.number ?? location.businessPhone } as Location;
 }
 
 export function id(prefix: string): string {

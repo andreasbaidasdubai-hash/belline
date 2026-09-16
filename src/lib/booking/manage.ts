@@ -159,7 +159,7 @@ export function bookingEmail(location: Location, booking: Booking, kind: Booking
     ...(deposit ? ["", deposit] : []),
     ...(policy ? ["", policy] : []),
     "",
-    location.phone ? `Questions? Call ${location.name} on ${location.phone}.` : `— ${location.name}`,
+    location.businessPhone ? `Questions? Call ${location.name} on ${location.businessPhone}.` : `— ${location.name}`,
   ].join("\n");
 
   const button = (href: string, label: string, primary: boolean) =>
@@ -190,7 +190,7 @@ ${
 ${deposit ? `<tr><td style="padding:14px 28px 0;font-size:14px;color:#4A443C">${esc(deposit)}</td></tr>` : ""}
 ${policy ? `<tr><td style="padding:14px 28px 0;font-size:13px;color:#746C63">${esc(policy)}</td></tr>` : ""}
 <tr><td style="padding:22px 28px 28px;font-size:13px;color:#746C63">${
-    location.phone ? `Questions? Call ${esc(location.name)} on ${esc(location.phone)}.` : esc(location.name)
+    location.businessPhone ? `Questions? Call ${esc(location.name)} on ${esc(location.businessPhone)}.` : esc(location.name)
   }</td></tr>
 </table>
 <p style="font-size:11px;color:#9A9288;margin:16px 0 0">Sent for ${esc(location.name)} by Belline.</p>

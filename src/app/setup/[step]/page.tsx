@@ -352,7 +352,7 @@ function Body({
             countryIso={venueMarket(venue)}
             initial={{
               askFor: rules.askFor.length > 0,
-              transferNumber: o?.escalation?.transferNumber || venue.agent.transferNumber || venue.phone,
+              transferNumber: o?.escalation?.transferNumber || venue.agent.transferNumber || venue.businessPhone,
               notify: o?.escalation?.notifyEmail || o?.escalation?.notifyWhatsApp || "",
               afterHours: rules.afterHours,
               neverSay: rules.neverSay.join("\n"),
@@ -391,9 +391,9 @@ function Body({
         channelStatuses(venue, facts, { whatsappConnected: whatsapp.state === "live" }).map((c) => [c.id, c]),
       ) as Record<ChannelStatus["id"], ChannelStatus>;
       const pill = (c: ChannelStatus) => `${STATE_WORD[c.state]}${c.state === "waiting" && c.detail.startsWith("Connected") ? " — connected" : ""}`;
-      // Belline's own number, and only that. `venue.phone` also holds the
-      // business's own line from the review step, which was once shown here as
-      // the number to forward calls to.
+      // Belline's number, and only that: `bellineNumber`, never the business's
+      // own phone from the review step, which was once shown here as the number
+      // to forward calls to.
       const belline = bellineNumberOf(venue);
       const action = { padding: "8px 14px", fontSize: 13.5, display: "inline-block" } as const;
       return (

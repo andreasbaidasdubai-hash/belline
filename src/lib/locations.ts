@@ -126,15 +126,17 @@ function applyBasics(location: Location, input: LocationInput): LocationResult {
   if (input.address !== undefined) next.address = String(input.address).trim().slice(0, 240);
   // With its country code, always (lib/phone.ts): a number that is new or
   // changed must arrive as E.164. One sent back exactly as stored is kept, so a
-  // venue saved before this rule can still change its hours.
-  if (input.phone !== undefined && String(input.phone).trim() !== location.phone.trim()) {
+  // venue saved before this rule can still change its hours. `phone` here is
+  // the business's own number; the Belline number is only ever set by the pool
+  // or by staff, never from this form.
+  if (input.phone !== undefined && String(input.phone).trim() !== location.businessPhone.trim()) {
     const raw = String(input.phone).trim();
     if (raw) {
       const strict = requireE164(raw);
       if (!strict.ok) return { ok: false, field: "phone", error: strict.reason };
-      next.phone = strict.e164;
+      next.businessPhone = strict.e164;
     } else {
-      next.phone = "";
+      next.businessPhone = "";
     }
   }
   if (input.currency !== undefined) {

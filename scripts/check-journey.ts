@@ -340,7 +340,7 @@ console.log("\n\x1b[1mAnswering real customers, channel by channel\x1b[0m\n");
 const passedAll = tested(withState(reviewed, { destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }));
 
 await test("nothing answers a real customer before Go live, whatever is connected", () => {
-  const connected = { ...passedAll, phone: "+97140000009", embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, channels: { phone: { numberAssignedAt: at, forwardingVerifiedAt: at }, web: { domains: ["https://x.test"], detectedAt: at } } } };
+  const connected = { ...passedAll, bellineNumber: { number: "+97140000009", via: "pool" as const, assignedAt: at }, embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, channels: { phone: { numberAssignedAt: at, forwardingVerifiedAt: at }, web: { domains: ["https://x.test"], detectedAt: at } } } };
   assert.equal(answersRealCustomers(connected), false);
   const s = channelStatuses(connected, NO_FACTS, { now });
   assert.deepEqual(s.map((c) => [c.id, c.state]), [["phone", "waiting"], ["web", "waiting"], ["link", "not_set_up"], ["whatsapp", "not_set_up"]]);
@@ -349,7 +349,7 @@ await test("nothing answers a real customer before Go live, whatever is connecte
 });
 
 await test("a connected channel waiting on the checks says so", () => {
-  const unchecked = { ...withState(reviewed, { destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }), phone: "+97140000009" };
+  const unchecked = { ...withState(reviewed, { destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }), bellineNumber: { number: "+97140000009", via: "pool" as const, assignedAt: at } };
   const venue = { ...unchecked, onboarding: { ...unchecked.onboarding!, channels: { phone: { numberAssignedAt: at, forwardingVerifiedAt: at } } } };
   const phone = channelStatuses(venue, NO_FACTS, { now })[0];
   assert.equal(phone.state, "waiting");
@@ -357,7 +357,7 @@ await test("a connected channel waiting on the checks says so", () => {
 });
 
 await test("after Go live each channel is live once connected, and one connected later goes live on its own", () => {
-  const live = { ...passedAll, phone: "+97140000009", embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, activatedAt: at, channels: { phone: { numberAssignedAt: at, forwardingVerifiedAt: at } } } };
+  const live = { ...passedAll, bellineNumber: { number: "+97140000009", via: "pool" as const, assignedAt: at }, embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, activatedAt: at, channels: { phone: { numberAssignedAt: at, forwardingVerifiedAt: at } } } };
   assert.equal(answersRealCustomers(live), true);
   const before = channelStatuses(live, NO_FACTS, { now });
   assert.deepEqual(before.map((c) => [c.id, c.state]), [["phone", "live"], ["web", "waiting"], ["link", "not_set_up"], ["whatsapp", "not_set_up"]]);
@@ -368,7 +368,7 @@ await test("after Go live each channel is live once connected, and one connected
 });
 
 await test("no Belline number is not set up, never live", () => {
-  const s = channelStatuses({ ...fresh, phone: "" }, { ...NO_FACTS }, { now });
+  const s = channelStatuses({ ...fresh, bellineNumber: undefined }, { ...NO_FACTS }, { now });
   assert.equal(s[0].state, "not_set_up");
 });
 
@@ -396,7 +396,7 @@ await test("every seeded venue is marked live, on Belline's diary", () => {
 });
 
 await test("a live venue from before the journey changes in nothing but the new record", () => {
-  const old: Loc = { ...complete(fresh), phone: "+97140000000", onboarding: undefined, brainHistory: [{ createdAt: "2026-03-01T09:00:00.000Z" } as never] };
+  const old: Loc = { ...complete(fresh), bellineNumber: { number: "+97140000000", via: "legacy", assignedAt: "2026-03-01T09:00:00.000Z" }, onboarding: undefined, brainHistory: [{ createdAt: "2026-03-01T09:00:00.000Z" } as never] };
   const filled = backfillOnboarding(old, NO_FACTS, now)!;
   const { onboarding, ...rest } = filled;
   const { onboarding: _none, ...before } = old;
@@ -407,7 +407,7 @@ await test("a live venue from before the journey changes in nothing but the new 
 });
 
 await test("real calls, an active subscription or the original tenants each count as live", () => {
-  const blank: Loc = { ...fresh, onboarding: undefined, phone: "" };
+  const blank: Loc = { ...fresh, onboarding: undefined, businessPhone: "", bellineNumber: undefined };
   assert.ok(backfillOnboarding(blank, { ...NO_FACTS, phoneCalls: 2 }, now)!.onboarding!.activatedAt);
   assert.ok(backfillOnboarding(blank, { ...NO_FACTS, webConversations: 1 }, now)!.onboarding!.activatedAt);
   assert.ok(backfillOnboarding({ ...blank, subscription: { ...fresh.subscription!, status: "active" } }, NO_FACTS, now)!.onboarding!.activatedAt);
@@ -415,7 +415,7 @@ await test("real calls, an active subscription or the original tenants each coun
 });
 
 await test("a trial part way through setup is not marked live, and is reviewed only if complete", () => {
-  const blank: Loc = { ...fresh, onboarding: undefined, phone: "" };
+  const blank: Loc = { ...fresh, onboarding: undefined, businessPhone: "", bellineNumber: undefined };
   const unfinished = backfillOnboarding(blank, { ...NO_FACTS, testConversations: 3 }, now)!.onboarding!;
   assert.equal(unfinished.activatedAt, undefined);
   assert.equal(unfinished.reviewedAt, undefined);
@@ -439,10 +439,16 @@ await test("backfill is idempotent: a record is never rewritten, and a second bo
 });
 
 await test("a venue saved without a record is backfilled on the next boot", () => {
-  const legacy = { ...getLocation(fresh.id)!, id: "loc_legacy_journey", phone: "+97140000001", onboarding: undefined };
-  upsertLocation(legacy);
+  // Shaped as stored before the phone split too: one `phone`, neither new field.
+  const { businessPhone: _b, bellineNumber: _n, ...rest } = getLocation(fresh.id)!;
+  void _b;
+  void _n;
+  const legacy = { ...rest, id: "loc_legacy_journey", phone: "+97140000001", onboarding: undefined };
+  upsertLocation(legacy as never);
   seedIfEmpty();
   assert.ok(getLocation("loc_legacy_journey")!.onboarding?.activatedAt);
+  // The split ran first, so the number it answered on is still its Belline number.
+  assert.equal(getLocation("loc_legacy_journey")!.bellineNumber?.number, "+97140000001");
 });
 
 console.log("\n\x1b[1mSurfaces read the journey\x1b[0m\n");
