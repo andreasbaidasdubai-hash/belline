@@ -106,11 +106,15 @@ setInterval(sweepReminders, REMINDER_SWEEP_MS).unref?.();
 // Bookings whose change has not reached the venue's Google Calendar yet —
 // Google refused, timed out, or the process restarted mid-write — are tried
 // again every few minutes, each on its own back-off. Idempotent by event id.
+// The same sweep notices connections that never came back from Google and
+// venues Google refused because of our project that it now accepts.
 const GOOGLE_SWEEP_MS = 3 * 60 * 1000;
 async function sweepGoogle(): Promise<void> {
-  const { retryGoogleSyncs } = await import("./src/lib/integrations/google-sync");
-  const r = await retryGoogleSyncs();
-  if (r.attempted) console.log(`[google] retried ${r.attempted}: ${r.synced} written, ${r.failed} failed, ${r.waiting} waiting on a connection`);
+  const { sweepGoogle: sweep } = await import("./src/lib/integrations/google-sync");
+  const r = await sweep();
+  if (r.attempted || r.abandoned || r.recovered) {
+    console.log(`[google] sweep: ${r.abandoned} abandoned connects, ${r.recovered} venues recovered; retried ${r.attempted}: ${r.synced} written, ${r.failed} failed, ${r.waiting} waiting on a connection`);
+  }
 }
 setTimeout(() => void sweepGoogle().catch((err) => console.error("[google] sweep failed:", err)), 45_000).unref?.();
 setInterval(() => void sweepGoogle().catch((err) => console.error("[google] sweep failed:", err)), GOOGLE_SWEEP_MS).unref?.();

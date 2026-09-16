@@ -794,9 +794,25 @@ await test("Google refusing the token marks the link, raises one exception, offe
       "call_45:book:1",
     );
     assert.ok(!created.ok);
+    // In the team's queue, not only a log line.
+    const { listExceptions } = await import("../src/lib/exceptions");
+    const queued = listExceptions({ locationId: loc.id, kind: "google_token_expired" });
+    assert.equal(queued.length, 1, "no google_token_expired exception for the team");
   } finally {
     fake.restore();
   }
+});
+
+await test("a booking taken at the desk while the connection is down is kept, and waits for the calendar", async () => {
+  const loc = getLocation(salonBase.id)!;
+  assert.ok(loc.google?.expiredAt, "the salon should still be expired here");
+  const { date, startMin } = sharedSlot(loc);
+  const out = createFromDesk(loc, { date, startMin, serviceIds: [loc.salon!.services[0].id], staffId: loc.salon!.staff[1].id, guestName: "While Down", guestPhone: "+971500000107" });
+  assert.ok(out.ok, out.ok ? "" : out.error);
+  await settle();
+  const saved = listBookings({ locationId: loc.id, status: "confirmed" }).find((b) => b.guestName === "While Down")!;
+  assert.equal(saved.calendarSync?.state, "pending");
+  assert.equal(liveEventsOf(saved.id).length, 0);
 });
 
 await test("the owner's home banner carries the calendar line", async () => {
@@ -814,6 +830,220 @@ await test("reconnecting keeps the calendars picked, and clears the expiry", asy
   assert.equal(again.google!.calendarId, "primary");
   assert.ok(again.google!.staffCalendars && Object.keys(again.google!.staffCalendars).length === 1);
   assert.equal(providerFor(again), googleCalendarProvider);
+});
+
+await test("once reconnected, the sweep writes what was booked while it was down", async () => {
+  assert.ok(sync, "no sync module");
+  await sync!.sweepGoogle(new Date());
+  const booking = listBookings({ locationId: salonBase.id, status: "confirmed" }).find((b) => b.guestName === "While Down")!;
+  assert.equal(getBooking(booking.id)!.calendarSync?.state, "synced");
+  assert.equal(liveEventsOf(booking.id).length, 1);
+});
+
+// ---------------------------------------------------------------------------
+head("Misconfiguration in the real world: said plainly to the owner, logged and queued for us");
+
+const googleApiLib = await import("../src/lib/integrations/google-api");
+/** A customer venue the tests above never connected. */
+const spareVenue = () => {
+  const v = listLocations().find((l) => !l.internal && l.id !== salonBase.id && l.id !== restaurantBase.id && !l.google);
+  assert.ok(v, "the fixture has no third venue");
+  return v!;
+};
+
+/** Answer the live client's fetches with these, in order, for the length of `fn`. */
+async function withGoogleReplies(replies: { status: number; body: unknown }[], fn: () => Promise<void>): Promise<void> {
+  const guard = globalThis.fetch;
+  const queue = [...replies];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input instanceof Request ? input.url : input);
+    assert.match(url, /^https:\/\/(oauth2|www)\.googleapis\.com\//, `the live client asked for ${url}`);
+    const next = queue.shift();
+    assert.ok(next, `an unexpected request to ${url}`);
+    return new Response(JSON.stringify(next!.body), { status: next!.status, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await fn();
+  } finally {
+    globalThis.fetch = guard;
+  }
+}
+const rejection = async (p: Promise<unknown>) => {
+  try {
+    await p;
+  } catch (err) {
+    return err;
+  }
+  throw new Error("expected a rejection");
+};
+
+await test("the live client reads Google's answers right: API off and a bad client are ours, 401 and a withdrawn permission are the owner's", async () => {
+  const { liveGoogleApi, GoogleAuthError, GoogleConfigError, GoogleApiError } = googleApiLib;
+  const disabled = {
+    error: {
+      code: 403,
+      message: "Google Calendar API has not been used in project 123456 before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=123456 then retry.",
+      errors: [{ message: "…", domain: "usageLimits", reason: "accessNotConfigured", extendedHelp: "https://console.developers.google.com" }],
+      status: "PERMISSION_DENIED",
+    },
+  };
+  const scope = { error: { code: 403, message: "Request had insufficient authentication scopes.", errors: [{ reason: "insufficientPermissions" }], status: "PERMISSION_DENIED", details: [{ reason: "ACCESS_TOKEN_SCOPE_INSUFFICIENT" }] } };
+  await withGoogleReplies(
+    [
+      { status: 403, body: disabled },
+      { status: 403, body: disabled },
+      { status: 401, body: { error: { code: 401, status: "UNAUTHENTICATED" } } },
+      { status: 403, body: scope },
+      { status: 500, body: { error: { code: 500 } } },
+      { status: 401, body: { error: "invalid_client" } },
+      { status: 400, body: { error: "redirect_uri_mismatch" } },
+      { status: 400, body: { error: "invalid_grant" } },
+    ],
+    async () => {
+      const a = await rejection(liveGoogleApi.listCalendars("t"));
+      assert.ok(a instanceof GoogleConfigError && a.reason === "api_disabled", String(a));
+      const b = await rejection(liveGoogleApi.listEvents("t", "primary", "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"));
+      assert.ok(b instanceof GoogleConfigError && b.reason === "api_disabled", String(b));
+      assert.ok((await rejection(liveGoogleApi.putEvent("t", "primary", { id: "blx" } as never))) instanceof GoogleAuthError);
+      assert.ok((await rejection(liveGoogleApi.cancelEvent("t", "primary", "blx"))) instanceof GoogleAuthError, "a withdrawn permission is not read as a lost connection");
+      const e = await rejection(liveGoogleApi.insertEvent("t", "primary", { id: "blx" } as never));
+      assert.ok(e instanceof GoogleApiError && !(e instanceof GoogleConfigError));
+      const f = await rejection(liveGoogleApi.accessToken("r"));
+      assert.ok(f instanceof GoogleConfigError && f.reason === "client", String(f));
+      const g = await rejection(liveGoogleApi.exchangeCode("c", "https://app.belline.ai/api/integrations/google"));
+      assert.ok(g instanceof GoogleConfigError && g.reason === "client", String(g));
+      assert.ok((await rejection(liveGoogleApi.accessToken("r"))) instanceof GoogleAuthError);
+    },
+  );
+});
+
+await test("the Calendar API switched off: requests, the owner told it is ours, the team given the fix, and back by itself once it is on", async () => {
+  assert.ok(sync, "no sync module");
+  resetCustomerErrors();
+  const { listExceptions } = await import("../src/lib/exceptions");
+  const loc = getLocation(restaurantBase.id)!;
+  assert.equal(providerFor(loc), googleCalendarProvider, "the restaurant should be booking into Google here");
+  fake.disableApi();
+  google.setGoogleApi(fake.api);
+  let bookingId = "";
+  try {
+    const date = addDays(todayIn(loc.timezone), 9);
+    const lines = await errorsDuring(async () => {
+      const offered = await googleCalendarProvider.checkAvailability({ location: loc }, { locationId: loc.id, date, partySize: 2 });
+      assert.deepEqual(offered, [], "times offered from a calendar Google will not show");
+    });
+    const after = getLocation(loc.id)!;
+    assert.ok(after.google!.misconfiguredAt, "the venue is not marked");
+    assert.equal(providerFor(after), requestOnlyProvider);
+    assert.equal(takesRequestsOnly(after), true);
+    const state = google.connectionState(after);
+    assert.ok(state.connected && !state.healthy && !state.expired);
+    assert.equal(state.detail, google.GOOGLE_MISCONFIGURED_TEXT);
+    assert.doesNotMatch(state.detail, /403|accessNotConfigured|SERVICE_DISABLED|API|project/i);
+    assert.equal(lines.filter((l) => l.startsWith(`[exception] google:misconfigured:${loc.id}`)).length, 1, "not logged for us");
+    const queued = listExceptions({ locationId: loc.id, kind: "google_misconfigured" });
+    assert.equal(queued.length, 1);
+    assert.match(queued[0].reason, /Enable the Google Calendar API/);
+    const { overviewFor, visibleHealth } = await import("../src/lib/overview");
+    const line = visibleHealth((await overviewFor(after)).health, false).find((h) => h.label === "Calendar");
+    assert.ok(line && !line.ok && line.detail === google.GOOGLE_MISCONFIGURED_TEXT, "the owner's home banner does not say so");
+
+    // A desk booking in the meantime waits rather than failing.
+    const made = createLocal(after, { date, startMin: 19 * 60, partySize: 2, guestName: "API Off Guest", guestPhone: "+971500000108", source: "manual", staffOverride: true });
+    assert.ok(made.ok, made.ok ? "" : made.detail);
+    if (made.ok) bookingId = made.booking.id;
+    await settle();
+    assert.equal(getBooking(bookingId)!.calendarSync?.state, "pending");
+
+    // Still off: the sweep leaves it marked.
+    const still = await sync!.sweepGoogle(new Date());
+    assert.equal(still.recovered, 0);
+  } finally {
+    fake.enableApi();
+  }
+  const swept = await sync!.sweepGoogle(new Date());
+  assert.equal(swept.recovered, 1);
+  const back = getLocation(loc.id)!;
+  assert.equal(back.google!.misconfiguredAt, undefined);
+  assert.equal(providerFor(back), googleCalendarProvider);
+  assert.ok(google.connectionState(back).healthy);
+  assert.equal(getBooking(bookingId)!.calendarSync?.state, "synced", "the waiting booking was not written once Google answered");
+  assert.equal(fake.calendar.events("primary").filter((e) => e.bellineBookingId === bookingId && e.status !== "cancelled").length, 1);
+});
+
+await test("connecting while the API is off never says 'connected': the owner lands on 'not available yet'", async () => {
+  const route = source("src/app/api/integrations/google/route.ts");
+  assert.match(route, /await listCalendarsFor\(saved\);[\s\S]{0,120}if \(err instanceof GoogleConfigError\) return land\(request, checked\.returnTo, saved\.id, "google_unavailable"\)/);
+  assert.ok(route.indexOf("listCalendarsFor(saved)") < route.indexOf('"connected")'), "the probe comes after 'connected'");
+  assert.match(route, /if \(err instanceof GoogleConfigError\) \{\s*\/\/[^\n]*\n\s*reportMisconfigured\(location, err\);[\s\S]{0,300}"google_unavailable"\)/);
+  assert.match(integrationErrorText("google_unavailable")!, /not available on this account yet/);
+  // And the same path, run: a fresh connection, then the probe.
+  const venue = spareVenue();
+  fake.disableApi();
+  try {
+    const connected = upsertLocation(await google.completeConnection(venue, "stub-code", "http://localhost/cb", "user_owner", now));
+    const err = await errorsDuring(async () => {
+      const out = await google.listCalendarsFor(connected).catch((e: unknown) => e);
+      assert.ok(out instanceof googleApiLib.GoogleConfigError);
+    });
+    assert.ok(err.some((l) => l.includes(`google:misconfigured:${venue.id}`)));
+    assert.ok(getLocation(venue.id)!.google!.misconfiguredAt);
+  } finally {
+    fake.enableApi();
+    upsertLocation(venue);
+  }
+});
+
+await test("a permission unticked on Google's screen is refused, the token handed back, and the owner told to allow both", async () => {
+  const venue = spareVenue();
+  fake.grant([GOOGLE_SCOPES[1]]);
+  try {
+    const revokedBefore = fake.revoked.length;
+    const err = await rejection(google.completeConnection({ ...venue, google: undefined }, "stub-code", "http://localhost/cb", "user_owner", now));
+    assert.ok(err instanceof google.GoogleScopeError, String(err));
+    assert.deepEqual((err as InstanceType<typeof google.GoogleScopeError>).missing, [GOOGLE_SCOPES[0]]);
+    assert.equal(fake.revoked.length, revokedBefore + 1, "the half-granted token was not handed back");
+  } finally {
+    fake.grant();
+  }
+  const route = source("src/app/api/integrations/google/route.ts");
+  assert.match(route, /if \(err instanceof GoogleScopeError\) \{[\s\S]{0,400}"google_refused"\)/);
+  assert.match(integrationErrorText("google_refused")!, /both permissions ticked/);
+});
+
+await test("an owner Google stops at 'Access blocked' (not a test user) never returns: the owner is told what to do and the team gets an exception", async () => {
+  const { listExceptions } = await import("../src/lib/exceptions");
+  const venue = spareVenue();
+  const started = Date.now();
+  // The owner presses Connect; Google shows "Access blocked" and nothing comes back.
+  google.signState({ locationId: venue.id, userId: "user_owner", returnTo: "setup" }, started);
+  // Another owner connects normally: no exception for that one.
+  const other = google.signState({ locationId: restaurantBase.id, userId: "user_owner", returnTo: "integrations" }, started);
+  assert.ok(google.verifyState(other.state, { userId: "user_owner", cookieNonce: other.nonce, now: started }).ok);
+
+  assert.equal(google.sweepAbandonedConnects(new Date(started + 5 * 60_000)), 0, "raised before the ten minutes were up");
+  let raised = 0;
+  await errorsDuring(() => {
+    raised = google.sweepAbandonedConnects(new Date(started + 11 * 60_000));
+  });
+  assert.ok(raised >= 1);
+  const queued = listExceptions({ locationId: venue.id, kind: "google_connect_abandoned" });
+  assert.equal(queued.length, 1);
+  assert.match(queued[0].reason, /test users/);
+  assert.equal(listExceptions({ locationId: restaurantBase.id, kind: "google_connect_abandoned" }).length, 0, "a connection that came back was raised");
+  assert.ok(getLocation(venue.id)!.googleConnectAbandonedAt);
+  assert.equal(google.sweepAbandonedConnects(new Date(started + 20 * 60_000)), 0, "raised twice");
+  // The owner's words, on the page they come back to.
+  assert.match(google.GOOGLE_ABANDONED_TEXT, /access is blocked/);
+  assert.doesNotMatch(google.GOOGLE_ABANDONED_TEXT, /403|OAuth|consent screen|test user/i);
+  const page = source("src/app/(app)/integrations/page.tsx");
+  assert.match(page, /googleVenue\.googleConnectAbandonedAt && \([\s\S]{0,300}\{GOOGLE_ABANDONED_TEXT\}/);
+  // A decline that does come back is still "requests for now", and logged.
+  const route = source("src/app/api/integrations/google/route.ts");
+  assert.match(route, /if \(oauthError\) console\.warn\(/);
+  // Connecting afterwards clears the notice.
+  const connected = await google.completeConnection(getLocation(venue.id)!, "stub-code", "http://localhost/cb", "user_owner", now);
+  assert.equal(connected.googleConnectAbandonedAt, undefined);
 });
 
 await test("disconnecting revokes at Google, drops the link and puts the venue back on requests", async () => {

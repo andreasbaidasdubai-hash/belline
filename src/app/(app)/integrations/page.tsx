@@ -4,7 +4,7 @@ import { isBellineStaff } from "@/lib/auth";
 import { integrationErrorText } from "@/lib/errors/customer";
 import { seedIfEmpty } from "@/lib/seed";
 import { destinationOf, googleUsable, takesRequestsOnly } from "@/lib/booking/destination";
-import { GOOGLE_EXPIRED_TEXT, connectionState, listCalendarsFor } from "@/lib/integrations/google";
+import { GOOGLE_ABANDONED_TEXT, GOOGLE_EXPIRED_TEXT, connectionState, listCalendarsFor } from "@/lib/integrations/google";
 import { flag } from "@/lib/flags";
 import { getLocation } from "@/lib/store";
 import GoogleCalendarControls from "./GoogleCalendarControls";
@@ -181,6 +181,16 @@ export default async function IntegrationsPage({
               {google.detail}
             </span>
           </div>
+
+          {googleOn && !google.connected && googleVenue.googleConnectAbandonedAt && (
+            <div
+              role="status"
+              className="panel"
+              style={{ padding: "12px 14px", margin: "0 0 12px", borderColor: "var(--warn)", fontSize: 13.5, lineHeight: 1.55 }}
+            >
+              {GOOGLE_ABANDONED_TEXT}
+            </div>
+          )}
 
           {google.expired && (
             <div

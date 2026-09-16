@@ -19,12 +19,13 @@ type Venue = Pick<Location, "onboarding"> & { google?: Location["google"] };
 /**
  * Can Belline book into this venue's Google Calendar right now?
  *
- * The flag is on, a sealed token is stored, and Google has not stopped
- * accepting it. Any of the three missing and the venue takes requests.
+ * The flag is on, a sealed token is stored, Google has not stopped accepting
+ * it, and Google is not refusing Belline's own project (the Calendar API
+ * switched off, say). Any of them missing and the venue takes requests.
  */
 export function googleUsable(location: Venue, env: Record<string, string | undefined> = process.env): boolean {
   const link = location.google;
-  return Boolean(link?.sealedToken && !link.expiredAt && flag("booking.google", env));
+  return Boolean(link?.sealedToken && !link.expiredAt && !link.misconfiguredAt && flag("booking.google", env));
 }
 
 /**

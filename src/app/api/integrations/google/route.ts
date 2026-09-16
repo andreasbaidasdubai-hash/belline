@@ -12,12 +12,16 @@ import {
   chooseCalendars,
   completeConnection,
   disconnectGoogle,
+  GoogleScopeError,
+  listCalendarsFor,
+  reportMisconfigured,
   returnPath,
   signState,
   verifyState,
   type Outcome,
   type ReturnTo,
 } from "@/lib/integrations/google";
+import { GoogleConfigError } from "@/lib/integrations/google-api";
 import { queueGoogleSync, resyncMovedCalendars, settleGoogleSync } from "@/lib/integrations/google-sync";
 import { todayIn } from "@/lib/time";
 import { appOrigin } from "@/lib/origin";
@@ -100,6 +104,8 @@ export async function GET(request: Request) {
   }
 
   const oauthError = url.searchParams.get("error");
+  // Logged either way: a run of declines from one venue is worth a look.
+  if (oauthError) console.warn(`[google] ${location.name}: Google sent the owner back with error=${oauthError.slice(0, 60)}`);
   if (oauthError === "access_denied") return land(request, checked.returnTo, location.id, "declined");
   if (oauthError) {
     customerError("google", `oauth returned ${oauthError}`, "refused", location.id);
@@ -111,6 +117,18 @@ export async function GET(request: Request) {
 
   try {
     const saved = upsertLocation(await completeConnection(location, code, redirectUri(request), auth.user.id));
+
+    // One read before saying "connected": Google refusing Belline's own project
+    // (the Calendar API switched off) only shows on a real call, and an owner
+    // told "connected" would then find nothing works. withAccess marks the
+    // venue, and the team gets the exception with the fix.
+    try {
+      await listCalendarsFor(saved);
+    } catch (err) {
+      if (err instanceof GoogleConfigError) return land(request, checked.returnTo, saved.id, "google_unavailable");
+      // Anything else is transient: the connection stands, and the picker tries again.
+      console.warn(`[google] ${saved.name}: calendars not readable right after connecting: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     // A venue on Belline's diary gets what is already booked copied out, so
     // the calendar is not empty on the day they connect it. A venue booking
@@ -126,6 +144,17 @@ export async function GET(request: Request) {
     return land(request, checked.returnTo, saved.id, "connected");
   } catch (err) {
     // The raw error is logged with a trace id; the owner gets a sentence.
+    if (err instanceof GoogleScopeError) {
+      // A permission unticked on Google's screen: connect again with both allowed.
+      customerError("google", err, "refused", location.id);
+      return land(request, checked.returnTo, location.id, "google_refused");
+    }
+    if (err instanceof GoogleConfigError) {
+      // Our client id, secret or redirect address, not the owner.
+      reportMisconfigured(location, err);
+      customerError("google", err, "not_configured", location.id);
+      return land(request, checked.returnTo, location.id, "google_unavailable");
+    }
     customerError("google", err, "failed", location.id);
     return land(request, checked.returnTo, location.id, "google_failed");
   }

@@ -166,6 +166,11 @@ export interface Location {
   /** A connected Google Calendar, mirrored to one-way. */
   google?: GoogleLink;
   /**
+   * When a "Connect Google Calendar" was started and never came back from
+   * Google. Cleared by the next connection that does. See integrations/google.ts.
+   */
+  googleConnectAbandonedAt?: string;
+  /**
    * What one booking is typically worth here.
    *
    * Entered by the venue or left alone. Belline never guesses it: an invented
@@ -1428,7 +1433,10 @@ export type ExceptionKind =
   | "billing_dispute"
   | "account_recovery"
   | "handoff_requested"
-  | "google_sync_failed";
+  | "google_sync_failed"
+  | "google_token_expired"
+  | "google_misconfigured"
+  | "google_connect_abandoned";
 
 export interface SupportException {
   id: string;

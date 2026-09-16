@@ -47,7 +47,10 @@ const COPY: Record<Provider, Partial<Record<Kind, [string, string]>> & { failed:
   },
   google: {
     not_configured: ["Google Calendar is not available on this account yet.", "Your bookings stay in Belline's diary in the meantime."],
-    refused: ["Google did not allow the connection.", "Try connecting again, and choose Allow on Google's screen."],
+    refused: [
+      "Google did not allow the connection.",
+      "Connect again, and on Google's screen choose Allow with both permissions ticked: seeing your calendars and adding events.",
+    ],
     declined: [
       "No problem — requests for now.",
       "Belline takes the details and your team confirms. You can connect Google Calendar whenever you like.",

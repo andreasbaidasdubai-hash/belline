@@ -39,6 +39,9 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "account_recovery",
   "handoff_requested",
   "google_sync_failed",
+  "google_token_expired",
+  "google_misconfigured",
+  "google_connect_abandoned",
 ];
 
 interface KindMeta {
@@ -72,6 +75,21 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
   google_sync_failed: {
     label: "Bookings not reaching Google Calendar",
     next: "Check the server log for the venue's [google] lines. Belline retries on its own; if Google keeps refusing, ask the owner to reconnect.",
+    belle: false,
+  },
+  google_token_expired: {
+    label: "Google Calendar access expired",
+    next: "The venue is on requests and the owner has a banner. If they do not reconnect within a day, contact them.",
+    belle: false,
+  },
+  google_misconfigured: {
+    label: "Google project refusing Belline",
+    next: "Read the reason: usually the Google Calendar API is not enabled on the project. Fix it in Google Cloud; the sweep clears the venue on its own.",
+    belle: false,
+  },
+  google_connect_abandoned: {
+    label: "Google connection never came back",
+    next: "While the Google app is in Testing, add the owner's Google address to the test users, then ask them to connect again.",
     belle: false,
   },
 };

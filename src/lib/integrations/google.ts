@@ -5,11 +5,14 @@ import { describeBookingShort } from "../booking";
 import { destinationOf, googleUsable } from "../booking/destination";
 import { credentialsConfigured, openCredentials, sealCredentials } from "../db/credentials";
 import { raiseException } from "../errors/customer";
+import { openException } from "../exceptions";
 import { flag } from "../flags";
 import {
   GOOGLE_SCOPES,
   GoogleAuthError,
+  GoogleConfigError,
   liveGoogleApi,
+  missingScopes,
   zonedInstant,
   type GoogleApi,
   type GoogleCalendarEntry,
@@ -72,10 +75,21 @@ export interface GoogleLink {
   lastSyncedAt?: string;
   /** Google stopped accepting the connection. The venue takes requests until it is reconnected. */
   expiredAt?: string;
+  /**
+   * Google refused because of Belline's own Google project (the Calendar API
+   * not enabled, the client not recognised). Nothing the owner can do: the
+   * venue takes requests, the team has an exception, and the sweep checks
+   * again until Google answers.
+   */
+  misconfiguredAt?: string;
 }
 
 export const GOOGLE_EXPIRED_TEXT =
   "Google Calendar stopped letting Belline in, so bookings are taken as requests until you reconnect it.";
+export const GOOGLE_MISCONFIGURED_TEXT =
+  "Google Calendar is connected, but Google is not letting Belline use it yet because of a setting on Belline's side. The Belline team has been told. Bookings are taken as requests until it is fixed; you don't need to do anything.";
+export const GOOGLE_ABANDONED_TEXT =
+  "Your last try at connecting Google Calendar never came back from Google. If Google said access is blocked, or that the app has not been verified, your Google account is not on Belline's early-access list yet: tell the Belline team which Google address you used and we will add it, then connect again. If you simply closed the window, connect again whenever you like.";
 export const WRITE_FAILED_TEXT =
   "Google Calendar did not accept the last booking change. The booking is safe in Belline, and Belline keeps trying.";
 
@@ -179,6 +193,45 @@ function consumeNonce(nonce: string): boolean {
   });
 }
 
+/**
+ * Connections started and never finished, once their ten minutes are up.
+ *
+ * While the Google project is in Testing mode, an owner whose Google account
+ * is not on its test-users list is stopped on Google's own page ("Access
+ * blocked … Error 403: access_denied") and is never sent back to Belline, so
+ * the callback cannot see it. This is where it shows: a start with no return.
+ * The venue is marked so the owner sees what to do, and the team gets an
+ * exception, because closing the window looks the same from here.
+ */
+export function sweepAbandonedConnects(now = new Date()): number {
+  const gone = mutateOAuthStates((rows) => {
+    const expired = rows.filter((r) => Date.parse(r.expiresAt) <= now.getTime());
+    return { rows: rows.filter((r) => !expired.includes(r)), out: expired };
+  });
+  let raised = 0;
+  for (const row of gone) {
+    const location = getLocation(row.locationId);
+    if (!location) continue;
+    // Connected since: a later try went through.
+    if (location.google && location.google.connectedAt >= row.createdAt && !location.google.expiredAt) continue;
+    upsertLocation({ ...location, googleConnectAbandonedAt: row.createdAt });
+    console.warn(`[google] ${location.name}: a connection started at ${row.createdAt} never came back from Google`);
+    openException({
+      tenantId: location.tenantId,
+      locationId: location.id,
+      kind: "google_connect_abandoned",
+      reason:
+        `The owner started connecting Google Calendar at ${row.createdAt} and never came back from Google. ` +
+        "In Testing mode that is what an account missing from the OAuth consent screen's test users looks like: add their Google address " +
+        "(Google Cloud, OAuth consent screen, Test users), then ask them to connect again. It is also what closing the window looks like.",
+      context: { userId: row.userId },
+      source: "system",
+    });
+    raised++;
+  }
+  return raised;
+}
+
 export type StateCheck =
   | { ok: true; locationId: string; returnTo: ReturnTo }
   | { ok: false; reason: "malformed" | "signature" | "expired" | "used" | "user" | "cookie"; returnTo?: ReturnTo };
@@ -268,13 +321,36 @@ function openToken(link: GoogleLink): string {
   return openCredentials(link.sealedToken).refreshToken;
 }
 
-/** Finish OAuth. Returns the venue with the link on it; the caller saves it. */
+/** The owner unticked one of the two permissions on Google's screen. */
+export class GoogleScopeError extends Error {
+  constructor(readonly missing: string[]) {
+    super(`Google granted the connection without ${missing.join(", ")}`);
+    this.name = "GoogleScopeError";
+  }
+}
+
+/**
+ * Finish OAuth. Returns the venue with the link on it; the caller saves it.
+ *
+ * Google lets an owner untick either permission and still press Continue. A
+ * connection without both would fail on its first booking, so it is refused
+ * here instead, the token handed back to Google, and the owner told to connect
+ * again with both ticked.
+ */
 export async function completeConnection(location: Location, code: string, redirectUri: string, userId: string, now = new Date()): Promise<Location> {
   const { refreshToken, scope } = await googleApi().exchangeCode(code, redirectUri);
+  const missing = missingScopes(scope);
+  if (missing.length) {
+    await googleApi()
+      .revoke(refreshToken)
+      .catch(() => {});
+    throw new GoogleScopeError(missing);
+  }
   const previous = location.google;
   const { refreshToken: _legacy, ...kept } = previous ?? ({} as Partial<GoogleLink>);
+  const { googleConnectAbandonedAt: _abandoned, ...venue } = location;
   return {
-    ...location,
+    ...venue,
     google: {
       // Reconnecting keeps the calendars the owner already picked.
       calendarId: kept.calendarId ?? "primary",
@@ -319,6 +395,7 @@ export async function withAccess<T>(location: Location, fn: (token: string, api:
     }
   } catch (err) {
     if (err instanceof GoogleAuthError) markExpired(location.id, err.message);
+    if (err instanceof GoogleConfigError) markMisconfigured(location.id, err);
     throw err;
   }
 }
@@ -329,6 +406,72 @@ export function markExpired(locationId: string, detail = ""): void {
   if (!location?.google || location.google.expiredAt) return;
   upsertLocation({ ...location, google: { ...location.google, expiredAt: new Date().toISOString(), lastError: GOOGLE_EXPIRED_TEXT } });
   raiseException(`google:expired:${locationId}`, `Google no longer accepts the connection for ${location.name}; bookings fall back to requests. ${detail}`);
+  openException({
+    tenantId: location.tenantId,
+    locationId,
+    kind: "google_token_expired",
+    reason: `Google stopped accepting ${location.name}'s calendar connection (revoked, expired or password changed). The venue is on requests and the owner has a banner asking them to reconnect. ${detail}`.trim(),
+    source: "system",
+  });
+}
+
+/**
+ * Google refused because of Belline's Google project. The venue goes to
+ * requests (see `googleUsable`), the owner is told it is ours to fix, and the
+ * team gets an exception naming the fix. `recheckMisconfigured` clears it.
+ */
+export function markMisconfigured(locationId: string, err: GoogleConfigError): void {
+  globalRef.__bellineGoogleAccess?.delete(locationId);
+  const location = getLocation(locationId);
+  if (!location?.google || location.google.misconfiguredAt) return;
+  upsertLocation({ ...location, google: { ...location.google, misconfiguredAt: new Date().toISOString(), lastError: GOOGLE_MISCONFIGURED_TEXT } });
+  reportMisconfigured(location, err);
+}
+
+/** The team's side of a project problem: a log line and an exception naming the fix. */
+export function reportMisconfigured(location: Location, err: GoogleConfigError): void {
+  const locationId = location.id;
+  const fix =
+    err.reason === "api_disabled"
+      ? "Enable the Google Calendar API on the Google Cloud project that owns GOOGLE_CLIENT_ID (APIs & Services, Library, Google Calendar API, Enable), wait a few minutes; the sweep clears this on its own."
+      : "Check GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and the authorised redirect address in Google Cloud against the app's.";
+  raiseException(`google:misconfigured:${locationId}`, `Google refused ${location.name}'s calendar because of the Google project (${err.reason}): ${err.message}`);
+  openException({
+    tenantId: location.tenantId,
+    locationId,
+    kind: "google_misconfigured",
+    reason: `Google refused ${location.name}'s calendar because of Belline's Google project (${err.reason}). ${fix}`,
+    context: { reason: err.reason },
+    source: "system",
+  });
+}
+
+/**
+ * Ask Google again for every venue marked misconfigured, and clear the mark
+ * where it now answers. Run by the sweep. Returns how many were cleared.
+ */
+export async function recheckMisconfigured(): Promise<number> {
+  let cleared = 0;
+  if (!flag("booking.google")) return 0;
+  for (const location of listLocations({ includeInternal: true })) {
+    const link = location.google;
+    if (!link?.misconfiguredAt || link.expiredAt || !link.sealedToken) continue;
+    try {
+      const api = googleApi();
+      const token = await api.accessToken(openToken(link));
+      await api.listCalendars(token);
+    } catch (err) {
+      if (err instanceof GoogleAuthError) markExpired(location.id, err.message);
+      continue;
+    }
+    const fresh = getLocation(location.id);
+    if (!fresh?.google) continue;
+    const { misconfiguredAt: _cleared, ...rest } = fresh.google;
+    upsertLocation({ ...fresh, google: { ...rest, lastError: rest.lastError === GOOGLE_MISCONFIGURED_TEXT ? undefined : rest.lastError } });
+    console.log(`[google] ${location.name}: Google answers again; the calendar is back in use`);
+    cleared++;
+  }
+  return cleared;
 }
 
 /** A write Google refused: the owner sees our sentence on the connection, the log gets Google's. */
@@ -562,6 +705,7 @@ export function connectionState(location: Location): {
   if (link.expiredAt || !link.sealedToken) {
     return { connected: true, healthy: false, expired: true, detail: GOOGLE_EXPIRED_TEXT };
   }
+  if (link.misconfiguredAt) return { connected: true, healthy: false, expired: false, detail: GOOGLE_MISCONFIGURED_TEXT };
   if (link.lastError) return { connected: true, healthy: false, expired: false, detail: link.lastError };
   const where = link.calendarName ? ` to ${link.calendarName}` : "";
   return {

@@ -10,6 +10,7 @@ import {
   GOOGLE_SCOPES,
   GoogleApiError,
   GoogleAuthError,
+  googleFailure,
   zonedInstant,
   type GoogleApi,
   type GoogleCalendarEntry,
@@ -332,9 +333,28 @@ export function fakeGoogleApi(opts: { calendars?: GoogleCalendarEntry[] } = {}) 
       bellineBookingId: event.extendedProperties.private.bellineBookingId,
     };
   };
+  let apiDisabled = false;
+  let grantedScope = GOOGLE_SCOPES.join(" ");
   const access = (token: string) => {
     if (expired || !token.startsWith("stub-access-") || !tokens.has(token.slice("stub-access-".length))) {
       throw new GoogleAuthError("stub: token refused");
+    }
+    // What Google answers when the Calendar API is not enabled on the project,
+    // through the same classifier the live client uses.
+    if (apiDisabled) {
+      throw googleFailure(
+        403,
+        JSON.stringify({
+          error: {
+            code: 403,
+            message: "Google Calendar API has not been used in project 000000000000 before or it is disabled.",
+            errors: [{ domain: "usageLimits", reason: "accessNotConfigured" }],
+            status: "PERMISSION_DENIED",
+            details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "SERVICE_DISABLED" }],
+          },
+        }),
+        "stub",
+      );
     }
   };
   /** Failures queued by `failNext`, per method. */
@@ -353,7 +373,7 @@ export function fakeGoogleApi(opts: { calendars?: GoogleCalendarEntry[] } = {}) 
       if (code !== "stub-code") throw new GoogleApiError(400, "stub: invalid_grant");
       const refreshToken = `stub-refresh-${++seq}-${randomUUID()}`;
       tokens.add(refreshToken);
-      return { refreshToken, scope: GOOGLE_SCOPES.join(" ") };
+      return { refreshToken, scope: grantedScope };
     },
     async accessToken(refreshToken) {
       calls.push({ method: "accessToken" });
@@ -417,6 +437,17 @@ export function fakeGoogleApi(opts: { calendars?: GoogleCalendarEntry[] } = {}) 
      */
     failNext(method: "putEvent" | "cancelEvent", times = 1, opts: { afterWrite?: boolean } = {}): void {
       failures.set(method, { times, afterWrite: Boolean(opts.afterWrite) });
+    },
+    /** The Calendar API switched off on the project: every calendar call is refused with 403 accessNotConfigured. */
+    disableApi(): void {
+      apiDisabled = true;
+    },
+    enableApi(): void {
+      apiDisabled = false;
+    },
+    /** What the owner leaves ticked on Google's screen. Defaults to both. */
+    grant(scopes: readonly string[] = GOOGLE_SCOPES): void {
+      grantedScope = scopes.join(" ");
     },
   };
 }

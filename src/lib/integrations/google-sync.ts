@@ -2,8 +2,17 @@ import type { Booking, CalendarEventRef, CalendarSync, Location } from "../types
 import { getBooking, getLocation, listBookings, saveBooking } from "../store";
 import { googleUsable } from "../booking/destination";
 import { openException } from "../exceptions";
-import { bookingEventId, calendarFor, eventFor, noteWriteFailure, noteWriteSuccess, withAccess } from "./google";
-import { GoogleAuthError } from "./google-api";
+import {
+  bookingEventId,
+  calendarFor,
+  eventFor,
+  noteWriteFailure,
+  noteWriteSuccess,
+  recheckMisconfigured,
+  sweepAbandonedConnects,
+  withAccess,
+} from "./google";
+import { GoogleAuthError, GoogleConfigError } from "./google-api";
 import { todayIn } from "../time";
 
 /**
@@ -170,9 +179,10 @@ async function run(bookingId: string, now = new Date()): Promise<SyncResult> {
     noteWriteSuccess(location.id, stillFailing, now);
     return "synced";
   } catch (err) {
-    if (err instanceof GoogleAuthError) {
-      // withAccess has marked the link expired: the venue is on requests, the
-      // owner has the banner and the team has the exception.
+    if (err instanceof GoogleAuthError || err instanceof GoogleConfigError) {
+      // withAccess has marked the link expired or misconfigured: the venue is
+      // on requests, the owner is told, the team has the exception. Written
+      // once the connection works again.
       patch(bookingId, {}, { state: "pending", lastError: "Waiting for Google Calendar to be connected again." });
       return "waiting";
     }
@@ -240,6 +250,19 @@ export async function retryGoogleSyncs(now = new Date()): Promise<{ attempted: n
     else out.waiting++;
   }
   return out;
+}
+
+/**
+ * Everything the server does for Google every few minutes: connections that
+ * never came back, venues Google was refusing that it may accept again, and
+ * bookings still waiting to be written — in that order, so a venue cleared by
+ * the recheck has its waiting bookings written in the same sweep.
+ */
+export async function sweepGoogle(now = new Date()) {
+  const abandoned = sweepAbandonedConnects(now);
+  const recovered = await recheckMisconfigured();
+  const bookings = await retryGoogleSyncs(now);
+  return { abandoned, recovered, ...bookings };
 }
 
 /** As `syncBooking`, with the sweep's clock. */

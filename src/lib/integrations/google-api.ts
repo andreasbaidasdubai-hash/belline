@@ -77,6 +77,67 @@ export class GoogleApiError extends Error {
   }
 }
 
+/**
+ * Google refuses because of how the Google Cloud project is set up, not
+ * because of anything the owner did: the Calendar API is not enabled on the
+ * project (403 accessNotConfigured / SERVICE_DISABLED), or the client id,
+ * secret or redirect address are not the ones Google has (invalid_client,
+ * unauthorized_client, redirect_uri_mismatch). Only Belline can fix these;
+ * reconnecting does not help.
+ */
+export class GoogleConfigError extends Error {
+  constructor(
+    readonly reason: "api_disabled" | "client",
+    message: string,
+  ) {
+    super(message);
+    this.name = "GoogleConfigError";
+  }
+}
+
+/** The permissions a working connection needs. Google lets an owner untick either on its screen. */
+export function missingScopes(granted: string): string[] {
+  const have = new Set(granted.split(/\s+/).filter(Boolean));
+  return GOOGLE_SCOPES.filter((s) => !have.has(s));
+}
+
+/**
+ * Turn a Calendar API failure into the error Belline acts on. Exported for the
+ * tests, which feed it the bodies Google actually sends.
+ */
+export function googleFailure(status: number, text: string, what: string): Error {
+  let reasons: string[] = [];
+  let message = "";
+  try {
+    const data = JSON.parse(text) as {
+      error?: { message?: string; status?: string; errors?: { reason?: string }[]; details?: { reason?: string }[] };
+    };
+    message = data.error?.message ?? "";
+    reasons = [
+      ...(data.error?.errors ?? []).map((e) => e.reason ?? ""),
+      ...(data.error?.details ?? []).map((d) => d.reason ?? ""),
+    ];
+  } catch {
+    message = text;
+  }
+  const short = `${what}: ${status} ${reasons.filter(Boolean).join(",")} ${message}`.slice(0, 300);
+  if (status === 401) return new GoogleAuthError(short);
+  if (status === 403) {
+    if (reasons.some((r) => r === "accessNotConfigured" || r === "SERVICE_DISABLED") || /has not been used in project|it is disabled/i.test(message)) {
+      return new GoogleConfigError("api_disabled", short);
+    }
+    // The owner unticked a permission on Google's screen, or withdrew it since:
+    // only reconnecting fixes it, the same as a revoked token.
+    if (reasons.some((r) => r === "insufficientPermissions" || r === "ACCESS_TOKEN_SCOPE_INSUFFICIENT")) {
+      return new GoogleAuthError(short);
+    }
+  }
+  return new GoogleApiError(status, short);
+}
+
+/** The token endpoint's `error` codes that mean the project, not the owner. */
+const CLIENT_ERRORS = new Set(["invalid_client", "unauthorized_client", "redirect_uri_mismatch"]);
+
 export interface GoogleCalendarEntry {
   id: string;
   name: string;
@@ -136,7 +197,7 @@ async function call(token: string, path: string, init: RequestInit = {}): Promis
     ...init,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
   });
-  if (res.status === 401) throw new GoogleAuthError(`Google returned 401 for ${path.split("?")[0]}`);
+  if (res.status === 401 || res.status === 403) throw googleFailure(res.status, await body(res), path.split("?")[0]);
   return res;
 }
 
@@ -155,6 +216,7 @@ export const liveGoogleApi: GoogleApi = {
       }),
     });
     const data = (await res.json().catch(() => ({}))) as { refresh_token?: string; scope?: string; error?: string };
+    if (data.error && CLIENT_ERRORS.has(data.error)) throw new GoogleConfigError("client", `token exchange: ${data.error}`);
     if (!res.ok || !data.refresh_token) {
       throw new GoogleApiError(res.status, `token exchange: ${data.error ?? "no refresh token returned"}`);
     }
@@ -173,6 +235,7 @@ export const liveGoogleApi: GoogleApi = {
       }),
     });
     const data = (await res.json().catch(() => ({}))) as { access_token?: string; error?: string };
+    if (data.error && CLIENT_ERRORS.has(data.error)) throw new GoogleConfigError("client", `refresh: ${data.error}`);
     if (data.error === "invalid_grant" || res.status === 401) throw new GoogleAuthError(`refresh: ${data.error ?? res.status}`);
     if (!res.ok || !data.access_token) throw new GoogleApiError(res.status, `refresh: ${data.error ?? "no access token"}`);
     return data.access_token;
@@ -180,7 +243,7 @@ export const liveGoogleApi: GoogleApi = {
 
   async listCalendars(token) {
     const res = await call(token, "/users/me/calendarList?minAccessRole=writer&fields=items(id,summary,primary)");
-    if (!res.ok) throw new GoogleApiError(res.status, `calendarList: ${await body(res)}`);
+    if (!res.ok) throw googleFailure(res.status, await body(res), "calendarList");
     const data = (await res.json()) as { items?: { id: string; summary?: string; primary?: boolean }[] };
     return (data.items ?? []).map((c) => ({ id: c.id, name: c.summary ?? c.id, primary: Boolean(c.primary) }));
   },
@@ -194,7 +257,7 @@ export const liveGoogleApi: GoogleApi = {
       fields: "items(id,status,transparency,start,end,extendedProperties)",
     });
     const res = await call(token, `/calendars/${encodeURIComponent(calendarId)}/events?${params}`);
-    if (!res.ok) throw new GoogleApiError(res.status, `events.list: ${await body(res)}`);
+    if (!res.ok) throw googleFailure(res.status, await body(res), "events.list");
     type Item = {
       id: string;
       status?: string;
@@ -224,7 +287,7 @@ export const liveGoogleApi: GoogleApi = {
     });
     // 409: an event with this id exists, which is the idempotency key doing its job.
     if (res.status === 409) return { id: event.id, created: false };
-    if (!res.ok) throw new GoogleApiError(res.status, `events.insert: ${await body(res)}`);
+    if (!res.ok) throw googleFailure(res.status, await body(res), "events.insert");
     return { id: event.id, created: true };
   },
 
@@ -237,13 +300,13 @@ export const liveGoogleApi: GoogleApi = {
       await liveGoogleApi.insertEvent(token, calendarId, event);
       return;
     }
-    if (!res.ok) throw new GoogleApiError(res.status, `events.update: ${await body(res)}`);
+    if (!res.ok) throw googleFailure(res.status, await body(res), "events.update");
   },
 
   async cancelEvent(token, calendarId, eventId) {
     const res = await call(token, `/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`, { method: "DELETE" });
     if (res.status === 404 || res.status === 410) return;
-    if (!res.ok) throw new GoogleApiError(res.status, `events.delete: ${await body(res)}`);
+    if (!res.ok) throw googleFailure(res.status, await body(res), "events.delete");
   },
 
   async revoke(refreshToken) {
