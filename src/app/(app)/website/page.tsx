@@ -2,14 +2,13 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { getBusiness, listCalls } from "@/lib/store";
 import { dateIn, todayIn } from "@/lib/time";
-import { chatAllowed, voiceAllowed, WEBCHAT_DEFAULTS } from "@/lib/webchat";
+import { WEBCHAT_DEFAULTS } from "@/lib/webchat";
 import { EMBED_DEFAULTS, embedSnippet, suggestedOrigins } from "@/lib/embed";
 import { BUILDER_TABS } from "@/lib/onboarding/platform";
 import { appOrigin } from "@/lib/origin";
 import { venueWhatsApp } from "@/lib/whatsapp";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import WidgetEditor from "./WidgetEditor";
-import InstallCheck from "./InstallCheck";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +65,17 @@ export default async function WebsitePage({
       />
       <LocationTabs base="/website" active={location.id} />
 
+      {/*
+       * Everything that changes when the owner presses "Switch it on" — whether
+       * it is on, what it offers, and the "Is it on your website?" panel — is
+       * decided inside the editor, from what the save actually returned. It
+       * used to be decided here, from this render's snapshot of the venue: the
+       * save patches client state without reloading (deliberately, so a
+       * half-typed sites box survives a failed save), so this component never
+       * ran again and the panel that watches for the widget appearing never
+       * mounted until the owner's *next* visit — by which time the widget had
+       * long since reported itself and nobody had been told.
+       */}
       <WidgetEditor
         locationId={location.id}
         enabled={Boolean(embed?.enabled)}
@@ -73,10 +83,6 @@ export default async function WebsitePage({
         origins={suggestedOrigins(location, getBusiness(location.tenantId, location.businessId)?.website)}
         snippet={embed?.enabled ? embedSnippet(location, origin) : ""}
         builderTabs={BUILDER_TABS}
-        offering={{
-          voice: voiceAllowed(embed),
-          chat: chatAllowed(embed),
-        }}
         used={used}
         limits={{
           voice: embed?.maxCallsPerDay ?? EMBED_DEFAULTS.maxCallsPerDay,
@@ -85,8 +91,8 @@ export default async function WebsitePage({
         minutesCount={location.subscription ? true : false}
         appearance={embed?.appearance ?? {}}
         whatsappNumber={whatsapp?.phoneE164 ?? null}
+        detectedAt={location.onboarding?.channels.web?.detectedAt ?? null}
       />
-      {embed?.enabled && <InstallCheck locationId={location.id} detectedAt={location.onboarding?.channels.web?.detectedAt ?? null} />}
     </>
   );
 }

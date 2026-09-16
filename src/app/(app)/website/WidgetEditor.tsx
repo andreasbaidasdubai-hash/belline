@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { EmbedAppearance, EmbedMode } from "@/lib/types";
 import { APPEARANCE_RULES, EMBED_PALETTE, accentHex, contrastRatio, textOn } from "@/lib/embed-look";
 import InstallGuide from "./InstallGuide";
+import InstallCheck from "./InstallCheck";
 
 /**
  * Switching the website widget on, and saying what it offers.
@@ -49,12 +51,12 @@ export default function WidgetEditor({
   origins,
   snippet: snippetAtLoad,
   builderTabs,
-  offering,
   used,
   limits,
   minutesCount,
   appearance,
   whatsappNumber,
+  detectedAt,
 }: {
   locationId: string;
   enabled: boolean;
@@ -63,7 +65,6 @@ export default function WidgetEditor({
   origins: string[];
   snippet: string;
   builderTabs: { id: string; name: string; steps: string[]; note?: string }[];
-  offering: { voice: boolean; chat: boolean };
   used: { voice: number; chat: number };
   limits: { voice: number; chat: number };
   /** Whether voice here comes out of a paid allowance. Changes what we warn about. */
@@ -71,10 +72,17 @@ export default function WidgetEditor({
   appearance: EmbedAppearance;
   /** The venue's WhatsApp number, if Belle answers one — the third button. */
   whatsappNumber: string | null;
+  /** When the widget was last seen loading on the venue's own site, if ever. */
+  detectedAt: string | null;
 }) {
+  const router = useRouter();
   const [enabled, setEnabled] = useState(enabledAtLoad);
   const [snippet, setSnippet] = useState(snippetAtLoad);
   const [pick, setPick] = useState<EmbedMode>(mode);
+  // What is *saved*, as opposed to what is picked. The header and the day's
+  // counters describe the live widget, so they follow this and not `pick`; a
+  // mode chosen and not yet saved changes the preview and nothing else.
+  const [savedMode, setSavedMode] = useState<EmbedMode>(mode);
   const [sites, setSites] = useState(origins.join("\n"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +98,11 @@ export default function WidgetEditor({
   const accentMark = accentText;
   const contrast = Math.max(contrastRatio(accent, "#FFFFFF"), contrastRatio(accent, "#1B2735"));
   const tooPale = contrast < APPEARANCE_RULES.minContrast;
+
+  // voiceAllowed/chatAllowed, off the saved mode rather than off a server prop
+  // captured before the save. Read from the prop, an owner who switched the
+  // widget on in this visit was told "On · talking" whatever they had chosen.
+  const offering = { voice: savedMode !== "chat", chat: savedMode !== "voice" };
 
   function setLabel(field: "voiceLabel" | "chatLabel" | "whatsappLabel", value: string) {
     setLook((prev) => ({ ...prev, [field]: value.slice(0, APPEARANCE_RULES.labelMaxChars) }));
@@ -114,7 +127,13 @@ export default function WidgetEditor({
           appearance: look,
         }),
       });
-      const data = (await res.json()) as { error?: string; enabled?: boolean; snippet?: string; origins?: string[] };
+      const data = (await res.json()) as {
+        error?: string;
+        enabled?: boolean;
+        snippet?: string;
+        origins?: string[];
+        mode?: EmbedMode;
+      };
       if (!res.ok) {
         setError(data.error ?? "That didn't save. Try again in a moment.");
         return;
@@ -123,8 +142,15 @@ export default function WidgetEditor({
       // typed in the sites box when the save failed half-way. The sites come
       // back normalised, so a typo is visible straight away.
       setEnabled(Boolean(data.enabled));
+      if (data.mode) setSavedMode(data.mode);
       if (data.snippet) setSnippet(data.snippet);
       if (data.origins) setSites(data.origins.join("\n"));
+      // The rest of this screen is still server-rendered — today's usage, the
+      // ceilings, the suggested sites. A refresh re-runs the page on the server
+      // and hands down fresh props without remounting this component, so the
+      // typed-in box the reload used to eat is untouched. Nothing on screen
+      // waits for it: what the save returned is already showing.
+      router.refresh();
     } catch {
       setError("That didn't save. Try again in a moment.");
     } finally {
@@ -496,6 +522,15 @@ export default function WidgetEditor({
           </div>
         </div>
       )}
+
+      {/*
+       * "Is it on your website?" — mounted off this component's own state, so
+       * it appears in the visit that switches the widget on rather than the
+       * one after. It has to: its whole job is to notice the widget reporting
+       * itself, which happens seconds after the snippet above is pasted, and a
+       * panel that is not on screen is not polling.
+       */}
+      {enabled && <InstallCheck locationId={locationId} detectedAt={detectedAt} />}
     </>
   );
 }

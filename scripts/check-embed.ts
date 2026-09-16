@@ -419,6 +419,32 @@ console.log("\n\x1b[1mKnowing it is installed\x1b[0m\n");
     assert.ok(!labelsOf(check).has("your website address"), "the install check still has the old shared label");
   });
 
+  await test("the install panel and the header follow the save, not the server's snapshot of the page", () => {
+    const page = source("src/app/(app)/website/page.tsx");
+    const editor = source("src/app/(app)/website/WidgetEditor.tsx");
+
+    // The defect this pins: the panel that watches for the widget appearing
+    // was gated on the server's `embed` — read before the widget was switched
+    // on — while the save patches client state and never re-renders the page.
+    // An owner switched it on, pasted the line, and was told nothing until
+    // their next visit. Nothing server-rendered may decide whether it mounts.
+    assert.ok(!/InstallCheck/.test(page), "the server page still decides whether the install panel mounts");
+    assert.match(editor, /\{enabled && <InstallCheck/);
+    assert.match(editor, /detectedAt=\{detectedAt\}/);
+
+    // The same fault in the header: `enabled` was client state and `offering`
+    // a stale prop, so a widget saved as "both" announced itself as talking.
+    // Both now come off what the save returned.
+    assert.ok(!/offering:/.test(editor), "the header still takes what it offers from a server prop");
+    assert.match(editor, /setSavedMode\(data\.mode\)/);
+    assert.match(editor, /savedMode !== "chat"/);
+
+    // And the rest of the screen is still server-rendered, so the save asks
+    // for it again — a refresh, never a reload: a reload eats the sites box.
+    assert.match(editor, /router\.refresh\(\)/);
+    assert.ok(!/location\.reload\(/.test(editor), "saving still reloads the page");
+  });
+
   await test("builder tabs cover WordPress, Wix, Shopify, Squarespace and Tag Manager, plus an email for a web person", async () => {
     const { BUILDER_TABS } = await import("../src/lib/onboarding/platform");
     const ids = BUILDER_TABS.map((t) => t.id);
