@@ -1,11 +1,17 @@
-import type { Location } from "../types";
+import type { Booking, Location } from "../types";
 import { getLocation, listLocations, upsertLocation } from "../store";
+import { describeBookingShort } from "../booking";
+import { destinationOf, outlookUsable } from "../booking/destination";
+import { zonedInstant } from "./google-api";
+import { bookingEventId, overlapsBusy, type Busy, type BusySlot, type CalendarConnector } from "./calendar-connector";
 import { credentialsConfigured, openCredentials, sealCredentials } from "../db/credentials";
 import { raiseException } from "../errors/customer";
 import { openException } from "../exceptions";
 import { flag } from "../flags";
 import { appOrigin } from "../origin";
 import {
+  BOOKING_PROPERTY,
+  KEY_PROPERTY,
   MICROSOFT_AUTHORITY,
   MICROSOFT_SCOPES,
   MicrosoftAuthError,
@@ -13,7 +19,10 @@ import {
   liveMicrosoftApi,
   type MicrosoftApi,
   type OutlookCalendarEntry,
+  type OutlookEvent,
 } from "./microsoft-api";
+
+export { outlookUsable } from "../booking/destination";
 import { signOAuthState, takeExpiredStates, verifyOAuthState, type ReturnTo, type StateCheck } from "./oauth-state";
 import { fakeMicrosoftApi } from "../testing/stubs";
 
@@ -471,3 +480,190 @@ export function outlookConnectionState(location: Location): { connected: boolean
 export async function listOutlookCalendarsFor(location: Location): Promise<OutlookCalendarEntry[]> {
   return withOutlookAccess(location, (token, api) => api.listCalendars(token));
 }
+
+/**
+ * Save the owner's picks, checked against what their account can write to.
+ * Returns an owner-facing sentence when a pick is not one of theirs.
+ */
+export async function chooseOutlookCalendars(
+  location: Location,
+  input: { calendarId: string; staffCalendars?: Record<string, string> },
+): Promise<{ ok: true; location: Location } | { ok: false; error: string }> {
+  if (!location.outlook) return { ok: false, error: "Connect Outlook first." };
+  const calendars = await listOutlookCalendarsFor(location);
+  const byId = new Map(calendars.map((c) => [c.id, c]));
+  const venueCal = byId.get(input.calendarId);
+  if (!venueCal) return { ok: false, error: "That calendar is not one your Microsoft account can add events to." };
+  const staffIds = new Set((location.salon?.staff ?? []).map((s) => s.id));
+  const staffCalendars: Record<string, string> = {};
+  for (const [staffId, calendarId] of Object.entries(input.staffCalendars ?? {})) {
+    if (!calendarId) continue;
+    if (!staffIds.has(staffId)) return { ok: false, error: "That person is not on your team list." };
+    if (!byId.has(calendarId)) return { ok: false, error: "One of those calendars is not one your Microsoft account can add events to." };
+    staffCalendars[staffId] = calendarId;
+  }
+  return {
+    ok: true,
+    location: { ...location, outlook: { ...location.outlook, calendarId: venueCal.id, calendarName: venueCal.name, staffCalendars } },
+  };
+}
+
+/** The calendar a booking for this person goes into. */
+export function outlookCalendarFor(link: OutlookLink, staffId?: string): string {
+  return (staffId && link.staffCalendars?.[staffId]) || link.calendarId;
+}
+
+/**
+ * Busy intervals, per calendar, for one local day and the small hours after it.
+ * Events Belline wrote are skipped (its own diary holds them), and so are
+ * events shown as free or working elsewhere.
+ */
+export async function busyForOutlook(location: Location, date: string): Promise<Busy> {
+  const link = location.outlook!;
+  const calendars = [...new Set([link.calendarId, ...Object.values(link.staffCalendars ?? {})])];
+  const start = new Date(zonedInstant(date, 0, location.timezone)).toISOString();
+  const end = new Date(zonedInstant(date, 36 * 60, location.timezone)).toISOString();
+  return withOutlookAccess(location, async (token, api) => {
+    const out: Busy = new Map();
+    for (const calendarId of calendars) {
+      const events = await api.listEvents(token, calendarId, start, end);
+      out.set(
+        calendarId,
+        events.filter((e) => !e.free && !e.bellineBookingId).map((e) => [Date.parse(e.start), Date.parse(e.end)] as [number, number]),
+      );
+    }
+    return out;
+  });
+}
+
+/** Is this interval taken on the venue's calendar, or on this person's own? */
+export function isBusyOutlook(location: Location, busy: Busy, slot: BusySlot): boolean {
+  const link = location.outlook!;
+  const from = zonedInstant(slot.date, slot.startMin, location.timezone);
+  const to = zonedInstant(slot.date, slot.endMin, location.timezone);
+  return overlapsBusy(busy, new Set([link.calendarId, outlookCalendarFor(link, slot.staffId)]), from, to);
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+/** A local time at the venue as the UTC wall-clock Graph is sent. */
+function utcWall(location: Location, date: string, minutes: number): string {
+  return new Date(zonedInstant(date, minutes, location.timezone)).toISOString().slice(0, 19);
+}
+
+export function outlookEventFor(location: Location, booking: Booking, key: string): OutlookEvent {
+  const twoWay = destinationOf(location) === "outlook";
+  return {
+    subject: `${booking.guestName} — ${describeBookingShort(location, booking)}`,
+    body: {
+      contentType: "text",
+      content: [
+        `Booked through Belline (${booking.source}).`,
+        booking.guestPhone ? `Phone: ${booking.guestPhone}` : null,
+        booking.notes ? `Note: ${booking.notes}` : null,
+        `Reference: ${booking.ref}`,
+        "",
+        twoWay
+          ? "To change or cancel this booking, do it in Belline, so the customer's record stays right."
+          : "Belline owns availability. Changing this event does not change the booking.",
+      ]
+        .filter((line) => line !== null)
+        .join("\n"),
+    },
+    start: { dateTime: utcWall(location, booking.date, booking.startMin), timeZone: "UTC" },
+    end: { dateTime: utcWall(location, booking.date, booking.endMin), timeZone: "UTC" },
+    showAs: "busy",
+    isReminderOn: false,
+    // Tagged, so reading busy times back skips what Belline wrote, and the event is found again by its key.
+    singleValueExtendedProperties: [
+      { id: BOOKING_PROPERTY, value: booking.id },
+      { id: KEY_PROPERTY, value: key },
+    ],
+  };
+}
+
+/** A write Microsoft refused: the owner sees our sentence on the connection, the log gets Microsoft's. */
+export function noteOutlookWriteFailure(locationId: string, raw: unknown): void {
+  const location = getLocation(locationId);
+  if (!location?.outlook) return;
+  if (location.outlook.lastError !== OUTLOOK_WRITE_FAILED_TEXT) {
+    upsertLocation({ ...location, outlook: { ...location.outlook, lastError: OUTLOOK_WRITE_FAILED_TEXT } });
+  }
+  console.warn(`[outlook] ${location.name}: ${raw instanceof Error ? raw.message : String(raw)}`);
+}
+
+/** A write Microsoft accepted. The write warning goes only when nothing else at the venue is still failing. */
+export function noteOutlookWriteSuccess(locationId: string, stillFailing: boolean, now = new Date()): void {
+  const location = getLocation(locationId);
+  if (!location?.outlook) return;
+  const clear = location.outlook.lastError === OUTLOOK_WRITE_FAILED_TEXT && !stillFailing;
+  upsertLocation({ ...location, outlook: { ...location.outlook, lastSyncedAt: now.toISOString(), ...(clear ? { lastError: undefined } : {}) } });
+}
+
+/**
+ * Disconnect: drop the sealed token and the link, and a venue that booked into
+ * Outlook goes back to requests. Microsoft has no endpoint to revoke one
+ * refresh token, so the owner is told where to remove Belline's permission in
+ * their Microsoft account; the copy Belline held is gone either way. Events
+ * already written stay: they are the venue's.
+ */
+export function disconnectOutlook(location: Location, now = new Date()): Location {
+  accessCache().delete(location.id);
+  const { outlook: _dropped, ...rest } = location;
+  const o = rest.onboarding;
+  if (o?.destination?.kind === "outlook") {
+    return { ...rest, onboarding: { ...o, destination: { kind: "requests", setAt: now.toISOString() } } };
+  }
+  return rest;
+}
+
+export const OUTLOOK_DISCONNECTED_TEXT =
+  "Disconnected. Belline no longer holds access to your Outlook calendar. To remove Belline from your Microsoft account as well, open your account's app permissions (for a work account, your IT admin can do it) and remove Belline.";
+
+/** Outlook, as the shared provider and sync see it (calendar-connector.ts). */
+export const outlookConnector: CalendarConnector = {
+  kind: "outlook",
+  name: "Outlook",
+  tag: "outlook",
+  failedException: "outlook_sync_failed",
+  linked: (location) => Boolean(location.outlook),
+  usable: (location) => outlookUsable(location),
+  calendarFor: (location, staffId) => outlookCalendarFor(location.outlook!, staffId),
+  keyOf: (booking) => booking.calendarEventKey ?? bookingEventId(booking),
+  refFields: (key, id) => ({ calendarEventKey: key, calendarEventId: id }),
+
+  async put(location, booking, calendarId, key) {
+    const event = outlookEventFor(location, booking, key);
+    return withOutlookAccess(location, async (token, api) => {
+      // The stored id, when it is this event on this calendar: one call.
+      const known = booking.calendarEventId && booking.calendarId === calendarId && booking.calendarEventKey === key ? booking.calendarEventId : null;
+      if (known && (await api.updateEvent(token, calendarId, known, event))) return known;
+      // Otherwise by key: a write whose answer was lost, or an event deleted by hand.
+      const found = await api.findEventByKey(token, calendarId, key);
+      if (found && (await api.updateEvent(token, calendarId, found, event))) return found;
+      return api.createEvent(token, calendarId, event);
+    });
+  },
+
+  async insert(location, booking, calendarId, key) {
+    const event = outlookEventFor(location, booking, key);
+    return withOutlookAccess(location, async (token, api) => (await api.findEventByKey(token, calendarId, key)) ?? api.createEvent(token, calendarId, event));
+  },
+
+  async remove(location, booking, ref) {
+    await withOutlookAccess(location, async (token, api) => {
+      const stored =
+        booking.calendarEventId && booking.calendarId === ref.calendarId && booking.calendarEventKey === ref.eventId ? booking.calendarEventId : null;
+      const id = stored ?? (await api.findEventByKey(token, ref.calendarId, ref.eventId));
+      if (id) await api.deleteEvent(token, ref.calendarId, id);
+    });
+  },
+
+  busyFor: (location, date) => busyForOutlook(location, date),
+  isBusy: (location, busy, slot) => isBusyOutlook(location, busy, slot),
+  waiting: (err) => err instanceof MicrosoftAuthError || err instanceof MicrosoftConfigError,
+  noteWriteFailure: (locationId, raw) => noteOutlookWriteFailure(locationId, raw),
+  noteWriteSuccess: (locationId, stillFailing, now) => noteOutlookWriteSuccess(locationId, stillFailing, now),
+};

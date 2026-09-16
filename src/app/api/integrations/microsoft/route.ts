@@ -7,7 +7,10 @@ import { flag } from "@/lib/flags";
 import { credentialsConfigured } from "@/lib/db/credentials";
 import {
   OUTLOOK_CALLBACK_PATH,
+  OUTLOOK_DISCONNECTED_TEXT,
   OUTLOOK_STATE_COOKIE,
+  chooseOutlookCalendars,
+  disconnectOutlook,
   OutlookNoCalendarError,
   OutlookScopeError,
   completeOutlookConnection,
@@ -20,6 +23,7 @@ import {
 } from "@/lib/integrations/outlook";
 import { MicrosoftConfigError } from "@/lib/integrations/microsoft-api";
 import type { ReturnTo } from "@/lib/integrations/oauth-state";
+import { resyncMovedCalendars } from "@/lib/integrations/calendar-sync";
 import { appOrigin } from "@/lib/origin";
 import { customerError, raiseException } from "@/lib/errors/customer";
 
@@ -125,4 +129,57 @@ export async function GET(request: Request) {
     customerError("outlook", err, "failed", location.id);
     return land(checked.returnTo, location.id, "outlook_failed");
   }
+}
+
+/** The calendar picker: one calendar for the venue, and optionally one per person. */
+export async function POST(request: Request) {
+  const auth = await requireApiUser();
+  if (auth.response) return auth.response;
+
+  const body = (await request.json().catch(() => ({}))) as {
+    locationId?: string;
+    calendarId?: string;
+    staffCalendars?: Record<string, string>;
+  };
+  const location = getLocation(String(body.locationId ?? ""));
+  if (!location || !canEditAgent(auth.user, location.id)) {
+    return NextResponse.json({ error: "Not your venue." }, { status: 403 });
+  }
+  if (!flag("booking.outlook") || !location.outlook) {
+    return NextResponse.json({ error: "Connect Outlook first." }, { status: 409 });
+  }
+
+  try {
+    const out = await chooseOutlookCalendars(location, {
+      calendarId: String(body.calendarId ?? ""),
+      staffCalendars: body.staffCalendars && typeof body.staffCalendars === "object" ? body.staffCalendars : {},
+    });
+    if (!out.ok) return NextResponse.json({ error: out.error }, { status: 422 });
+    // Someone's bookings follow them to the calendar they now use.
+    resyncMovedCalendars(upsertLocation(out.location));
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const said = customerError("outlook", err, "unavailable", location.id);
+    return NextResponse.json({ error: `${said.message} ${said.next}` }, { status: 502 });
+  }
+}
+
+/**
+ * Disconnect. Belline's sealed token and the link are dropped, and a venue that
+ * booked into Outlook goes back to requests. Microsoft has no endpoint to revoke
+ * one refresh token, so the answer tells the owner where to remove Belline's
+ * permission in their Microsoft account. Events already written stay.
+ */
+export async function DELETE(request: Request) {
+  const auth = await requireApiUser();
+  if (auth.response) return auth.response;
+
+  const { locationId } = (await request.json().catch(() => ({}))) as { locationId?: string };
+  const location = locationId ? getLocation(locationId) : undefined;
+  if (!location || !canEditAgent(auth.user, location.id)) {
+    return NextResponse.json({ error: "Not your venue." }, { status: 403 });
+  }
+
+  upsertLocation(disconnectOutlook(location));
+  return NextResponse.json({ ok: true, said: OUTLOOK_DISCONNECTED_TEXT });
 }

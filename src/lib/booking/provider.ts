@@ -16,8 +16,9 @@ import {
 } from "./index";
 import { findBookingByRef, findBookingsByPhone, getBooking } from "../store";
 import { holdForSlot, MAX_QUOTED_HOLDS } from "./holds";
-import { destinationOf, googleUsable, takesRequestsOnly } from "./destination";
+import { destinationOf, googleUsable, outlookUsable, takesRequestsOnly } from "./destination";
 import { googleCalendarProvider } from "./google-provider";
+import { outlookCalendarProvider } from "./outlook-provider";
 
 export { takesRequestsOnly } from "./destination";
 
@@ -281,12 +282,13 @@ export const requestOnlyProvider: BookingProvider = {
  * Fresha is two providers in one tenant, and anything keyed higher up would
  * have to be undone.
  *
- * Belline's diary where the venue uses it; Google Calendar where the venue
- * chose it and the connection works (see google-provider.ts); requests for
- * everything else. Outlook and partner systems have no adapter yet, and a
- * Google connection that expired falls back to requests on the next call.
+ * Belline's diary where the venue uses it; Google Calendar or Outlook where the
+ * venue chose it and the connection works (see calendar-provider.ts); requests
+ * for everything else. Partner systems have no adapter yet, and a calendar
+ * connection that expired falls back to requests on the next call.
  */
 export function providerFor(location: Location): BookingProvider {
   if (destinationOf(location) === "google" && googleUsable(location)) return googleCalendarProvider;
+  if (destinationOf(location) === "outlook" && outlookUsable(location)) return outlookCalendarProvider;
   return takesRequestsOnly(location) ? requestOnlyProvider : localProvider;
 }

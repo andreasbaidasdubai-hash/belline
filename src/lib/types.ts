@@ -1162,14 +1162,20 @@ export interface Booking {
   cancelledAt?: string;
   cancelReason?: string;
   /**
-   * The Google Calendar event this booking is, and the calendar it is in.
-   * Derived from the idempotency key, so a second create finds the first.
+   * The calendar event this booking is, and the calendar it is in. For Google
+   * the id is derived from the idempotency key, so a second create finds the
+   * first. For Outlook it is the id Microsoft assigned.
    */
   calendarEventId?: string;
   calendarId?: string;
   /**
-   * Where the venue's connected Google Calendar stands with this booking.
-   * Absent when the venue has no connection. See integrations/google-sync.ts.
+   * Outlook only: the key written on the event (integrations/calendar-connector.ts),
+   * by which it is found again whatever id Microsoft gave it. Google's key is its id.
+   */
+  calendarEventKey?: string;
+  /**
+   * Where the venue's connected calendar stands with this booking.
+   * Absent when the venue has no connection. See integrations/calendar-sync.ts.
    */
   calendarSync?: CalendarSync;
   /**
@@ -1390,7 +1396,7 @@ export interface User {
   resetNonce?: string;
 }
 
-/** An event in a calendar, by calendar and id. */
+/** An event in a calendar, by calendar and key (for Google the key is the id). */
 export interface CalendarEventRef {
   calendarId: string;
   eventId: string;
@@ -1417,8 +1423,10 @@ export interface CalendarSync {
   lastError?: string;
   /** Events this booking left behind on another calendar, still to be removed. */
   stale?: CalendarEventRef[];
-  /** A write that was started and not confirmed: it may exist in Google. */
+  /** A write that was started and not confirmed: it may exist in the calendar. */
   inflight?: CalendarEventRef;
+  /** Which calendar service the event fields belong to. Absent: Google. */
+  provider?: "outlook";
 }
 
 /** Why a person at Belline has to step in. See exceptions.ts. */

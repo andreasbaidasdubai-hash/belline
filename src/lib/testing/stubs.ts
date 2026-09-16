@@ -21,6 +21,7 @@ import {
   tokenFailure,
   type MicrosoftApi,
   type OutlookCalendarEntry,
+  type OutlookEvent,
   type TokenErrorBody,
 } from "../integrations/microsoft-api";
 
@@ -475,6 +476,16 @@ export function fakeGoogleApi(opts: { calendars?: GoogleCalendarEntry[] } = {}) 
  * Failures are fed through the same classifiers the live client uses
  * (`tokenFailure`, `graphFailure`), with the bodies Microsoft sends.
  */
+export interface OutlookStubEvent {
+  id: string;
+  start: string;
+  end: string;
+  subject?: string;
+  free?: boolean;
+  bellineBookingId?: string;
+  key?: string;
+}
+
 export function fakeMicrosoftApi(opts: { calendars?: OutlookCalendarEntry[] } = {}) {
   const calls: { method: keyof MicrosoftApi; calendarId?: string; id?: string }[] = [];
   /** Refresh tokens Microsoft would accept. */
@@ -495,9 +506,35 @@ export function fakeMicrosoftApi(opts: { calendars?: OutlookCalendarEntry[] } = 
     return token;
   };
   const access = (token: string) => {
-    if (expired || !token.startsWith("stub-ms-access-") || !live.has(token.slice("stub-ms-access-".length).split("#")[0])) {
+    if (expired || !token.startsWith("stub-ms-access-") || !issued.includes(token.slice("stub-ms-access-".length))) {
       throw graphFailure(401, JSON.stringify({ error: { code: "InvalidAuthenticationToken", message: "Access token has expired or is not yet valid." } }), "stub");
     }
+    if (graphError) throw graphFailure(graphError.status, JSON.stringify(graphError.body), "stub");
+  };
+  let graphError: { status: number; body: unknown } | null = null;
+  let eventSeq = 0;
+  const calendarsEvents = new Map<string, Map<string, OutlookStubEvent>>();
+  const of = (calendarId: string) => {
+    if (!calendarsEvents.has(calendarId)) calendarsEvents.set(calendarId, new Map());
+    return calendarsEvents.get(calendarId)!;
+  };
+  const fromGraph = (id: string, event: OutlookEvent): OutlookStubEvent => {
+    const prop = (name: string) => event.singleValueExtendedProperties.find((p) => p.id.endsWith(`Name ${name}`))?.value;
+    return {
+      id,
+      start: `${event.start.dateTime}Z`,
+      end: `${event.end.dateTime}Z`,
+      subject: event.subject,
+      bellineBookingId: prop("bellineBookingId"),
+      key: prop("bellineEventKey"),
+    };
+  };
+  const failures = new Map<keyof MicrosoftApi, { times: number; afterWrite: boolean }>();
+  const trip = (method: keyof MicrosoftApi, wrote: boolean) => {
+    const f = failures.get(method);
+    if (!f || f.times <= 0 || f.afterWrite !== wrote) return;
+    f.times--;
+    throw graphFailure(503, JSON.stringify({ error: { code: "ServiceNotAvailable", message: `stub: ${method} failed${wrote ? " after the write landed" : ""}` } }), method);
   };
 
   const api: MicrosoftApi = {
@@ -527,7 +564,49 @@ export function fakeMicrosoftApi(opts: { calendars?: OutlookCalendarEntry[] } = 
     async listCalendars(token) {
       access(token);
       calls.push({ method: "listCalendars" });
+      trip("listCalendars", false);
       return calendars;
+    },
+    async listEvents(token, calendarId, start, end) {
+      access(token);
+      calls.push({ method: "listEvents", calendarId });
+      trip("listEvents", false);
+      const lo = Date.parse(start);
+      const hi = Date.parse(end);
+      return [...of(calendarId).values()]
+        .filter((e) => Date.parse(e.start) < hi && Date.parse(e.end) > lo)
+        .map(({ id, start: s, end: e, free, bellineBookingId }) => ({ id, start: s, end: e, free, bellineBookingId }));
+    },
+    async findEventByKey(token, calendarId, key) {
+      access(token);
+      calls.push({ method: "findEventByKey", calendarId, id: key });
+      trip("findEventByKey", false);
+      return [...of(calendarId).values()].find((e) => e.key === key)?.id ?? null;
+    },
+    async createEvent(token, calendarId, event) {
+      access(token);
+      trip("createEvent", false);
+      const id = `AAMkAD-evt-${++eventSeq}`;
+      calls.push({ method: "createEvent", calendarId, id });
+      of(calendarId).set(id, fromGraph(id, event));
+      trip("createEvent", true);
+      return id;
+    },
+    async updateEvent(token, calendarId, eventId, event) {
+      access(token);
+      calls.push({ method: "updateEvent", calendarId, id: eventId });
+      trip("updateEvent", false);
+      if (!of(calendarId).has(eventId)) return false;
+      of(calendarId).set(eventId, fromGraph(eventId, event));
+      trip("updateEvent", true);
+      return true;
+    },
+    async deleteEvent(token, calendarId, eventId) {
+      access(token);
+      calls.push({ method: "deleteEvent", calendarId, id: eventId });
+      trip("deleteEvent", false);
+      of(calendarId).delete(eventId);
+      trip("deleteEvent", true);
     },
   };
 
@@ -535,6 +614,26 @@ export function fakeMicrosoftApi(opts: { calendars?: OutlookCalendarEntry[] } = 
     api,
     calls,
     issued,
+    /** Live events on a calendar, as Microsoft holds them. */
+    events(calendarId: string): OutlookStubEvent[] {
+      return [...of(calendarId).values()];
+    },
+    /** Something the owner put in their calendar themselves. `free` is "Show as: Free". */
+    addBusy(calendarId: string, start: string, end: string, opts: { free?: boolean } = {}): void {
+      const id = `AAMkAD-own-${++eventSeq}`;
+      of(calendarId).set(id, { id, start, end, subject: "Owner's own event", free: opts.free });
+    },
+    /**
+     * The next `times` calls to `method` fail with a 503. With `afterWrite` the
+     * write lands first and only the answer is lost.
+     */
+    failNext(method: keyof MicrosoftApi, times = 1, opts: { afterWrite?: boolean } = {}): void {
+      failures.set(method, { times, afterWrite: Boolean(opts.afterWrite) });
+    },
+    /** Every Graph call answers this, as Microsoft does for a mailbox that has none. */
+    failGraph(reply: { status: number; body: unknown } | null): void {
+      graphError = reply;
+    },
     /** Microsoft stops accepting every refresh token and access token. */
     expire(): void {
       expired = true;

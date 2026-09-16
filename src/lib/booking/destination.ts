@@ -14,7 +14,7 @@ export function destinationOf(location: Pick<Location, "onboarding">): Destinati
   return location.onboarding?.destination?.kind ?? "belline";
 }
 
-type Venue = Pick<Location, "onboarding"> & { google?: Location["google"] };
+type Venue = Pick<Location, "onboarding"> & { google?: Location["google"]; outlook?: Location["outlook"] };
 
 /**
  * Can Belline book into this venue's Google Calendar right now?
@@ -29,18 +29,28 @@ export function googleUsable(location: Venue, env: Record<string, string | undef
 }
 
 /**
+ * Can Belline book into this venue's Outlook calendar right now? The same four
+ * conditions as Google, against `booking.outlook` and the Outlook link.
+ */
+export function outlookUsable(location: Venue, env: Record<string, string | undefined> = process.env): boolean {
+  const link = location.outlook;
+  return Boolean(link?.sealedToken && !link.expiredAt && !link.misconfiguredAt && flag("booking.outlook", env));
+}
+
+/**
  * Does this venue take requests rather than confirmed bookings?
  *
- * Outlook and partner systems count as requests until their adapters exist.
- * Google counts as requests whenever its connection is not usable — flag off,
- * never connected, or the token expired — so a calendar Belline cannot see is
- * never booked into. An owner who chose one is not told it works; the agent
- * takes the details and the team confirms.
+ * Partner systems count as requests until their adapters exist. Google and
+ * Outlook count as requests whenever their connection is not usable — flag
+ * off, never connected, or the token expired — so a calendar Belline cannot
+ * see is never booked into. An owner who chose one is not told it works; the
+ * agent takes the details and the team confirms.
  */
 export function takesRequestsOnly(location: Venue): boolean {
   const kind = destinationOf(location);
   if (kind === "belline") return false;
   if (kind === "google") return !googleUsable(location);
+  if (kind === "outlook") return !outlookUsable(location);
   return true;
 }
 

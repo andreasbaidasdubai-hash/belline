@@ -1,5 +1,5 @@
-import crypto from "node:crypto";
 import type { Booking, Location } from "../types";
+import { bookingEventId, overlapsBusy, type Busy, type CalendarConnector } from "./calendar-connector";
 import { getLocation, listLocations, upsertLocation } from "../store";
 import { signOAuthState, takeExpiredStates, verifyOAuthState, type ReturnTo, type StateCheck } from "./oauth-state";
 import { describeBookingShort } from "../booking";
@@ -502,7 +502,7 @@ export function calendarFor(link: GoogleLink, staffId?: string): string {
   return (staffId && link.staffCalendars?.[staffId]) || link.calendarId;
 }
 
-export type Busy = Map<string, [number, number][]>;
+export type { Busy } from "./calendar-connector";
 
 /**
  * Busy intervals, per calendar, for one local day (and the small hours after
@@ -537,13 +537,7 @@ export function isBusy(location: Location, busy: Busy, slot: { date: string; sta
   const link = location.google!;
   const from = zonedInstant(slot.date, slot.startMin, location.timezone);
   const to = zonedInstant(slot.date, slot.endMin, location.timezone);
-  const calendars = new Set([link.calendarId, calendarFor(link, slot.staffId)]);
-  for (const calendarId of calendars) {
-    for (const [start, end] of busy.get(calendarId) ?? []) {
-      if (start < to && end > from) return true;
-    }
-  }
-  return false;
+  return overlapsBusy(busy, new Set([link.calendarId, calendarFor(link, slot.staffId)]), from, to);
 }
 
 // ---------------------------------------------------------------------------
@@ -551,27 +545,11 @@ export function isBusy(location: Location, busy: Busy, slot: { date: string; sta
 // ---------------------------------------------------------------------------
 
 /**
- * A Google event id from an idempotency key.
- *
- * Google lets the caller choose the id (base32hex, 5–1024 characters), and an
- * insert with an id that exists is refused with 409. So the same key arriving
- * twice — a retried webhook, a caller who said yes twice — can only ever make
- * one event, and nothing has to be remembered to make that true.
+ * A Google event id is an event key (calendar-connector.ts): Google lets the
+ * caller choose the id, and an insert with an id that exists is refused with
+ * 409, so the same key arriving twice can only ever make one event.
  */
-export function eventIdFor(locationId: string, key: string): string {
-  return `bl${crypto.createHash("sha256").update(`${locationId}|${key}`).digest("hex").slice(0, 40)}`;
-}
-
-/**
- * The event id for a booking that did not come through the Google provider:
- * made at the desk, from a guest's link, or before event ids were stored. It is
- * the id the one-way mirror has always used, so an event it already wrote is
- * the same event, and it depends only on the booking's own id, so every write
- * for one booking lands on one event.
- */
-export function bookingEventId(booking: Booking): string {
-  return `belline${booking.id.replace(/[^a-z0-9]/gi, "").toLowerCase()}`.slice(0, 60);
-}
+export { bookingEventId, eventIdFor } from "./calendar-connector";
 
 /** A local wall-clock time in the venue's own zone, as Google wants it. */
 function isoLocal(date: string, minutes: number): string {
@@ -604,6 +582,35 @@ export function eventFor(location: Location, booking: Booking, id: string): Goog
     extendedProperties: { private: { bellineBookingId: booking.id } },
   };
 }
+
+/** Google, as the shared provider and sync see it (calendar-connector.ts). */
+export const googleConnector: CalendarConnector = {
+  kind: "google",
+  name: "Google Calendar",
+  tag: "google",
+  failedException: "google_sync_failed",
+  linked: (location) => Boolean(location.google),
+  usable: (location) => googleUsable(location),
+  calendarFor: (location, staffId) => calendarFor(location.google!, staffId),
+  keyOf: (booking) => booking.calendarEventId ?? bookingEventId(booking),
+  refFields: (key) => ({ calendarEventId: key }),
+  async put(location, booking, calendarId, key) {
+    await withAccess(location, (token, api) => api.putEvent(token, calendarId, eventFor(location, booking, key)));
+    return key;
+  },
+  async insert(location, booking, calendarId, key) {
+    await withAccess(location, (token, api) => api.insertEvent(token, calendarId, eventFor(location, booking, key)));
+    return key;
+  },
+  async remove(location, _booking, ref) {
+    await withAccess(location, (token, api) => api.cancelEvent(token, ref.calendarId, ref.eventId));
+  },
+  busyFor: (location, date) => busyFor(location, date),
+  isBusy: (location, busy, slot) => isBusy(location, busy, slot),
+  waiting: (err) => err instanceof GoogleAuthError || err instanceof GoogleConfigError,
+  noteWriteFailure: (locationId, raw) => noteWriteFailure(locationId, raw),
+  noteWriteSuccess: (locationId, stillFailing, now) => noteWriteSuccess(locationId, stillFailing, now),
+};
 
 /** What the dashboard shows about the connection. Our sentences only. */
 export function connectionState(location: Location): {

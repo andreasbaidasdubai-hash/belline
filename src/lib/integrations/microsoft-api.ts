@@ -156,6 +156,45 @@ export interface OutlookCalendarEntry {
   primary: boolean;
 }
 
+/**
+ * Belline's private extended properties on the events it writes. One GUID for
+ * Belline, two names: the booking the event is (so reading busy times back
+ * skips Belline's own), and the event key (so an event is found again whatever
+ * id Graph gave it, and never created twice).
+ */
+const PROPERTY_SET = "{5f3e2b7a-9c4d-4e1f-8a6b-3d2c1b0a9f8e}";
+export const BOOKING_PROPERTY = `String ${PROPERTY_SET} Name bellineBookingId`;
+export const KEY_PROPERTY = `String ${PROPERTY_SET} Name bellineEventKey`;
+
+/**
+ * An event as Belline writes it. Times are UTC wall-clock, which Graph accepts
+ * in every mailbox without mapping IANA zones to Windows ones.
+ *
+ * No `transactionId`: Graph's own de-duplication is keyed on it for an unstated
+ * window, and a booking moved away from a calendar and back would reuse it.
+ * The key property, looked up before every create, is the idempotency here.
+ */
+export interface OutlookEvent {
+  subject: string;
+  body: { contentType: "text"; content: string };
+  start: { dateTime: string; timeZone: "UTC" };
+  end: { dateTime: string; timeZone: "UTC" };
+  showAs: "busy";
+  isReminderOn: false;
+  singleValueExtendedProperties: { id: string; value: string }[];
+}
+
+/** An event reduced to what availability needs. Times are ISO instants. */
+export interface OutlookBusyEvent {
+  id: string;
+  start: string;
+  end: string;
+  /** Shown as free or working elsewhere. Never blocks a time. */
+  free?: boolean;
+  /** Set on events Belline wrote. Belline's own diary already counts those. */
+  bellineBookingId?: string;
+}
+
 export interface MicrosoftApi {
   /** Finish OAuth. Throws when Microsoft returns no refresh token. */
   exchangeCode(code: string, redirectUri: string): Promise<MicrosoftTokens>;
@@ -163,6 +202,16 @@ export interface MicrosoftApi {
   refresh(refreshToken: string): Promise<MicrosoftTokens>;
   /** The calendars this account can add events to. */
   listCalendars(accessToken: string): Promise<OutlookCalendarEntry[]>;
+  /** Events overlapping [start, end), cancelled ones left out. */
+  listEvents(accessToken: string, calendarId: string, start: string, end: string): Promise<OutlookBusyEvent[]>;
+  /** The id of the event on this calendar carrying this key, or null. */
+  findEventByKey(accessToken: string, calendarId: string, key: string): Promise<string | null>;
+  /** Create. Returns Graph's id. */
+  createEvent(accessToken: string, calendarId: string, event: OutlookEvent): Promise<string>;
+  /** Replace the fields Belline writes. False when there is no such event. */
+  updateEvent(accessToken: string, calendarId: string, eventId: string, event: OutlookEvent): Promise<boolean>;
+  /** An event already gone counts as deleted. */
+  deleteEvent(accessToken: string, calendarId: string, eventId: string): Promise<void>;
 }
 
 function clientId(): string {
@@ -234,5 +283,75 @@ export const liveMicrosoftApi: MicrosoftApi = {
     return (data.value ?? [])
       .filter((c) => c.canEdit !== false)
       .map((c) => ({ id: c.id, name: c.name ?? "Calendar", primary: Boolean(c.isDefaultCalendar) }));
+  },
+
+  async listEvents(accessToken, calendarId, start, end) {
+    type Item = {
+      id: string;
+      isCancelled?: boolean;
+      showAs?: string;
+      start?: { dateTime?: string };
+      end?: { dateTime?: string };
+      singleValueExtendedProperties?: { id: string; value: string }[];
+    };
+    const params = new URLSearchParams({
+      startDateTime: start,
+      endDateTime: end,
+      $top: "250",
+      $select: "id,start,end,showAs,isCancelled",
+      $expand: `singleValueExtendedProperties($filter=id eq '${BOOKING_PROPERTY}')`,
+    });
+    const out: OutlookBusyEvent[] = [];
+    let next: string | undefined = `/me/calendars/${encodeURIComponent(calendarId)}/calendarView?${params}`;
+    // A day's view is one page almost always; the cap keeps a runaway calendar from holding a caller.
+    for (let page = 0; next && page < 10; page++) {
+      const res = await graph(accessToken, next);
+      if (!res.ok) throw graphFailure(res.status, await body(res), "calendarView");
+      const data = (await res.json()) as { value?: Item[]; "@odata.nextLink"?: string };
+      for (const e of data.value ?? []) {
+        if (e.isCancelled) continue;
+        out.push({
+          id: e.id,
+          // UTC wall-clock, because of the Prefer header.
+          start: `${e.start?.dateTime?.slice(0, 19)}Z`,
+          end: `${e.end?.dateTime?.slice(0, 19)}Z`,
+          free: e.showAs === "free" || e.showAs === "workingElsewhere",
+          bellineBookingId: e.singleValueExtendedProperties?.find((p) => p.id.toLowerCase() === BOOKING_PROPERTY.toLowerCase())?.value,
+        });
+      }
+      next = data["@odata.nextLink"];
+    }
+    return out;
+  },
+
+  async findEventByKey(accessToken, calendarId, key) {
+    const filter = `singleValueExtendedProperties/Any(ep: ep/id eq '${KEY_PROPERTY}' and ep/value eq '${key.replace(/'/g, "''")}')`;
+    const res = await graph(accessToken, `/me/calendars/${encodeURIComponent(calendarId)}/events?$filter=${encodeURIComponent(filter)}&$select=id&$top=1`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw graphFailure(res.status, await body(res), "events.find");
+    const data = (await res.json()) as { value?: { id: string }[] };
+    return data.value?.[0]?.id ?? null;
+  },
+
+  async createEvent(accessToken, calendarId, event) {
+    const res = await graph(accessToken, `/me/calendars/${encodeURIComponent(calendarId)}/events`, { method: "POST", body: JSON.stringify(event) });
+    if (!res.ok) throw graphFailure(res.status, await body(res), "events.create");
+    return ((await res.json()) as { id: string }).id;
+  },
+
+  async updateEvent(accessToken, calendarId, eventId, event) {
+    const res = await graph(accessToken, `/me/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(event),
+    });
+    if (res.status === 404) return false;
+    if (!res.ok) throw graphFailure(res.status, await body(res), "events.update");
+    return true;
+  },
+
+  async deleteEvent(accessToken, calendarId, eventId) {
+    const res = await graph(accessToken, `/me/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, { method: "DELETE" });
+    if (res.status === 404 || res.status === 410) return;
+    if (!res.ok) throw graphFailure(res.status, await body(res), "events.delete");
   },
 };

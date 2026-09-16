@@ -37,7 +37,8 @@ const { installFetchGuard, blockedFetches, fakeMicrosoftApi } = await import("..
 installFetchGuard();
 
 const { seedIfEmpty } = await import("../src/lib/seed");
-const { getLocation, listLocations, upsertLocation } = await import("../src/lib/store");
+const { getLocation, listBookings, listLocations, upsertLocation } = await import("../src/lib/store");
+const listBookingsAt = (locationId: string) => listBookings({ locationId, status: "confirmed" });
 const outlook = await import("../src/lib/integrations/outlook");
 const msApi = await import("../src/lib/integrations/microsoft-api");
 const google = await import("../src/lib/integrations/google");
@@ -305,6 +306,206 @@ await test("a grant without Calendars.ReadWrite is refused, full-URI scopes are 
   } finally {
     fake.grant("Calendars.ReadWrite User.Read profile openid email");
   }
+});
+
+// ---------------------------------------------------------------------------
+head("Availability is Belline's rules, less what Outlook says is busy");
+
+const { outlookCalendarProvider } = await import("../src/lib/booking/outlook-provider");
+const { localProvider, providerFor, requestOnlyProvider } = await import("../src/lib/booking/provider");
+const { outlookUsable, takesRequestsOnly } = await import("../src/lib/booking/destination");
+const { findAvailability } = await import("../src/lib/booking");
+const { addDays, todayIn } = await import("../src/lib/time");
+const { zonedInstant } = await import("../src/lib/integrations/google-api");
+const iso = (l: Loc, date: string, min: number) => new Date(zonedInstant(date, min, l.timezone)).toISOString();
+
+const usedDays = new Set<string>();
+/** A day, not used by another test yet, when the salon's first service has at least three times. */
+function openDay(l: Loc): string {
+  for (let i = 3; i < 60; i++) {
+    const date = addDays(todayIn(l.timezone), i);
+    if (usedDays.has(date)) continue;
+    if (findAvailability(l, { locationId: l.id, date, serviceIds: [l.salon!.services[0].id] }, { limit: 200 }).length >= 3) {
+      usedDays.add(date);
+      return date;
+    }
+  }
+  throw new Error("the fixture salon has no open day in the next two months");
+}
+
+await test("with the flag on and a connection, an Outlook destination gets the Outlook provider; without either, requests", async () => {
+  const loc = await connect(salonBase);
+  assert.equal(providerFor(loc), outlookCalendarProvider);
+  assert.equal(outlookCalendarProvider.name, "outlook");
+  assert.equal(takesRequestsOnly(loc), false);
+  assert.equal(outlookUsable(loc, {}), false, "flag off in an empty env");
+  assert.equal(providerFor({ ...loc, outlook: undefined }), requestOnlyProvider);
+  assert.equal(takesRequestsOnly({ ...loc, outlook: undefined }), true);
+});
+
+await test("a busy event in Outlook removes the overlapping slot, and only overlapping ones", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const date = openDay(loc);
+  const query = { locationId: loc.id, date, serviceIds: [loc.salon!.services[0].id] };
+  const rules = findAvailability(loc, query, { limit: 200 });
+  const target = rules[0];
+  fake.addBusy("AAMkAD-default", iso(loc, date, target.startMin), iso(loc, date, target.endMin));
+  const offered = await outlookCalendarProvider.checkAvailability({ location: loc }, query);
+  assert.ok(!offered.some((s) => s.startMin < target.endMin && s.endMin > target.startMin), "an overlapping slot is still offered");
+  assert.ok(offered.length > 0, "a busy block took every time away");
+  for (const slot of offered) assert.ok(rules.some((r) => r.startMin === slot.startMin && r.staffId === slot.staffId), "Outlook added a time");
+});
+
+await test("an event shown as free does not block", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const query = { locationId: loc.id, date: openDay(loc), serviceIds: [loc.salon!.services[0].id] };
+  const before = await outlookCalendarProvider.checkAvailability({ location: loc }, query);
+  fake.addBusy("AAMkAD-default", iso(loc, query.date, before[0].startMin), iso(loc, query.date, before[0].endMin), { free: true });
+  const after = await outlookCalendarProvider.checkAvailability({ location: loc }, query);
+  assert.equal(after.length, before.length);
+});
+
+await test("the picker saves a person's own calendar, which blocks only them, and refuses a calendar the account cannot write to", async () => {
+  const [first, second] = salonBase.salon!.staff;
+  const bad = await outlook.chooseOutlookCalendars(getLocation(salonBase.id)!, { calendarId: "AAMkAD-someone-elses" });
+  assert.ok(!bad.ok && /not one your Microsoft account/.test(bad.error));
+  const stranger = await outlook.chooseOutlookCalendars(getLocation(salonBase.id)!, { calendarId: "AAMkAD-default", staffCalendars: { staff_nobody: STAFF_CAL } });
+  assert.ok(!stranger.ok);
+  const picked = await outlook.chooseOutlookCalendars(getLocation(salonBase.id)!, { calendarId: "AAMkAD-default", staffCalendars: { [first.id]: STAFF_CAL } });
+  assert.ok(picked.ok);
+  if (!picked.ok) return;
+  const loc = upsertLocation(picked.location);
+  const serviceIds = [loc.salon!.services[0].id];
+  let date = "";
+  for (let i = 3; i < 60 && !date; i++) {
+    const d = addDays(todayIn(loc.timezone), i);
+    if (usedDays.has(d)) continue;
+    if ([first.id, second.id].every((staffId) => findAvailability(loc, { locationId: loc.id, date: d, serviceIds, staffId }, { limit: 200 }).length > 0)) {
+      usedDays.add(d);
+      date = d;
+    }
+  }
+  const forPerson = (staffId: string) =>
+    outlookCalendarProvider.checkAvailability({ location: getLocation(loc.id)! }, { locationId: loc.id, date, serviceIds, staffId });
+  assert.ok(date, "no day in the next two months when both people work");
+  const secondBefore = await forPerson(second.id);
+  const both = (await forPerson(first.id)).find((s) => secondBefore.some((o) => o.startMin === s.startMin));
+  assert.ok(both, "no time where both people are free in the fixture");
+  fake.addBusy(STAFF_CAL, iso(loc, date, both!.startMin), iso(loc, date, both!.endMin));
+  assert.ok(!(await forPerson(first.id)).some((s) => s.startMin === both!.startMin), "the busy person is still offered");
+  assert.ok((await forPerson(second.id)).some((s) => s.startMin === both!.startMin), "the other person lost the time too");
+});
+
+// ---------------------------------------------------------------------------
+head("Create, update and cancel: idempotency keys and stored event ids");
+
+const liveEventsOf = (bookingId: string) =>
+  ["AAMkAD-default", STAFF_CAL].flatMap((calendarId) => fake.events(calendarId).filter((e) => e.bellineBookingId === bookingId).map((e) => ({ calendarId, ...e })));
+
+await test("the same key twice is one event and one booking; Graph's id and the key are stored", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const date = openDay(loc);
+  const query = { locationId: loc.id, date, serviceIds: [loc.salon!.services[0].id] };
+  const [slot] = await outlookCalendarProvider.checkAvailability({ location: loc }, query);
+  const input = { date, startMin: slot.startMin, guestName: "Layla Haddad", guestPhone: "+971501234567", serviceIds: query.serviceIds, staffId: slot.staffId };
+  const creates = fake.calls.filter((c) => c.method === "createEvent").length;
+  const one = await outlookCalendarProvider.createBooking({ location: loc }, input, "call_42:book:1");
+  assert.ok(one.ok, one.ok ? "" : one.detail);
+  if (!one.ok) return;
+  const two = await outlookCalendarProvider.createBooking({ location: getLocation(loc.id)! }, input, "call_42:book:1");
+  assert.ok(two.ok && two.duplicate && two.booking.id === one.booking.id);
+  assert.equal(fake.calls.filter((c) => c.method === "createEvent").length - creates, 1, "a second event was created");
+  assert.equal(liveEventsOf(one.booking.id).length, 1);
+  assert.equal(one.booking.calendarEventKey, outlook.outlookConnector.keyOf(one.booking));
+  assert.equal(one.booking.calendarEventKey, (await import("../src/lib/integrations/calendar-connector")).eventIdFor(loc.id, "call_42:book:1"));
+  assert.match(one.booking.calendarEventId!, /^AAMkAD-evt-/, "Graph's id is not stored");
+  assert.equal(one.booking.calendarSync?.provider, "outlook");
+  const [event] = liveEventsOf(one.booking.id);
+  assert.equal(Date.parse(event.start), zonedInstant(date, slot.startMin, loc.timezone), "the event is not at the booking's time");
+});
+
+await test("a create whose answer was lost is found by its key on the next try, not made twice", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const booking = listBookingsAt(loc.id).find((b) => b.guestName === "Layla Haddad")!;
+  const key = "bl-lost-answer-key-0001";
+  fake.failNext("createEvent", 1, { afterWrite: true });
+  const lost = await rejection(outlook.outlookConnector.insert(loc, booking, "AAMkAD-default", key));
+  assert.ok(lost instanceof msApi.MicrosoftApiError, String(lost));
+  const landed = fake.events("AAMkAD-default").filter((e) => e.key === key);
+  assert.equal(landed.length, 1, "the fixture did not land the write");
+  const creates = fake.calls.filter((c) => c.method === "createEvent").length;
+  assert.equal(await outlook.outlookConnector.insert(loc, booking, "AAMkAD-default", key), landed[0].id);
+  // And a create-or-replace for the same key replaces it.
+  assert.equal(await outlook.outlookConnector.put(loc, booking, "AAMkAD-default", key), landed[0].id);
+  assert.equal(fake.calls.filter((c) => c.method === "createEvent").length, creates, "an event with this key was created again");
+  await outlook.outlookConnector.remove(loc, booking, { calendarId: "AAMkAD-default", eventId: key });
+  assert.equal(fake.events("AAMkAD-default").filter((e) => e.key === key).length, 0);
+});
+
+await test("a time taken in Outlook is refused before anything is written", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const date = openDay(loc);
+  const query = { locationId: loc.id, date, serviceIds: [loc.salon!.services[0].id] };
+  const [slot] = await outlookCalendarProvider.checkAvailability({ location: loc }, query);
+  fake.addBusy("AAMkAD-default", iso(loc, date, slot.startMin), iso(loc, date, slot.endMin));
+  fake.addBusy(STAFF_CAL, iso(loc, date, slot.startMin), iso(loc, date, slot.endMin));
+  const creates = fake.calls.filter((c) => c.method === "createEvent").length;
+  const out = await outlookCalendarProvider.createBooking(
+    { location: loc },
+    { date, startMin: slot.startMin, guestName: "Omar Saleh", guestPhone: "+971509876543", serviceIds: query.serviceIds, staffId: slot.staffId },
+    "call_43:book:1",
+  );
+  assert.ok(!out.ok && out.reason === "unavailable");
+  assert.equal(fake.calls.filter((c) => c.method === "createEvent").length, creates);
+});
+
+await test("cancelling deletes the event by its stored Graph id and cancels the booking", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const booking = listBookingsAt(loc.id).find((b) => b.guestName === "Layla Haddad")!;
+  const out = await outlookCalendarProvider.cancelBooking({ location: loc }, booking, "Guest asked");
+  assert.ok(out.ok);
+  assert.ok(fake.calls.some((c) => c.method === "deleteEvent" && c.id === booking.calendarEventId), "not deleted by the stored id");
+  assert.deepEqual(liveEventsOf(booking.id), []);
+  if (out.ok) assert.equal(out.booking.status, "cancelled");
+});
+
+await test("Belline's own events do not block the next table at the same time", async () => {
+  const loc = await connect(restaurantBase);
+  const date = addDays(todayIn(loc.timezone), 6);
+  const query = { locationId: loc.id, date, partySize: 2 };
+  const [slot] = await outlookCalendarProvider.checkAvailability({ location: loc }, query);
+  assert.ok(slot, "the fixture restaurant has no slot");
+  const made = await outlookCalendarProvider.createBooking(
+    { location: loc },
+    { date, startMin: slot.startMin, guestName: "Sara Khan", guestPhone: "+971501112233", partySize: 2 },
+    "call_44:book:1",
+  );
+  assert.ok(made.ok, made.ok ? "" : made.detail);
+  const again = await outlookCalendarProvider.checkAvailability({ location: getLocation(loc.id)! }, query);
+  const local = await localProvider.checkAvailability({ location: getLocation(loc.id)! }, query);
+  assert.equal(again.length, local.length, "Belline's own event was counted as busy");
+});
+
+await test("disconnecting drops the sealed token and the link, puts the venue on requests, and says where to remove Belline at Microsoft", async () => {
+  const venue = spareVenue();
+  const connected = upsertLocation({
+    ...(await outlook.completeOutlookConnection(venue, "stub-code", CALLBACK, "user_owner", now)),
+    onboarding: { version: 1, channels: {}, destination: { kind: "outlook", setAt: at } },
+  });
+  assert.equal(providerFor(connected), outlookCalendarProvider);
+  const out = upsertLocation(outlook.disconnectOutlook(connected, now));
+  assert.equal(out.outlook, undefined);
+  assert.equal(out.onboarding!.destination!.kind, "requests");
+  assert.equal(providerFor(out), requestOnlyProvider);
+  assert.match(outlook.OUTLOOK_DISCONNECTED_TEXT, /remove Belline/);
+  assert.match(source("src/app/api/integrations/microsoft/route.ts"), /export async function DELETE[\s\S]*disconnectOutlook\(location\)[\s\S]*OUTLOOK_DISCONNECTED_TEXT/);
+  upsertLocation(venue);
+});
+
+await test("Google's provider is the same shared provider, still named google", async () => {
+  const { googleCalendarProvider } = await import("../src/lib/booking/google-provider");
+  assert.equal(googleCalendarProvider.name, "google");
+  assert.match(source("src/lib/booking/google-provider.ts"), /calendarProvider\(\(\) => googleConnector\)/);
 });
 
 // __MORE__
