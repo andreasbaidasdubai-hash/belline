@@ -26,7 +26,7 @@ import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
 import { MARKETS } from "@/lib/markets";
 import { PHONE_OPTIONAL } from "@/lib/telephony/forwarding";
 import { flag } from "@/lib/flags";
-import { ownerTickets } from "@/lib/exceptions";
+import { listExceptions, ownerTickets } from "@/lib/exceptions";
 import { whatsappStatus } from "@/lib/whatsapp";
 import { whatsappCard, type WhatsAppCard as WhatsAppCardState } from "@/lib/whatsapp-selfserve";
 import { seedIfEmpty } from "@/lib/seed";
@@ -36,6 +36,8 @@ import { selftestAvailable, testsPassed, testsStale } from "@/lib/onboarding/sel
 import BelleDock from "../BelleDock";
 import SetupWizard from "../SetupWizard";
 import SelftestPanel from "../SelftestPanel";
+import WhatsAppAssisted from "@/app/(app)/integrations/WhatsAppAssisted";
+import { bellineNumberOf } from "@/lib/telephony/number";
 import { ActionButton, DestinationPicker, RulesForm, type DestinationOption } from "../StepActions";
 
 export const dynamic = "force-dynamic";
@@ -213,8 +215,8 @@ function destinationOptions(venue: Location): DestinationOption[] {
   return [
     {
       id: "requests",
-      title: "Phone, WhatsApp or walk-ins",
-      body: "Belline takes the details and tells the customer your team will confirm. Each request arrives in your Inbox.",
+      title: "My team confirms each booking",
+      body: "Belline takes the customer's details and the time they want, and tells them your team will confirm. Each request arrives in your Inbox for your team to confirm.",
       state: "available",
     },
     {
@@ -385,6 +387,11 @@ function Body({
         channelStatuses(venue, facts, { whatsappConnected: whatsapp.state === "live" }).map((c) => [c.id, c]),
       ) as Record<ChannelStatus["id"], ChannelStatus>;
       const pill = (c: ChannelStatus) => `${STATE_WORD[c.state]}${c.state === "waiting" && c.detail.startsWith("Connected") ? " — connected" : ""}`;
+      // Belline's own number, and only that. `venue.phone` also holds the
+      // business's own line from the review step, which was once shown here as
+      // the number to forward calls to.
+      const belline = bellineNumberOf(venue);
+      const action = { padding: "8px 14px", fontSize: 13.5, display: "inline-block" } as const;
       return (
         <>
           <Heading step={step} title="Let calls and chats reach Belline." />
@@ -406,18 +413,28 @@ function Body({
             </div>
           )}
           <Card title="Your phone line (optional)" status={pill(status.phone)}>
-            {phoneWorks
-              ? "Forwarded calls are reaching Belline."
-              : venue.phone
-                ? `To use it, you dial a short code on your own phone that forwards the calls you miss to ${venue.phone}. Nothing is forwarded until you do.`
-                : flag("numbers.pool")
-                  ? "To use it, get your Belline number on the forwarding page. It takes a second, and nothing is forwarded until you dial a code yourself."
-                  : "Your Belline number is being prepared. It appears on the forwarding page as soon as it is ready."}
-            {!phoneWorks && !webWorks && (
+            <span data-testid="phone-card-text">
+              {phoneWorks
+                ? "Forwarded calls are reaching Belline."
+                : belline
+                  ? `To use it, you dial a short code on your own phone that forwards the calls you miss to your Belline number, ${belline}. Nothing is forwarded until you do.`
+                  : flag("numbers.pool")
+                    ? "To use it, get your Belline number on the forwarding page. It takes a second, and nothing is forwarded until you dial a code yourself."
+                    : "Your Belline number is being prepared. It appears on the forwarding page as soon as it is ready."}
+            </span>
+            {!phoneWorks && (
               <>
-                {" "}
-                {PHONE_OPTIONAL}{" "}
-                <Link href="/website?from=setup">Skip the phone for now</Link>
+                {!webWorks && <span style={{ display: "block", marginTop: 6 }}>{PHONE_OPTIONAL}</span>}
+                <span style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+                  {(belline || flag("numbers.pool")) && (
+                    <Link href="/golive?from=setup" className="btn" style={action}>
+                      {belline ? "Forward my calls" : "Get my Belline number"}
+                    </Link>
+                  )}
+                  <Link href={onward?.url ?? "/"} className="btn" style={action} data-testid="skip-phone">
+                    Skip the phone for now
+                  </Link>
+                </span>
               </>
             )}
           </Card>
@@ -426,13 +443,22 @@ function Body({
               "The widget is on your website."
             ) : (
               <>
-                Add the chat to your site with one line of code. <Link href="/website?from=setup">Add it to my website</Link>
+                Add the chat to your site with one line of code.
+                <span style={{ display: "block", marginTop: 10 }}>
+                  <Link href="/website?from=setup" className="btn btn-accent" style={action} data-testid="add-to-website">
+                    Add it to my website
+                  </Link>
+                </span>
               </>
             )}
           </Card>
-          <Card title="WhatsApp (optional)" status={whatsapp.state === "soon" ? "Coming soon" : pill(status.whatsapp)}>
+          <Card title="WhatsApp (optional)" status={whatsapp.state === "soon" ? "Available — set up with us" : pill(status.whatsapp)}>
             {whatsapp.state === "soon" ? (
-              "Belline will answer a second WhatsApp number for you. Going live does not wait for it."
+              <>
+                WhatsApp works today on a second number for your business, which Belline sets up with you, so your own
+                WhatsApp stays as it is. Doing it yourself opens once Meta&apos;s verification is ready. Going live does not wait for it.
+                <WhatsAppAssisted locationId={venue.id} ticket={listExceptions({ locationId: venue.id, kind: "whatsapp_assisted_setup" }).find((e) => e.status !== "resolved")?.ticket} />
+              </>
             ) : whatsapp.state === "live" ? (
               "Belline answers your WhatsApp number."
             ) : (

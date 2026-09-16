@@ -340,7 +340,7 @@ console.log("\n\x1b[1mAnswering real customers, channel by channel\x1b[0m\n");
 const passedAll = tested(withState(reviewed, { destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }));
 
 await test("nothing answers a real customer before Go live, whatever is connected", () => {
-  const connected = { ...passedAll, phone: "+97140000009", embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, channels: { phone: { forwardingVerifiedAt: at }, web: { domains: ["https://x.test"], detectedAt: at } } } };
+  const connected = { ...passedAll, phone: "+97140000009", embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, channels: { phone: { numberAssignedAt: at, forwardingVerifiedAt: at }, web: { domains: ["https://x.test"], detectedAt: at } } } };
   assert.equal(answersRealCustomers(connected), false);
   const s = channelStatuses(connected, NO_FACTS, { now });
   assert.deepEqual(s.map((c) => [c.id, c.state]), [["phone", "waiting"], ["web", "waiting"], ["whatsapp", "not_set_up"]]);
@@ -350,14 +350,14 @@ await test("nothing answers a real customer before Go live, whatever is connecte
 
 await test("a connected channel waiting on the checks says so", () => {
   const unchecked = { ...withState(reviewed, { destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }), phone: "+97140000009" };
-  const venue = { ...unchecked, onboarding: { ...unchecked.onboarding!, channels: { phone: { forwardingVerifiedAt: at } } } };
+  const venue = { ...unchecked, onboarding: { ...unchecked.onboarding!, channels: { phone: { numberAssignedAt: at, forwardingVerifiedAt: at } } } };
   const phone = channelStatuses(venue, NO_FACTS, { now })[0];
   assert.equal(phone.state, "waiting");
   assert.match(phone.detail, /checks/);
 });
 
 await test("after Go live each channel is live once connected, and one connected later goes live on its own", () => {
-  const live = { ...passedAll, phone: "+97140000009", embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, activatedAt: at, channels: { phone: { forwardingVerifiedAt: at } } } };
+  const live = { ...passedAll, phone: "+97140000009", embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, activatedAt: at, channels: { phone: { numberAssignedAt: at, forwardingVerifiedAt: at } } } };
   assert.equal(answersRealCustomers(live), true);
   const before = channelStatuses(live, NO_FACTS, { now });
   assert.deepEqual(before.map((c) => [c.id, c.state]), [["phone", "live"], ["web", "waiting"], ["whatsapp", "not_set_up"]]);

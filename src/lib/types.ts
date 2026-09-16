@@ -1386,6 +1386,7 @@ export type ExceptionKind =
   | "payment_failed_final"
   | "stripe_off_trial_end"
   | "trial_cap_reached"
+  | "whatsapp_assisted_setup"
   | "deletion_legal_hold"
   | "owner_requested_human"
   | "vendor_balance_low"

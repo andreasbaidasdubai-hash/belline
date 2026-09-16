@@ -57,7 +57,14 @@ export async function POST(request: Request) {
   // out again.
   if (venue.phone.trim() && venue.phone.replace(/\D/g, "") !== digits) releaseNumber(venue.id);
   if (phone) recordManualAssignment(venue.id, phone, auth.user.id);
-  upsertLocation({ ...venue, phone });
+  // Stamped, so the number reads as Belline's even when it is not a pool
+  // number (telephony/number.ts): the same field also holds a business's own
+  // phone from the review step, which must never be shown as a forwarding target.
+  const o = venue.onboarding;
+  const phoneState = { ...(o?.channels.phone ?? {}) };
+  if (phone) phoneState.numberAssignedAt = new Date().toISOString();
+  else delete phoneState.numberAssignedAt;
+  upsertLocation({ ...venue, phone, ...(o ? { onboarding: { ...o, channels: { ...o.channels, phone: phoneState } } } : {}) });
 
   // The override is the fix for a "being prepared" ticket, so it closes it
   // with a note saying what was done.

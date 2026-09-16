@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { WhatsAppCard as Card } from "@/lib/whatsapp-selfserve";
 import ConnectWhatsApp from "./ConnectWhatsApp";
+import WhatsAppAssisted from "./WhatsAppAssisted";
 
 /**
  * The WhatsApp card, one state at a time.
@@ -70,7 +71,7 @@ export default function WhatsAppCard({
   }
 
   const [label, tone] = {
-    soon: ["Coming soon", "plain"],
+    soon: ["Available — set up with us", "plain"],
     unavailable: ["Couldn't check", "warn"],
     blocked: ["Being fixed", "warn"],
     none: ["Not connected", "plain"],
@@ -98,11 +99,13 @@ export default function WhatsAppCard({
       {card.state === "soon" && (
         <>
           <p className="muted" style={text}>
-            Belline will answer a second WhatsApp number for {venueName}, so your own WhatsApp stays exactly as it is.
-            Connecting it yourself is coming soon, and everything else works without it.
+            WhatsApp works today: Belline answers a second WhatsApp number for {venueName}, which we set up with you, so
+            your own WhatsApp stays exactly as it is. Connecting it yourself opens once Meta&apos;s verification is ready.
+            Everything else works without it.
           </p>
+          <WhatsAppAssisted locationId={locationId} />
           <button className="btn" type="button" style={{ marginTop: 12 }} onClick={notify} disabled={busy || Boolean(note)}>
-            Tell me when it&apos;s ready
+            Tell me when I can do it myself
           </button>
         </>
       )}

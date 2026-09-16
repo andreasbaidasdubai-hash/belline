@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { Call, Location, OnboardingState } from "../types";
 import { findCallBySid, getLocation, id, saveCall, upsertLocation } from "../store";
 import { freshOnboarding } from "../onboarding/journey";
+import { bellineNumberOf } from "./number";
 import { openException } from "../exceptions";
 
 /**
@@ -70,7 +71,7 @@ export function verificationState(location: Location, now: Date = new Date()): W
 export type OpenResult = { ok: true; expiresAt: string } | { ok: false; status: number; error: string };
 
 export function openWindow(location: Location, carrier: Phone["carrier"] | undefined, now: Date = new Date()): OpenResult {
-  if (!location.phone.trim()) return { ok: false, status: 409, error: "Your Belline number is not ready yet, so there is nothing to test." };
+  if (!bellineNumberOf(location)) return { ok: false, status: 409, error: "Your Belline number is not ready yet, so there is nothing to test." };
   const phone = location.onboarding?.channels.phone ?? {};
   if (phone.forwardingVerifiedAt) return { ok: true, expiresAt: now.toISOString() };
   const expiresAt = new Date(now.getTime() + WINDOW_MINUTES * 60_000).toISOString();
@@ -96,7 +97,8 @@ function businessNumbers(location: Location): string[] {
 export function isVerificationCall(location: Location, params: Record<string, string>, now: Date = new Date()): boolean {
   const w = location.onboarding?.channels.phone?.verification;
   if (!w || Date.parse(w.expiresAt) <= now.getTime()) return false;
-  if (digits(params.To) !== digits(location.phone) || !digits(location.phone)) return false;
+  const belline = bellineNumberOf(location);
+  if (digits(params.To) !== digits(belline) || !digits(belline)) return false;
   const via = digits(params.ForwardedFrom || params.CalledVia);
   if (!via) return true;
   const own = businessNumbers(location);

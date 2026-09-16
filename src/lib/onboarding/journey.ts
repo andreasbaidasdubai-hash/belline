@@ -5,6 +5,7 @@ import { flag } from "../flags";
 import { googleUsable } from "../booking/destination";
 import { applyRules, type RulesInput } from "./rules";
 import { testsCurrent, testsPassed } from "./selftest-state";
+import { bellineNumberOf } from "../telephony/number";
 
 /**
  * From signup to answering real calls, as one ordered list.
@@ -275,7 +276,7 @@ export function channelConnected(location: Location, id: ChannelId, facts: Journ
   const o = location.onboarding;
   switch (id) {
     case "phone":
-      return Boolean(location.phone.trim() && (o?.channels.phone?.forwardingVerifiedAt || facts.phoneCalls > 0));
+      return Boolean(bellineNumberOf(location) && (o?.channels.phone?.forwardingVerifiedAt || facts.phoneCalls > 0));
     case "web":
       return Boolean(location.embed?.enabled && (o?.channels.web?.detectedAt || facts.webConversations > 0));
     case "whatsapp":
@@ -323,10 +324,10 @@ export function channelStatuses(
         ? { ...base, state: "live", detail: `Forwarded calls are answered. Customers keep dialling the number they already have.` }
         : { ...base, state: "waiting", detail: waitingWhy };
     }
-    if (location.phone.trim()) {
+    if (bellineNumberOf(location)) {
       return { ...base, state: "waiting", detail: "You have a Belline number. Forward your line to it and make one test call." };
     }
-    return { ...base, state: "not_set_up", detail: "No Belline number yet." };
+    return { ...base, state: "not_set_up", detail: "Your Belline number is being prepared." };
   })();
 
   const web = ((): ChannelStatus => {

@@ -566,13 +566,82 @@ await test("the phone is plainly optional, with a way to skip it on the channels
   assert.match(step, /Skip the phone for now/);
   assert.doesNotMatch(step, /Waiting for the test call/);
   // Belle says the same.
-  upsertLocation({ ...fresh(), phone: "+97140000009" });
+  // Stamped as assigned: an unstamped phone on a new signup is the owner's own line, not Belline's.
+  upsertLocation({ ...fresh(), phone: "+97140000009", onboarding: { ...fresh().onboarding!, channels: { ...fresh().onboarding!.channels, phone: { numberAssignedAt: "2026-09-16T08:00:00.000Z" } } } });
   const said = executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "mobile" });
   upsertLocation({ ...fresh(), phone: "" });
   assert.ok(said.ok, said.say);
   assert.match(said.say, /\*\*61\*\+97140000009#/);
   assert.match(said.say, /nothing is forwarded until they do/);
   assert.match(said.say, /calls you do not pick up go to Belline/i);
+});
+
+await test("the owner's own number on the rules step is not Belline's: Belle gives no codes to it", () => {
+  // The review step saved the business's own mobile; nothing was assigned.
+  const f = fresh();
+  upsertLocation({ ...f, phone: "0502992339", onboarding: { ...f.onboarding!, channels: { ...f.onboarding!.channels, phone: {} } } });
+  const said = executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "mobile" });
+  upsertLocation({ ...fresh(), phone: "" });
+  assert.ok(said.ok, said.say);
+  assert.doesNotMatch(said.say, /0502992339|502992339/, "Belle told the owner to forward calls to their own phone");
+  assert.match(said.say, /being prepared/);
+});
+
+console.log("\n\x1b[1mSetup copy the founder read\x1b[0m\n");
+
+await test("Skip the phone for now and Add it to my website are real buttons, not links inside a sentence", () => {
+  const step = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "[step]", "page.tsx"), "utf8");
+  assert.match(step, /className="btn" style=\{action\} data-testid="skip-phone">\s*Skip the phone for now/);
+  assert.match(step, /className="btn btn-accent" style=\{action\} data-testid="add-to-website">\s*Add it to my website/);
+  assert.doesNotMatch(step, /one line of code\. <Link href="\/website\?from=setup">Add it to my website<\/Link>/);
+  assert.doesNotMatch(step, /\{PHONE_OPTIONAL\}\{" "\}\s*<Link href="\/website\?from=setup">Skip the phone for now<\/Link>/);
+});
+
+await test("the booking option says what it means: the team confirms each booking, with no walk-ins", () => {
+  const step = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "[step]", "page.tsx"), "utf8");
+  assert.doesNotMatch(step, /Phone, WhatsApp or walk-ins/);
+  assert.match(step, /title: "My team confirms each booking"/);
+  assert.match(step, /tells them your team will confirm/);
+});
+
+await test("the notification field is the owner's own email or WhatsApp, not Belline's", () => {
+  const form = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "StepActions.tsx"), "utf8");
+  assert.match(form, /Your own email or WhatsApp, for new requests/);
+  assert.match(form, /Your own email address or your own WhatsApp number, where Belline tells you about a new request/);
+  assert.match(form, /This is not\s+Belline&apos;s WhatsApp/);
+  assert.doesNotMatch(form, /Where to tell you about new requests/);
+});
+
+await test("WhatsApp is offered as it is today: set up with us on a second number, never a dead Coming soon", () => {
+  const step = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "[step]", "page.tsx"), "utf8");
+  const card = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "integrations", "WhatsAppCard.tsx"), "utf8");
+  const assisted = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "integrations", "WhatsAppAssisted.tsx"), "utf8");
+  assert.doesNotMatch(step, /whatsapp\.state === "soon" \? "Coming soon"/);
+  assert.match(step, /WhatsApp works today on a second number/);
+  assert.match(step, /<WhatsAppAssisted /);
+  assert.match(card, /soon: \["Available — set up with us"/);
+  assert.match(card, /<WhatsAppAssisted /);
+  assert.match(assisted, /Set it up with us/);
+  assert.match(assisted, /\/api\/whatsapp\/assisted/);
+  const route = fs.readFileSync(path.join(process.cwd(), "src", "app", "api", "whatsapp", "assisted", "route.ts"), "utf8");
+  assert.match(route, /requireApiUser\(\)/);
+  assert.match(route, /canEditAgent\(user, location\.id\)/);
+  assert.match(route, /kind: "whatsapp_assisted_setup"/);
+});
+
+await test("the website chat always offers voice notes, for Messages only and for Both", () => {
+  const chat = fs.readFileSync(path.join(process.cwd(), "src", "app", "embed", "[key]", "chat", "Chat.tsx"), "utf8");
+  const page = fs.readFileSync(path.join(process.cwd(), "src", "app", "embed", "[key]", "chat", "page.tsx"), "utf8");
+  const editor = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "website", "WidgetEditor.tsx"), "utf8");
+  // The microphone depends on what the browser can record, never on the widget's mode.
+  assert.match(chat, /setCanRecord\(Boolean\(recordingMime\(\) && navigator\.mediaDevices\?\.getUserMedia\)\)/);
+  assert.match(chat, /\{canRecord && !draft\.trim\(\) \?/);
+  assert.doesNotMatch(chat, /canRecord && (voiceHref|mode)/);
+  assert.doesNotMatch(page, /voiceNotes|canRecord/);
+  // And the frame may ask for it in either mode.
+  assert.match(fs.readFileSync(path.join(process.cwd(), "public", "embed.js"), "utf8"), /panel\.allow = kind === "voice" \? "microphone; autoplay" : "microphone"/);
+  assert.match(editor, /holds the microphone to send a voice note/);
+  assert.match(editor, /messages always take voice notes too/);
 });
 
 await test("landlines are sent to the carrier, with the right number to call", () => {

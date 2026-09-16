@@ -360,12 +360,13 @@ export function RulesForm({
           <>
             <div>
               <label htmlFor="notify" style={{ textTransform: "none", letterSpacing: 0, fontSize: 14 }}>
-                Where to tell you about new requests
+                Your own email or WhatsApp, for new requests
               </label>
               <input id="notify" type="text" autoComplete="email" value={v.notify} onChange={(e) => set("notify", e.target.value)} {...invalid("notify")} />
               <p className="muted" style={hint}>
-                An email address or a WhatsApp number. Requests always appear in your Inbox. Email and WhatsApp alerts are being
-                prepared, and will go here when they are ready.
+                Your own email address or your own WhatsApp number, where Belline tells you about a new request. This is not
+                Belline&apos;s WhatsApp and customers never see it. Requests always appear in your Inbox. Email and WhatsApp alerts
+                are being prepared, and will go here when they are ready.
               </p>
               {fieldError("notify")}
             </div>

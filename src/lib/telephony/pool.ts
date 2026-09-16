@@ -4,6 +4,7 @@ import { flag } from "../flags";
 import { openException } from "../exceptions";
 import { BELLINE_TENANT_ID } from "../tenancy";
 import { freshOnboarding } from "../onboarding/journey";
+import { bellineNumberOf } from "./number";
 
 /**
  * Belline numbers, handed out by code.
@@ -115,7 +116,10 @@ function preparing(location: Location, reason: "flag_off" | "pool_empty"): Assig
  */
 export function assignNumber(location: Location, now: Date = new Date(), env: Record<string, string | undefined> = process.env): AssignResult {
   const current = getLocation(location.id) ?? location;
-  if (current.phone.trim()) return { state: "assigned", number: current.phone.trim(), created: false };
+  // Belline's number, not whatever is in `phone`: the review step saves the
+  // business's own line there, and that is not a number calls forward to.
+  const existing = bellineNumberOf(current);
+  if (existing) return { state: "assigned", number: existing, created: false };
   if (!flag("numbers.pool", env)) return preparing(current, "flag_off");
 
   const held = heldNumbers(current.id);
