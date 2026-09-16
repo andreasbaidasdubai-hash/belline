@@ -42,7 +42,7 @@ const { scenariosFor } = await import("../src/lib/onboarding/selftest");
 const { historyFor } = await import("../src/lib/brain");
 const { executeSetupTool, runSetupTurn, setupGreeting } = await import("../src/lib/onboarding/assistant");
 const { INSTALL_STEPS, detectPlatform, installedIn } = await import("../src/lib/onboarding/platform");
-const { forwardingCodes, uaeCarriers } = await import("../src/lib/telephony/forwarding");
+const { CODES_EXPLAINED, PHONE_OPTIONAL, forwardingCodes, uaeCarriers } = await import("../src/lib/telephony/forwarding");
 
 let passed = 0;
 let failed = 0;
@@ -528,6 +528,51 @@ await test("du and e& mobiles get the conditional codes with the venue's own num
   const codes = forwardingCodes("+97145550142");
   assert.ok(codes.some((c) => c.dial === "**61*+97145550142#"));
   assert.ok(codes.some((c) => c.dial === "##004#"));
+});
+
+await test("every code says in plain words what dialling it does, and that the owner dials it", () => {
+  const codes = forwardingCodes("+97145550142");
+  const meaning = (mode: string) => codes.find((c) => c.mode === mode)!.meaning;
+  assert.match(meaning("noanswer"), /do not pick up/);
+  assert.match(meaning("busy"), /on another call/);
+  assert.match(meaning("off"), /rings as it did before/);
+  assert.match(CODES_EXPLAINED, /\*\*61\* forwards the calls you do not answer/);
+  assert.match(CODES_EXPLAINED, /\*\*67\* forwards calls when you are busy/);
+  assert.match(CODES_EXPLAINED, /dial them yourself on your own mobile/);
+  assert.match(CODES_EXPLAINED, /nothing is forwarded until you do/);
+  // No number, no codes and no explanation of codes that are not there.
+  assert.deepEqual(forwardingCodes(""), []);
+});
+
+await test("the phone is plainly optional, with a way to skip it on the channels step and the forwarding page", () => {
+  const read = (...p: string[]) => fs.readFileSync(path.join(process.cwd(), ...p), "utf8");
+  const phone = read("src", "app", "(app)", "golive", "PhoneSetup.tsx");
+  const golive = read("src", "app", "(app)", "golive", "page.tsx");
+  const step = read("src", "app", "setup", "[step]", "page.tsx");
+  assert.match(PHONE_OPTIONAL, /optional/);
+  // The forwarding page explains the codes where they appear, and each row says what it does.
+  assert.match(phone, /\{codesExplained\}/);
+  assert.match(phone, /\{code\.meaning\}/);
+  assert.match(golive, /codesExplained=\{CODES_EXPLAINED\}/);
+  // A visible skip, with and without a number yet.
+  assert.match(phone, /Skip the phone for now/);
+  assert.equal(phone.split("{skip}").length - 1, 2, "the skip is not shown in both the no-number and the number states");
+  assert.match(golive, /skipHref=\{from === "setup" \? "\/website\?from=setup"/);
+  assert.match(golive, /optional \? "optional" : "to do"/);
+  // The channels step leads with either way in, never with forwarding as the one thing to do.
+  assert.doesNotMatch(step, /Set up call forwarding/);
+  assert.match(step, /One is enough to go live/);
+  assert.match(step, /Your phone line \(optional\)/);
+  assert.match(step, /Skip the phone for now/);
+  assert.doesNotMatch(step, /Waiting for the test call/);
+  // Belle says the same.
+  upsertLocation({ ...fresh(), phone: "+97140000009" });
+  const said = executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "mobile" });
+  upsertLocation({ ...fresh(), phone: "" });
+  assert.ok(said.ok, said.say);
+  assert.match(said.say, /\*\*61\*\+97140000009#/);
+  assert.match(said.say, /nothing is forwarded until they do/);
+  assert.match(said.say, /calls you do not pick up go to Belline/i);
 });
 
 await test("landlines are sent to the carrier, with the right number to call", () => {

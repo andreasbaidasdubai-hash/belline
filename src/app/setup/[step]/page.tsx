@@ -12,6 +12,7 @@ import { destinationOf, googleUsable, serviceLengthsRequired, takesRequestsOnly 
 import { integrationErrorText } from "@/lib/errors/customer";
 import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
 import { MARKETS } from "@/lib/markets";
+import { PHONE_OPTIONAL } from "@/lib/telephony/forwarding";
 import { flag } from "@/lib/flags";
 import { ownerTickets } from "@/lib/exceptions";
 import { whatsappStatus } from "@/lib/whatsapp";
@@ -351,27 +352,37 @@ function Body({
         <>
           <Heading step={step} title="Let calls and chats reach Belline." />
           <p style={lede}>
-            One is enough to go live. The phone counts once your test call arrives, and the website once the widget loads
-            on your site.
+            One is enough to go live: the chat on your website, or your phone. Nothing is switched on until you do it, and
+            you can add the other later. The website counts once the widget loads on your site, and the phone once a test
+            call arrives.
           </p>
           {step.done ? (
             cont
           ) : (
-            <Link href="/golive?from=setup" className="btn btn-accent" style={primary}>
-              Set up call forwarding
-            </Link>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <Link href="/website?from=setup" className="btn btn-accent" style={primary}>
+                Add the chat to my website
+              </Link>
+              <Link href="/golive?from=setup" className="btn" style={{ padding: "12px 18px", display: "inline-block" }}>
+                Forward my phone calls
+              </Link>
+            </div>
           )}
-          <Card
-            title="Your phone line"
-            status={phoneWorks ? "Working" : venue.phone ? "Waiting for the test call" : flag("numbers.pool") ? "Get your number" : "Number being prepared"}
-          >
+          <Card title="Your phone line (optional)" status={phoneWorks ? "Working" : venue.phone ? "Not forwarded yet" : "Optional"}>
             {phoneWorks
               ? "Forwarded calls are reaching Belline."
               : venue.phone
-                ? `Forward the calls you miss to ${venue.phone}, then press "I've set it — test it" on the forwarding page.`
+                ? `To use it, you dial a short code on your own phone that forwards the calls you miss to ${venue.phone}. Nothing is forwarded until you do.`
                 : flag("numbers.pool")
-                  ? "Get your Belline number on the forwarding page. It takes a second."
+                  ? "To use it, get your Belline number on the forwarding page. It takes a second, and nothing is forwarded until you dial a code yourself."
                   : "Your Belline number is being prepared. It appears on the forwarding page as soon as it is ready."}
+            {!phoneWorks && !webWorks && (
+              <>
+                {" "}
+                {PHONE_OPTIONAL}{" "}
+                <Link href="/website?from=setup">Skip the phone for now</Link>
+              </>
+            )}
           </Card>
           <Card title="Your website" status={webWorks ? "Installed" : venue.embed?.enabled ? "Waiting for the widget to load" : "Not added yet"}>
             {webWorks ? (

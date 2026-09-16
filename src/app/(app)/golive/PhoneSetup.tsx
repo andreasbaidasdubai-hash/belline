@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 /**
@@ -20,6 +21,7 @@ export interface CarrierView {
 
 export interface CodeView {
   when: string;
+  meaning: string;
   dial: string;
   tel: string;
 }
@@ -39,6 +41,9 @@ export default function PhoneSetup({
   pbxNote,
   diagnosis,
   unverifiedNote,
+  codesExplained,
+  phoneOptional,
+  skipHref,
   verify: initialVerify,
 }: {
   locationId: string;
@@ -50,6 +55,12 @@ export default function PhoneSetup({
   pbxNote: string;
   diagnosis: { cause: string; check: string }[];
   unverifiedNote: string;
+  /** forwarding.ts `CODES_EXPLAINED`: what the codes are, and that the owner dials them. */
+  codesExplained: string;
+  /** forwarding.ts `PHONE_OPTIONAL`. */
+  phoneOptional: string;
+  /** Where "Skip the phone for now" goes: the website chat, the other way in. */
+  skipHref: string;
   verify: Verify;
 }) {
   const [number, setNumber] = useState(initialNumber);
@@ -116,6 +127,18 @@ export default function PhoneSetup({
     }
   }
 
+  // Never implied to be required. Hidden once forwarding is proven, when
+  // there is nothing left to skip.
+  const skip =
+    verify.state === "verified" ? null : (
+      <p className="muted" style={{ margin: "14px 0 0", fontSize: 13 }}>
+        {phoneOptional}{" "}
+        <Link href={skipHref} className="btn" style={{ padding: "6px 12px", fontSize: 12.5, marginLeft: 4 }}>
+          Skip the phone for now
+        </Link>
+      </p>
+    );
+
   if (!number) {
     return (
       <div>
@@ -132,12 +155,15 @@ export default function PhoneSetup({
           </button>
         )}
         {error && <p role="alert" style={{ color: "var(--bad)", fontSize: 12.5, margin: "10px 0 0" }}>{error}</p>}
+        {skip}
       </div>
     );
   }
 
   const chosen = carriers.find((c) => c.id === carrier);
-  const mobile = Boolean(chosen);
+  // A number that cannot be dialled has no codes: say it is being prepared,
+  // never show an empty table or a code with a gap in it.
+  const mobile = Boolean(chosen) && codes.length > 0;
 
   return (
     <div>
@@ -162,7 +188,13 @@ export default function PhoneSetup({
 
       {mobile ? (
         <>
-          <p style={{ margin: "0 0 10px" }}>On the phone whose calls you want covered, tap each code and press call.</p>
+          <p style={{ margin: "0 0 8px" }}>
+            On the phone whose calls you want covered, tap a code and press call. Belline only hears the calls each
+            code sends it.
+          </p>
+          <p className="muted" data-testid="codes-explained" style={{ margin: "0 0 10px", fontSize: 13 }}>
+            {codesExplained}
+          </p>
           <div className="table-wrap" tabIndex={0}>
             <table className="forward-table">
               <thead>
@@ -174,7 +206,12 @@ export default function PhoneSetup({
               <tbody>
                 {codes.map((code) => (
                   <tr key={code.when}>
-                    <td>{code.when}</td>
+                    <td>
+                      {code.when}
+                      <span className="muted" style={{ display: "block", fontSize: 12.5 }}>
+                        {code.meaning}
+                      </span>
+                    </td>
                     <td className="mono">
                       <a href={code.tel}>{code.dial}</a>
                     </td>
@@ -185,6 +222,10 @@ export default function PhoneSetup({
           </div>
           {chosen && !chosen.verified && <p className="muted" style={{ fontSize: 12.5, margin: "8px 0 0" }}>{unverifiedNote}</p>}
         </>
+      ) : chosen ? (
+        <p role="status" className="muted" style={{ margin: 0 }}>
+          The codes appear here with your Belline number in them as soon as the number is ready.
+        </p>
       ) : (
         <p className="muted" style={{ margin: 0 }}>
           {carrier === "pbx"
@@ -231,6 +272,7 @@ export default function PhoneSetup({
         )}
         {error && <p role="alert" style={{ color: "var(--bad)", fontSize: 12.5, margin: "10px 0 0" }}>{error}</p>}
       </div>
+      {skip}
     </div>
   );
 }

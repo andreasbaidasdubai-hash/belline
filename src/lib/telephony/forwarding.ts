@@ -21,6 +21,11 @@ import { flag } from "../flags";
 export interface ForwardingCode {
   mode: "noanswer" | "busy" | "unreachable" | "off";
   when: string;
+  /**
+   * What dialling it does, in plain words. "**61*" means nothing to an owner,
+   * and an unexplained code reads as something Belline has already switched on.
+   */
+  meaning: string;
   dial: string;
   /** The same code as a link a phone dials when tapped. `#` has to be escaped in a URI. */
   tel: string;
@@ -42,6 +47,17 @@ export interface Carrier {
 
 export const UNVERIFIED_NOTE = "These codes should work. The test call below confirms it on your line.";
 
+/**
+ * Said wherever codes appear: what they are, who dials them, and that nothing
+ * is switched on until the owner does.
+ */
+export const CODES_EXPLAINED =
+  "These are standard phone codes, not something Belline switches on. You dial them yourself on your own mobile, like a phone number, and nothing is forwarded until you do. **61* forwards the calls you do not answer, **67* forwards calls when you are busy on another call, and **62* forwards calls when your phone is off or has no signal. ##004# switches all of them off again.";
+
+/** The phone is one way in, not a requirement: the website chat alone is enough to go live. */
+export const PHONE_OPTIONAL =
+  "The phone is optional. Belline can go live on the chat on your website alone, and you can forward your calls any time later.";
+
 /** The digits and plus of a number, or "" when there is no usable number. */
 export function dialTarget(number: string): string {
   const to = number.replace(/[^\d+]/g, "");
@@ -56,12 +72,12 @@ export function telLink(dial: string): string {
 export function forwardingCodes(target: string): ForwardingCode[] {
   const to = dialTarget(target);
   if (!to) return [];
-  const row = (mode: ForwardingCode["mode"], when: string, dial: string): ForwardingCode => ({ mode, when, dial, tel: telLink(dial) });
+  const row = (mode: ForwardingCode["mode"], when: string, meaning: string, dial: string): ForwardingCode => ({ mode, when, meaning, dial, tel: telLink(dial) });
   return [
-    row("noanswer", "Nobody answers", `**61*${to}#`),
-    row("busy", "The line is busy", `**67*${to}#`),
-    row("unreachable", "The phone is off or out of signal", `**62*${to}#`),
-    row("off", "Switch all forwarding off again", "##004#"),
+    row("noanswer", "Nobody answers", "Calls you do not pick up go to Belline.", `**61*${to}#`),
+    row("busy", "The line is busy", "Calls that arrive while you are on another call go to Belline.", `**67*${to}#`),
+    row("unreachable", "The phone is off or out of signal", "Calls go to Belline while your phone is off or has no signal.", `**62*${to}#`),
+    row("off", "Switch all forwarding off again", "Your phone rings as it did before. Nothing goes to Belline.", "##004#"),
   ];
 }
 

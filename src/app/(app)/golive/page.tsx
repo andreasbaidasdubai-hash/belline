@@ -9,7 +9,7 @@ import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
 import { flag } from "@/lib/flags";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
-import { DIAGNOSIS, PBX_NOTE, UNVERIFIED_NOTE, forwardingCodes, uaeCarriers } from "@/lib/telephony/forwarding";
+import { CODES_EXPLAINED, DIAGNOSIS, PBX_NOTE, PHONE_OPTIONAL, UNVERIFIED_NOTE, forwardingCodes, uaeCarriers } from "@/lib/telephony/forwarding";
 import { verificationState } from "@/lib/telephony/verify";
 import PhoneSetup from "./PhoneSetup";
 
@@ -28,14 +28,14 @@ export const dynamic = "force-dynamic";
  * way, and saying so is better than printing a code that does nothing.
  */
 
-function Step({ n, title, done, children }: { n: number; title: string; done: boolean; children: React.ReactNode }) {
+function Step({ n, title, done, optional, children }: { n: number; title: string; done: boolean; optional?: boolean; children: React.ReactNode }) {
   return (
     <div className="panel" style={{ marginBottom: 14 }}>
       <div className="panel-head" style={{ display: "flex", gap: 10, alignItems: "center" }}>
         <span className="mono muted">0{n}</span>
         {title}
         <span className="pill" style={{ marginLeft: "auto", color: done ? "var(--good)" : "var(--text-2)" }}>
-          {done ? "done" : "to do"}
+          {done ? "done" : optional ? "optional" : "to do"}
         </span>
       </div>
       <div style={{ padding: "16px 18px", fontSize: 13.5, lineHeight: 1.6 }}>{children}</div>
@@ -46,11 +46,11 @@ function Step({ n, title, done, children }: { n: number; title: string; done: bo
 export default async function GoLivePage({
   searchParams,
 }: {
-  searchParams: Promise<{ loc?: string }>;
+  searchParams: Promise<{ loc?: string; from?: string }>;
 }) {
   seedIfEmpty();
   const user = await requireUser();
-  const { loc } = await searchParams;
+  const { loc, from } = await searchParams;
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
 
@@ -86,7 +86,7 @@ export default async function GoLivePage({
     <>
       <PageHeader
         title="Go live"
-        subtitle="Three steps between a finished setup and Belline answering your real phone. Your customers keep dialling the number they already have."
+        subtitle="How Belline answers your real phone, if you want it to. Your customers keep dialling the number they already have, and nothing is forwarded until you dial a code yourself."
       />
       <LocationTabs base="/golive" active={location.id} />
 
@@ -117,16 +117,19 @@ export default async function GoLivePage({
         )}
       </Step>
 
-      <Step n={2} title="Your number, and forwarding to it" done={verified}>
+      <Step n={2} title="Your number, and forwarding to it" done={verified} optional>
         <PhoneSetup
           locationId={location.id}
           number={number}
           poolOn={poolOn}
           carriers={uaeCarriers(number).map((c) => ({ id: c.id, name: c.name, verified: c.verified, landline: c.landline }))}
-          codes={forwardingCodes(number).map(({ when, dial: code, tel }) => ({ when, dial: code, tel }))}
+          codes={forwardingCodes(number).map(({ when, meaning, dial: code, tel }) => ({ when, meaning, dial: code, tel }))}
           pbxNote={PBX_NOTE}
           diagnosis={DIAGNOSIS}
           unverifiedNote={UNVERIFIED_NOTE}
+          codesExplained={CODES_EXPLAINED}
+          phoneOptional={PHONE_OPTIONAL}
+          skipHref={from === "setup" ? "/website?from=setup" : `/website?loc=${location.id}`}
           verify={verify}
         />
         {abroad && (

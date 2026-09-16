@@ -577,9 +577,14 @@ export function executeSetupTool(
         return { ok: true, say: `${prefix}The mobile codes appear on the Go live page with the number in them, as soon as the number is ready. Do not give codes before then.` };
       }
       const codes = forwardingCodes(number)
-        .map((c) => `${c.when}: dial ${c.dial}`)
+        .map((c) => `${c.when}: dial ${c.dial} (${c.meaning.replace(/\.$/, "")})`)
         .join(". ");
-      return { ok: true, say: `${prefix}On the mobile, dial each code once and press call. ${codes}. Then ring the business number from another phone to test it.` };
+      return {
+        ok: true,
+        say:
+          `${prefix}These are standard codes they dial themselves on their own mobile; nothing is forwarded until they do, and the phone is optional (the website chat alone is enough to go live). ` +
+          `On the mobile, dial each code once and press call. ${codes}. Then ring the business number from another phone to test it.`,
+      };
     }
 
     case "help_article": {
