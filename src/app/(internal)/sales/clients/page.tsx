@@ -53,7 +53,7 @@ function statusStyle(status: string, pastDue: boolean): React.CSSProperties {
 
 export default async function ClientsPage() {
   const user = await requireUser();
-  if (!isBellineStaff(user)) return <p className="muted">Owner only.</p>;
+  if (!isBellineStaff(user)) return <p className="muted">Belline staff only.</p>;
 
   seedIfEmpty();
   const rows = clientBook();

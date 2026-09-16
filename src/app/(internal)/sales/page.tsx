@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth-server";
-import { canManageUsers } from "@/lib/auth";
+import { isBellineStaff } from "@/lib/auth";
 import { PageHeader } from "@/components/LocationTabs";
 import {
   agentSummaries,
@@ -26,8 +26,10 @@ export const dynamic = "force-dynamic";
  */
 export default async function SalesOverview() {
   const user = await requireUser();
-  if (!canManageUsers(user)) {
-    return <p className="muted">The sales engine is owner-only.</p>;
+  // The tenant, not the role: every self-serve signup is the owner of its
+  // own tenant, so `canManageUsers` let any customer read the pipeline.
+  if (!isBellineStaff(user)) {
+    return <p className="muted">Belline staff only.</p>;
   }
 
   const state = await setupState();

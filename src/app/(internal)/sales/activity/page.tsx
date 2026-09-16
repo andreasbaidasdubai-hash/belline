@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth-server";
-import { canManageUsers } from "@/lib/auth";
+import { isBellineStaff } from "@/lib/auth";
 import { PageHeader } from "@/components/LocationTabs";
 import { agentSummaries, recentActivity, setupState } from "@/lib/sales/kpi/overview";
 import Setup from "../Setup";
@@ -37,8 +37,9 @@ export default async function ActivityPage({
   searchParams: Promise<{ agent?: string; type?: string }>;
 }) {
   const user = await requireUser();
-  if (!canManageUsers(user)) {
-    return <p className="muted">The sales engine is owner-only.</p>;
+  // See isBellineStaff: owning a tenant is not working here.
+  if (!isBellineStaff(user)) {
+    return <p className="muted">Belline staff only.</p>;
   }
 
   const state = await setupState();

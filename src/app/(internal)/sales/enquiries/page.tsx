@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth-server";
+import { isBellineStaff } from "@/lib/auth";
 import { listLeads } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -40,8 +41,9 @@ export default async function EnquiriesPage() {
   const user = await requireUser();
   // The layout guards this too. Checked again here because a route handler or
   // a future refactor can move a page out from under a layout, and the cost of
-  // the second check is nothing.
-  if (user.role !== "owner") return <p className="muted">Not available.</p>;
+  // the second check is nothing. On the tenant, not the role — `role === "owner"`
+  // is true of every self-serve signup, so it refused nobody.
+  if (!isBellineStaff(user)) return <p className="muted">Belline staff only.</p>;
 
   const leads = listLeads();
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth-server";
+import { isBellineStaff } from "@/lib/auth";
 import { PageHeader } from "@/components/LocationTabs";
 import { isConfigured, query } from "@/lib/sales/db/client";
 import { setupState } from "@/lib/sales/kpi/overview";
@@ -76,7 +77,7 @@ async function load(): Promise<Row[]> {
 
 export default async function ApprovalsPage() {
   const user = await requireUser();
-  if (user.role !== "owner") return null;
+  if (!isBellineStaff(user)) return null; // the tenant, not the role
 
   const state = await setupState();
   if (state !== "ready") {

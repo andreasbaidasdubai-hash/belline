@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth-server";
-import { canManageUsers } from "@/lib/auth";
+import { isBellineStaff } from "@/lib/auth";
 import { PageHeader } from "@/components/LocationTabs";
 import { resolveAgentConfig, ConfigError } from "@/lib/sales/config/agents";
 import {
@@ -28,8 +28,9 @@ export const dynamic = "force-dynamic";
  */
 export default async function AgentPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
-  if (!canManageUsers(user)) {
-    return <p className="muted">The sales engine is owner-only.</p>;
+  // See isBellineStaff: owning a tenant is not working here.
+  if (!isBellineStaff(user)) {
+    return <p className="muted">Belline staff only.</p>;
   }
 
   const state = await setupState();
