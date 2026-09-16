@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { EmbedConfig, EmbedMode, Location } from "./types";
 import { listCalls } from "./store";
-import { todayIn } from "./time";
+import { dateIn, todayIn } from "./time";
 import { serviceState } from "./billing/entitlement";
 import type { ChannelAccount } from "./reception/types";
 import { listAccounts, saveAccount } from "./reception/repo";
@@ -172,7 +172,7 @@ export function chatGate(location: Location): ChatGate {
   const limit = config?.maxChatsPerDay ?? WEBCHAT_DEFAULTS.maxChatsPerDay;
   const today = todayIn(location.timezone);
   const used = listCalls(location.id).filter(
-    (call) => call.channel === "webchat" && call.startedAt.slice(0, 10) === today,
+    (call) => call.channel === "webchat" && dateIn(call.startedAt, location.timezone) === today,
   ).length;
 
   if (used < limit) return { allowed: true, used, limit };

@@ -615,6 +615,11 @@ function notesFor(
       .filter((m) => m.included !== null && m.included > 0 && (m.kind === "pool" || m.id === "phone"))
       .map((m) => ({ m, left: Math.max(0, (m.included as number) - m.used) }));
     const spent = parts.filter((p) => p.left === 0);
+    if (sub.trial?.extendedFrom && !stripeEnabled()) {
+      // Extended because card payments were closed when it reached its end
+      // (billing/trial-end.ts). Leads the page: it is the date that matters.
+      notes.push(`Payments open soon — you're covered until ${spokenDate(sub.trial.endsOn)}.`);
+    }
     notes.push(
       spent.length === 0
         ? `Trial: ${parts.map((p) => `${p.left} of ${p.m.included} ${meterWords(p.m.id)}`).join(" and ")} left. Nothing is charged during the trial.`
@@ -697,6 +702,12 @@ function notesFor(
     } else if (m.fraction >= 0.8) {
       notes.push(`${Math.round(m.fraction * 100)}% of your ${what} used.`);
     }
+  }
+
+  if (sub.alerts?.pendingSince && sub.alerts.periodStart === usage.period.start && sub.alerts.pending) {
+    // The alert email has not gone (email is off, or sending failed). Said
+    // here so the owner learns it from the page; the sweep keeps trying.
+    notes.push("We could not email you about your usage yet, so check this page — the figures here are up to date.");
   }
 
   if (usage.upgrade) {

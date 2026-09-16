@@ -1,13 +1,26 @@
 import type { Location, Subscription, User, Vertical, WeeklyHours } from "../types";
-import { id, saveBusiness, saveTenant, upsertLocation, findUserByEmail } from "../store";
+import {
+  id,
+  saveBusiness,
+  saveTenant,
+  upsertLocation,
+  findUserByEmail,
+  deleteUser,
+  removeBusiness,
+  removeLocation,
+  removeTenant,
+} from "../store";
 import { createUser } from "../auth";
 import { ensureBaseline } from "../brain";
 import { checkShape } from "../leads/email";
 import { extractFromSources, readSite, type Extracted, type ModelCall, type SourceFile } from "../prospect";
 import { TRIAL, checkSelection } from "../billing/plans";
-import { tradeFromParam, tradeLabel, verticalForTrade } from "../signup-rules";
-import { marketOf, type Market } from "../markets";
+import { MARKETS, isMarket, marketDefaults, marketOf, type Market } from "../markets";
+import { passwordProblem, tradeFromParam, tradeLabel, verticalForTrade } from "../signup-rules";
+import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
+import { MENU_QUESTION, type Confirmed, type CurrentVenue } from "./review";
+import { takesRequestsOnly } from "../booking/destination";
 
 /**
  * Getting a business live without a person in the loop.
@@ -52,32 +65,59 @@ export interface SignupInput {
    * What they do, from the checkout's list (signup-rules.ts `TRADES`).
    *
    * Optional, because the question is: "Something else" and no answer at all
-   * both arrive here as nothing, and both get the appointment diary.
+   * both arrive here as nothing, and both get the appointment diary. This is
+   * never an engine: "garage" is a trade, and the engine it runs on is worked
+   * out from the list.
    */
   trade?: string;
   /**
    * The engine, where the caller already knows it. Belle and the tests name
-   * it directly; the checkout sends `trade` and lets it be worked out.
+   * it directly; the checkout sends `trade` and lets it be worked out. Empty
+   * is the same as not saying, and gets the appointment diary.
    */
-  vertical?: Vertical;
-  /** Where they are, so "tomorrow at four" means their four. */
+  vertical?: Vertical | "";
+  /**
+   * The venue's clock. `signUp` ignores it and uses the market's, because a
+   * browser's zone says where the owner is sitting, not where the business
+   * is. Adding a location to an existing account (locations.ts) still sets it.
+   */
   timezone?: string;
   /** What they picked on the checkout page, remembered as what the trial is trialling. */
   products?: unknown[];
-  /** Which market's prices they were shown. */
-  market?: Market;
+  /** The country the business is in. Currency and timezone follow from it. Unset is the UAE. */
+  market?: Market | string;
+  /** The owner confirmed an email the typo check queried ("did you mean …?"). */
+  emailConfirmed?: boolean;
+  /** Ticked the Terms box. Recorded with the versions (legal.ts) when true. */
+  acceptedTerms?: boolean;
 }
+
+export type SignupField = "businessName" | "email" | "password" | "vertical" | "market" | "terms";
 
 export type SignupResult =
   | { ok: true; user: User; location: Location }
-  | { ok: false; field: "businessName" | "email" | "password" | "vertical"; error: string };
+  | {
+      ok: false;
+      field: SignupField;
+      error: string;
+      /** A likely intended address, for a "Use …" button. */
+      didYouMean?: string;
+      /** Where to sign in instead, when the address already has an account. */
+      signIn?: string;
+    };
+
+/** Injectable for the checks, so a failure half way through can be forced. */
+export interface SignupDeps {
+  ensureBaseline?: typeof ensureBaseline;
+  createUser?: typeof createUser;
+}
 
 /**
  * A month, every channel on, no card, and a cap on voice minutes and
  * text conversations so an unattended trial cannot run up a bill
  * (billing/plans.ts `TRIAL`, which is the only place the length is set).
  */
-function trialSubscription(timezone: string, picked?: unknown[], market?: Market): Subscription {
+function trialSubscription(timezone: string, picked?: unknown[], market?: unknown): Subscription {
   const today = todayIn(timezone);
   const ends = new Date(`${today}T12:00:00Z`);
   ends.setUTCDate(ends.getUTCDate() + TRIAL.days);
@@ -111,9 +151,11 @@ function everyDay(start: number, end: number): WeeklyHours {
  * one is a support ticket.
  */
 export function blankVenue(input: SignupInput, tenantId: string, businessId: string): Location {
-  const timezone = input.timezone || "Asia/Dubai";
+  const defaults = marketDefaults(input.market);
+  const timezone = input.timezone || defaults.timezone;
   const name = input.businessName.trim();
-  const vertical = input.vertical ?? verticalForTrade(input.trade);
+  // An empty answer is "Something else", not an engine: `||`, never `??`.
+  const vertical = input.vertical || verticalForTrade(input.trade);
   const isRestaurant = vertical === "restaurant";
   const tradeKey = tradeFromParam(input.trade);
 
@@ -127,10 +169,14 @@ export function blankVenue(input: SignupInput, tenantId: string, businessId: str
     timezone,
     phone: "",
     address: "",
-    currency: timezone.startsWith("Europe") ? "GBP" : "AED",
+    // From the market, never guessed from the timezone: every Europe/* zone
+    // used to get pounds, including a UAE business set up from Zurich.
+    currency: defaults.currency,
     hours: everyDay(9 * 60, 18 * 60),
     closures: [],
     subscription: trialSubscription(timezone, input.products, input.market),
+    // Not live, nothing reviewed: the journey starts at reading the business.
+    onboarding: { version: 1, channels: {} },
     agent: {
       displayName: "Belline",
       greeting: `Thank you for calling ${name}, this is Belline. How can I help?`,
@@ -169,8 +215,14 @@ export function blankVenue(input: SignupInput, tenantId: string, businessId: str
  * goes through the same checker the website's form uses, because a customer
  * who mistypes their address at signup never receives anything and never
  * knows why.
+ *
+ * All or nothing. Every check runs before the first write — the password
+ * included, which used to be checked last, after a tenant, a business and a
+ * venue had already been saved for an account nobody could sign in to. And if
+ * a write itself fails part way, what was written is removed again before the
+ * error goes any further.
  */
-export async function signUp(input: SignupInput): Promise<SignupResult> {
+export async function signUp(input: SignupInput, deps: SignupDeps = {}): Promise<SignupResult> {
   const businessName = input.businessName.trim();
   if (businessName.length < 2) {
     return { ok: false, field: "businessName", error: "What is the business called?" };
@@ -182,58 +234,142 @@ export async function signUp(input: SignupInput): Promise<SignupResult> {
   const email = input.email.trim().toLowerCase();
   const shape = checkShape(email);
   if (!shape.valid) {
-    return { ok: false, field: "email", error: shape.reason ?? "That does not look like an email address." };
+    return {
+      ok: false,
+      field: "email",
+      error: shape.suggestion
+        ? `That does not look right. Did you mean ${shape.suggestion}?`
+        : (shape.reason ?? "That does not look like an email address."),
+      didYouMean: shape.suggestion,
+    };
+  }
+  // A well-formed address one letter away from a big provider ("gmial.com")
+  // is asked about once. It may be real, so "keep what I typed" is allowed.
+  if (shape.suggestion && !input.emailConfirmed) {
+    return {
+      ok: false,
+      field: "email",
+      error: `Did you mean ${shape.suggestion}?`,
+      didYouMean: shape.suggestion,
+    };
   }
   if (findUserByEmail(email)) {
     return {
       ok: false,
       field: "email",
       error: "There is already an account with that address. Sign in instead.",
+      signIn: `/login?email=${encodeURIComponent(email)}`,
     };
   }
 
-  // Only an explicit answer can be wrong. An absent one is "Something else",
-  // which is a valid thing to be, and gets the appointment diary.
-  if (input.vertical !== undefined && !["restaurant", "salon", "clinic"].includes(input.vertical)) {
-    return { ok: false, field: "vertical", error: "Choose the kind of business." };
+  const problem = passwordProblem(input.password);
+  if (problem) return { ok: false, field: "password", error: problem };
+
+  // Only an explicit engine can be wrong. An absent one — and "Something
+  // else", which arrives as "" — is a valid thing to be, and gets the
+  // appointment diary. What the customer picked from the checkout's list
+  // travels in `trade` and is never read as an engine, so "garage" is a
+  // perfectly good trade and never a `vertical`.
+  const stated = input.vertical || undefined;
+  if (stated && !["restaurant", "salon", "clinic"].includes(stated)) {
+    return { ok: false, field: "vertical", error: "Choose the kind of business, or leave it empty." };
   }
   const tradeKey = tradeFromParam(input.trade);
-  const vertical: Vertical = input.vertical ?? verticalForTrade(input.trade);
+  const vertical: Vertical = stated ?? verticalForTrade(input.trade);
+
+  // The market is where the business is, and it has to be one we can serve.
+  if (input.market !== undefined && !(isMarket(input.market) && MARKETS[input.market].status === "live")) {
+    return { ok: false, field: "market", error: "Belline is not open in that country yet." };
+  }
+  const where = marketDefaults(input.market);
 
   // A tenant of their own, from the first second. Nothing about this account
   // shares a boundary with anybody else's.
   const tenantId = id("tnt");
   const businessId = id("biz");
   const now = new Date().toISOString();
+  const written: { user?: string; location?: string; business?: boolean; tenant?: boolean } = {};
 
-  saveTenant({ id: tenantId, name: businessName, status: "active", createdAt: now });
-  saveBusiness({
-    id: businessId,
-    tenantId,
-    name: businessName,
-    category: tradeLabel(tradeKey, vertical),
-    email,
-    // Never on by default. Appearing in a consumer search is a decision the
-    // merchant makes, not one they discover.
-    discoverable: false,
-    createdAt: now,
-  });
+  try {
+    saveTenant({
+      id: tenantId,
+      name: businessName,
+      status: "active",
+      createdAt: now,
+      ...(input.acceptedTerms
+        ? { onboarding: { terms: { tosVersion: TOS_VERSION, dpaVersion: DPA_VERSION, acceptedAt: now, acceptedBy: email } } }
+        : {}),
+    });
+    written.tenant = true;
+    saveBusiness({
+      id: businessId,
+      tenantId,
+      name: businessName,
+      // Only when they said — the trade they picked, in their own words, so a
+      // vet and a car garage are not both filed as "Salon & spa". An unnamed
+      // trade is filled in from their website at the next step rather than
+      // guessed here.
+      category: tradeKey || stated ? tradeLabel(tradeKey, vertical) : undefined,
+      email,
+      // Never on by default. Appearing in a consumer search is a decision the
+      // merchant makes, not one they discover.
+      discoverable: false,
+      createdAt: now,
+    });
+    written.business = true;
 
-  const location = upsertLocation(blankVenue({ ...input, vertical, trade: tradeKey }, tenantId, businessId));
-  ensureBaseline(location);
+    const location = upsertLocation(
+      blankVenue(
+        { ...input, vertical, trade: tradeKey, market: where.market, timezone: where.timezone },
+        tenantId,
+        businessId,
+      ),
+    );
+    written.location = location.id;
+    (deps.ensureBaseline ?? ensureBaseline)(location);
 
-  const created = createUser({
-    email,
-    name: businessName,
-    password: input.password,
-    role: "owner",
-    tenantId,
-  });
-  if (!created.ok) {
-    return { ok: false, field: "password", error: created.error };
+    const created = (deps.createUser ?? createUser)({
+      email,
+      name: businessName,
+      password: input.password,
+      role: "owner",
+      tenantId,
+    });
+    if (!created.ok) {
+      // Only reachable in a race: somebody took the address between the check
+      // above and here.
+      rollback(tenantId, businessId, written);
+      return { ok: false, field: "email", error: created.error };
+    }
+    written.user = created.user.id;
+
+    return { ok: true, user: created.user, location };
+  } catch (err) {
+    rollback(tenantId, businessId, written);
+    throw err;
   }
+}
 
-  return { ok: true, user: created.user, location };
+/** Undo a signup that failed part way, newest write first. */
+function rollback(
+  tenantId: string,
+  businessId: string,
+  written: { user?: string; location?: string; business?: boolean; tenant?: boolean },
+): void {
+  const steps: (() => void)[] = [
+    () => written.user && deleteUser(written.user),
+    () => written.location && removeLocation(written.location),
+    () => written.business && removeBusiness(businessId),
+    () => written.tenant && removeTenant(tenantId),
+  ];
+  for (const step of steps) {
+    try {
+      step();
+    } catch (err) {
+      // Keep undoing the rest. What is left is what scripts/orphans.ts lists.
+      console.error(`[signup] rollback step failed for ${tenantId}:`, err);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -377,58 +513,129 @@ export function setupNote(website: string, documents = 0): string {
  * told yes, which is the difference between this and the sales demo the reader
  * was built for.
  */
-export function applyDraft(
-  location: Location,
-  confirmed: {
-    name?: string;
-    address?: string;
-    phone?: string;
-    greeting?: string;
-    hours?: WeeklyHours;
-    services?: { name: string; durationMin: number; price: number }[];
-    staff?: string[];
-    faqs?: { q: string; a: string }[];
-    policies?: string[];
-  },
-): Location {
+export function applyDraft(location: Location, confirmed: Confirmed): Location {
+  const hours = confirmed.hours ?? location.hours;
+  let faqs = confirmed.faqs ?? location.agent.faqs;
+
   const next: Location = {
     ...location,
     name: confirmed.name?.trim() || location.name,
-    address: confirmed.address?.trim() || location.address,
-    phone: confirmed.phone?.trim() || location.phone,
-    hours: confirmed.hours ?? location.hours,
-    agent: {
-      ...location.agent,
-      greeting: confirmed.greeting?.trim() || location.agent.greeting,
-      faqs: confirmed.faqs ?? location.agent.faqs,
-      policies: confirmed.policies ?? location.agent.policies,
-    },
+    // An empty string is a cleared field, not a missing one: the review form
+    // always sends what is on screen.
+    address: confirmed.address !== undefined ? confirmed.address.trim() : location.address,
+    phone: confirmed.phone !== undefined ? confirmed.phone.trim() : location.phone,
+    hours,
   };
 
-  if (confirmed.services && location.vertical !== "restaurant") {
-    const services = confirmed.services.map((s, i) => ({
-      id: `svc${i + 1}`,
-      name: s.name,
-      durationMin: Math.max(5, Math.round(s.durationMin || 30)),
-      // Held after the appointment and never quoted to the guest. Fifteen
-      // minutes is the number every salon uses when asked, and it is editable.
-      bufferMin: 15,
-      price: Math.max(0, Math.round(s.price || 0)),
-    }));
-    const staff = (confirmed.staff ?? []).map((name, i) => ({
-      id: `stf${i + 1}`,
-      name,
-      // Everyone can do everything until somebody says otherwise. The opposite
-      // default — nobody can do anything — produces a venue that can never
-      // offer a slot, which reads as broken rather than as unfinished.
-      serviceIds: services.map((s) => s.id),
-      hours: next.hours,
-      timeOff: [],
-    }));
-    next.salon = { ...(location.salon ?? { resources: [], slotMinutes: 15 }), services, staff };
+  if (location.vertical === "restaurant") {
+    // A menu is something to answer questions about, never something to book:
+    // a table is booked, the lamb shoulder is not. So it is filed as one FAQ
+    // the agent reads, replacing the last menu it was given.
+    if (confirmed.services) {
+      faqs = faqs.filter((f) => f.q !== MENU_QUESTION);
+      const items = confirmed.services.filter((s) => s.name.trim());
+      if (items.length) {
+        const priced = (s: { name: string; price: number }) =>
+          s.price > 0 ? `${s.name.trim()} (${location.currency} ${Math.round(s.price)})` : s.name.trim();
+        faqs = [...faqs, { q: MENU_QUESTION, a: `${items.map(priced).join("; ")}.` }];
+      }
+    }
+  } else if (confirmed.services || confirmed.staff) {
+    const salon = location.salon ?? { services: [], staff: [], resources: [], slotMinutes: 15 };
+    const taken = new Set<string>();
+    const idFor = (prefix: string, name: string) => {
+      const base = `${prefix}_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 24) || "item"}`;
+      let candidate = base;
+      for (let n = 2; taken.has(candidate); n++) candidate = `${base}_${n}`;
+      taken.add(candidate);
+      return candidate;
+    };
+    const match = <T extends { name: string }>(list: T[], name: string) =>
+      list.find((x) => x.name.trim().toLowerCase() === name.trim().toLowerCase());
+
+    // A service keeps its id when its name is unchanged, so bookings already
+    // made against it still point at something.
+    const services = confirmed.services
+      ? confirmed.services.map((s) => {
+          const was = match(salon.services, s.name);
+          const id = was && !taken.has(was.id) ? was.id : idFor("svc", s.name);
+          taken.add(id);
+          return {
+            ...(was ?? {}),
+            id,
+            name: s.name.trim(),
+            durationMin: Math.max(5, Math.round(s.durationMin || 30)),
+            // Held after the appointment and never quoted to the guest. Fifteen
+            // minutes is the number every salon uses when asked, and it is editable.
+            bufferMin: was?.bufferMin ?? 15,
+            price: Math.max(0, Math.round(s.price || 0)),
+          };
+        })
+      : salon.services;
+    const serviceIds = services.map((s) => s.id);
+
+    const staff = confirmed.staff
+      ? confirmed.staff.map((name) => {
+          const was = match(salon.staff, name);
+          if (!was) {
+            return {
+              id: idFor("stf", name),
+              name: name.trim(),
+              // Everyone can do everything until somebody says otherwise. The opposite
+              // default — nobody can do anything — produces a venue that can never
+              // offer a slot, which reads as broken rather than as unfinished.
+              serviceIds,
+              hours,
+              timeOff: [],
+            };
+          }
+          taken.add(was.id);
+          const kept = was.serviceIds.filter((sid) => serviceIds.includes(sid));
+          return {
+            ...was,
+            serviceIds: kept.length ? kept : serviceIds,
+            // Somebody on the venue's old hours follows the new ones; a person
+            // with their own rota keeps it.
+            hours: JSON.stringify(was.hours) === JSON.stringify(location.hours) ? hours : was.hours,
+          };
+        })
+      : salon.staff.map((s) => ({
+          ...s,
+          serviceIds: s.serviceIds.filter((sid) => serviceIds.includes(sid)).length
+            ? s.serviceIds.filter((sid) => serviceIds.includes(sid))
+            : serviceIds,
+        }));
+
+    next.salon = { ...salon, services, staff };
   }
 
+  next.agent = {
+    ...location.agent,
+    greeting: confirmed.greeting?.trim() || location.agent.greeting,
+    faqs,
+    policies: confirmed.policies ?? location.agent.policies,
+  };
+
   return upsertLocation(next);
+}
+
+/** The venue as the review form starts from it (review.ts `CurrentVenue`). */
+export function currentVenue(location: Location): CurrentVenue {
+  return {
+    name: location.name,
+    vertical: location.vertical,
+    greeting: location.agent.greeting,
+    address: location.address,
+    phone: location.phone,
+    hours: location.hours,
+    services:
+      location.vertical === "restaurant"
+        ? []
+        : (location.salon?.services ?? []).map((s) => ({ name: s.name, durationMin: s.durationMin, price: s.price ?? 0 })),
+    staff: location.vertical === "restaurant" ? [] : (location.salon?.staff ?? []).map((s) => s.name),
+    faqs: location.agent.faqs,
+    policies: location.agent.policies,
+  };
 }
 
 /** Is this venue ready to answer a telephone? */
@@ -439,7 +646,11 @@ export function readiness(location: Location): {
   const missing: { label: string; where: string }[] = [];
 
   if (!location.address.trim()) missing.push({ label: "An address", where: "/agents" });
-  if (location.vertical === "restaurant") {
+  // A business that confirms its own bookings needs no tables, sittings,
+  // services or rota in Belline: nothing is booked against them.
+  if (takesRequestsOnly(location)) {
+    // Only what every business needs, below.
+  } else if (location.vertical === "restaurant") {
     if (!location.restaurant?.tables.length) {
       missing.push({ label: "Your tables", where: "/venue" });
     }

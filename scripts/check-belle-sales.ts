@@ -21,6 +21,7 @@ delete process.env.RESEND_API_KEY;
 delete process.env.TWILIO_ACCOUNT_SID;
 // Card payments off unless a test turns them on: the default in every environment without Stripe.
 delete process.env.STRIPE_SECRET_KEY;
+delete process.env.STRIPE_WEBHOOK_SECRET;
 
 const { seedIfEmpty } = await import("../src/lib/seed");
 const { getLocation, listLocations, listLeads, findUserByEmail } = await import("../src/lib/store");
@@ -58,10 +59,12 @@ function chat() {
 /** Runs `fn` with card payments configured. The key is fake: no test here calls Stripe. */
 async function withStripe<T>(fn: () => T | Promise<T>): Promise<T> {
   process.env.STRIPE_SECRET_KEY = "sk_test_not_a_real_key";
+  process.env.STRIPE_WEBHOOK_SECRET = "whsec_not_a_real_secret";
   try {
     return await fn();
   } finally {
     delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.STRIPE_WEBHOOK_SECRET;
   }
 }
 

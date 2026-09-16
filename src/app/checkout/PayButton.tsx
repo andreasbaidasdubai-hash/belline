@@ -6,22 +6,28 @@ import type { BillingCycle, ProductId } from "@/lib/billing/plans";
 /**
  * One button, and it says what it does.
  *
- * "Pay" rather than "Continue" or "Proceed": the next screen asks for a card,
- * and a button that hides that is a button people press and then resent.
+ * "Choose plan": the next screen is Stripe's, asking for a card. It used to
+ * promise going live as well, but paying does not switch anything on — going
+ * live is its own step in setup.
  *
- * When Stripe is not configured the button says so instead of failing. That is
- * the same contract every other provider in this codebase follows.
+ * With card payments closed (`billing.stripe` off) the button says payments
+ * open soon and until when the owner is covered. It never calls the checkout
+ * route, so its 503 is never what the owner sees, and it never offers an
+ * email address instead.
  */
 export default function PayButton({
   products,
   cycle,
   enabled,
   venueName,
+  coveredNote,
 }: {
   products: ProductId[];
   cycle: BillingCycle;
   enabled: boolean;
   venueName: string;
+  /** "Payments open soon — you're covered until …", from billing/trial-end.ts. */
+  coveredNote?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,11 +44,11 @@ export default function PayButton({
     return (
       <div>
         <button className="btn" disabled style={{ width: "100%", padding: "14px 16px" }}>
-          Card payments are not switched on yet
+          Payments open soon
         </button>
         <p className="muted" style={{ fontSize: 12, margin: "12px 0 0", lineHeight: 1.6 }}>
-          {venueName} keeps answering meanwhile. Email{" "}
-          <a href="mailto:hello@belline.ai">hello@belline.ai</a> and we will take it from there.
+          {coveredNote ?? "Payments open soon — Belline keeps answering until then."} {venueName} keeps answering, and
+          nothing is charged.
         </p>
       </div>
     );
@@ -79,7 +85,7 @@ export default function PayButton({
         disabled={busy}
         style={{ width: "100%", padding: "14px 16px", fontSize: 14.5 }}
       >
-        {busy ? "Opening checkout…" : "Pay and go live"}
+        {busy ? "Opening checkout…" : "Choose plan"}
       </button>
       {error && (
         <p role="alert" style={{ fontSize: 12.5, color: "var(--bad)", margin: "12px 0 0" }}>

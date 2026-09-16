@@ -195,6 +195,12 @@
 
   function dress(cfg) {
     if (!cfg || typeof cfg !== "object") return;
+    // The business has not gone live yet. Installed is enough to be detected;
+    // visitors see nothing until it is switched on.
+    if (cfg.live === false) {
+      dock.remove();
+      return;
+    }
     // No attribute on the tag means the dashboard decides what is offered —
     // so switching chat on in Belline reaches the site without a re-paste.
     if (!attrMode && (cfg.mode === "voice" || cfg.mode === "chat" || cfg.mode === "both") && cfg.mode !== mode) {
@@ -226,6 +232,25 @@
       dock.insertBefore(wa, dock.firstChild);
       fabs.whatsapp = wa;
     }
+  }
+
+  // Tell Belline the widget loaded here. This is how the dashboard knows it is
+  // installed, the moment the page loads. The browser attaches this page's
+  // origin; a site the venue did not name is refused, and the widget then
+  // takes itself off the page rather than sit there refusing every tap.
+  try {
+    fetch(origin + "/api/embed/" + encodeURIComponent(key) + "/seen", { method: "POST", mode: "cors" })
+      .then(function (r) {
+        if (r.status === 403) {
+          dock.remove();
+          console.warn("[belline] this website is not on the venue's list, so the widget is not shown.");
+        }
+      })
+      .catch(function () {
+        /* a failed ping never costs the venue its widget */
+      });
+  } catch (e) {
+    /* an old browser without fetch keeps the widget */
   }
 
   try {

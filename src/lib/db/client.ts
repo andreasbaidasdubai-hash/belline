@@ -1,5 +1,7 @@
 import pg from "pg";
 
+import { checkDbRefusal } from "./guard";
+
 /**
  * Postgres.
  *
@@ -43,6 +45,12 @@ types.setTypeParser(1700, (v) => Number(v));
 // connections until Postgres refuses new ones.
 const globalRef = globalThis as unknown as { __bellineDbPool?: pg.Pool };
 
+// A check script with a shared DATABASE_URL stops here, at import, before any
+// test runs or any query is sent. See guard.ts. `pool()` asks again, for a
+// script that sets the variable after importing this module.
+const refusedAtLoad = checkDbRefusal();
+if (refusedAtLoad) throw new Error(refusedAtLoad);
+
 export function isConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL);
 }
@@ -53,6 +61,8 @@ export function pool(): pg.Pool {
       "DATABASE_URL is not set. The sales engine and WhatsApp reception need Postgres; voice does not.",
     );
   }
+  const refusal = checkDbRefusal();
+  if (refusal) throw new Error(refusal);
   if (!globalRef.__bellineDbPool) {
     globalRef.__bellineDbPool = new Pool({
       connectionString: process.env.DATABASE_URL,

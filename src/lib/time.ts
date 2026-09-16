@@ -36,6 +36,17 @@ export function todayIn(timezone: string): DateStr {
 }
 
 /** Minutes from local midnight for "now" in the given timezone. */
+/**
+ * The venue's calendar date of an ISO timestamp.
+ *
+ * `startedAt.slice(0, 10)` is the UTC date, which in Dubai is yesterday until
+ * 04:00. Compared with `todayIn`, it made a widget's daily cap reset at four in
+ * the morning and a day's count read zero for the first four hours.
+ */
+export function dateIn(iso: string, timezone: string): DateStr {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso)) as DateStr;
+}
+
 export function nowMinutesIn(timezone: string): Minutes {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,

@@ -249,6 +249,68 @@ await test("a Twilio receipt carries the number it went out on", () => {
 });
 
 // ---------------------------------------------------------------------------
+head("A business that confirms its own bookings is never told it has one");
+
+const { checkRequestReply, repairRequestReply, checkTimes } = await import("../src/lib/agent/honesty");
+const { executeTool } = await import("../src/lib/agent/tools");
+const guardRoot = path.resolve(import.meta.dirname, "..");
+const requestVenue = {
+  ...getLocation(signed.location.id)!,
+  onboarding: { version: 1 as const, channels: {}, destination: { kind: "requests" as const, setAt: new Date().toISOString() } },
+};
+
+await test("replies that claim a booking are caught", () => {
+  for (const reply of [
+    "You're booked for Friday at 8pm.",
+    "Lovely, see you Friday!",
+    "Your table for 4 is confirmed.",
+    "All set — a table for four at eight.",
+    "I've reserved that for you.",
+  ]) {
+    assert.equal(checkRequestReply(reply).ok, false, reply);
+  }
+});
+
+await test("honest request replies pass untouched", () => {
+  for (const reply of [
+    "Your request for a table for 4 on Friday at 8pm is with the team, and they'll get back to you to confirm.",
+    "Nothing is booked until the team confirms it.",
+    "The team will confirm once it's booked in.",
+    "I can't see the diary, so I can't say whether 8pm is free.",
+  ]) {
+    assert.equal(checkRequestReply(reply).ok, true, reply);
+  }
+});
+
+await test("a repaired reply keeps the rest and never says confirmed, booked or see you", () => {
+  const reply = "Thanks Sara. You're booked for Friday at 8pm, see you then! Parking is behind the building.";
+  const repaired = repairRequestReply(reply, checkRequestReply(reply));
+  assert.doesNotMatch(repaired, /confirmed|booked|see you/i);
+  assert.match(repaired, /Thanks Sara\./);
+  assert.match(repaired, /Parking is behind the building\./);
+  assert.match(repaired, /with the team/);
+});
+
+await test("repeating the requested time back is not an invented time", () => {
+  const traces = [{ at: "", name: "take_booking_request", input: {}, output: { requested: true, requested_time: "20:00" }, ms: 1, ok: true }];
+  assert.equal(checkTimes("I've passed on your request for 8:00 PM on Friday.", traces).ok, true);
+});
+
+await test("the message path runs the request guard for request-only venues", () => {
+  const respond = fs.readFileSync(path.join(guardRoot, "src/lib/reception/respond.ts"), "utf8");
+  assert.match(respond, /takesRequestsOnly\(location\)/);
+  assert.match(respond, /checkRequestReply\(reply\)/);
+  assert.match(respond, /ai\.claimed_confirmation/);
+});
+
+await test("a request-only venue refuses a diary tool with words to say, not an error", async () => {
+  const call = startCall(requestVenue, "webchat", "visitor");
+  const out = await executeTool("check_availability", { date: "2030-01-01", service_ids: [] }, { location: requestVenue, call });
+  assert.match(JSON.stringify(out.result), /not_supported/);
+  assert.match(JSON.stringify(out.result), /take_booking_request/);
+});
+
+// ---------------------------------------------------------------------------
 
 void listCalls;
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });

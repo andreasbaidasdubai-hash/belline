@@ -4,7 +4,8 @@ import type { Conversation, Provider } from "./types";
 import { getCall, getLocation, saveCall } from "../store";
 import { startCall } from "../calls";
 import { AgentSession } from "../agent/runtime";
-import { checkTimes, publishedTimes, repairReply } from "../agent/honesty";
+import { checkRequestReply, checkTimes, publishedTimes, repairReply, repairRequestReply } from "../agent/honesty";
+import { takesRequestsOnly } from "../booking/destination";
 import { metaAdapter } from "./channel/meta";
 import { twilioAdapter } from "./channel/twilio";
 import { internalAdapter } from "./channel/internal";
@@ -26,6 +27,8 @@ import {
   transition,
 } from "./repo";
 import { track, newTraceId } from "./events";
+import { openException } from "../exceptions";
+import { BELLINE_TENANT_ID } from "../tenancy";
 import type { Accepted } from "./inbound";
 import type { ChannelAdapter } from "./channel";
 
@@ -226,6 +229,25 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
     reply = repairReply(reply, honesty);
   }
 
+  // At a business that confirms its own bookings, nothing Belline writes may
+  // tell somebody they hold one. Same shape as the check above: the original is
+  // kept for audit, and only the sentences that claimed a booking are removed.
+  if (takesRequestsOnly(location)) {
+    const claim = checkRequestReply(reply);
+    if (!claim.ok) {
+      await track({
+        tenantId,
+        businessId: conversation.businessId,
+        channel: conversation.channel,
+        conversationId,
+        traceId,
+        name: "ai.claimed_confirmation",
+        payload: { claims: claim.claims, replaced: reply },
+      });
+      reply = repairRequestReply(reply, claim);
+    }
+  }
+
   if (modelError && !reply) {
     // Nothing usable came back. Escalating is the honest answer: a customer
     // waiting on a message that will never arrive is worse than one told a
@@ -279,6 +301,18 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
       name: "handoff.requested",
       payload: { reason: handoff.reason },
     });
+    // On Belline's own line the person asking is a prospect or a customer
+    // asking us, and nobody watches that inbox the way an owner watches theirs.
+    if (location.tenantId === BELLINE_TENANT_ID) {
+      openException({
+        tenantId: location.tenantId,
+        locationId: location.id,
+        kind: "handoff_requested",
+        reason: handoff.reason,
+        context: { conversationId, channel: conversation.channel, summary: handoff.summary.slice(0, 500) },
+        source: "system",
+      });
+    }
   }
 
   if (!committed.messageId || !reply.trim()) {

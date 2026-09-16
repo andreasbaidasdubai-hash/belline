@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
-import { overviewFor, summarise } from "@/lib/overview";
+import { overviewFor, summarise, visibleHealth } from "@/lib/overview";
+import { isBellineStaff } from "@/lib/auth";
 import { readiness } from "@/lib/onboarding";
+import { isActivated, journeyFor } from "@/lib/onboarding/journey";
+import { testsStale } from "@/lib/onboarding/selftest-state";
 import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
 import { callDurationSeconds } from "@/lib/calls";
@@ -54,7 +57,11 @@ export default async function OverviewPage({
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
 
-  const { did, worth, health, needsYou, recent } = overviewFor(location);
+  const overview = overviewFor(location);
+  const { did, worth, needsYou, recent } = overview;
+  // Staff see every line and the panel; an owner sees only what is theirs.
+  const staff = isBellineStaff(user);
+  const health = visibleHealth(overview.health, staff);
   const t = terms(location);
   const unwell = health.filter((h) => !h.ok);
   // A venue with no number, no services and no staff cannot answer anybody,
@@ -62,6 +69,9 @@ export default async function OverviewPage({
   // existed for the setup screen; the home page is where it is needed.
   const setup = readiness(location);
   const service = serviceState(location, todayIn(location.timezone));
+  // Before going live the home page has one call to action: the journey's next
+  // step. A live venue keeps the page it had.
+  const path = isActivated(location) ? null : journeyFor(location);
 
   return (
     <>
@@ -77,7 +87,7 @@ export default async function OverviewPage({
       <LocationTabs base="/" active={location.id} />
 
       {/* The two things that stop a real call arriving, above everything else. */}
-      {(service.lapsed || !location.phone) && !location.demo?.enabled && (
+      {(service.lapsed || (!path && !location.phone)) && !location.demo?.enabled && (
         <div className="panel" style={{ padding: "15px 18px", marginBottom: 14, borderColor: service.lapsed ? "var(--bad)" : "var(--warn)" }}>
           <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
             {service.lapsed
@@ -90,6 +100,16 @@ export default async function OverviewPage({
         </div>
       )}
 
+      {/* Live, and the setup changed after the checks. Worth a look, never a block. */}
+      {!path && testsStale(location) && (
+        <div className="panel" role="status" style={{ padding: "13px 18px", marginBottom: 14, fontSize: 13.5, lineHeight: 1.5 }}>
+          You changed your setup since the last checks.{" "}
+          <Link href="/setup/test" style={{ color: "var(--accent)", textDecoration: "underline" }}>
+            Re-run checks
+          </Link>
+        </div>
+      )}
+
       {/* What it did. One sentence first, because that is what gets read. */}
       <div className="panel" style={{ padding: "20px 22px", marginBottom: 14 }}>
         <p style={{ fontSize: 16, lineHeight: 1.5, margin: 0, maxWidth: "58ch", color: "var(--text)" }}>
@@ -97,12 +117,22 @@ export default async function OverviewPage({
             ? summarise(location, did)
             : `Belline can't answer for ${location.name} yet — a few things to finish first.`}
         </p>
-        {!setup.ready && (
+        {path?.next && (
+          <div style={{ marginTop: 14, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+            <Link href={path.next.url} className="btn btn-accent" data-testid="journey-next">
+              Next: {path.next.title}
+            </Link>
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              Step {path.next.n} of {path.steps.length}
+            </span>
+          </div>
+        )}
+        {!path && !setup.ready && (
           <Link href={`/setup/assistant?loc=${location.id}`} className="btn btn-accent" style={{ marginTop: 14, display: "inline-block" }}>
             Set it up with Belle
           </Link>
         )}
-        {!setup.ready && (
+        {!path && !setup.ready && (
           <ul style={{ margin: "14px 0 0", padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
             {setup.missing.map((m) => (
               <li key={m.label} style={{ fontSize: 13.5 }}>
@@ -284,7 +314,8 @@ export default async function OverviewPage({
             </div>
           </div>
 
-          <div className="panel">
+          {staff && (
+          <div className="panel" data-testid="health-panel">
             <div className="panel-head">Belline health</div>
             <div style={{ padding: "12px 18px 16px" }}>
               {health.map((h) => (
@@ -311,6 +342,7 @@ export default async function OverviewPage({
               ))}
             </div>
           </div>
+          )}
         </div>
       </div>
     </>

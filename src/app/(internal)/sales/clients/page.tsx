@@ -41,6 +41,7 @@ const CHANNEL_LABEL: Record<CostChannel, string> = {
   embed_voice: "Website voice button",
   webchat: "Website chat",
   whatsapp: "WhatsApp",
+  test: "Setup checks",
 };
 
 function statusStyle(status: string, pastDue: boolean): React.CSSProperties {

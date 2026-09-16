@@ -94,8 +94,12 @@ function chats(locationId: string, count: number) {
 
 const decide = (v: { fresh: () => ReturnType<typeof getLocation> }, stripe = false) =>
   policy.decide(v.fresh()!, TODAY, { stripe });
-const apply = (v: { fresh: () => ReturnType<typeof getLocation> }, stripe = false) =>
-  policy.applyUsagePolicy(v.fresh()!, TODAY, { stripe });
+/** Apply, and mark any alert sent as if the email went. The pending path has its own tests below. */
+const apply = (v: { id: string; fresh: () => ReturnType<typeof getLocation> }, stripe = false) => {
+  const out = policy.applyUsagePolicy(v.fresh()!, TODAY, { stripe });
+  if (out.alerts.length) policy.markAlertsSent(v.id, out.decision.periodStart, out.alerts);
+  return out;
+};
 
 console.log("\n\x1b[1mAlerts at 70%, 90% and 100%\x1b[0m\n");
 
@@ -362,6 +366,86 @@ await test("packs, trial and volume sentences are read from the catalogue", () =
   assert.match(speak.volumeSentence(), /separate subscription/);
   assert.match(speak.volumeSentence(), /5 to 19 locations: 10% off/);
   assert.match(speak.volumeSentence(), /20 or more/);
+});
+
+console.log("\n\x1b[1mAn alert is sent only when the email went\x1b[0m\n");
+
+delete process.env.RESEND_API_KEY;
+delete process.env.FLAG_EMAIL_TRANSACTIONAL;
+const PENDING_NOTE = /could not email you about your usage/;
+
+const quiet = await venue();
+talk(quiet.id, 53); // 70.7% of 75
+
+await test("a raised alert is recorded as pending, not sent, and is not raised again meanwhile", () => {
+  const out = policy.applyUsagePolicy(quiet.fresh(), TODAY, { stripe: false });
+  assert.deepEqual(out.alerts, [{ pool: "minutes", threshold: 70 }]);
+  const record = quiet.fresh().subscription!.alerts!;
+  assert.deepEqual(record.sent, {}, "marked sent before any email was tried");
+  assert.deepEqual(record.pending, { minutes: [70] });
+  assert.ok(record.pendingSince);
+  assert.deepEqual(decide(quiet).alerts, [], "a pending alert was raised a second time");
+});
+
+await test("with email off the alert is not delivered, stays pending, and the billing page says so", async () => {
+  const delivered = await policy.notifyAlerts(quiet.fresh(), [{ pool: "minutes", threshold: 70 }]);
+  assert.equal(delivered, false);
+  assert.deepEqual(quiet.fresh().subscription!.alerts!.pending, { minutes: [70] });
+  assert.ok(accountFor(quiet.fresh(), TODAY)!.notes.some((n) => PENDING_NOTE.test(n)), "no pending note on the page");
+});
+
+await test("the sweep retries: a failure keeps it pending, a success marks it sent once and clears the note", async () => {
+  await policy.retryPendingAlerts(async () => false, { today: TODAY });
+  assert.deepEqual(quiet.fresh().subscription!.alerts!.pending, { minutes: [70] });
+
+  const tried: string[] = [];
+  const ok = async (loc: { id: string }) => {
+    tried.push(loc.id);
+    return true;
+  };
+  await policy.retryPendingAlerts(ok, { today: TODAY });
+  assert.deepEqual(quiet.fresh().subscription!.alerts, { periodStart: PERIOD, sent: { minutes: [70] } });
+  assert.ok(!accountFor(quiet.fresh(), TODAY)!.notes.some((n) => PENDING_NOTE.test(n)), "the note outlived the email");
+  tried.length = 0;
+  await policy.retryPendingAlerts(ok, { today: TODAY });
+  assert.ok(!tried.includes(quiet.id), "a sent alert was sent again");
+});
+
+await test("a call that raises an alert with email off leaves it pending", async () => {
+  const v = await venue();
+  talk(v.id, 53);
+  serviceState(v.fresh(), TODAY, { channel: "phone" });
+  await new Promise((r) => setTimeout(r, 50));
+  const record = v.fresh().subscription!.alerts!;
+  assert.deepEqual(record.sent, {});
+  assert.deepEqual(record.pending, { minutes: [70] });
+});
+
+await test("an alert from an earlier period is not sent late", async () => {
+  const v = await venue();
+  const sub = v.fresh().subscription!;
+  upsertLocation({ ...v.fresh(), subscription: { ...sub, alerts: { periodStart: "2026-10-01", sent: {}, pending: { minutes: [90] }, pendingSince: "2026-10-20T10:00:00Z" } } });
+  const tried: string[] = [];
+  await policy.retryPendingAlerts(async (loc) => (tried.push(loc.id), true), { today: TODAY });
+  assert.ok(!tried.includes(v.id));
+});
+
+console.log("\n\x1b[1mThe choice is there during the trial\x1b[0m\n");
+
+await test("an owner on a trial can choose what happens at 100%, and nothing acts on it until a plan", async () => {
+  const v = await venue({ status: "trialing", trial: { endsOn: "2026-11-15", minutes: 30, conversations: 50 } });
+  const out = policy.setUsagePolicyRequest(v.owner, { locationId: v.id, mode: "cap" });
+  assert.equal(out.status, 200, JSON.stringify(out.body));
+  assert.equal(v.fresh().subscription!.usagePolicy?.mode, "cap");
+  assert.equal(policy.governs(v.fresh()), false, "the policy acted during the trial");
+});
+
+await test("the billing page shows the chooser for a trial, not only for a paid plan", () => {
+  const page = fs.readFileSync(path.join(process.cwd(), "src/app/(app)/billing/page.tsx"), "utf8");
+  assert.doesNotMatch(page, /!trialing && isPooled\(products\)/, "the chooser is still hidden in the trial");
+  assert.match(page, /isPooledTrial\(subscription\)/);
+  const form = fs.readFileSync(path.join(process.cwd(), "src/app/(app)/billing/UsagePolicy.tsx"), "utf8");
+  assert.match(form, /applies from your first plan/);
 });
 
 await test("packs are live in the catalogue now that the policy works", () => {

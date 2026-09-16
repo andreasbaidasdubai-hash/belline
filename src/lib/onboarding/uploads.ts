@@ -1,5 +1,7 @@
 import { draftFromSources, type Draft, type DraftDeps } from "./index";
 import type { SourceFile } from "../prospect";
+import { customerError, raiseException } from "../errors/customer";
+import { flag } from "../flags";
 
 /**
  * A price list or a brochure, handed over at setup.
@@ -115,14 +117,22 @@ export async function draftFromRequest(req: Request, deps: DraftDeps = {}): Prom
     if (!website) return refuse("Paste the address of your website.");
   }
 
+  // No model to read with. Said honestly, and logged once for the team, rather
+  // than letting the SDK complain about a missing key to the owner.
+  if (!deps.model && !flag("import.model")) {
+    raiseException("import:model_off", "setup import asked for with import.model off");
+    const out = customerError("import", "import.model flag is off", "not_configured", "setup");
+    return { status: 503, body: { error: `${out.message} ${out.next}`, fallback: FALLBACK } };
+  }
+
   try {
     const draft = await draftFromSources({ website: website || undefined, files }, deps);
     return { status: 200, body: { ok: true, draft } };
   } catch (err) {
-    // Everything that can go wrong here is the customer's problem to
-    // understand, not ours to hide: a typo, a site behind a login, a scan too
-    // faint to read. Say which, and let them type it in instead.
-    const message = err instanceof Error ? err.message : String(err);
-    return { status: 422, body: { error: message, fallback: FALLBACK } };
+    // A typo, a site behind a login, a scan too faint to read: those were
+    // written for the owner (CustomerError) and are said as they are. An SDK's
+    // own text is not, and is replaced with a plain sentence.
+    const out = customerError("import", err, "failed", "setup");
+    return { status: 422, body: { error: out.message, fallback: FALLBACK } };
   }
 }

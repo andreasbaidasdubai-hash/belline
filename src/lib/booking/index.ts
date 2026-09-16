@@ -24,6 +24,7 @@ import {
 import { asBookings as holdsAsBookings, releaseCall } from "./holds";
 import { bookingKey, describeWhat, findDuplicate, type BookingIdentity } from "./idempotency";
 import { pushBooking } from "../integrations/google";
+import { destinationOf } from "./destination";
 import { listWaitlist } from "../store";
 import { markConverted } from "../waitlist";
 
@@ -104,12 +105,14 @@ export type BookingResult =
 export function findAvailability(
   location: Location,
   query: AvailabilityQuery,
-  opts: { callId?: string } = {},
+  opts: { callId?: string; limit?: number } = {},
 ): Slot[] {
   const bookings = withHolds(location, query.date, opts.callId);
+  // `limit` is for a provider that filters afterwards (Google's busy times):
+  // cutting at six first would leave it nothing to offer on a busy morning.
   return location.vertical === "restaurant"
-    ? searchRestaurant(location, bookings, query)
-    : searchSalon(location, bookings, query);
+    ? searchRestaurant(location, bookings, query, opts.limit)
+    : searchSalon(location, bookings, query, opts.limit);
 }
 
 export function createBooking(location: Location, input: CreateInput): BookingResult {
@@ -653,7 +656,11 @@ function convertWaitlist(booking: Booking): void {
  * on the connection so the dashboard can say so.
  */
 function mirrored(location: Location, booking: Booking): Booking {
-  if (location.google) void pushBooking(location, booking);
+  // A venue that books into Google has the provider create the event itself,
+  // with its idempotency key; the mirror only follows changes to one that
+  // exists. Mirroring a new booking here too would make a second event.
+  const providerWrites = destinationOf(location) === "google" && !booking.calendarEventId;
+  if (location.google && !providerWrites) void pushBooking(location, booking);
   return booking;
 }
 

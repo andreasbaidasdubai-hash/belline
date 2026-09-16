@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import type { Location, Subscription } from "../types";
-import { getLocation, upsertLocation } from "../store";
+import { getLocation, recordStripeEvent, stripeEventSeen, upsertLocation } from "../store";
+import { flag } from "../flags";
 import { MARKETS, marketOf, type Market } from "../markets";
 import {
   GRANDFATHER_DAYS,
@@ -42,7 +43,20 @@ import { addDays, todayIn } from "../time";
 
 let client: Stripe | null = null;
 
+/**
+ * Card payments for Belline's own plans are open: the `billing.stripe` flag,
+ * which needs the secret key *and* the webhook secret. A key without a webhook
+ * would take a card and never switch the plan on, so it does not count.
+ *
+ * Everything that stops a venue for not paying reads this, so while it is off
+ * nobody loses their receptionist over a checkout they could not use.
+ */
 export function stripeEnabled(): boolean {
+  return flag("billing.stripe");
+}
+
+/** A Stripe client can be built: the secret key is set. Deposits and the portal need only this. */
+export function stripeConfigured(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY);
 }
 
@@ -180,6 +194,19 @@ export function checkoutParams(
 export async function createCheckout(input: CheckoutInput): Promise<{ url: string }> {
   const selection = checkSelection(input.products, input.market);
   if (!selection.ok) throw new Error(selection.error);
+
+  // A stubbed local run: no prices are looked up and nothing reaches Stripe.
+  // The session is written beside the data so /__stub/stripe/checkout can
+  // play Stripe's part and send the signed webhook.
+  if (flag("stubs")) {
+    const { stubCheckoutSession } = await import("../testing/stubs");
+    const params = checkoutParams(
+      { ...input, products: selection.products },
+      selection.products.map((id) => `price_stub_${lookupKeyFor(id, input.market, input.cycle)}`),
+    );
+    return stubCheckoutSession(new URL(input.successUrl).origin, params as unknown as Record<string, unknown>);
+  }
+
   const prices = await Promise.all(selection.products.map((id) => priceFor(id, input.market, input.cycle)));
   const session = await stripe().checkout.sessions.create(
     checkoutParams({ ...input, products: selection.products }, prices.map((p) => p.id)),
@@ -202,6 +229,9 @@ export async function portalUrl(customerId: string, returnUrl: string): Promise<
 // The webhook
 // ---------------------------------------------------------------------------
 
+/** Only ever used to check signatures. Building it makes no request. */
+let verifier: Stripe | null = null;
+
 export function verifyWebhook(raw: string, signature: string | null): Stripe.Event {
   // Two endpoints' secrets: the account's own events, and — for deposits —
   // events on venues' connected accounts, which Stripe signs separately.
@@ -211,11 +241,13 @@ export function verifyWebhook(raw: string, signature: string | null): Stripe.Eve
   if (!secrets.length) throw new Error("STRIPE_WEBHOOK_SECRET is not set.");
   if (!signature) throw new Error("No Stripe signature on that request.");
   // Over the raw bytes, and Stripe's own constructEvent so the timestamp
-  // tolerance that stops a replay is applied too.
+  // tolerance that stops a replay is applied too. Verifying needs only the
+  // webhook secret, so a stubbed run with no secret key verifies the same way.
+  verifier ??= new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_verify_only");
   let last: unknown;
   for (const secret of secrets) {
     try {
-      return stripe().webhooks.constructEvent(raw, signature, secret);
+      return verifier.webhooks.constructEvent(raw, signature, secret);
     } catch (err) {
       last = err;
     }
@@ -225,13 +257,29 @@ export function verifyWebhook(raw: string, signature: string | null): Stripe.Eve
 
 const LEGACY = new Set<string>(["starter", "business", "enterprise"]);
 
+/** When Stripe created the event, ISO, or undefined for a hand-built one. */
+function eventTime(event: Stripe.Event): string | undefined {
+  return typeof event.created === "number" && event.created > 0 ? new Date(event.created * 1000).toISOString() : undefined;
+}
+
 /**
  * What a Stripe event means for a venue's plan.
  *
  * Deliberately small. Belline stores what it needs to decide whether to answer
  * and what to show on the billing page — not a mirror of Stripe's data model.
+ *
+ * Safe to apply twice and in the wrong order, because Stripe does both: it
+ * redelivers anything it is not sure arrived, and it promises no ordering.
+ * The webhook also skips event ids it has already applied (billing/webhook.ts),
+ * but that record can be lost, so each case here stands on its own:
+ *   - a repeat of the checkout that made the current subscription is a no-op,
+ *     so the anniversary (`startedOn`) does not move;
+ *   - a checkout for a subscription that has since been cancelled, or created
+ *     before the cancellation, never reactivates it;
+ *   - a cancellation keeps the first date it was given, which is Stripe's.
  */
 export function applyStripeEvent(event: Stripe.Event): { locationId?: string; applied: string } {
+  const at = eventTime(event);
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
@@ -245,6 +293,16 @@ export function applyStripeEvent(event: Stripe.Event): { locationId?: string; ap
 
       const location = getLocation(locationId);
       if (!location) return { locationId, applied: "ignored: unknown venue" };
+
+      const current = location.subscription;
+      const subscriptionId = typeof session.subscription === "string" ? session.subscription : undefined;
+      const sameSubscription = Boolean(subscriptionId && location.stripe?.subscriptionId === subscriptionId);
+      if (current?.status === "cancelled" && (sameSubscription || (at && current.cancelledAt && at < current.cancelledAt))) {
+        return { locationId, applied: "ignored: older than the cancellation" };
+      }
+      if (current?.status === "active" && sameSubscription) {
+        return { locationId, applied: "ignored: this subscription is already active" };
+      }
 
       const market = marketOf(session.metadata?.belline_market);
       const cycle: BillingCycle = session.metadata?.belline_cycle === "annual" ? "annual" : "monthly";
@@ -288,6 +346,9 @@ export function applyStripeEvent(event: Stripe.Event): { locationId?: string; ap
           status: "active",
           priceMinor,
           catalogueVersion: session.metadata?.belline_catalogue || catalogueOf(selection.products),
+          // What the owner chose during the trial for 100% of an allowance
+          // carries on to the plan it was chosen for.
+          ...(current?.usagePolicy ? { usagePolicy: current.usagePolicy } : {}),
         };
       }
 
@@ -311,13 +372,20 @@ export function applyStripeEvent(event: Stripe.Event): { locationId?: string; ap
       if (!locationId) return { applied: "ignored: no venue on the subscription" };
       const location = getLocation(locationId);
       if (!location?.subscription) return { locationId, applied: "ignored: unknown venue" };
+      const known = location.stripe?.subscriptionId;
+      if (known && subscription.id && subscription.id !== known) {
+        return { locationId, applied: "ignored: an earlier subscription, not the current one" };
+      }
+      if (location.subscription.status === "cancelled") {
+        return { locationId, applied: "ignored: already cancelled" };
+      }
 
       upsertLocation({
         ...location,
         subscription: {
           ...location.subscription,
           status: "cancelled",
-          cancelledAt: new Date().toISOString(),
+          cancelledAt: at ?? new Date().toISOString(),
         },
       });
       return { locationId, applied: "subscription cancelled" };
@@ -337,7 +405,7 @@ export function applyStripeEvent(event: Stripe.Event): { locationId?: string; ap
       if (!location?.subscription) return { locationId, applied: "ignored: unknown venue" };
       upsertLocation({
         ...location,
-        subscription: { ...location.subscription, paymentFailedAt: new Date().toISOString() },
+        subscription: { ...location.subscription, paymentFailedAt: at ?? new Date().toISOString() },
       });
       return { locationId, applied: "payment failed, recorded" };
     }

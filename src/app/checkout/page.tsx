@@ -4,9 +4,10 @@ import { listLocationsFor } from "@/lib/store";
 import { seedIfEmpty } from "@/lib/seed";
 import { LEGACY_TO_BUNDLE, TRIAL, checkSelection, recommendedPlan, type BillingCycle } from "@/lib/billing/plans";
 import { productsOf, subscriptionMarket } from "@/lib/billing/usage";
-import { MARKETS, marketOf } from "@/lib/markets";
-import { stripeEnabled } from "@/lib/billing/stripe";
+import { MARKETS, liveMarkets, marketOf } from "@/lib/markets";
 import { tradeFromParam } from "@/lib/signup-rules";
+import { stripeEnabled } from "@/lib/billing/stripe";
+import { paymentsSoonSentence } from "@/lib/billing/trial-end";
 import Order from "./Order";
 
 export const dynamic = "force-dynamic";
@@ -89,7 +90,9 @@ export default async function CheckoutPage({
           signedIn={Boolean(user)}
           venueName={venue?.name ?? "your venue"}
           stripe={stripeEnabled()}
+          coveredNote={paymentsSoonSentence(venue)}
           cancelled={Boolean(params.cancelled)}
+          markets={liveMarkets()}
           trade={trade}
         />
       </main>

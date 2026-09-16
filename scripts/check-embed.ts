@@ -334,6 +334,102 @@ console.log("\nHow it looks — the venue's choices, within the guidelines\n");
   });
 }
 
+console.log("\n\x1b[1mKnowing it is installed\x1b[0m\n");
+
+{
+  const { recordSeen, suggestedOrigins } = await import("../src/lib/embed");
+  const { upsertLocation, getBusiness } = await import("../src/lib/store");
+  const { journey } = await import("../src/lib/onboarding/journey");
+  const source = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
+
+  const fresh = () => getLocation(venue.id)!;
+  // A clean record, and the widget on for one site.
+  upsertLocation({ ...fresh(), onboarding: { version: 1, channels: {} } });
+  enableEmbed(fresh(), ["https://marinahair.ae"]);
+
+  await test("a ping from a site the venue did not name writes nothing and tells the widget not to render", () => {
+    assert.deepEqual(recordSeen(fresh(), "https://copycat.example"), { ok: false });
+    assert.deepEqual(recordSeen(fresh(), null), { ok: false }, "a missing origin counted as the venue's");
+    assert.deepEqual(recordSeen(fresh(), "https://marinahair.ae.copycat.example"), { ok: false });
+    assert.equal(fresh().onboarding?.channels.web, undefined);
+  });
+
+  await test("a ping from the venue's own site marks the widget installed, and www counts", () => {
+    const at = new Date("2026-09-15T10:00:00.000Z");
+    const out = recordSeen(fresh(), "https://www.marinahair.ae", at);
+    assert.ok(out.ok && out.firstTime);
+    assert.equal(fresh().onboarding?.channels.web?.detectedAt, at.toISOString());
+    assert.deepEqual(fresh().onboarding?.channels.web?.domains, ["https://marinahair.ae"]);
+  });
+
+  await test("pinging again is idempotent: detection keeps its first time, only the last check moves", () => {
+    const later = new Date("2026-09-15T11:00:00.000Z");
+    const out = recordSeen(fresh(), "https://marinahair.ae", later);
+    assert.ok(out.ok && !out.firstTime);
+    assert.equal(fresh().onboarding?.channels.web?.detectedAt, "2026-09-15T10:00:00.000Z");
+    assert.equal(fresh().onboarding?.channels.web?.lastCheckAt, later.toISOString());
+  });
+
+  await test("detection completes the phone-and-website step without any conversation", () => {
+    const steps = journey(fresh()).steps;
+    assert.equal(steps.find((s) => s.id === "channels")!.done, true);
+  });
+
+  await test("a switched-off widget is not detected, even from its own site", () => {
+    const offVenue = disableEmbed(fresh());
+    assert.deepEqual(recordSeen(offVenue, "https://marinahair.ae"), { ok: false });
+    enableEmbed(fresh(), ["https://marinahair.ae"]);
+  });
+
+  await test("the website setup read is the suggested site, and saved sites win over it", () => {
+    const base = fresh();
+    const bare = { ...base, embed: undefined, onboarding: { version: 1 as const, channels: { web: { domains: ["https://marinahair.ae"] } } } };
+    assert.deepEqual(suggestedOrigins(bare), ["https://marinahair.ae"]);
+    assert.deepEqual(suggestedOrigins({ ...bare, onboarding: { version: 1, channels: {} } }, "www.marina-business.ae/about"), ["https://www.marina-business.ae"]);
+    assert.deepEqual(suggestedOrigins(base), base.embed!.allowedOrigins);
+    assert.ok(getBusiness(base.tenantId, base.businessId), "the fixture has a business");
+    assert.match(source("src/app/api/setup/route.ts"), /normaliseOrigin\(String\(body\.website/);
+  });
+
+  await test("embed.js pings on load and takes itself off the page when refused", () => {
+    const js = fs.readFileSync(path.join(process.cwd(), "public", "embed.js"), "utf8");
+    assert.ok(js.includes('"/api/embed/" + encodeURIComponent(key) + "/seen"'));
+    assert.match(js, /status === 403[\s\S]{0,40}dock\.remove\(\)/);
+  });
+
+  await test("the seen route trusts the browser's Origin header and nothing the page sends", () => {
+    const route = source("src/app/api/embed/[key]/seen/route.ts");
+    assert.match(route, /headers\.get\("origin"\)/);
+    assert.match(route, /recordSeen\(/);
+    assert.ok(!/req\.json\(/.test(route), "the route reads a body a page could forge");
+    assert.match(route, /status: 403/);
+  });
+
+  await test("the website page switches on without a reload, polls every 20 seconds and has one label per field", () => {
+    const editor = source("src/app/(app)/website/WidgetEditor.tsx");
+    const check = source("src/app/(app)/website/InstallCheck.tsx");
+    assert.ok(!/location\.reload\(/.test(editor), "saving still reloads the page");
+    assert.match(check, /\/api\/embed\/status/);
+    assert.match(check, /20_000/);
+    // The two website inputs on this page used to share a name. A visible
+    // label repeated as its own group's aria-label (Shape, Corner) is fine.
+    const labelsOf = (src: string) => new Set([...src.matchAll(/(?:aria-label="|<label[^>]*>)([^"<{]+)/g)].map((m) => m[1].trim().toLowerCase()));
+    const shared = [...labelsOf(check)].filter((l) => labelsOf(editor).has(l));
+    assert.deepEqual(shared, [], `labels used on both website fields: ${shared.join(", ")}`);
+    assert.ok(!labelsOf(check).has("your website address"), "the install check still has the old shared label");
+  });
+
+  await test("builder tabs cover WordPress, Wix, Shopify, Squarespace and Tag Manager, plus an email for a web person", async () => {
+    const { BUILDER_TABS } = await import("../src/lib/onboarding/platform");
+    const ids = BUILDER_TABS.map((t) => t.id);
+    for (const id of ["wordpress", "wix", "shopify", "squarespace", "gtm"]) assert.ok(ids.includes(id), `no ${id} tab`);
+    assert.ok(BUILDER_TABS.every((t) => t.steps.length > 0));
+    const guide = source("src/app/(app)/website/InstallGuide.tsx");
+    assert.match(guide, /mailto:\?subject=/);
+    assert.match(guide, /Send to my web person/);
+  });
+}
+
 console.log(
   failed === 0
     ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n`

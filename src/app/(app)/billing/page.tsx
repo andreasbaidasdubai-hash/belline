@@ -8,9 +8,11 @@ import {
   billableVoiceMinutes,
   channelOfCall,
   conversationStarts,
+  isPooledTrial,
   meterWords,
   type Meter,
 } from "@/lib/billing/usage";
+import { extendTrialIfPaymentsClosed } from "@/lib/billing/trial-end";
 import { ALERT_THRESHOLDS, CHANNELS, isPooled, money, nextPlanUp, productById } from "@/lib/billing/plans";
 import { packsSentence } from "@/lib/billing/speak";
 import { canManageUsers } from "@/lib/auth";
@@ -131,7 +133,10 @@ export default async function BillingPage({
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
 
   const today = todayIn(location.timezone);
-  const account = accountFor(location, today);
+  // The sweep does this for every venue; doing it here too means the owner
+  // never sees an ended trial on the day payments could not be taken.
+  const venue = extendTrialIfPaymentsClosed(location, today).location;
+  const account = accountFor(venue, today);
 
   if (!account) {
     return (
@@ -316,10 +321,13 @@ export default async function BillingPage({
             </div>
           </div>
 
-          {!trialing && isPooled(products) && (
+          {/* Shown during the trial too: the choice is made before the first
+              invoice, and carries on to the plan (billing/stripe.ts). */}
+          {(isPooled(products) || isPooledTrial(subscription)) && (
             <div className="panel" style={{ marginBottom: 14 }}>
               <div className="panel-head">When an allowance runs out</div>
               <UsagePolicy
+                trial={trialing}
                 locationId={location.id}
                 mode={subscription.usagePolicy?.mode ?? null}
                 capAed={

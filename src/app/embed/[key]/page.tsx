@@ -6,6 +6,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import { listLocations } from "@/lib/store";
 import { checkEmbedGate, originAllowed } from "@/lib/embed";
 import { chatAllowed } from "@/lib/webchat";
+import { widgetOpenFor } from "@/lib/embed-preview";
 import Console from "../../(app)/test/Console";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,11 @@ export default async function EmbedPage({
     (l) => l.embed?.enabled && l.embed.key === key,
   );
   if (!location?.embed) notFound();
+
+  // Before Go live, only the owner, signed in, can open it.
+  if (!(await widgetOpenFor(location))) {
+    return <Refused reason={`${location.name} has not switched this on yet.`} />;
+  }
 
   // Who is framing us. `sec-fetch-site` tells us whether we are framed at all;
   // `referer` is the only thing that names the page when it is a same-origin

@@ -1,6 +1,19 @@
 import type { Location } from "../types";
 import { isRestaurant, terms } from "../verticals";
 import { minutesToClock, todayIn, nowMinutesIn, dateToSpoken } from "../time";
+import { bookingLinkOf, takesRequestsOnly } from "../booking/destination";
+import { requestRulesOf } from "../booking/requests";
+
+/**
+ * A clinic's rule about medical detail. In the prompt for every clinic,
+ * whatever it chose on setup and whether or not clinics are open for
+ * self-serve, and not stored with the owner's policies, so it cannot be edited
+ * away.
+ */
+export const CLINIC_MEDICAL_RULE =
+  "Never ask for, repeat or write down symptoms, diagnoses, medication, test results or any other medical detail — not in a reply, not in a request, not in a message. " +
+  "If someone starts to describe them, say kindly that the clinical team will ask about that themselves, and take only their name, a contact number, when they would like to come and the kind of appointment. " +
+  "If they describe an emergency happening now, tell them to call emergency services straight away.";
 
 /**
  * System prompt construction.
@@ -76,6 +89,22 @@ ${t.staffPlural.toUpperCase()}
 ${staff}
 
 When a caller asks for several ${t.services} in one visit, pass every service id to the tools and quote the combined price and total time.`;
+}
+
+/**
+ * What a request-only business offers, without the diary's machinery: no ids,
+ * no seatings, no rota. Names and prices are knowledge; working days and last
+ * seatings read as availability, and there is none to quote.
+ */
+function requestFacts(location: Location): string {
+  const t = terms(location);
+  const services = location.vertical === "restaurant" ? [] : (location.salon?.services ?? []);
+  if (!services.length) return "";
+  const list = services
+    .map((s) => `- ${s.name}${s.durationMin ? `, about ${s.durationMin} min` : ""}${s.price ? `, ${location.currency} ${s.price}` : ""}`)
+    .join("\n");
+  return `${t.services.toUpperCase()} AND PRICES
+${list}`;
 }
 
 /**
@@ -158,16 +187,47 @@ export function staticPrompt(location: Location, channel: AgentChannel = "voice"
   // rules, no "offer times first" habit, and not the demonstration-line block,
   // which told her to take a booking properly.
   const selling = Boolean(location.internal);
-  const facts = selling ? "" : isRestaurant(location) ? restaurantFacts(location) : diaryFacts(location);
-  const medium = selling
-    ? MEDIUM[channel]
-        .split("\n")
-        .filter((line) => !/check_availability|times to choose from|booking reference|a root colour|a single time has been offered/.test(line))
-        .join("\n")
-    : MEDIUM[channel];
+  // A business that confirms its own bookings. Nothing below may teach the
+  // habits of a diary: checking times, offering them, reading a reference.
+  const requestsOnly = !selling && takesRequestsOnly(location);
+  const facts = selling ? "" : requestsOnly ? requestFacts(location) : isRestaurant(location) ? restaurantFacts(location) : diaryFacts(location);
+  const medium =
+    selling || requestsOnly
+      ? MEDIUM[channel]
+          .split("\n")
+          .filter(
+            (line) =>
+              !/check_availability|times to choose from|booking reference|a root colour|a single time has been offered/.test(line) &&
+              !(requestsOnly && /seven thirty, done/.test(line)),
+          )
+          .join("\n")
+      : MEDIUM[channel];
+  const rules = requestRulesOf(location);
+  const link = bookingLinkOf(location);
   const bookingRules = selling
     ? ""
-    : `# Booking rules
+    : requestsOnly
+      ? `# Bookings: ${location.name} confirms every booking itself
+You cannot see the diary, and nothing you do books anything.
+- Never say a booking is confirmed, booked, reserved or "all set", and never say "see you then". Nothing is booked until the team confirms it.
+- Never say whether a day or a time is free or taken. You do not know. If they ask, say the team will check when they confirm.
+- To book, use take_booking_request: their name, a contact number read back to them${
+          rules.askFor.includes("partySize") ? ", how many people" : ""
+        }${rules.askFor.includes("service") ? `, what they would like` : ""}, and when they would like to come. Ask for a second choice of time if they have one.
+- Afterwards, say the request is with the team and they will get back to them to confirm.${
+          link && channel === "text" ? "\n- If they would rather book themselves, send_booking_link gives them the business's own booking link." : ""
+        }${
+          rules.afterHours === "message"
+            ? "\n- Outside the opening hours below, do not take a booking request. Take a message with take_message and say the team will reply when they open."
+            : ""
+        }
+- Never invent a price, a product or a policy. If you do not know, say you will have a colleague confirm and take a message.
+
+`
+      : `# Booking rules`;
+  const bookingRulesRest = selling || requestsOnly
+    ? ""
+    : `
 - Never state availability from memory or assumption. Call check_availability first, every time, including when the caller proposes a time that sounds obvious.
 - Get the guest's name and a contact number before calling book. Read the number back to confirm it.
 - After booking, read back the day, the time${isRestaurant(location) ? ", and the party size" : `, the ${t.service}, and the price`}, then give the reference.
@@ -188,8 +248,15 @@ ${a.persona}
 
 ${medium}
 
-${bookingRules}# House rules you must follow
-${a.policies.map((p) => `- ${p}`).join("\n")}
+${bookingRules}${bookingRulesRest}# House rules you must follow
+${[...a.policies, ...(requestsOnly ? rules.neverSay.map((s) => `Never say: ${s}`) : [])].map((p) => `- ${p}`).join("\n")}${
+    location.vertical === "clinic"
+      ? `
+
+# Medical details (this rule always applies)
+${CLINIC_MEDICAL_RULE}`
+      : ""
+  }
 
 # ${location.name}
 Phone: ${location.phone}

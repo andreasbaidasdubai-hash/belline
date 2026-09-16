@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
- * "Is it on my website?" — answered by looking.
+ * "Is it on my website?" — answered without being asked.
  *
- * The owner pastes their site's address; we fetch it, find which builder it
- * runs on, show that builder's exact steps, and say yes or no to whether the
- * snippet is live.
+ * While this page is open it checks every 20 seconds. The widget reports
+ * itself the moment it loads on one of the venue's sites, so an owner who
+ * pastes the snippet and opens their site sees this flip to installed without
+ * pressing anything. Checking a particular page by hand is still here, and
+ * shows that builder's exact steps.
  */
 
 interface Result {
@@ -17,11 +19,26 @@ interface Result {
   steps: { name: string; steps: string[]; note?: string };
 }
 
-export default function InstallCheck({ locationId }: { locationId: string }) {
+export default function InstallCheck({ locationId, detectedAt: initialDetected }: { locationId: string; detectedAt: string | null }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [detectedAt, setDetectedAt] = useState(initialDetected);
+
+  useEffect(() => {
+    if (detectedAt) return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/embed/status?locationId=${encodeURIComponent(locationId)}`);
+        const body = (await res.json().catch(() => ({}))) as { detectedAt?: string | null };
+        if (body.detectedAt) setDetectedAt(body.detectedAt);
+      } catch {
+        /* the next tick tries again */
+      }
+    }, 20_000);
+    return () => clearInterval(timer);
+  }, [detectedAt, locationId]);
 
   async function check(event: React.FormEvent) {
     event.preventDefault();
@@ -46,29 +63,33 @@ export default function InstallCheck({ locationId }: { locationId: string }) {
 
   return (
     <div className="panel" style={{ marginTop: 14 }}>
-      <div className="panel-head">Put it on your website</div>
+      <div className="panel-head">Is it on your website?</div>
       <div style={{ padding: "14px 18px 18px" }}>
+        <p role="status" style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: detectedAt ? "var(--ok)" : "var(--text)" }}>
+          {detectedAt
+            ? "✓ Installed. The widget has loaded on your website."
+            : "Waiting for the widget to load on your website. This updates by itself once it does."}
+        </p>
         <p className="muted" style={{ margin: "0 0 12px", fontSize: 13, lineHeight: 1.6 }}>
-          Paste your website address. We will tell you exactly where the snippet goes for your website builder,
-          and check whether it is live.
+          To check one page now, paste its address. We will also say which website builder it uses.
         </p>
         <form onSubmit={check} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://yourbusiness.ae"
-            aria-label="Your website address"
+            aria-label="Page to check for the widget"
             style={{ flex: "1 1 260px" }}
           />
-          <button className="btn btn-accent" type="submit" disabled={busy || !url.trim()}>
-            {busy ? "Checking…" : "Check my site"}
+          <button className="btn" type="submit" disabled={busy || !url.trim()}>
+            {busy ? "Checking…" : "Check this page"}
           </button>
         </form>
         {error && <p role="alert" style={{ color: "var(--bad)", fontSize: 12.5, margin: "10px 0 0" }}>{error}</p>}
         {result && (
           <div style={{ marginTop: 16 }}>
             <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 600, color: result.installed ? "var(--ok)" : "var(--text)" }}>
-              {result.installed ? "✓ Live on your site." : result.reason ?? "Not on that page yet."}
+              {result.installed ? "✓ Live on that page." : result.reason ?? "Not on that page yet."}
             </p>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
               {result.platform && result.platform !== "custom" ? `Built with ${result.steps.name}` : result.steps.name}

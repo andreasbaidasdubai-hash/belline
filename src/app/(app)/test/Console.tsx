@@ -910,7 +910,7 @@ export default function Console({
                   onClick={() => (listening ? stopListening() : void startListening())}
                   style={listening ? { borderColor: "var(--bad)", color: "var(--bad)" } : undefined}
                   disabled={status ? !status.stt : false}
-                  title={status && !status.stt ? "Set DEEPGRAM_API_KEY to use the microphone" : ""}
+                  title={status && !status.stt ? "Speaking is not switched on here yet. Type instead." : ""}
                 >
                   {listening ? "◼ Mute" : "◉ Speak"}
                 </button>

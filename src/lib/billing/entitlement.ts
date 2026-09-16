@@ -3,7 +3,7 @@ import { getTenant } from "../store";
 import { accountFor, isPooledTrial, meterFor, periodFor, productsOf } from "./usage";
 import { channelsOf, grandfatherExpires, poolOf, type Channel } from "./plans";
 import { stripeEnabled } from "./stripe";
-import { applyUsagePolicy, governs, notifyAlerts, poolExhausted, settlePacks } from "./usage-policy";
+import { applyUsagePolicy, governs, markAlertsSent, notifyAlerts, poolExhausted, settlePacks } from "./usage-policy";
 
 /**
  * Is this venue entitled to be answered — at all, and on this channel?
@@ -132,7 +132,18 @@ export function serviceState(
     const applied = applyUsagePolicy(location, today, { stripe: stripeEnabled() });
     location = applied.location;
     if (applied.added.length && stripeEnabled()) void settlePacks(location.id).catch((err) => console.error("[packs]", err));
-    if (applied.alerts.length) void notifyAlerts(location, applied.alerts).catch((err) => console.error("[usage alerts]", err));
+    if (applied.alerts.length) {
+      // Marked sent only once the email went; otherwise they stay pending and
+      // the billing sweep tries again.
+      const { id } = location;
+      const periodStart = applied.decision.periodStart;
+      const alerts = applied.alerts;
+      void notifyAlerts(location, alerts)
+        .then((sent) => {
+          if (sent) markAlertsSent(id, periodStart, alerts);
+        })
+        .catch((err) => console.error("[usage alerts]", err));
+    }
   }
   const lapsed = lapseOf(location, today);
   const enforce = opts.enforce ?? stripeEnabled();
@@ -163,7 +174,8 @@ export function lapseSentence(lapsed: Lapse, enforced: boolean): string {
         : lapsed === "legacy_plan_ended"
           ? "Your original plan's grandfathered period is over."
           : "Your plan was cancelled and the paid period is over.";
-  return enforced
-    ? `${what} Belline has stopped answering. Choose a plan and it answers again straight away.`
-    : `${what} Choose a plan to keep Belline answering.`;
+  if (enforced) return `${what} Belline has stopped answering. Choose a plan and it answers again straight away.`;
+  // Not enforced means card payments are closed: "choose a plan" would be a
+  // button that cannot be pressed.
+  return stripeEnabled() ? `${what} Choose a plan to keep Belline answering.` : `${what} Payments open soon — Belline keeps answering until then.`;
 }

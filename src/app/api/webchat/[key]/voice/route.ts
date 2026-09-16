@@ -4,6 +4,7 @@ import { VOICE_NOTE_MAX_BYTES, VOICE_NOTE_MAX_SECONDS, voiceNoteToText } from "@
 import { speechKeyterms } from "@/lib/verticals";
 import { transcribeClip } from "@/lib/providers/stt";
 import { meterClip } from "@/lib/billing/cost";
+import { widgetOpenFor } from "@/lib/embed-preview";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request, ctx: { params: Promise<{ key: string }> }) {
   const { key } = await ctx.params;
 
-  const visitor = await resolveVisitor(key, req.headers.get("x-visitor-token") ?? undefined);
+  const visitor = await resolveVisitor(key, req.headers.get("x-visitor-token") ?? undefined, widgetOpenFor);
   if (visitor instanceof NextResponse) return visitor;
 
   const clientId = cleanClientId(req.headers.get("x-client-id"));

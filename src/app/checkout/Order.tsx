@@ -16,6 +16,7 @@ import {
   type ProductId,
 } from "@/lib/billing/plans";
 import { formatMoney, type Market } from "@/lib/markets";
+import type { Vertical } from "@/lib/types";
 import { overLimitSentence } from "@/lib/billing/speak";
 import CheckoutForm from "./CheckoutForm";
 import PayButton from "./PayButton";
@@ -69,7 +70,9 @@ export default function Order({
   signedIn,
   venueName,
   stripe,
+  coveredNote,
   cancelled,
+  markets,
   trade,
 }: {
   market: Market;
@@ -78,7 +81,10 @@ export default function Order({
   signedIn: boolean;
   venueName: string;
   stripe: boolean;
+  coveredNote?: string;
   cancelled: boolean;
+  /** The countries a business can sign up in today. */
+  markets: Market[];
   /** Preselected from the link's `?trade=`, or "" for nothing chosen. */
   trade: string;
 }) {
@@ -207,7 +213,7 @@ export default function Order({
             <p className="muted" style={{ fontSize: 13, margin: "0 0 22px", lineHeight: 1.55 }}>
               For {venueName}.
             </p>
-            <PayButton products={ids} cycle={cycle} enabled={stripe} venueName={venueName} />
+            <PayButton products={ids} cycle={cycle} enabled={stripe} venueName={venueName} coveredNote={coveredNote} />
           </>
         ) : (
           <>
@@ -215,14 +221,12 @@ export default function Order({
             <p className="muted" style={{ fontSize: 13, margin: "0 0 22px", lineHeight: 1.55 }}>
               Four things and you are set up. No card until you choose a plan.
             </p>
-            <CheckoutForm products={ids} market={market} trade={trade} />
+            <CheckoutForm products={ids} market={market} markets={markets} trade={trade} />
           </>
         )}
 
         <p className="muted" style={{ fontSize: 11, margin: "18px 0 0", textAlign: "center", lineHeight: 1.65 }}>
           {stripe ? "Secure checkout by Stripe · " : ""}Cancel anytime
-          <br />
-          Several venues? <a href="mailto:hello@belline.ai">Email us</a> and we will price it properly.
         </p>
       </section>
     </>

@@ -3,10 +3,15 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { listCalls } from "@/lib/store";
 import { readiness } from "@/lib/onboarding";
+import { raiseException } from "@/lib/errors/customer";
+import { openException } from "@/lib/exceptions";
 import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
+import { flag } from "@/lib/flags";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
-import { PBX_NOTE, forwardingCodes, uaeCarriers } from "@/lib/telephony/forwarding";
+import { DIAGNOSIS, PBX_NOTE, UNVERIFIED_NOTE, forwardingCodes, uaeCarriers } from "@/lib/telephony/forwarding";
+import { verificationState } from "@/lib/telephony/verify";
+import PhoneSetup from "./PhoneSetup";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +19,9 @@ export const dynamic = "force-dynamic";
  * From "set up" to "answering my phone".
  *
  * The website's step two says "point your line at it", and until this page
- * nothing in the product said *at what*, or how. Setup ended on "Belline is
- * ready" for a venue with no number anybody could forward to — the one step
- * between a trial and a real call was a conversation that had not happened.
+ * nothing in the product said *at what*, or how. Now it is one flow: get a
+ * Belline number, forward the line to it with codes that already contain the
+ * number, and prove it with a test call the server actually receives.
  *
  * The forwarding codes are the GSM supplementary-service codes, which work on
  * most mobile lines. Landlines and office phone systems each do it their own
@@ -56,17 +61,32 @@ export default async function GoLivePage({
   const service = serviceState(location, todayIn(location.timezone));
   const phoneCalls = listCalls(location.id).filter((c) => c.channel === "phone" && !c.isDemo);
   const lastCall = phoneCalls.reduce<string | null>((a, c) => (!a || c.startedAt > a ? c.startedAt : a), null);
-  const target = dial || "<your Belline number>";
+  const poolOn = flag("numbers.pool");
+  const verify = verificationState(location);
 
-  const request = `mailto:hello@belline.ai?subject=${encodeURIComponent(
-    `Belline number for ${location.name}`,
-  )}&body=${encodeURIComponent(`Please assign a Belline number to ${location.name} (venue ${location.id}).`)}`;
+  // With the pool off, numbers are assigned by the Belline team. Said as it
+  // is, and the team is told, instead of a mailto the owner has to remember to
+  // send. With it on, the owner presses "Get my number" and the ticket is only
+  // opened if the pool turns out to be empty.
+  if (!number && !poolOn) {
+    raiseException(`numbers:unassigned:${location.id}`, `venue ${location.id} opened Go live without a number`);
+    // One open row per venue: opening this page again only counts it.
+    openException({
+      tenantId: location.tenantId,
+      locationId: location.id,
+      kind: "pool_empty",
+      reason: "Opened Go live without a Belline number. Numbers are assigned by hand until the pool is switched on.",
+      source: "system",
+    });
+  }
+
+  const verified = verify.state === "verified";
 
   return (
     <>
       <PageHeader
         title="Go live"
-        subtitle="Four steps between a finished setup and Belline answering your real phone. Your customers keep dialling the number they already have."
+        subtitle="Three steps between a finished setup and Belline answering your real phone. Your customers keep dialling the number they already have."
       />
       <LocationTabs base="/golive" active={location.id} />
 
@@ -97,68 +117,27 @@ export default async function GoLivePage({
         )}
       </Step>
 
-      <Step n={2} title="Your Belline number" done={Boolean(number)}>
-        {number ? (
-          <>
-            <p style={{ margin: 0 }}>
-              Calls forwarded to <strong className="mono">{number}</strong> are answered as {location.name}.
-              Nobody needs to know this number — it is only where your own line sends the calls it cannot take.
-            </p>
-            {abroad && (
-              <p style={{ margin: "10px 0 0", color: "var(--warn)" }}>
-                This number is outside the UAE. Your phone provider charges a forwarded call like a call you
-                make to that country, so check their rate before you switch forwarding on.
-              </p>
-            )}
-          </>
-        ) : (
-          <>
-            <p style={{ margin: 0 }}>
-              Every venue gets its own number to forward to, so a call reaches your diary and not somebody
-              else&apos;s. Yours has not been assigned yet.
-            </p>
-            <a className="btn btn-accent" href={request} style={{ marginTop: 12, display: "inline-block" }}>
-              Ask for my number
-            </a>
-          </>
+      <Step n={2} title="Your number, and forwarding to it" done={verified}>
+        <PhoneSetup
+          locationId={location.id}
+          number={number}
+          poolOn={poolOn}
+          carriers={uaeCarriers(number).map((c) => ({ id: c.id, name: c.name, verified: c.verified, landline: c.landline }))}
+          codes={forwardingCodes(number).map(({ when, dial: code, tel }) => ({ when, dial: code, tel }))}
+          pbxNote={PBX_NOTE}
+          diagnosis={DIAGNOSIS}
+          unverifiedNote={UNVERIFIED_NOTE}
+          verify={verify}
+        />
+        {abroad && (
+          <p style={{ margin: "10px 0 0", color: "var(--warn)" }}>
+            This number is outside the UAE. Your phone provider charges a forwarded call like a call you
+            make to that country, so check their rate before you switch forwarding on.
+          </p>
         )}
       </Step>
 
-      <Step n={3} title="Forward the calls nobody picks up" done={phoneCalls.length > 0}>
-        <p style={{ margin: "0 0 12px" }}>
-          Your team still gets first refusal: Belline only hears a call that rang out or found the line busy.
-          On a <strong>du</strong> or <strong>e&amp;</strong> mobile, dial each code from the phone whose calls you want covered and press call.
-        </p>
-        <div className="table-wrap" tabIndex={0}>
-          <table className="forward-table">
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>Dial</th>
-              </tr>
-            </thead>
-            <tbody>
-              {forwardingCodes(target).map((code) => (
-                <tr key={code.when}>
-                  <td>{code.when}</td>
-                  <td className="mono">{code.dial}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-          {uaeCarriers(target).map((carrier) => (
-            <p key={carrier.id} style={{ margin: 0, fontSize: 13 }}>
-              <strong>{carrier.name} landline or business line.</strong>{" "}
-              <span className="muted">{carrier.landline}</span>
-            </p>
-          ))}
-          <p className="muted" style={{ margin: 0, fontSize: 12.5 }}>{PBX_NOTE}</p>
-        </div>
-      </Step>
-
-      <Step n={4} title="Ring it yourself" done={phoneCalls.length > 0}>
+      <Step n={3} title="Real calls arriving" done={phoneCalls.length > 0}>
         {phoneCalls.length > 0 ? (
           <p style={{ margin: 0 }}>
             Calls are arriving — the last one was {lastCall?.slice(0, 16).replace("T", " ")}.{" "}
@@ -166,9 +145,8 @@ export default async function GoLivePage({
           </p>
         ) : (
           <p style={{ margin: 0 }}>
-            From a different phone, ring your usual number and let it ring out. Belline should pick up as{" "}
-            {location.name}. Book something, then check it appears in <Link href={`/bookings?loc=${location.id}`}>Bookings</Link>.
-            Before that, the <Link href={`/test?loc=${location.id}`}>test console</Link> costs nothing.
+            Once forwarding works, every call your team misses is answered as {location.name}. Before that, the{" "}
+            <Link href={`/test?loc=${location.id}`}>test console</Link> costs nothing.
           </p>
         )}
       </Step>

@@ -20,6 +20,15 @@ export interface GraphReply {
 
 export interface Graph {
   post(path: string, body: Record<string, unknown>): Promise<GraphReply>;
+  /** Read fields off an object. Optional so a fake that only posts still fits. */
+  get?(path: string, fields: string): Promise<GraphReply>;
+}
+
+/** Said to the owner when Belline's own Meta token has expired. Never theirs to fix. */
+export const TOKEN_EXPIRED_MESSAGE = "We're fixing this on our side — nothing for you to do.";
+
+export function isTokenError(reply: GraphReply): boolean {
+  return reply.body.error?.code === 190 || reply.status === 401;
 }
 
 const VERSION = process.env.WHATSAPP_GRAPH_VERSION ?? "v21.0";
@@ -37,7 +46,24 @@ export function graphClient(token = process.env.WHATSAPP_ACCESS_TOKEN ?? ""): Gr
       const json = (await res.json().catch(() => ({}))) as GraphReply["body"];
       return { ok: res.ok, status: res.status, body: json };
     },
+    async get(path, fields) {
+      const res = await fetch(`https://graph.facebook.com/${VERSION}/${path}?fields=${encodeURIComponent(fields)}`, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(20_000),
+      });
+      const json = (await res.json().catch(() => ({}))) as GraphReply["body"];
+      return { ok: res.ok, status: res.status, body: json };
+    },
   };
+}
+
+/**
+ * Point the business account's webhooks at our app (checklist 6.8). Done after
+ * every new number; Meta treats a repeat as a no-op.
+ */
+export async function subscribeApps(wabaId: string, graph: Graph): Promise<{ ok: true } | { ok: false; error: string; token: boolean }> {
+  const reply = await graph.post(`${wabaId}/subscribed_apps`, {});
+  return reply.ok ? { ok: true } : { ok: false, error: explain(reply), token: isTokenError(reply) };
 }
 
 /** What self-serve provisioning needs on top of a connected line. */
@@ -81,7 +107,7 @@ export function explain(reply: GraphReply): string {
   const code = err?.code;
   const msg = (err?.message ?? "").toLowerCase();
 
-  if (code === 190 || reply.status === 401) return "Belline's WhatsApp token has expired — this is ours to fix, not yours. Email hello@belline.ai.";
+  if (code === 190 || reply.status === 401) return TOKEN_EXPIRED_MESSAGE;
   if (msg.includes("already") && (msg.includes("registered") || msg.includes("in use") || msg.includes("exists"))) {
     return "That number is already on WhatsApp — on a phone, or in another business account. Use a number that has never been on WhatsApp, or delete WhatsApp on that SIM first.";
   }

@@ -1,5 +1,8 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import Brand from "@/components/Brand";
+import BackToSetup from "@/components/BackToSetup";
+import { navCollapsed } from "@/lib/onboarding/journey";
 import { requireUser } from "@/lib/auth-server";
 import { canManageUsers, canSeeLocation, isBellineStaff } from "@/lib/auth";
 import { listLocations } from "@/lib/store";
@@ -45,7 +48,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const hasTables = visible.some((l) => l.restaurant);
   const hasPeople = visible.some((l) => l.salon);
 
-  const nav = [
+  // Until one of their businesses goes live, an owner sees the three places
+  // that move setup forward, not the twenty that assume it is done.
+  const collapsed = navCollapsed(visible, isBellineStaff(user));
+
+  const nav = collapsed
+    ? [
+        { href: "/setup", label: "Setup" },
+        { href: "/setup/assistant", label: "Belle" },
+        ...(canManageUsers(user) ? [{ href: "/billing", label: "Account" }] : []),
+      ]
+    : [
     { href: "/attention", label: "Needs you", badge: outstanding || undefined },
     { href: "/", label: "Overview" },
     { href: "/calendar", label: "Calendar" },
@@ -174,7 +187,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main className="content">{children}</main>
+      <main className="content">
+        <Suspense fallback={null}>
+          <BackToSetup />
+        </Suspense>
+        {children}
+      </main>
       <LiveRefresh />
     </div>
   );

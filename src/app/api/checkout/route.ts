@@ -6,6 +6,7 @@ import { createCheckout, stripeEnabled } from "@/lib/billing/stripe";
 import { LEGACY_TO_BUNDLE, checkSelection, type BillingCycle } from "@/lib/billing/plans";
 import { subscriptionMarket } from "@/lib/billing/usage";
 import { appOrigin } from "@/lib/origin";
+import { flag } from "@/lib/flags";
 
 export const dynamic = "force-dynamic";
 
@@ -32,13 +33,9 @@ export async function POST(req: Request) {
   }
 
   if (!stripeEnabled()) {
-    return NextResponse.json(
-      {
-        error:
-          "Card payments are not switched on yet. Email hello@belline.ai and we will set it up with you.",
-      },
-      { status: 503 },
-    );
+    // The page does not offer the button while payments are closed; this is
+    // for anything that calls the route anyway.
+    return NextResponse.json({ error: "Payments open soon. Belline keeps answering until then." }, { status: 503 });
   }
 
   let body: { products?: unknown; bundle?: unknown; planId?: unknown; cycle?: unknown; locationId?: unknown };
@@ -72,7 +69,8 @@ export async function POST(req: Request) {
 
   // Where Stripe sends them back. Never the request's origin: behind the proxy
   // that is localhost, and a customer who has just paid would land there.
-  const origin = appOrigin();
+  // A stubbed local run comes back to this machine, never to the real app.
+  const origin = flag("stubs") ? `http://localhost:${process.env.PORT ?? 3000}` : appOrigin();
 
   try {
     const { url } = await createCheckout({

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { canManageUsers } from "@/lib/auth";
 import { listLocationsFor } from "@/lib/store";
-import { portalUrl, stripeEnabled } from "@/lib/billing/stripe";
+import { portalUrl, stripeConfigured } from "@/lib/billing/stripe";
 import { appOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   if (!canManageUsers(auth.user)) {
     return NextResponse.json({ error: "Only an owner can do that." }, { status: 403 });
   }
-  if (!stripeEnabled()) {
+  if (!stripeConfigured()) {
     return NextResponse.json({ error: "Card payments are not switched on yet." }, { status: 503 });
   }
 

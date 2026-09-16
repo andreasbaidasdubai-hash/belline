@@ -13,6 +13,7 @@ type Mode = "packs" | "upgrade" | "cap";
  * this form: it records a choice.
  */
 export default function UsagePolicy({
+  trial = false,
   locationId,
   mode,
   capAed,
@@ -21,6 +22,8 @@ export default function UsagePolicy({
   alerts,
   nextPlan,
 }: {
+  /** During the trial the choice is recorded now and applies from the first plan. */
+  trial?: boolean;
   locationId: string;
   mode: Mode | null;
   capAed: number | null;
@@ -81,7 +84,13 @@ export default function UsagePolicy({
 
   return (
     <div style={{ padding: "14px 18px 18px", display: "grid", gap: 10 }}>
-      {!mode && (
+      {trial && (
+        <p className="muted" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5 }}>
+          Choose now and it applies from your first plan. During the trial, Belline stops at the trial allowance and
+          nothing is charged.
+        </p>
+      )}
+      {!mode && !trial && (
         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--warn)" }}>
           Not chosen yet — until you choose, Belline stops at 100% and nothing is added to your bill.
         </p>

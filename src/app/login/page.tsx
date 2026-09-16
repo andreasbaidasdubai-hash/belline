@@ -7,8 +7,14 @@ import LoginForm from "./LoginForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  /** `?email=` from signup's "already has an account" link, to save retyping it. */
+  searchParams: Promise<{ email?: string }>;
+}) {
   seedIfEmpty();
+  const { email } = await searchParams;
 
   // Already signed in? Nothing to do here.
   if (await currentUser()) redirect("/");
@@ -32,7 +38,7 @@ export default async function LoginPage() {
             : "Sign in to the dashboard"}
         </h1>
 
-        <LoginForm firstRun={firstRun} />
+        <LoginForm firstRun={firstRun} initialEmail={typeof email === "string" ? email.slice(0, 254) : ""} />
 
         <p
           className="muted"

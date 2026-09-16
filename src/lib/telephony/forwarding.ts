@@ -1,45 +1,78 @@
+import { flag } from "../flags";
+
 /**
  * How to forward a UAE line to Belline, per carrier.
  *
  * The same data renders on the Go live page and is what the setup assistant
- * would read, so the two cannot disagree. UAE first; other countries are added
+ * reads, so the two cannot disagree. UAE first; other countries are added
  * here as rows when their markets open.
  *
- * What is stated is what is safe to state. du and e& run GSM mobile networks,
- * so the standard conditional-forwarding codes apply on their mobile lines.
- * Landlines and office phone systems are set up by the provider or whoever
- * runs the system — so for those this says who to call, rather than printing
- * a code that may do nothing.
+ * What is stated is what is safe to state. du, e& and Virgin Mobile run GSM
+ * mobile networks, so the standard conditional-forwarding codes apply on their
+ * mobile lines. Landlines and office phone systems are set up by the provider
+ * or whoever runs the system — so for those this says who to call, rather
+ * than printing a code that may do nothing.
+ *
+ * Never a placeholder. Until the venue has a Belline number there are no codes
+ * at all, and the page says the number is being prepared: a code with
+ * "<your Belline number>" in it gets dialled exactly as printed.
  */
 
 export interface ForwardingCode {
+  mode: "noanswer" | "busy" | "unreachable" | "off";
   when: string;
   dial: string;
+  /** The same code as a link a phone dials when tapped. `#` has to be escaped in a URI. */
+  tel: string;
 }
 
 export interface Carrier {
-  id: "du" | "eand";
+  id: "du" | "eand" | "virgin";
   name: string;
+  /**
+   * Codes confirmed by a real test call on this carrier (checklist 5.5). None
+   * are yet, so every row says "should work" and the verification call is
+   * what proves it for the owner's own line.
+   */
+  verified: boolean;
   mobile: ForwardingCode[];
-  landline: string;
+  /** Null for a carrier with no landlines. */
+  landline: string | null;
 }
 
+export const UNVERIFIED_NOTE = "These codes should work. The test call below confirms it on your line.";
+
+/** The digits and plus of a number, or "" when there is no usable number. */
+export function dialTarget(number: string): string {
+  const to = number.replace(/[^\d+]/g, "");
+  return /^\+?\d{8,15}$/.test(to) ? to : "";
+}
+
+export function telLink(dial: string): string {
+  return `tel:${dial.replace(/#/g, "%23")}`;
+}
+
+/** The codes for a real number. Empty when there is none: never a placeholder. */
 export function forwardingCodes(target: string): ForwardingCode[] {
-  const to = target.replace(/[^\d+]/g, "") || "<your Belline number>";
+  const to = dialTarget(target);
+  if (!to) return [];
+  const row = (mode: ForwardingCode["mode"], when: string, dial: string): ForwardingCode => ({ mode, when, dial, tel: telLink(dial) });
   return [
-    { when: "Nobody answers", dial: `**61*${to}#` },
-    { when: "The line is busy", dial: `**67*${to}#` },
-    { when: "The phone is off or out of signal", dial: `**62*${to}#` },
-    { when: "Switch all forwarding off again", dial: "##004#" },
+    row("noanswer", "Nobody answers", `**61*${to}#`),
+    row("busy", "The line is busy", `**67*${to}#`),
+    row("unreachable", "The phone is off or out of signal", `**62*${to}#`),
+    row("off", "Switch all forwarding off again", "##004#"),
   ];
 }
 
-export function uaeCarriers(target: string): Carrier[] {
+export function uaeCarriers(target: string, opts: { virgin?: boolean } = {}): Carrier[] {
   const codes = forwardingCodes(target);
+  const virgin = opts.virgin ?? flag("forwarding.carrier.virgin");
   return [
     {
       id: "du",
       name: "du",
+      verified: false,
       mobile: codes,
       landline:
         "For a du landline or business line, call du on 155 and ask for conditional call forwarding — on no answer and on busy — to your Belline number.",
@@ -47,12 +80,41 @@ export function uaeCarriers(target: string): Carrier[] {
     {
       id: "eand",
       name: "e& (Etisalat)",
+      verified: false,
       mobile: codes,
       landline:
         "For an e& landline or business line, call e& on 101 and ask for conditional call forwarding — on no answer and on busy — to your Belline number.",
     },
+    // Virgin Mobile runs on du's network and should take the same codes, but
+    // nobody has dialled them on a Virgin SIM yet, so the row waits for its flag.
+    ...(virgin
+      ? [{ id: "virgin", name: "Virgin Mobile", verified: false, mobile: codes, landline: null } satisfies Carrier]
+      : []),
   ];
 }
 
 export const PBX_NOTE =
   "An office phone system (PBX) forwards from its own settings. Ask whoever maintains it to forward unanswered and busy calls to your Belline number.";
+
+/**
+ * What to check when the test call never arrived, most likely first. The page
+ * and Belle show the same list.
+ */
+export const DIAGNOSIS: { cause: string; check: string }[] = [
+  {
+    cause: "The code did not take",
+    check: "Dial the code again from the phone whose calls you want covered. Your phone should show a message saying forwarding is on.",
+  },
+  {
+    cause: "It is a landline or business line",
+    check: "Codes only work on mobiles. Call du on 155 or e& on 101 and ask for conditional call forwarding to your Belline number.",
+  },
+  {
+    cause: "An office phone system answers first",
+    check: PBX_NOTE,
+  },
+  {
+    cause: "The test call was answered, or came from the same phone",
+    check: "Ring from a different phone and let it ring out without anyone picking up.",
+  },
+];

@@ -6,7 +6,9 @@ import type {
   Business,
   Call,
   Location,
+  PoolNumber,
   Session,
+  SupportException,
   Tenant,
   User,
   WaitlistEntry,
@@ -45,9 +47,30 @@ interface Db {
   leads: Lead[];
   /** What each call and conversation cost to run. See billing/cost.ts. */
   costs: CostEvent[];
+  /** Things a person at Belline has to step in on. See exceptions.ts. */
+  exceptions: SupportException[];
+  /** Pre-bought Belline numbers. See telephony/pool.ts. */
+  numberPool: PoolNumber[];
+  /** Stripe webhook events already applied, so a redelivery changes nothing. See billing/stripe.ts. */
+  stripeEvents: StripeEventRow[];
 }
 
+/** One Stripe event we have applied. Kept for the newest `STRIPE_EVENTS_KEPT`. */
+export interface StripeEventRow {
+  id: string;
+  type: string;
+  /** When Stripe created the event, ISO. */
+  createdAt?: string;
+  appliedAt: string;
+  applied: string;
+}
+
+/** Stripe stops redelivering after three days; a few thousand ids covers that many times over. */
+const STRIPE_EVENTS_KEPT = 5000;
+
 const EMPTY: Db = {
+  stripeEvents: [],
+  numberPool: [],
   tenants: [],
   businesses: [],
   locations: [],
@@ -58,6 +81,7 @@ const EMPTY: Db = {
   sessions: [],
   leads: [],
   costs: [],
+  exceptions: [],
 };
 
 // Next's dev server re-evaluates modules on edit; the custom server holds the
@@ -220,6 +244,23 @@ export function saveTenant(tenant: Tenant): Tenant {
   else db.tenants.push(tenant);
   persist("tenants");
   return tenant;
+}
+
+/**
+ * Remove a tenant row outright. Only for undoing a signup that failed half
+ * way (onboarding/index.ts), before anybody could have used the account.
+ */
+export function removeTenant(tenantId: string): void {
+  const db = load();
+  db.tenants = db.tenants.filter((t) => t.id !== tenantId);
+  persist("tenants");
+}
+
+/** As `removeTenant`: only for rolling back a failed signup. */
+export function removeBusiness(businessId: string): void {
+  const db = load();
+  db.businesses = db.businesses.filter((b) => b.id !== businessId);
+  persist("businesses");
 }
 
 /**
@@ -391,11 +432,24 @@ export function saveWaitlistEntry(entry: WaitlistEntry): WaitlistEntry {
 
 // --- calls -----------------------------------------------------------------
 
-export function listCalls(locationId?: string): Call[] {
+/**
+ * A venue's calls, newest first.
+ *
+ * Forwarding test calls are left out unless asked for: the owner ringing
+ * their own number to check it works is not a customer, and every count,
+ * report and bill reads this list.
+ */
+export function listCalls(locationId?: string, opts: { includeTests?: boolean } = {}): Call[] {
   const out = load().calls;
   return (locationId ? out.filter((c) => c.locationId === locationId) : out)
+    .filter((c) => opts.includeTests || !c.isTest)
     .slice()
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+}
+
+/** The phone call Twilio knows by this id, test calls included. */
+export function findCallBySid(callSid: string): Call | undefined {
+  return callSid ? load().calls.find((c) => c.callSid === callSid) : undefined;
 }
 
 export function getCall(callId: string): Call | undefined {
@@ -409,6 +463,59 @@ export function saveCall(call: Call): Call {
   else db.calls[idx] = call;
   persist("calls");
   return call;
+}
+
+/** Where the collections are written. The mail outbox sits beside them. */
+export function dataDir(): string {
+  return DATA_DIR;
+}
+
+// --- number pool -----------------------------------------------------------
+
+export function listPoolRows(): PoolNumber[] {
+  return load().numberPool;
+}
+
+/**
+ * Change the pool in one synchronous step.
+ *
+ * Nothing between reading the rows and writing them awaits, so two claims in
+ * the same process can never see the same free number. See telephony/pool.ts.
+ */
+export function mutatePool<T>(fn: (rows: PoolNumber[]) => T): T {
+  const db = load();
+  const out = fn(db.numberPool);
+  persist("numberPool");
+  return out;
+}
+
+// --- stripe events ---------------------------------------------------------
+
+export function stripeEventSeen(id: string): StripeEventRow | undefined {
+  return load().stripeEvents.find((e) => e.id === id);
+}
+
+export function recordStripeEvent(row: StripeEventRow): void {
+  const db = load();
+  if (db.stripeEvents.some((e) => e.id === row.id)) return;
+  db.stripeEvents.push(row);
+  if (db.stripeEvents.length > STRIPE_EVENTS_KEPT) db.stripeEvents.splice(0, db.stripeEvents.length - STRIPE_EVENTS_KEPT);
+  persist("stripeEvents");
+}
+
+// --- support exceptions ----------------------------------------------------
+
+export function listExceptionRows(): SupportException[] {
+  return load().exceptions;
+}
+
+export function saveExceptionRow(row: SupportException): SupportException {
+  const db = load();
+  const idx = db.exceptions.findIndex((e) => e.id === row.id);
+  if (idx === -1) db.exceptions.push(row);
+  else db.exceptions[idx] = row;
+  persist("exceptions");
+  return row;
 }
 
 // --- costs -----------------------------------------------------------------

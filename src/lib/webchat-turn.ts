@@ -4,6 +4,7 @@ import { seedIfEmpty } from "./seed";
 import { listLocations } from "./store";
 import type { Location } from "./types";
 import { migrateReception } from "./reception/migrate";
+import { isActivated } from "./onboarding/journey";
 import { isConfigured } from "./db/client";
 import { acceptInbound } from "./reception/inbound";
 import { respondTo } from "./reception/respond";
@@ -57,6 +58,11 @@ export interface Visitor {
 export async function resolveVisitor(
   key: string,
   token: string | undefined,
+  /**
+   * May the chat answer for this venue? Defaults to "only once it is live";
+   * the routes pass `widgetOpenFor`, which also lets a signed-in owner preview.
+   */
+  open: (location: Location) => boolean | Promise<boolean> = isActivated,
 ): Promise<Visitor | NextResponse> {
   // The token first. It is an HMAC check, costs nothing, and refuses the
   // unauthenticated flood before it reaches the database — the migration
@@ -85,6 +91,9 @@ export async function resolveVisitor(
   }
   if (claim.locationId !== location.id) {
     return NextResponse.json({ error: "Wrong venue." }, { status: 403 });
+  }
+  if (!(await open(location))) {
+    return NextResponse.json({ error: "Chat is not available here." }, { status: 404 });
   }
 
   return { location, visitorId: claim.visitorId, handle: visitorHandle(claim.visitorId) };

@@ -46,14 +46,14 @@ export default async function InboxPage({
         <div className="panel" role="status" style={{ padding: 24, marginTop: 18 }}>
           {view.state === "not-configured" ? (
             <p className="muted" style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>
-              Messaging needs a database, and <code>DATABASE_URL</code> is not set on this
-              deployment. Voice works without it; WhatsApp does not.
+              Messages are not switched on for this account yet. Phone calls are answered as
+              normal.
             </p>
           ) : (
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, maxWidth: "62ch" }}>
               Messages can&apos;t be loaded right now. Phone calls don&apos;t depend on this and
-              are still being answered. Reload this page in a minute; if it keeps happening,
-              email <a href="mailto:hello@belline.ai" style={{ textDecoration: "underline" }}>hello@belline.ai</a>.
+              are still being answered. Reload this page in a minute. If it keeps happening,
+              the team is told automatically.
             </p>
           )}
         </div>

@@ -6,6 +6,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import { listLocations } from "@/lib/store";
 import { originAllowed } from "@/lib/embed";
 import { chatAllowed, chatGate, newVisitorId, voiceAllowed } from "@/lib/webchat";
+import { widgetOpenFor } from "@/lib/embed-preview";
 import Chat from "./Chat";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,11 @@ export default async function ChatPage({
     (l) => l.embed?.enabled && l.embed.key === key,
   );
   if (!location?.embed) notFound();
+
+  // Before Go live, only the owner, signed in, can open it.
+  if (!(await widgetOpenFor(location))) {
+    return <Refused reason={`${location.name} has not switched this on yet.`} />;
+  }
 
   // The venue may have the bell on and the chat off. Not a 404: the key is
   // real, the venue is real, and somebody has pasted `data-mode="chat"` onto a

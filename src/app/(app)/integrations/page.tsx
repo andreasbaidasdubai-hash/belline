@@ -1,16 +1,21 @@
 import Link from "next/link";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
+import { integrationErrorText } from "@/lib/errors/customer";
 import { seedIfEmpty } from "@/lib/seed";
-import { connectionState, googleConfigured } from "@/lib/integrations/google";
-import { whatsappConfigured, whatsappStatus } from "@/lib/whatsapp";
-import { provisioningReady } from "@/lib/whatsapp-provision";
+import { destinationOf, googleUsable, takesRequestsOnly } from "@/lib/booking/destination";
+import { GOOGLE_EXPIRED_TEXT, connectionState, listCalendarsFor } from "@/lib/integrations/google";
+import { flag } from "@/lib/flags";
+import { getLocation } from "@/lib/store";
+import GoogleCalendarControls from "./GoogleCalendarControls";
+import { whatsappStatus } from "@/lib/whatsapp";
+import { whatsappCard } from "@/lib/whatsapp-selfserve";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
-import ConnectWhatsApp from "./ConnectWhatsApp";
+import WhatsAppCard from "./WhatsAppCard";
 import RemindersForm from "./RemindersForm";
 import { smsEnabled } from "@/lib/providers/sms";
 import { reminderHours, remindersEnabled } from "@/lib/reminders";
-import { stripeEnabled } from "@/lib/billing/stripe";
+import { stripeConfigured } from "@/lib/billing/stripe";
 import { depositsReady, refreshConnectedAccount } from "@/lib/billing/deposits";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +53,13 @@ export default async function IntegrationsPage({
       ? await refreshConnectedAccount(location).catch(() => location)
       : location;
 
-  const google = connectionState(location);
+  // Calendars first: loading them is what finds out a token has expired, and
+  // the state below should say so on this load, not the next.
+  const googleOn = flag("booking.google");
+  const calendars = googleOn && googleUsable(location) ? await listCalendarsFor(location).catch(() => null) : null;
+  const googleVenue = getLocation(location.id) ?? location;
+  const google = connectionState(googleVenue);
+  const twoWay = destinationOf(googleVenue) === "google";
   const whatsapp = await whatsappStatus(location);
   const account = whatsapp.state === "connected" ? whatsapp.account : null;
 
@@ -56,7 +67,11 @@ export default async function IntegrationsPage({
     <>
       <PageHeader
         title="Integrations"
-        subtitle="Belline decides availability. A connected calendar is where the team already looks, so bookings are mirrored into it."
+        subtitle={
+          takesRequestsOnly(location)
+            ? "Belline takes booking requests and your team confirms each one. Calendars and booking systems below are shown as they are today."
+            : "Belline decides availability. A connected calendar is where the team already looks, so bookings are mirrored into it."
+        }
       />
       <LocationTabs base="/integrations" active={location.id} />
 
@@ -86,7 +101,7 @@ export default async function IntegrationsPage({
             fontSize: 13,
           }}
         >
-          {error}
+          {integrationErrorText(error)}
         </div>
       )}
 
@@ -119,13 +134,13 @@ export default async function IntegrationsPage({
           <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
             {!location.policy?.deposit
               ? "No deposit rule is set. Add one under How it works — who pays, how much, on which days — and Belline tells callers about it when they book."
-              : !stripeEnabled()
+              : !stripeConfigured()
                 ? "Belline tells callers about your deposit when they book, and the booking is marked as owing it. Card payments are not switched on yet, so your team sends the link and marks it paid in Bookings."
                 : depositsReady(paymentsVenue)
                   ? "Connected. When a booking needs a deposit, the guest is texted a Stripe link straight away, and the money goes to your own Stripe account. Paid deposits are marked in Bookings on their own."
                   : "Connect your own Stripe account and guests are texted a link to pay the deposit the moment they book. The money goes to your account, not ours — Stripe checks who you are and where to pay out."}
           </p>
-          {location.policy?.deposit && stripeEnabled() && !depositsReady(paymentsVenue) && (
+          {location.policy?.deposit && stripeConfigured() && !depositsReady(paymentsVenue) && (
             <a className="btn btn-accent" href={`/api/payments/connect?locationId=${location.id}`} style={{ display: "inline-block", marginTop: 14 }}>
               {paymentsVenue.payments?.stripeAccountId ? "Finish setting up Stripe" : "Set up card payments with Stripe"}
             </a>
@@ -136,63 +151,13 @@ export default async function IntegrationsPage({
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head">WhatsApp</div>
         <div style={{ padding: 18 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <span
-              className="pill"
-              style={
-                account
-                  ? { background: "var(--ok-soft)", color: "var(--ok)", borderColor: "var(--ok)" }
-                  : whatsapp.state === "unavailable"
-                    ? { background: "var(--warn-soft)", color: "var(--warn)", borderColor: "var(--warn)" }
-                    : undefined
-              }
-            >
-              {account ? "Connected" : whatsapp.state === "unavailable" ? "Couldn't check" : "Not connected"}
-            </span>
-            {account && (
-              <span className="mono" style={{ fontSize: 13.5 }}>
-                {account.phoneE164}
-              </span>
-            )}
-          </div>
-          {whatsapp.state === "unavailable" ? (
-            // Not "Not connected": the number may already be live, and offering
-            // to connect it again is how an owner registers it twice.
-            <p role="status" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
-              Belline couldn&apos;t check this venue&apos;s WhatsApp just now. Nothing has changed on
-              your number. Reload this page in a minute.
-            </p>
-          ) : account ? (
-            <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
-              Belline answers this number on WhatsApp — questions, bookings, changes — and every
-              thread is in your inbox. Put it on your website, your Google profile and your
-              Instagram as &ldquo;WhatsApp us&rdquo;. Your own WhatsApp is untouched.
-            </p>
-          ) : whatsappConfigured() && provisioningReady() && !location.demo?.enabled ? (
-            <>
-              <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
-                Belline can answer a WhatsApp number for {location.name} — a second number, so your
-                own WhatsApp stays exactly as it is. Type the number, type the code Meta texts to
-                it, done: about a minute, no Meta account, nothing to install.
-              </p>
-              <ConnectWhatsApp
-                locationId={location.id}
-                venueName={location.name}
-                pending={
-                  location.whatsappPending
-                    ? { number: location.whatsappPending.number, displayName: location.whatsappPending.displayName }
-                    : null
-                }
-              />
-            </>
-          ) : (
-            <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch", margin: 0 }}>
-              Belline can answer a WhatsApp number for {location.name} — a second number, so your
-              own WhatsApp stays exactly as it is. We register it and connect it for you; there is
-              nothing to install. <a href="mailto:hello@belline.ai?subject=WhatsApp%20for%20my%20venue">Email us</a> to
-              get it started.
-            </p>
-          )}
+          <WhatsAppCard
+            locationId={location.id}
+            venueName={location.name}
+            card={location.demo?.enabled && !account ? { state: "soon" } : whatsappCard(location, whatsapp)}
+            pendingName={location.whatsappPending?.displayName ?? null}
+            notifyRequested={Boolean(location.onboarding?.integrationRequests?.includes("whatsapp"))}
+          />
         </div>
       </div>
 
@@ -217,30 +182,60 @@ export default async function IntegrationsPage({
             </span>
           </div>
 
-          <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch" }}>
-            Bookings are written into the venue&apos;s calendar as they happen — one way.
-            Belline stays in charge of availability, because it knows things a calendar
-            cannot: which practitioner is qualified, how many covers the kitchen can take at
-            eight, that the chair is held for ten minutes after the guest leaves. An event
-            dragged about in Google does not change the booking, and the event text says so.
-          </p>
-
-          {googleConfigured() ? (
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <a className="btn btn-accent" href={`/api/integrations/google?locationId=${location.id}`}>
-                {google.connected ? "Reconnect" : "Connect Google Calendar"}
-              </a>
-              {google.connected && (
-                <Link className="btn" href={`/calendar?loc=${location.id}`}>
-                  See the diary
-                </Link>
-              )}
+          {google.expired && (
+            <div
+              role="alert"
+              className="panel"
+              style={{ padding: "12px 14px", margin: "0 0 12px", borderColor: "var(--bad)", background: "var(--bad-soft)", fontSize: 13.5 }}
+            >
+              {GOOGLE_EXPIRED_TEXT}
             </div>
+          )}
+
+          {twoWay ? (
+            <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch" }}>
+              Belline reads busy times from the calendars you pick and adds each booking to
+              them. Your hours, services and rules still decide what can be booked; the
+              calendar can only take times away. To change or cancel a booking, do it in
+              Belline, so the customer&apos;s record stays right.
+            </p>
+          ) : (
+            <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch" }}>
+              Bookings are written into the venue&apos;s calendar as they happen — one way.
+              Belline stays in charge of availability, because it knows things a calendar
+              cannot: which practitioner is qualified, how many covers the kitchen can take at
+              eight, that the chair is held for ten minutes after the guest leaves. An event
+              dragged about in Google does not change the booking, and the event text says so.
+            </p>
+          )}
+
+          {googleOn ? (
+            <>
+              <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                <a className="btn btn-accent" href={`/api/integrations/google?locationId=${location.id}`}>
+                  {google.connected ? "Reconnect" : "Connect Google Calendar"}
+                </a>
+                {google.connected && !google.expired && (
+                  <Link className="btn" href={`/calendar?loc=${location.id}`}>
+                    See the diary
+                  </Link>
+                )}
+              </div>
+              {googleUsable(googleVenue) && googleVenue.google && (
+                <GoogleCalendarControls
+                  locationId={location.id}
+                  calendars={calendars}
+                  calendarId={googleVenue.google.calendarId}
+                  staff={(location.salon?.staff ?? []).map((s) => ({ id: s.id, name: s.name }))}
+                  staffCalendars={googleVenue.google.staffCalendars ?? {}}
+                />
+              )}
+            </>
           ) : (
             <p style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 14 }}>
               Google Calendar isn&apos;t available on this account yet.
               {isBellineStaff(user) && (
-                <span className="muted"> (Ours to fix: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.)</span>
+                <span className="muted"> (Ours to fix: the booking.google flag is off. See the ops flags.)</span>
               )}
             </p>
           )}

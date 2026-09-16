@@ -24,6 +24,12 @@ import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voic
 import { ensureOwnWhatsAppAccount, ensureTwilioSandboxAccount } from "./src/lib/whatsapp";
 import { BrowserTransport, TwilioTransport, publicEvent } from "./src/lib/voice/transports";
 import { sendDueReminders } from "./src/lib/reminders";
+import { flag, stubsRequested } from "./src/lib/flags";
+import { graphClient } from "./src/lib/whatsapp-provision";
+import { runWhatsAppChecks } from "./src/lib/whatsapp-selfserve";
+import { PEER_HEADER } from "./src/lib/onboarding/limit";
+import { sweepTrialEnds } from "./src/lib/billing/trial-end";
+import { retryPendingAlerts } from "./src/lib/billing/usage-policy";
 
 /**
  * Custom server.
@@ -43,11 +49,25 @@ const port = Number(process.env.PORT ?? 3000);
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
+// Local end-to-end runs only. Throws, and so refuses to boot, in production or
+// next to a real database; otherwise every outbound fetch to a host that is
+// not this machine throws from here on.
+if (stubsRequested()) {
+  const { installStubs } = await import("./src/lib/testing/stubs");
+  installStubs();
+  console.log("[stubs] FLAG_STUBS=on: fake providers, outbound requests to other hosts are blocked");
+}
+
 await app.prepare();
 // Only valid after prepare(); it is what keeps dev-mode hot reload working
 // once we take over the upgrade event.
 const upgradeHandler = app.getUpgradeHandler();
 seedIfEmpty();
+// Local stubbed runs only: STUB_POOL's numbers go into the pool.
+if (stubsRequested()) {
+  const { seedStubPool } = await import("./src/lib/telephony/pool");
+  seedStubPool();
+}
 const reconciled = reconcileStaleCalls();
 void warmGreetings();
 // Our own WhatsApp number, connected the moment its credentials exist. Logged
@@ -83,7 +103,35 @@ function sweepReminders(): void {
 setTimeout(sweepReminders, 30_000).unref?.();
 setInterval(sweepReminders, REMINDER_SWEEP_MS).unref?.();
 
+// WhatsApp numbers waiting on Meta's display-name review, asked about every
+// ten minutes. Only with self-serve WhatsApp on; the fake Graph under stubs.
+const WHATSAPP_CHECK_MS = 10 * 60 * 1000;
+async function checkWhatsAppNames(): Promise<void> {
+  if (!flag("channel.whatsapp.selfserve")) return;
+  const graph = flag("stubs") ? (await import("./src/lib/testing/stubs")).stubGraph().graph : graphClient();
+  const r = await runWhatsAppChecks(graph);
+  if (r.moved) console.log(`[whatsapp] name reviews: ${r.checked} checked, ${r.moved} moved on`);
+}
+setInterval(() => void checkWhatsAppNames().catch((err) => console.error("[whatsapp] name check failed:", err)), WHATSAPP_CHECK_MS).unref?.();
+
+// Billing, once a day and shortly after boot: trials that reach their end while
+// card payments are closed are extended once (billing/trial-end.ts), and usage
+// alerts whose email did not go are tried again (billing/usage-policy.ts).
+const BILLING_SWEEP_MS = 24 * 60 * 60 * 1000;
+async function sweepBilling(): Promise<void> {
+  const trials = sweepTrialEnds();
+  const alerts = await retryPendingAlerts();
+  if (trials.extended || trials.raised || alerts.sent || alerts.pending) {
+    console.log(`[billing] trials ${trials.extended} extended, ${trials.raised} raised; alerts ${alerts.sent} sent, ${alerts.pending} still pending`);
+  }
+}
+setTimeout(() => void sweepBilling().catch((err) => console.error("[billing] sweep failed:", err)), 60_000).unref?.();
+setInterval(() => void sweepBilling().catch((err) => console.error("[billing] sweep failed:", err)), BILLING_SWEEP_MS).unref?.();
+
 const server = createServer((req, res) => {
+  // The socket address, for the signup rate limit when no proxy header is
+  // present. Always overwritten, so a client cannot choose its own bucket.
+  req.headers[PEER_HEADER] = req.socket.remoteAddress ?? "";
   // The website and the product share this process, chosen by hostname. See
   // marketing.ts — anything that is not `app.` is the website, and a request
   // it does not recognise falls through to Next rather than 404ing.
@@ -330,7 +378,7 @@ function handleTwilio(ws: WebSocket): void {
           ws.close();
           return;
         }
-        const call = startCall(location, "phone", params.from ?? "unknown");
+        const call = startCall(location, "phone", params.from ?? "unknown", { callSid: params.callSid });
         if (location.demo?.enabled) {
           call.isDemo = true;
           saveCall(call);

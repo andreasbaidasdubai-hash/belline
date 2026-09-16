@@ -24,6 +24,12 @@
 
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+// The self-serve states below write venues; never into the real data folder.
+process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-whatsapp-"));
 
 const { metaAdapter } = await import("../src/lib/reception/channel/meta");
 const { twilioAdapter } = await import("../src/lib/reception/channel/twilio");
@@ -689,7 +695,8 @@ console.log("\nA venue's number, self-serve\n");
   });
 
   await test("Meta's errors come out as sentences, never codes", () => {
-    assert.match(explain(fail("Error validating access token", 190)), /ours to fix/);
+    assert.match(explain(fail("Error validating access token", 190)), /on our side — nothing for you to do/);
+    assert.ok(!/hello@|email us/i.test(explain(fail("Error validating access token", 190))));
     assert.match(explain(fail("Too many attempts", 4)), /slow down/);
     assert.match(explain(fail("Something new")), /Meta said: Something new/);
     assert.match(explain({ ok: false, status: 500, body: {} }), /didn't answer/);
@@ -702,6 +709,147 @@ console.log("\nA venue's number, self-serve\n");
     assert.deepEqual(provisioningMissing(), ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_BUSINESS_ACCOUNT_ID"]);
     process.env = keep2;
   });
+}
+
+// ---------------------------------------------------------------------------
+console.log("\nSelf-serve states, with a fake Meta\n");
+
+{
+  const { installFetchGuard, blockedFetches, fakeGraph } = await import("../src/lib/testing/stubs");
+  installFetchGuard();
+  const { seedIfEmpty } = await import("../src/lib/seed");
+  const { getLocation, upsertLocation } = await import("../src/lib/store");
+  const { journey } = await import("../src/lib/onboarding/journey");
+  const { listExceptions } = await import("../src/lib/exceptions");
+  const sf = await import("../src/lib/whatsapp-selfserve");
+  const fsRead = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
+  const quiet = async <T,>(fn: () => Promise<T> | T): Promise<T> => {
+    const error = console.error;
+    console.error = () => {};
+    try {
+      return await fn();
+    } finally {
+      console.error = error;
+    }
+  };
+
+  seedIfEmpty();
+  const keep = { ...process.env };
+  const venue = () => getLocation("loc_lumiere")!;
+  upsertLocation({ ...venue(), onboarding: { version: 1, channels: {} } });
+  const none = { state: "none" } as const;
+
+  await test("flag off: the card says Coming soon, never 'Email us', and Go live does not depend on WhatsApp", () => {
+    delete process.env.FLAG_CHANNEL_WHATSAPP_SELFSERVE;
+    assert.deepEqual(sf.whatsappCard(venue(), none), { state: "soon" });
+    const before = journey(venue());
+    const withWa = { ...venue(), onboarding: { version: 1 as const, channels: { whatsapp: { status: "rejected" as const, since: "2026-09-15T10:00:00.000Z" } } } };
+    const after = journey(withWa);
+    assert.equal(after.canGoLive, before.canGoLive);
+    assert.deepEqual(after.blockers, before.blockers);
+    assert.ok(!fsRead("src/lib/onboarding/journey.ts").includes("channels.whatsapp"), "journey() reads WhatsApp state");
+  });
+
+  process.env.FLAG_CHANNEL_WHATSAPP_SELFSERVE = "on";
+  process.env.WHATSAPP_ACCESS_TOKEN = "test-token";
+  process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = "WABA1";
+  process.env.CREDENTIALS_KEY = "test-credentials-key";
+
+  const meta = fakeGraph();
+  const connected: string[] = [];
+  const p = {
+    graph: meta.graph,
+    wabaId: "WABA1",
+    connect: async (input: { number: string }) => {
+      connected.push(input.number);
+      return { ok: true as const };
+    },
+  };
+
+  await test("flag on: start, code, name review, then live", async () => {
+    assert.deepEqual(sf.whatsappCard(venue(), none), { state: "none" });
+    const started = await sf.startWhatsApp(venue(), { number: "+971501112233", displayName: "Lumière" }, p);
+    assert.ok(started.ok, !started.ok ? started.error : "");
+    assert.deepEqual(sf.whatsappCard(venue(), none), { state: "pending_code", number: "+971501112233" });
+
+    const wrong = await sf.finishWhatsApp(venue(), "000000", p);
+    assert.ok(!wrong.ok && /isn't right/.test(wrong.error));
+    assert.equal(sf.whatsappCard(venue(), none).state, "pending_code", "a wrong code lost the pending number");
+
+    const done = await sf.finishWhatsApp(venue(), "123456", p);
+    assert.ok(done.ok);
+    assert.ok(meta.posts.some((c) => c.path === "WABA1/subscribed_apps"), "the app was not subscribed to the number's webhooks");
+    assert.deepEqual(connected, ["+971501112233"]);
+    assert.equal(venue().whatsappPending, undefined);
+    assert.equal(sf.whatsappCard(venue(), none).state, "pending_name");
+
+    const id = venue().onboarding!.channels.whatsapp!.phoneNumberId!;
+    assert.equal(await sf.checkWhatsApp(venue(), meta.graph), "unchanged");
+    meta.setNameStatus(id, "APPROVED");
+    const job = await sf.runWhatsAppChecks(meta.graph);
+    assert.deepEqual(job, { checked: 1, moved: 1 });
+    assert.deepEqual(sf.whatsappCard(venue(), none), { state: "live", number: "+971501112233" });
+  });
+
+  await test("a refused name says why and offers another try; the second refusal opens a ticket", async () => {
+    const salon = () => getLocation("loc_azure")!;
+    upsertLocation({ ...salon(), onboarding: { version: 1, channels: {} } });
+    for (const attempt of [1, 2]) {
+      await sf.startWhatsApp(salon(), { number: "+971502223344", displayName: "Azure" }, p);
+      await sf.finishWhatsApp(salon(), "123456", p);
+      meta.setNameStatus(salon().onboarding!.channels.whatsapp!.phoneNumberId!, "DECLINED");
+      assert.equal(await quiet(() => sf.checkWhatsApp(salon(), meta.graph)), "rejected");
+      const card = sf.whatsappCard(salon(), none);
+      assert.equal(card.state, "rejected");
+      assert.match(card.state === "rejected" ? card.reason : "", /signage/);
+      assert.equal(listExceptions({ locationId: salon().id, kind: "whatsapp_rejected" }).length, attempt === 2 ? 1 : 0);
+      if (attempt === 1) {
+        sf.resetWhatsApp(salon());
+        assert.equal(sf.whatsappCard(salon(), none).state, "none");
+      }
+    }
+  });
+
+  await test("Meta refusing our token (190) opens a ticket, and the owner is told it is ours to fix", async () => {
+    const venueB = () => getLocation("loc_belline")!;
+    upsertLocation({ ...venueB(), onboarding: { version: 1, channels: {} } });
+    await sf.startWhatsApp(venueB(), { number: "+971503334455", displayName: "Belline" }, p);
+    await sf.finishWhatsApp(venueB(), "123456", p);
+    meta.failGets({ ok: false, status: 400, body: { error: { message: "Error validating access token", code: 190 } } });
+    assert.equal(await quiet(() => sf.checkWhatsApp(venueB(), meta.graph)), "blocked");
+    meta.failGets(undefined);
+    assert.equal(listExceptions({ locationId: venueB().id, kind: "whatsapp_token_expired" }).length, 1);
+    const card = sf.whatsappCard(venueB(), none);
+    assert.deepEqual(card, { state: "blocked", message: "We're fixing this on our side — nothing for you to do." });
+
+    const expired = fakeGraph((path) =>
+      path.endsWith("/phone_numbers") ? { ok: false, status: 401, body: { error: { message: "expired", code: 190 } } } : undefined,
+    );
+    const venueC = () => getLocation("loc_lumiere")!;
+    upsertLocation({ ...venueC(), onboarding: { version: 1, channels: {} } });
+    const out = await quiet(() => sf.startWhatsApp(venueC(), { number: "+971504445566", displayName: "Lumière" }, { ...p, graph: expired.graph }));
+    assert.ok(!out.ok && out.error === "We're fixing this on our side — nothing for you to do.");
+    assert.equal(sf.whatsappCard(venueC(), none).state, "blocked");
+  });
+
+  await test("a failed lookup is a retry, not a dead end", () => {
+    const fresh = { ...venue(), onboarding: { version: 1 as const, channels: {} } };
+    assert.deepEqual(sf.whatsappCard(fresh, { state: "unavailable" }), { state: "unavailable" });
+    const card = fsRead("src/app/(app)/integrations/WhatsAppCard.tsx");
+    assert.match(card, /\/api\/whatsapp\/check/);
+    assert.match(card, /Try again/);
+    assert.match(card, /Skip — add WhatsApp later/);
+    const screens = card + fsRead("src/app/(app)/integrations/page.tsx") + fsRead("src/app/api/whatsapp/number/route.ts");
+    assert.ok(!/Reload this page|hello@|Email us/i.test(screens), "a dead end is still on the WhatsApp screens");
+    assert.match(fsRead("src/app/api/whatsapp/number/route.ts"), /flag\("channel\.whatsapp\.selfserve"\)/);
+    assert.ok(!/Not self-serve/.test(fsRead("src/lib/whatsapp.ts")));
+  });
+
+  await test("no request left for Meta or anywhere else", () => {
+    assert.deepEqual(blockedFetches(), []);
+  });
+
+  process.env = keep;
 }
 
 console.log(

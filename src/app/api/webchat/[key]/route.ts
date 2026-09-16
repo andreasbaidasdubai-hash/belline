@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cleanClientId, resolveVisitor, visitorCatchUp, visitorTurn } from "@/lib/webchat-turn";
+import { widgetOpenFor } from "@/lib/embed-preview";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
     return NextResponse.json({ error: "Send JSON." }, { status: 400 });
   }
 
-  const visitor = await resolveVisitor(key, body.token);
+  const visitor = await resolveVisitor(key, body.token, widgetOpenFor);
   if (visitor instanceof NextResponse) return visitor;
 
   const text = String(body.text ?? "").trim().slice(0, 1000);
@@ -43,7 +44,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ key: string }> 
   const { key } = await ctx.params;
   const url = new URL(req.url);
 
-  const visitor = await resolveVisitor(key, url.searchParams.get("token") ?? undefined);
+  const visitor = await resolveVisitor(key, url.searchParams.get("token") ?? undefined, widgetOpenFor);
   if (visitor instanceof NextResponse) return visitor;
 
   const after = Number(url.searchParams.get("after") ?? 0) || 0;

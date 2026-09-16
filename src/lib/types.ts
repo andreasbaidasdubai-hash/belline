@@ -68,6 +68,19 @@ export interface Tenant {
    * same engine as everybody else's and must never appear in anybody's data.
    */
   internal?: boolean;
+  /** What happened when the account was opened. */
+  onboarding?: {
+    /** The legal versions the owner agreed to at signup (legal.ts). */
+    terms?: TermsAcceptance;
+  };
+}
+
+export interface TermsAcceptance {
+  tosVersion: string;
+  dpaVersion: string;
+  acceptedAt: string;
+  /** The email address that ticked the box. */
+  acceptedBy: string;
 }
 
 /**
@@ -227,6 +240,126 @@ export interface Location {
    * restored — see locations.ts.
    */
   archivedAt?: string;
+  /**
+   * How far the owner has got from signup to answering real calls.
+   *
+   * Facts, not a current-step pointer: journey.ts derives the step from these
+   * and the venue's own data, so a step cannot say "done" about something that
+   * was undone later. Absent only on venues that predate it, and seed.ts fills
+   * it on boot — see `backfillOnboarding`.
+   */
+  onboarding?: OnboardingState;
+}
+
+export type DestinationKind = "requests" | "belline" | "google" | "outlook" | "partner";
+
+export interface RequestRules {
+  /** Details a request needs besides a name and a number. */
+  askFor: ("partySize" | "service")[];
+  /** Outside opening hours: take the request as usual, or only a message. */
+  afterHours: "request" | "message";
+  /** Things the agent must never say, in the owner's words. */
+  neverSay: string[];
+}
+
+/**
+ * A booking somebody asked for at a business that confirms bookings itself.
+ * Nothing is reserved: the team reads this in the Inbox and gets back to them.
+ */
+export interface BookingRequest {
+  id: string;
+  /** The conversation and the requested slot, hashed, so asking twice records once. */
+  key: string;
+  at: string;
+  guestName: string;
+  guestPhone: string;
+  /** What they want, as they put it: a service, "a table". */
+  what?: string;
+  partySize?: number;
+  /** When they would like it, in their words: "Friday 8pm, or Saturday". */
+  preferred: string;
+  date?: string;
+  startMin?: number;
+  notes?: string;
+}
+
+/** One automatic check, as the owner sees it. */
+export interface SelftestResult {
+  scenario: string;
+  title: string;
+  passed: boolean;
+  /** What the check said, as a customer would. */
+  prompt?: string;
+  /** Belline's exact reply, with any card number taken out. */
+  reply?: string;
+  /** The likely cause, in the owner's words. Failures only. */
+  detail?: string;
+  /** Where to fix it. */
+  fix?: string;
+}
+
+export interface OnboardingState {
+  version: 1;
+  importedAt?: string;
+  /** When the owner saved the review form. */
+  reviewedAt?: string;
+  /** The facts they confirmed on it. */
+  reviewedFields?: string[];
+  destination?: { kind: DestinationKind; partner?: string; bookingLink?: string; setAt: string };
+  rulesConfirmedAt?: string;
+  escalation?: { transferNumber?: string; notifyEmail?: string; notifyWhatsApp?: string };
+  /** How Belline takes a booking request, set on the rules step. */
+  requestRules?: RequestRules;
+  /**
+   * Systems the owner asked Belline to connect to ("fresha", "google"). A
+   * request is recorded, never a connection: nothing here is built yet.
+   */
+  integrationRequests?: string[];
+  channels: {
+    web?: { domains: string[]; detectedAt?: string; lastCheckAt?: string };
+    phone?: {
+      numberAssignedAt?: string;
+      forwardingVerifiedAt?: string;
+      carrier?: "du" | "eand" | "virgin" | "landline" | "pbx";
+      modes?: ("noanswer" | "busy" | "unreachable" | "all")[];
+      /** The open "I've set it — test it" window, if any. See telephony/verify.ts. */
+      verification?: { nonce: string; openedAt: string; expiresAt: string; callSid?: string };
+      /** Windows that closed with no call arriving. Two opens a ticket. */
+      failedWindows?: number;
+    };
+    whatsapp?: {
+      status: "none" | "pending_code" | "pending_name" | "live" | "rejected";
+      since: string;
+      number?: string;
+      /** Meta's id for the number, which the name-review check asks about. */
+      phoneNumberId?: string;
+      /** Meta's reason, in words, when the name or number was refused. */
+      reason?: string;
+      /** Refusals so far. The second opens a ticket. */
+      rejections?: number;
+      /** Our side is broken (Meta token expired); nothing for the owner to do. */
+      blocked?: "token";
+      checkedAt?: string;
+    };
+  };
+  /** The last run of the automatic checks. See onboarding/selftest.ts. */
+  tests?: {
+    runId: string;
+    at: string;
+    /** configDigest() of the venue the checks ran against. A different digest now means stale. */
+    digest?: string;
+    results: SelftestResult[];
+    passed: boolean;
+  };
+  /** Runs today, for the daily limit. `date` is the venue's local date. */
+  selftestRuns?: { date: string; count: number };
+  activatedAt?: string;
+  /** A user id, or "backfill" for a venue that was live before the journey existed. */
+  activatedBy?: string;
+  pausedAt?: string;
+  pauseReason?: string;
+  /** Set when seed.ts wrote this record for a venue that predates it. */
+  backfilledAt?: string;
 }
 
 /**
@@ -287,6 +420,13 @@ export interface Subscription {
     minutes: number;
     /** Text conversations (catalogue 2026-10 onwards). */
     conversations?: number;
+    /**
+     * The original end date, when the trial reached it while card payments
+     * were closed and was extended once (billing/trial-end.ts). Present means
+     * the one extension has been used.
+     */
+    extendedFrom?: DateStr;
+    extendedAt?: string;
   };
   /**
    * What one billing period was sold at, in the market's minor unit — the
@@ -302,10 +442,17 @@ export interface Subscription {
    * Absent: nothing chosen yet, which behaves as `cap` and is never charged.
    */
   usagePolicy?: UsagePolicy;
-  /** Usage alerts already raised this period, per pool, so each goes once. */
+  /**
+   * Usage alerts this period, per pool, so each goes once. `sent` only once
+   * the email actually went; `pending` while it has not (email off, or it
+   * failed), retried by the billing sweep.
+   */
   alerts?: {
     periodStart: DateStr;
     sent: Partial<Record<"minutes" | "conversations", UsageAlertThreshold[]>>;
+    pending?: Partial<Record<"minutes" | "conversations", UsageAlertThreshold[]>>;
+    /** When the oldest pending alert was raised. Absent when nothing is pending. */
+    pendingSince?: string;
   };
   /** Packs added under a `packs` policy. Never written without one. */
   packs?: UsagePack[];
@@ -1005,6 +1152,12 @@ export interface Booking {
   cancelledAt?: string;
   cancelReason?: string;
   /**
+   * The Google Calendar event this booking is, and the calendar it is in.
+   * Derived from the idempotency key, so a second create finds the first.
+   */
+  calendarEventId?: string;
+  calendarId?: string;
+  /**
    * When this guest is due back, and for what.
    *
    * Written at booking time from the service's `recallDays` so that the recall
@@ -1151,6 +1304,29 @@ export interface Call {
    */
   attentionResolvedAt?: string;
   attentionResolvedBy?: string;
+  /** Booking requests taken in this conversation, at a request-only business. */
+  bookingRequests?: BookingRequest[];
+  /**
+   * The forwarding test call the owner made during a verification window.
+   * Answered with a short script, never billed and kept out of every count.
+   */
+  isTest?: boolean;
+  /** Twilio's id for a phone call, so a retried webhook cannot record it twice. */
+  callSid?: string;
+}
+
+/** A pre-bought Belline number waiting in, or taken from, the pool. See telephony/pool.ts. */
+export interface PoolNumber {
+  /** E.164. */
+  number: string;
+  status: "free" | "assigned" | "quarantine";
+  locationId?: string;
+  addedAt: string;
+  assignedAt?: string;
+  /** When it was given back. It stays out of the pool for 30 days after. */
+  releasedAt?: string;
+  /** "pool" when code assigned it, or the staff user who did it by hand. */
+  assignedBy?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1191,6 +1367,52 @@ export interface User {
    * so only the latest works. See `signLoginToken` in auth.ts.
    */
   loginNonce?: string;
+  /**
+   * The one password-reset link outstanding, by nonce. Kept apart from
+   * `loginNonce` so asking for a reset does not cancel a sign-in link Belle
+   * sent, and cleared on use. See `signResetToken` in auth.ts.
+   */
+  resetNonce?: string;
+}
+
+/** Why a person at Belline has to step in. See exceptions.ts. */
+export type ExceptionKind =
+  | "pool_empty"
+  | "number_assign_failed"
+  | "forwarding_unverified_2x"
+  | "whatsapp_rejected"
+  | "whatsapp_token_expired"
+  | "import_failed_3x"
+  | "payment_failed_final"
+  | "stripe_off_trial_end"
+  | "deletion_legal_hold"
+  | "owner_requested_human"
+  | "vendor_balance_low"
+  | "webhook_failures"
+  | "billing_dispute"
+  | "account_recovery"
+  | "handoff_requested";
+
+export interface SupportException {
+  id: string;
+  /** Short and readable, said to the owner: "B-7K2Q". */
+  ticket: string;
+  tenantId: string;
+  locationId?: string;
+  kind: ExceptionKind;
+  reason: string;
+  context: Record<string, unknown>;
+  source: "belle" | "system" | "owner";
+  status: "open" | "waiting_customer" | "resolved";
+  /** How many times the same thing was raised while this was open. */
+  count: number;
+  openedAt: string;
+  lastRaisedAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  resolution?: string;
+  /** Minutes a person spent on it: the human-touch metric. */
+  humanMinutes?: number;
 }
 
 export interface Session {
