@@ -56,8 +56,26 @@ function test(name: string, fn: () => void) {
 
 const H = (h: number, m = 0) => h * 60 + m;
 
-// A Wednesday, far enough out that nothing is in the past.
-const WED = "2026-09-16";
+/**
+ * A Wednesday, always in the future.
+ *
+ * Written as a fixed date "far enough out that nothing is in the past", which
+ * stopped being true on 2026-09-16. Its twin in check-booking.ts failed every
+ * run between noon and 2pm that day, because a fixture time that has arrived
+ * falls inside the venue's own notice rule. Derived from the clock so it
+ * cannot expire again. The deliberately-past dates further down this file are
+ * separate literals: those describe history and are meant to stay put.
+ */
+function nextWeekday(weekday: number): string {
+  const d = new Date();
+  d.setUTCHours(12, 0, 0, 0);
+  do {
+    d.setUTCDate(d.getUTCDate() + 1);
+  } while (d.getUTCDay() !== weekday);
+  return d.toISOString().slice(0, 10);
+}
+
+const WED = nextWeekday(3);
 
 function booking(location: Location, over: Partial<Booking>): Booking {
   return {

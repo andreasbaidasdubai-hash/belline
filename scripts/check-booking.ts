@@ -48,9 +48,30 @@ function test(name: string, fn: () => void) {
 
 const H = (h: number, m = 0) => h * 60 + m;
 
-// A Wednesday and a Saturday, far enough out that nothing is in the past.
-const WED = "2026-09-16";
-const SAT = "2026-09-19";
+/**
+ * A Wednesday and a Saturday, always in the future.
+ *
+ * These were written as fixed dates "far enough out that nothing is in the
+ * past", and then the future arrived: on 2026-09-16 the Wednesday fixture was
+ * today, and every run between noon and 2pm failed because booking 14:00 fell
+ * inside the venue's own two-hour notice rule. The engine was right and the
+ * fixture was stale — a gate that fails daily for two hours teaches people to
+ * ignore it, which is worse than having no gate.
+ *
+ * Derived from the clock instead, taking the NEXT such weekday strictly after
+ * today, so no fixture time can ever be in the past or inside a notice window.
+ */
+function nextWeekday(weekday: number): string {
+  const d = new Date();
+  d.setUTCHours(12, 0, 0, 0);
+  do {
+    d.setUTCDate(d.getUTCDate() + 1);
+  } while (d.getUTCDay() !== weekday);
+  return d.toISOString().slice(0, 10);
+}
+
+const WED = nextWeekday(3);
+const SAT = nextWeekday(6);
 
 function booking(over: Partial<Booking>): Booking {
   return {
