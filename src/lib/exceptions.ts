@@ -38,6 +38,7 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "billing_dispute",
   "account_recovery",
   "handoff_requested",
+  "google_sync_failed",
 ];
 
 interface KindMeta {
@@ -68,6 +69,11 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
     belle: false,
   },
   handoff_requested: { label: "Prospect asked for a person", next: "Reply in the Belline inbox.", belle: false },
+  google_sync_failed: {
+    label: "Bookings not reaching Google Calendar",
+    next: "Check the server log for the venue's [google] lines. Belline retries on its own; if Google keeps refusing, ask the owner to reconnect.",
+    belle: false,
+  },
 };
 
 export function isExceptionKind(value: unknown): value is ExceptionKind {

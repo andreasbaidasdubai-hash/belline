@@ -12,6 +12,7 @@ import { holdForSlot, MAX_QUOTED_HOLDS } from "./holds";
 import { bookingKey, describeWhat } from "./idempotency";
 import { googleUsable } from "./destination";
 import { busyFor, calendarFor, eventFor, eventIdFor, isBusy, withAccess, type Busy } from "../integrations/google";
+import { settleGoogleSync, syncedByProvider } from "../integrations/google-sync";
 import type { BookingProvider } from "./provider";
 
 /**
@@ -117,9 +118,11 @@ export const googleCalendarProvider: BookingProvider = {
       return refused(TAKEN, "unavailable");
     }
 
-    const made = localCreate(location, input);
+    const made = localCreate(location, { ...input, calendarWrittenBy: "provider" });
     if (!made.ok) return made;
-    if (made.duplicate && made.booking.calendarEventId) return made;
+    // Already in the calendar: written by this provider, or by the sync when it
+    // was made at the desk or from a link. A second event would be a duplicate.
+    if (made.duplicate && (made.booking.calendarEventId || made.booking.calendarSync)) return made;
     const booking = made.booking;
 
     // The engine may have picked the person; their own calendar counts too.
@@ -132,11 +135,13 @@ export const googleCalendarProvider: BookingProvider = {
     try {
       await withAccess(location, (token, api) => api.insertEvent(token, calendarId, eventFor(location, booking, eventId)));
     } catch (err) {
-      localCancel(booking, location, "Google Calendar did not accept it");
+      // The insert may have landed with only the answer lost. The id is kept
+      // on the booking, so the cancellation removes that event if it exists.
+      localCancel(saveBooking({ ...booking, calendarEventId: eventId, calendarId }), location, "Google Calendar did not accept it");
       console.warn(`[google] event not created for ${location.name}: ${err instanceof Error ? err.message : String(err)}`);
       return refused(CALENDAR_DOWN);
     }
-    const saved = saveBooking({ ...booking, calendarEventId: eventId, calendarId });
+    const saved = saveBooking({ ...booking, calendarEventId: eventId, calendarId, calendarSync: syncedByProvider() });
     return made.duplicate ? { ok: true, booking: saved, duplicate: true } : { ok: true, booking: saved };
   },
 
@@ -162,8 +167,13 @@ export const googleCalendarProvider: BookingProvider = {
     // Belline's own event for this booking is not counted as busy (it is tagged).
     const moved = { date, startMin, endMin: startMin + (booking.endMin - booking.startMin), staffId: changes.staffId ?? booking.staffId };
     if (isBusy(location, busy, moved)) return refused(TAKEN, "unavailable");
-    // The mirror moves the event, by the id stored on the booking.
-    return localModify(location, booking, changes);
+    // The engine saves the move and the sync moves the event, by the id stored
+    // on the booking. Waited for here, so the caller is answered with the
+    // calendar already changed; a failure stays on the booking and is retried.
+    const out = localModify(location, booking, changes);
+    if (!out.ok) return out;
+    await settleGoogleSync(out.booking.id);
+    return { ...out, booking: getBooking(out.booking.id) ?? out.booking };
   },
 
   async cancelBooking({ location }, booking, reason) {

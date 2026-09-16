@@ -24,7 +24,7 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-idem-"));
 
 const { seedIfEmpty } = await import("../src/lib/seed");
 const { listLocations, listBookings } = await import("../src/lib/store");
-const { createBooking, modifyBooking, cancelBooking } = await import("../src/lib/booking");
+const { createBooking, modifyBooking, cancelBooking, findAvailability } = await import("../src/lib/booking");
 const { bookingKey, describeWhat } = await import("../src/lib/booking/idempotency");
 
 let passed = 0;
@@ -269,6 +269,61 @@ await testAsync("NOT blocked: a different guest at the same time is a second eve
     listBookings({ locationId: gVenue.id, date: gDay }).filter((b) => b.status === "confirmed").length,
     2,
   );
+});
+
+console.log("\nThe same change arriving twice, from outside a call, into Google Calendar\n");
+
+// The sync module arrived with these tests; against older code the fallback
+// just lets fire-and-forget writes land, so the old behaviour fails on the
+// assertions rather than on an import.
+const syncLib = (await import("../src/lib/integrations/google-sync").catch(() => null)) as null | typeof import("../src/lib/integrations/google-sync");
+const settleSync = async () => {
+  if (syncLib) await syncLib.settleGoogleSync();
+  else await new Promise((r) => setTimeout(r, 50));
+};
+const { getBooking } = await import("../src/lib/store");
+const eventsFor = (api: ReturnType<typeof fakeGoogleApi>, calendars: string[], bookingId: string) =>
+  calendars.flatMap((calendarId) =>
+    api.calendar
+      .events(calendarId)
+      .filter((e) => e.bellineBookingId === bookingId && e.status !== "cancelled")
+      .map((e) => ({ calendarId, id: e.id })),
+  );
+
+await testAsync("the same desk booking entered twice is one booking and one event", async () => {
+  const d = futureDate(22);
+  const input = { date: d, startMin: 19 * 60, partySize: 2, guestName: "Desk Twice", guestPhone: "+971 50 333 4444", source: "manual" as const, staffOverride: true };
+  const one = createBooking(gVenue, input);
+  const two = createBooking(gVenue, input);
+  assert.ok(one.ok && two.ok);
+  if (!one.ok || !two.ok) return;
+  assert.equal(two.duplicate, true);
+  await settleSync();
+  const events = eventsFor(fakeGoogle, ["primary"], one.booking.id);
+  assert.equal(events.length, 1, `expected one event for the desk booking, found ${events.length}`);
+  assert.equal(events[0].id, getBooking(one.booking.id)!.calendarEventId);
+});
+
+await testAsync("syncing the same booking three times at once writes one event, by one id", async () => {
+  assert.ok(syncLib, "no sync module");
+  const booking = listBookings({ locationId: gVenue.id }).find((b) => b.guestName === "Desk Twice")!;
+  const before = fakeGoogle.calls.filter((c) => c.method === "putEvent" && c.id === booking.calendarEventId).length;
+  const queued = syncLib!.queueGoogleSync(gVenue, booking);
+  await Promise.all([syncLib!.syncBooking(queued.id), syncLib!.syncBooking(queued.id), syncLib!.syncBooking(queued.id)]);
+  await settleSync();
+  assert.equal(eventsFor(fakeGoogle, ["primary"], booking.id).length, 1);
+  const ids = new Set(fakeGoogle.calls.filter((c) => c.method === "putEvent").slice(before).map((c) => c.id));
+  assert.ok(ids.size <= 1, `the event was written under ${ids.size} ids`);
+  assert.equal(getBooking(booking.id)!.calendarSync?.state, "synced");
+});
+
+await testAsync("cancelling twice is one cancellation, and the event stays gone", async () => {
+  const booking = listBookings({ locationId: gVenue.id }).find((b) => b.guestName === "Desk Twice")!;
+  const once = cancelBooking(booking, gVenue, "twice");
+  cancelBooking(once, gVenue, "twice");
+  await settleSync();
+  assert.equal(eventsFor(fakeGoogle, ["primary"], booking.id).length, 0);
+  assert.equal(getBooking(booking.id)!.status, "cancelled");
 });
 
 await testAsync("nothing reached a real host", async () => {

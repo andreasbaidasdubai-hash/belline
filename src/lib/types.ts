@@ -1158,6 +1158,11 @@ export interface Booking {
   calendarEventId?: string;
   calendarId?: string;
   /**
+   * Where the venue's connected Google Calendar stands with this booking.
+   * Absent when the venue has no connection. See integrations/google-sync.ts.
+   */
+  calendarSync?: CalendarSync;
+  /**
    * When this guest is due back, and for what.
    *
    * Written at booking time from the service's `recallDays` so that the recall
@@ -1375,6 +1380,37 @@ export interface User {
   resetNonce?: string;
 }
 
+/** An event in a calendar, by calendar and id. */
+export interface CalendarEventRef {
+  calendarId: string;
+  eventId: string;
+}
+
+/**
+ * A booking's standing with the venue's Google Calendar.
+ *
+ * Written before Google is asked and updated after, so a failure, a restart or
+ * a second change arriving mid-write always leaves enough on the booking for
+ * the sweep to finish the job. See integrations/google-sync.ts.
+ */
+export interface CalendarSync {
+  /** `pending`: a change not yet in Google. `failed`: Google refused it; retried. */
+  state: "pending" | "synced" | "failed";
+  /** Consecutive failures. Back to 0 once Google has it. */
+  attempts: number;
+  /** Bumped by every change, so a run that started before one cannot mark it done. */
+  rev?: number;
+  lastTriedAt?: string;
+  nextAttemptAt?: string;
+  syncedAt?: string;
+  /** Ours, for the log and the dashboard. Never Google's text. */
+  lastError?: string;
+  /** Events this booking left behind on another calendar, still to be removed. */
+  stale?: CalendarEventRef[];
+  /** A write that was started and not confirmed: it may exist in Google. */
+  inflight?: CalendarEventRef;
+}
+
 /** Why a person at Belline has to step in. See exceptions.ts. */
 export type ExceptionKind =
   | "pool_empty"
@@ -1391,7 +1427,8 @@ export type ExceptionKind =
   | "webhook_failures"
   | "billing_dispute"
   | "account_recovery"
-  | "handoff_requested";
+  | "handoff_requested"
+  | "google_sync_failed";
 
 export interface SupportException {
   id: string;

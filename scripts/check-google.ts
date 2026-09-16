@@ -408,6 +408,188 @@ await test("Belline's own events do not block the next table at the same time", 
 });
 
 // ---------------------------------------------------------------------------
+head("Bookings made anywhere else reach the calendar: the desk, a guest's link, the sweep");
+
+const { createFromDesk, updateFromDesk } = await import("../src/lib/booking/desk");
+const { cancelBooking: cancelLocal, createBooking: createLocal, modifyBooking: modifyLocal } = await import("../src/lib/booking");
+const { getBooking } = await import("../src/lib/store");
+// The sync module is new with these tests. Against the code before it, the
+// module is absent and the helpers below fall back to letting fire-and-forget
+// writes land, so the old behaviour fails on its assertions rather than on an import.
+const sync = (await import("../src/lib/integrations/google-sync").catch(() => null)) as null | typeof import("../src/lib/integrations/google-sync");
+const settle = async () => {
+  if (sync) await sync.settleGoogleSync();
+  else await new Promise((r) => setTimeout(r, 50));
+};
+const CALENDARS = ["primary", "staff-a@group.calendar.google.com"];
+/** Every live event in the fake Google that belongs to this booking, and where. */
+const liveEventsOf = (bookingId: string) =>
+  CALENDARS.flatMap((calendarId) =>
+    fake.calendar
+      .events(calendarId)
+      .filter((e) => e.bellineBookingId === bookingId && e.status !== "cancelled")
+      .map((e) => ({ calendarId, ...e })),
+  );
+
+/** A day, not used yet, when both of the salon's first two people can take the first service at the same time. */
+function sharedSlot(l: Loc): { date: string; startMin: number } {
+  const [first, second] = l.salon!.staff;
+  const serviceIds = [l.salon!.services[0].id];
+  for (let i = 3; i < 90; i++) {
+    const date = addDays(todayIn(l.timezone), i);
+    if (usedDays.has(date)) continue;
+    const a = findAvailability(l, { locationId: l.id, date, serviceIds, staffId: first.id }, { limit: 200 });
+    const b = findAvailability(l, { locationId: l.id, date, serviceIds, staffId: second.id }, { limit: 200 });
+    const both = a.find((s) => b.some((o) => o.startMin === s.startMin));
+    if (both) {
+      usedDays.add(date);
+      return { date, startMin: both.startMin };
+    }
+  }
+  throw new Error("no time in the next three months when both people are free");
+}
+
+await test("a booking taken at the desk at a Google venue becomes an event, with the id stored, and blocks the time", async () => {
+  const loc = getLocation(salonBase.id)!;
+  assert.equal(providerFor(loc), googleCalendarProvider, "the salon should be booking into Google here");
+  const [, second] = loc.salon!.staff;
+  const { date, startMin } = sharedSlot(loc);
+  const out = createFromDesk(loc, { date, startMin, serviceIds: [loc.salon!.services[0].id], staffId: second.id, guestName: "Desk Guest One", guestPhone: "+971500000101" });
+  assert.ok(out.ok, out.ok ? "" : out.error);
+  if (!out.ok) return;
+  await settle();
+  const saved = getBooking(out.booking.id)!;
+  const events = liveEventsOf(saved.id);
+  assert.equal(events.length, 1, `expected one event in Google for the desk booking, found ${events.length}`);
+  assert.equal(events[0].calendarId, "primary", "the event is not on the calendar for that person");
+  assert.equal(saved.calendarEventId, events[0].id, "the event id is not stored on the booking");
+  assert.equal(saved.calendarId, "primary");
+  assert.equal(Date.parse(events[0].start), zonedInstant(date, startMin, loc.timezone));
+  // The agent is never offered what a person at the desk has just taken.
+  const offered = await googleCalendarProvider.checkAvailability(
+    { location: getLocation(loc.id)! },
+    { locationId: loc.id, date, serviceIds: [loc.salon!.services[0].id], staffId: second.id },
+  );
+  assert.ok(!offered.some((s) => s.startMin === startMin), "the agent is still offered the desk booking's time");
+});
+
+await test("moving it at the desk moves that event, by its id, and never makes a second", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const booking = listBookings({ locationId: loc.id, status: "confirmed" }).find((b) => b.guestName === "Desk Guest One")!;
+  const later = findAvailability(loc, { locationId: loc.id, date: booking.date, serviceIds: booking.serviceIds, staffId: booking.staffId, excludeBookingId: booking.id }, { limit: 200 })
+    .find((s) => s.startMin > booking.startMin + 60);
+  assert.ok(later, "no later time that day to move to");
+  const out = updateFromDesk(loc, booking, { startMin: later!.startMin });
+  assert.ok(out.ok, out.ok ? "" : out.error);
+  await settle();
+  const events = liveEventsOf(booking.id);
+  assert.equal(events.length, 1, `a move left ${events.length} events`);
+  assert.equal(events[0].id, getBooking(booking.id)!.calendarEventId);
+  assert.equal(Date.parse(events[0].start), zonedInstant(booking.date, later!.startMin, loc.timezone), "the event did not move");
+});
+
+await test("renaming the guest at the desk updates the event text", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const booking = listBookings({ locationId: loc.id, status: "confirmed" }).find((b) => b.guestName === "Desk Guest One")!;
+  const out = updateFromDesk(loc, booking, { guestName: "Desk Guest Renamed" });
+  assert.ok(out.ok);
+  await settle();
+  const events = liveEventsOf(booking.id);
+  assert.equal(events.length, 1);
+  assert.match(events[0].summary ?? "", /^Desk Guest Renamed/);
+});
+
+await test("cancelling at the desk cancels the event", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const booking = listBookings({ locationId: loc.id, status: "confirmed" }).find((b) => b.guestName === "Desk Guest Renamed")!;
+  cancelLocal(booking, loc, "Cancelled at the desk");
+  await settle();
+  assert.deepEqual(liveEventsOf(booking.id), [], "the cancelled desk booking is still an event in Google");
+});
+
+await test("a guest moving and then cancelling from their link: one event that follows, then none", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const { date, startMin } = sharedSlot(loc);
+  const serviceIds = [loc.salon!.services[0].id];
+  // The quick-book route and the manage link call exactly these.
+  const made = createLocal(loc, { date, startMin, serviceIds, guestName: "Link Guest", guestPhone: "+971500000102", source: "manual", staffOverride: true });
+  assert.ok(made.ok, made.ok ? "" : made.detail);
+  if (!made.ok) return;
+  await settle();
+  assert.equal(liveEventsOf(made.booking.id).length, 1, "the booking never reached Google");
+  const next = findAvailability(loc, { locationId: loc.id, date, serviceIds, staffId: made.booking.staffId, excludeBookingId: made.booking.id }, { limit: 200 })
+    .find((s) => s.startMin !== made.booking.startMin && s.staffId === made.booking.staffId);
+  assert.ok(next, "nowhere to move the guest to");
+  const moved = modifyLocal(getLocation(loc.id)!, getBooking(made.booking.id)!, { date, startMin: next!.startMin });
+  assert.ok(moved.ok, moved.ok ? "" : moved.detail);
+  await settle();
+  const events = liveEventsOf(made.booking.id);
+  assert.equal(events.length, 1);
+  assert.equal(Date.parse(events[0].start), zonedInstant(date, next!.startMin, loc.timezone));
+  cancelLocal(getBooking(made.booking.id)!, getLocation(loc.id)!, "Cancelled by the guest from their confirmation link");
+  await settle();
+  assert.deepEqual(liveEventsOf(made.booking.id), []);
+});
+
+await test("the agent's own booking is written once: the desk path never adds a second event for it", async () => {
+  const loc = getLocation(salonBase.id)!;
+  const { date, startMin } = sharedSlot(loc);
+  const serviceIds = [loc.salon!.services[0].id];
+  const [, second] = loc.salon!.staff;
+  const made = await googleCalendarProvider.createBooking({ location: loc }, { date, startMin, guestName: "Agent Guest", guestPhone: "+971500000103", serviceIds, staffId: second.id }, "call_60:book:1");
+  assert.ok(made.ok, made.ok ? "" : made.detail);
+  if (!made.ok) return;
+  await settle();
+  assert.equal(liveEventsOf(made.booking.id).length, 1);
+  // The same guest, the same time, typed in at the desk: the same booking.
+  const desk = createFromDesk(getLocation(loc.id)!, { date, startMin, serviceIds, staffId: second.id, guestName: "Agent Guest", guestPhone: "+971500000103" });
+  assert.ok(desk.ok && desk.duplicate);
+  await settle();
+  assert.equal(liveEventsOf(made.booking.id).length, 1);
+});
+
+await test("Google failing does not lose the booking: recorded, the owner told, retried, and raised for the team", async () => {
+  assert.ok(sync, "no sync module");
+  resetCustomerErrors();
+  const { listExceptions } = await import("../src/lib/exceptions");
+  const loc = getLocation(salonBase.id)!;
+  const { date, startMin } = sharedSlot(loc);
+  const [, second] = loc.salon!.staff;
+  fake.failNext("putEvent", 2);
+  let bookingId = "";
+  await errorsDuring(async () => {
+    const out = createFromDesk(loc, { date, startMin, serviceIds: [loc.salon!.services[0].id], staffId: second.id, guestName: "Retry Guest", guestPhone: "+971500000104" });
+    assert.ok(out.ok, out.ok ? "" : out.error);
+    if (out.ok) bookingId = out.booking.id;
+    await settle();
+  });
+  let saved = getBooking(bookingId)!;
+  assert.equal(saved.status, "confirmed", "the booking was lost with the calendar write");
+  assert.equal(saved.calendarSync?.state, "failed");
+  assert.equal(saved.calendarSync?.attempts, 1);
+  assert.equal(liveEventsOf(bookingId).length, 0);
+  const state = google.connectionState(getLocation(loc.id)!);
+  assert.ok(!state.healthy && /did not accept/.test(state.detail), `the owner is not told: ${state.detail}`);
+  assert.equal(listExceptions({ locationId: loc.id, kind: "google_sync_failed" }).length, 0, "one blip is not yet the team's problem");
+
+  // Not before its time.
+  const early = await sync!.retryGoogleSyncs(new Date());
+  assert.equal(early.attempted, 0, "retried before the back-off");
+  await errorsDuring(() => sync!.retryGoogleSyncs(new Date(Date.now() + 2 * 60_000)));
+  saved = getBooking(bookingId)!;
+  assert.equal(saved.calendarSync?.attempts, 2);
+  const raised = listExceptions({ locationId: loc.id, kind: "google_sync_failed" });
+  assert.equal(raised.length, 1, "a second failure should be in the team's queue");
+
+  const later = await sync!.retryGoogleSyncs(new Date(Date.now() + 60 * 60_000));
+  assert.equal(later.synced, 1);
+  saved = getBooking(bookingId)!;
+  assert.equal(saved.calendarSync?.state, "synced");
+  assert.equal(liveEventsOf(bookingId).length, 1, "the retry did not write the event");
+  assert.ok(google.connectionState(getLocation(loc.id)!).healthy, "the owner's warning outlived the fix");
+});
+
+// ---------------------------------------------------------------------------
 head("Choosing Google on the bookings step");
 
 await test("Google can be chosen with a working connection, is refused unconnected (with the way to connect), and not at all with the flag off", async () => {

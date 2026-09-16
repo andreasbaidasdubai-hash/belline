@@ -337,6 +337,15 @@ export function fakeGoogleApi(opts: { calendars?: GoogleCalendarEntry[] } = {}) 
       throw new GoogleAuthError("stub: token refused");
     }
   };
+  /** Failures queued by `failNext`, per method. */
+  const failures = new Map<keyof GoogleApi, { times: number; afterWrite: boolean }>();
+  /** Throws when a failure is queued for this method. `wrote` says whether the write already happened. */
+  const trip = (method: keyof GoogleApi, wrote: boolean) => {
+    const f = failures.get(method);
+    if (!f || f.times <= 0 || f.afterWrite !== wrote) return;
+    f.times--;
+    throw new GoogleApiError(503, `stub: ${method} failed${wrote ? " after the write landed" : ""}`);
+  };
 
   const api: GoogleApi = {
     async exchangeCode(code) {
@@ -371,13 +380,17 @@ export function fakeGoogleApi(opts: { calendars?: GoogleCalendarEntry[] } = {}) 
     async putEvent(token, calendarId, event) {
       access(token);
       calls.push({ method: "putEvent", calendarId, id: event.id });
+      trip("putEvent", false);
       await calendar.upsertEvent(calendarId, toStub(event));
+      trip("putEvent", true);
     },
     async cancelEvent(token, calendarId, eventId) {
       access(token);
       calls.push({ method: "cancelEvent", calendarId, id: eventId });
+      trip("cancelEvent", false);
       const existing = calendar.events(calendarId).find((e) => e.id === eventId);
       if (existing) await calendar.upsertEvent(calendarId, { ...existing, status: "cancelled" });
+      trip("cancelEvent", true);
     },
     async revoke(refreshToken) {
       calls.push({ method: "revoke" });
@@ -396,6 +409,14 @@ export function fakeGoogleApi(opts: { calendars?: GoogleCalendarEntry[] } = {}) 
     },
     restore(): void {
       expired = false;
+    },
+    /**
+     * The next `times` calls to `method` fail with a 503. With `afterWrite` the
+     * write lands first and only the answer is lost, the way a dropped
+     * connection looks from Belline's side.
+     */
+    failNext(method: "putEvent" | "cancelEvent", times = 1, opts: { afterWrite?: boolean } = {}): void {
+      failures.set(method, { times, afterWrite: Boolean(opts.afterWrite) });
     },
   };
 }

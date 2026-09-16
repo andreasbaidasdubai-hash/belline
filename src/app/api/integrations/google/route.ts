@@ -12,13 +12,13 @@ import {
   chooseCalendars,
   completeConnection,
   disconnectGoogle,
-  pushBooking,
   returnPath,
   signState,
   verifyState,
   type Outcome,
   type ReturnTo,
 } from "@/lib/integrations/google";
+import { queueGoogleSync, settleGoogleSync } from "@/lib/integrations/google-sync";
 import { todayIn } from "@/lib/time";
 import { appOrigin } from "@/lib/origin";
 import { customerError, raiseException } from "@/lib/errors/customer";
@@ -120,7 +120,8 @@ export async function GET(request: Request) {
       const upcoming = listBookings({ locationId: saved.id, status: "confirmed" })
         .filter((b) => b.date >= today)
         .slice(0, 50);
-      for (const booking of upcoming) await pushBooking(saved, booking);
+      for (const booking of upcoming) queueGoogleSync(saved, booking);
+      await settleGoogleSync();
     }
     return land(request, checked.returnTo, saved.id, "connected");
   } catch (err) {

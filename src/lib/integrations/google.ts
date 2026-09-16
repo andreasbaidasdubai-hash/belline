@@ -76,7 +76,8 @@ export interface GoogleLink {
 
 export const GOOGLE_EXPIRED_TEXT =
   "Google Calendar stopped letting Belline in, so bookings are taken as requests until you reconnect it.";
-const WRITE_FAILED_TEXT = "Google Calendar did not accept the last booking. Belline will try again with the next one.";
+export const WRITE_FAILED_TEXT =
+  "Google Calendar did not accept the last booking change. The booking is safe in Belline, and Belline keeps trying.";
 
 /** Kept for callers that only ask whether a connection can be offered. */
 export function googleConfigured(): boolean {
@@ -300,11 +301,29 @@ export function markExpired(locationId: string, detail = ""): void {
   raiseException(`google:expired:${locationId}`, `Google no longer accepts the connection for ${location.name}; bookings fall back to requests. ${detail}`);
 }
 
-function noteFailure(locationId: string, message: string, raw: unknown): void {
+/** A write Google refused: the owner sees our sentence on the connection, the log gets Google's. */
+export function noteWriteFailure(locationId: string, raw: unknown): void {
   const location = getLocation(locationId);
   if (!location?.google) return;
-  upsertLocation({ ...location, google: { ...location.google, lastError: message } });
+  if (location.google.lastError !== WRITE_FAILED_TEXT) {
+    upsertLocation({ ...location, google: { ...location.google, lastError: WRITE_FAILED_TEXT } });
+  }
   console.warn(`[google] ${location.name}: ${raw instanceof Error ? raw.message : String(raw)}`);
+}
+
+/**
+ * A write Google accepted. The warning goes only when it was the write warning
+ * and nothing else at the venue is still failing: one booking getting through
+ * does not mean another stuck one has.
+ */
+export function noteWriteSuccess(locationId: string, stillFailing: boolean, now = new Date()): void {
+  const location = getLocation(locationId);
+  if (!location?.google) return;
+  const clear = location.google.lastError === WRITE_FAILED_TEXT && !stillFailing;
+  upsertLocation({
+    ...location,
+    google: { ...location.google, lastSyncedAt: now.toISOString(), ...(clear ? { lastError: undefined } : {}) },
+  });
 }
 
 /**
@@ -451,8 +470,14 @@ export function eventIdFor(locationId: string, key: string): string {
   return `bl${crypto.createHash("sha256").update(`${locationId}|${key}`).digest("hex").slice(0, 40)}`;
 }
 
-/** The id the one-way mirror has always used, for bookings made before event ids were stored. */
-function legacyEventId(booking: Booking): string {
+/**
+ * The event id for a booking that did not come through the Google provider:
+ * made at the desk, from a guest's link, or before event ids were stored. It is
+ * the id the one-way mirror has always used, so an event it already wrote is
+ * the same event, and it depends only on the booking's own id, so every write
+ * for one booking lands on one event.
+ */
+export function bookingEventId(booking: Booking): string {
   return `belline${booking.id.replace(/[^a-z0-9]/gi, "").toLowerCase()}`.slice(0, 60);
 }
 
@@ -486,30 +511,6 @@ export function eventFor(location: Location, booking: Booking, id: string): Goog
     // Tagged, so reading busy times back can skip what Belline wrote itself.
     extendedProperties: { private: { bellineBookingId: booking.id } },
   };
-}
-
-/**
- * Mirror one booking into the venue's calendar.
- *
- * Never throws into a call. A calendar that is down must not stop a guest
- * being booked in Belline's diary — the booking is real either way. The
- * failure is recorded on the link, in our words, so the dashboard can say so.
- */
-export async function pushBooking(location: Location, booking: Booking): Promise<boolean> {
-  if (!googleUsable(location)) return false;
-  const link = location.google!;
-  try {
-    const event = eventFor(location, booking, booking.calendarEventId ?? legacyEventId(booking));
-    await withAccess(location, (token, api) => api.putEvent(token, booking.calendarId ?? calendarFor(link, booking.staffId), event));
-    const fresh = getLocation(location.id);
-    if (fresh?.google) {
-      upsertLocation({ ...fresh, google: { ...fresh.google, lastSyncedAt: new Date().toISOString(), lastError: undefined } });
-    }
-    return true;
-  } catch (err) {
-    if (!(err instanceof GoogleAuthError)) noteFailure(location.id, WRITE_FAILED_TEXT, err);
-    return false;
-  }
 }
 
 /** What the dashboard shows about the connection. Our sentences only. */

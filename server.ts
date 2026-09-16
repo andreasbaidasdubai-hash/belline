@@ -103,6 +103,18 @@ function sweepReminders(): void {
 setTimeout(sweepReminders, 30_000).unref?.();
 setInterval(sweepReminders, REMINDER_SWEEP_MS).unref?.();
 
+// Bookings whose change has not reached the venue's Google Calendar yet —
+// Google refused, timed out, or the process restarted mid-write — are tried
+// again every few minutes, each on its own back-off. Idempotent by event id.
+const GOOGLE_SWEEP_MS = 3 * 60 * 1000;
+async function sweepGoogle(): Promise<void> {
+  const { retryGoogleSyncs } = await import("./src/lib/integrations/google-sync");
+  const r = await retryGoogleSyncs();
+  if (r.attempted) console.log(`[google] retried ${r.attempted}: ${r.synced} written, ${r.failed} failed, ${r.waiting} waiting on a connection`);
+}
+setTimeout(() => void sweepGoogle().catch((err) => console.error("[google] sweep failed:", err)), 45_000).unref?.();
+setInterval(() => void sweepGoogle().catch((err) => console.error("[google] sweep failed:", err)), GOOGLE_SWEEP_MS).unref?.();
+
 // WhatsApp numbers waiting on Meta's display-name review, asked about every
 // ten minutes. Only with self-serve WhatsApp on; the fake Graph under stubs.
 const WHATSAPP_CHECK_MS = 10 * 60 * 1000;

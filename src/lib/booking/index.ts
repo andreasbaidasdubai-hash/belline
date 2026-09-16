@@ -23,9 +23,8 @@ import {
 } from "./policy";
 import { asBookings as holdsAsBookings, releaseCall } from "./holds";
 import { bookingKey, describeWhat, findDuplicate, type BookingIdentity } from "./idempotency";
-import { pushBooking } from "../integrations/google";
-import { destinationOf } from "./destination";
-import { listWaitlist } from "../store";
+import { queueGoogleSync } from "../integrations/google-sync";
+import { getLocation, listWaitlist } from "../store";
 import { markConverted } from "../waitlist";
 
 /**
@@ -64,6 +63,12 @@ export interface CreateInput {
   recallOf?: string;
   /** Freeze the clock. Tests only — a notice-period rule is untestable without it. */
   now?: Now;
+  /**
+   * Set only by the Google provider, which writes the event itself with the
+   * caller's idempotency key. Everything else leaves it unset, and the booking
+   * is written to a connected calendar here.
+   */
+  calendarWrittenBy?: "provider";
 }
 
 export type BookingResult =
@@ -215,7 +220,7 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
       createdAt: stamp,
       updatedAt: stamp,
     };
-    return { ok: true, booking: settled(location, booking, input.callId) };
+    return { ok: true, booking: settled(location, booking, input) };
   }
 
   const check = checkSalonSlot(location, bookings, {
@@ -284,7 +289,7 @@ export function createBooking(location: Location, input: CreateInput): BookingRe
     createdAt: stamp,
     updatedAt: stamp,
   };
-  return { ok: true, booking: settled(location, booking, input.callId) };
+  return { ok: true, booking: settled(location, booking, input) };
 }
 
 export function modifyBooking(
@@ -443,7 +448,7 @@ export function cancelBooking(
   reason?: string,
 ): Booking {
   const at = new Date().toISOString();
-  return saveBooking({
+  const saved = saveBooking({
     ...booking,
     status: "cancelled",
     cancelledAt: at,
@@ -451,6 +456,10 @@ export function cancelBooking(
     lateCancel: location ? isLateCancel(location, booking) : booking.lateCancel,
     updatedAt: at,
   });
+  // The desk, a guest's link and the agent all cancel here, so this is where
+  // the event goes too. The venue as it is now, when the caller had none.
+  const venue = location ?? getLocation(booking.locationId);
+  return venue ? mirrored(venue, saved) : saved;
 }
 
 export type Progress = "arrived" | "seated" | "left" | "no_show" | "reopen";
@@ -621,11 +630,13 @@ function recallFor(
  * the venue the next ninety seconds of that table for no reason, and the
  * commonest next thing a caller says is "actually, can we make it two tables".
  */
-function settled(location: Location, booking: Booking, callId?: string): Booking {
+function settled(location: Location, booking: Booking, input: Pick<CreateInput, "callId" | "calendarWrittenBy">): Booking {
   const saved = saveBooking(booking);
-  if (callId) releaseCall(callId);
+  if (input.callId) releaseCall(input.callId);
   convertWaitlist(saved);
-  return mirrored(location, saved);
+  // The Google provider writes its own event, keyed by the caller's
+  // idempotency key; writing it here as well would make a second one.
+  return input.calendarWrittenBy === "provider" ? saved : mirrored(location, saved);
 }
 
 /**
@@ -649,19 +660,16 @@ function convertWaitlist(booking: Booking): void {
 }
 
 /**
- * Mirror a booking into the venue's own calendar, if one is connected.
+ * Write a booking's change to the venue's own calendar, if one is connected —
+ * whether the venue books into it or only mirrors to it.
  *
  * Not awaited on purpose. The booking is already saved and is real either way;
- * a slow or broken Google must never hold a caller on the line. Failures land
- * on the connection so the dashboard can say so.
+ * a slow or broken Google must never hold a caller on the line or a
+ * receptionist at the desk. The change is marked on the booking first, so a
+ * failure is retried and raised rather than lost. See integrations/google-sync.ts.
  */
 function mirrored(location: Location, booking: Booking): Booking {
-  // A venue that books into Google has the provider create the event itself,
-  // with its idempotency key; the mirror only follows changes to one that
-  // exists. Mirroring a new booking here too would make a second event.
-  const providerWrites = destinationOf(location) === "google" && !booking.calendarEventId;
-  if (location.google && !providerWrites) void pushBooking(location, booking);
-  return booking;
+  return location.google ? queueGoogleSync(location, booking) : booking;
 }
 
 export { chainDuration, resolveServices };
