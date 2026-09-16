@@ -314,6 +314,51 @@ await test("every setup step opens Belle on that step, and the chat sends it", (
   assert.match(source("src/app/api/setup/assistant/route.ts"), /isStepId\(body\.step\)/);
 });
 
+await test("Belle docks beside the step, on every step, around the step's own column", () => {
+  const page = source("src/app/setup/[step]/page.tsx");
+  // In the shell rather than a branch of Body(): every step gets the toggle,
+  // and the step keeps its own column inside the dock, so its Continue /
+  // Save / Go live button stays exactly where it was.
+  const shell = page.indexOf("export default async function SetupStepPage");
+  assert.ok(shell > 0);
+  assert.ok(page.indexOf("<BelleDock") > shell, "the dock is inside a step's body, not the shell");
+  assert.equal(page.split("<BelleDock").length, 2, "more than one dock");
+  assert.match(page, /<BelleDock[^>]*>\s*<div className="setup-grid"/);
+  // Docked, she is given the step she is beside, and its greeting.
+  assert.match(page, /step=\{step\.id\}/);
+  assert.match(page, /greeting=\{setupGreeting\(venue, step\.id\)\}/);
+});
+
+await test("the panel is a labelled region, closed by Escape, remembered, and never a phone's", () => {
+  const dock = source("src/app/setup/BelleDock.tsx");
+  assert.match(dock, /min-width: 1024px/);
+  // Below the breakpoint nothing is docked at all: the panel is behind `wide`.
+  assert.match(dock, /\{wide &&/);
+  assert.match(dock, /aria-expanded=\{open\}/);
+  assert.match(dock, /aria-labelledby="belle-dock-title"/);
+  assert.match(dock, /e\.key !== "Escape"/);
+  assert.match(dock, /panelRef\.current\?\.focus\(\)/, "focus does not move into the panel");
+  assert.match(dock, /toggleRef\.current\?\.focus\(\)/, "focus does not come back to the toggle");
+  // Storage that throws must not stop the panel opening.
+  assert.match(dock, /window\.localStorage\.setItem\(KEY[^}]*\}\s*catch/);
+  assert.match(dock, /window\.localStorage\.getItem\(KEY\);\s*\}\s*catch/);
+  // One Belle: the docked chat is the assistant page's own component.
+  assert.match(dock, /import \{ BelleChat \} from "\.\/assistant\/SetupAssistant"/);
+  const css = source("src/app/globals.css");
+  // In the flow beside the step, never over it, so nothing on the step is covered.
+  assert.match(css, /\.setup-dock-panel \{[^}]*position: sticky/);
+  assert.doesNotMatch(css, /\.setup-dock-panel \{[^}]*position: fixed/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{ \.setup-dock-panel \{ animation: none/);
+});
+
+await test("/setup/assistant still stands on its own, and the narrow way in points at it", () => {
+  const page = source("src/app/setup/assistant/page.tsx");
+  assert.match(page, /export default async function SetupAssistantPage/);
+  assert.match(page, /<SetupAssistant\b/);
+  assert.match(source("src/app/setup/[step]/page.tsx"), /className="setup-ask-narrow"[\s\S]{0,200}Ask Belle/);
+  assert.match(source("src/app/globals.css"), /min-width: 1024px\) \{ \.setup-ask-narrow \{ display: none/);
+});
+
 globalThis.fetch = realFetch;
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

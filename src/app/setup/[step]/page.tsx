@@ -6,6 +6,7 @@ import { listCalls, listLocationsFor } from "@/lib/store";
 import { currentVenue } from "@/lib/onboarding";
 import { INTEGRATIONS, bellineDiaryOffered, factsFrom, isStepId, journey, type Journey, type Step } from "@/lib/onboarding/journey";
 import { venueMarket } from "@/lib/onboarding/rules";
+import { setupGreeting } from "@/lib/onboarding/assistant";
 import { requestRulesOf } from "@/lib/booking/requests";
 import { destinationOf, googleUsable, takesRequestsOnly } from "@/lib/booking/destination";
 import { integrationErrorText } from "@/lib/errors/customer";
@@ -19,6 +20,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import type { Location } from "@/lib/types";
 import { SCENARIO_ORDER, scenarioTitle } from "@/lib/onboarding/selftest";
 import { selftestAvailable, testsPassed, testsStale } from "@/lib/onboarding/selftest-state";
+import BelleDock from "../BelleDock";
 import SetupWizard from "../SetupWizard";
 import SelftestPanel from "../SelftestPanel";
 import { ActionButton, DestinationPicker, RulesForm, type DestinationOption } from "../StepActions";
@@ -512,23 +514,27 @@ export default async function SetupStepPage({
         <span className="muted" style={{ fontSize: 12.5, marginLeft: "auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {venue.name}
         </span>
-        <Link href={`/setup/assistant?step=${step.id}`} style={{ fontSize: 12.5, flex: "none" }}>
+        {/* From 1024px up Belle docks beside the step instead; this is the way
+            in on anything narrower, and the deep link everything else uses. */}
+        <Link href={`/setup/assistant?step=${step.id}`} className="setup-ask-narrow" style={{ fontSize: 12.5, flex: "none" }}>
           Ask Belle
         </Link>
       </header>
 
-      <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 90px" }}>
-        <Rail j={j} active={step} />
-        <main style={{ minWidth: 0, maxWidth: 720 }}>
-          <Body step={step} j={j} venue={venue} facts={facts} google={google} whatsapp={whatsapp} />
-          {/* A ticket the team is working on, so the owner is not left guessing. */}
-          {tickets.map((t) => (
-            <div key={t.ticket} className="panel" role="status" style={{ padding: "12px 16px", marginTop: 22, fontSize: 13.5 }}>
-              <strong>Ticket {t.ticket}</strong> · {t.status}. We will contact you at the email address on your account.
-            </div>
-          ))}
-        </main>
-      </div>
+      <BelleDock locationId={venue.id} step={step.id} greeting={setupGreeting(venue, step.id)}>
+        <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 90px" }}>
+          <Rail j={j} active={step} />
+          <main style={{ minWidth: 0, maxWidth: 720 }}>
+            <Body step={step} j={j} venue={venue} facts={facts} google={google} whatsapp={whatsapp} />
+            {/* A ticket the team is working on, so the owner is not left guessing. */}
+            {tickets.map((t) => (
+              <div key={t.ticket} className="panel" role="status" style={{ padding: "12px 16px", marginTop: 22, fontSize: 13.5 }}>
+                <strong>Ticket {t.ticket}</strong> · {t.status}. We will contact you at the email address on your account.
+              </div>
+            ))}
+          </main>
+        </div>
+      </BelleDock>
     </div>
   );
 }

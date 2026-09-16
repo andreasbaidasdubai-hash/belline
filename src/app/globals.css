@@ -2197,6 +2197,43 @@ body:has(.callbar) {
   .setup-assistant > aside { order: -1; }
 }
 
+/* Belle docked beside the setup step. Closed, the dock costs the step nothing:
+   the toggle sits in the right margin and the step keeps the whole width. Open,
+   the panel takes its own column and the step column narrows — the fields are
+   capped at 520px, so they keep their width rather than reflowing. Which side
+   of 1024px the owner is on is decided in BelleDock.tsx; below it nothing here
+   renders at all. */
+.setup-dock { display: flex; align-items: flex-start; }
+.setup-dock-main { flex: 1; min-width: 0; }
+.setup-dock-panel {
+  flex: none;
+  width: 340px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  animation: belle-dock-in 160ms ease-out;
+}
+@keyframes belle-dock-in { from { transform: translateX(18px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .setup-dock-panel { animation: none; } }
+.setup-dock-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.setup-dock-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The toggle is out of the flow so opening the panel is the only thing that
+   narrows the step. */
+.setup-dock-tab { position: fixed; top: 68px; right: 16px; z-index: 30; }
+/* The header's link is the way in on a phone or a laptop too narrow to dock. */
+@media (min-width: 1024px) { .setup-ask-narrow { display: none; } }
+
 @media (max-width: 760px) {
   .table-wrap > table:not(.booking-table):not(.forward-table) { min-width: 640px; }
 }

@@ -11,6 +11,10 @@ import type { HelpCard } from "@/lib/onboarding/assistant";
  * missing is always visible beside the conversation, so nobody has to ask
  * "are we done?". When Belle cannot answer, her reply carries the next step's
  * button and help, and a ticket for the team shows its number.
+ *
+ * The conversation is `BelleChat` on its own so the same chat can be docked
+ * beside a setup step (see setup/BelleDock.tsx) rather than only filling this
+ * page. It is the one Belle: same props, same endpoint, same turn.
  */
 
 interface Line {
@@ -20,24 +24,28 @@ interface Line {
   ticket?: string;
 }
 
-export default function SetupAssistant({
+export function BelleChat({
   locationId,
   step,
   greeting,
-  initialMissing,
   initialDraft,
+  onMissing,
+  /** Docked, the chat takes the height it is given instead of setting its own. */
+  fill = false,
+  inputRef,
 }: {
   locationId: string;
   step?: string;
   greeting: string;
-  initialMissing: string[];
   /** A message written for the owner, e.g. from a failed check. They still press send. */
   initialDraft?: string;
+  onMissing?: (missing: string[]) => void;
+  fill?: boolean;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }) {
   const [lines, setLines] = useState<Line[]>([{ role: "assistant", content: greeting }]);
   const [draft, setDraft] = useState(initialDraft ?? "");
   const [busy, setBusy] = useState(false);
-  const [missing, setMissing] = useState(initialMissing);
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
 
@@ -64,7 +72,7 @@ export default function SetupAssistant({
         setError(body.error ?? "Belle could not answer just then.");
       } else {
         setLines([...next, { role: "assistant", content: body.reply, help: body.help, ticket: body.ticket }]);
-        if (body.missing) setMissing(body.missing);
+        if (body.missing) onMissing?.(body.missing);
       }
     } catch {
       setError("Could not reach Belline. Check your connection.");
@@ -74,64 +82,93 @@ export default function SetupAssistant({
   }
 
   return (
+    <div
+      className={fill ? undefined : "panel"}
+      style={
+        fill
+          ? { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }
+          : { display: "flex", flexDirection: "column", height: "min(640px, 72vh)" }
+      }
+    >
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 18px 8px", display: "grid", gap: 10, alignContent: "start" }} role="log" aria-live="polite" tabIndex={0} aria-label="Conversation with Belle">
+        {lines.map((line, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: line.role === "user" ? "flex-end" : "flex-start" }}>
+            <p
+              style={{
+                margin: 0,
+                maxWidth: "78%",
+                padding: "10px 13px",
+                borderRadius: 14,
+                fontSize: 14,
+                lineHeight: 1.5,
+                whiteSpace: "pre-wrap",
+                background: line.role === "user" ? "var(--text)" : "var(--panel-2)",
+                color: line.role === "user" ? "var(--bg)" : "var(--text)",
+              }}
+            >
+              {line.content}
+              {line.ticket && (
+                <span style={{ display: "block", marginTop: 8, fontWeight: 600 }}>Ticket {line.ticket}</span>
+              )}
+              {line.help && (
+                <span style={{ display: "block", marginTop: 10 }}>
+                  <a href={line.help.fix} className="btn btn-accent" style={{ display: "inline-block" }}>
+                    {line.help.title.replace(/^Step \d+ · /, "Go to ")}
+                  </a>
+                </span>
+              )}
+            </p>
+          </div>
+        ))}
+        {busy && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Belle is saving that…</p>}
+        <div ref={end} />
+      </div>
+      {error && <p role="alert" style={{ margin: "0 18px 8px", fontSize: 12.5, color: "var(--bad)" }}>{error}</p>}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void send();
+        }}
+        style={{ display: "flex", gap: 8, padding: 12, borderTop: "1px solid var(--border)" }}
+      >
+        <input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="e.g. We're open 9 to 8, Saturday to Thursday"
+          aria-label="Your answer"
+          maxLength={2000}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <button className="btn btn-accent" type="submit" disabled={busy || !draft.trim()}>
+          Send
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export default function SetupAssistant({
+  locationId,
+  step,
+  greeting,
+  initialMissing,
+  initialDraft,
+}: {
+  locationId: string;
+  step?: string;
+  greeting: string;
+  initialMissing: string[];
+  /** A message written for the owner, e.g. from a failed check. They still press send. */
+  initialDraft?: string;
+}) {
+  const [missing, setMissing] = useState(initialMissing);
+
+  return (
     // The grid lives in globals.css so it can stack on a phone; inline, the
     // 230px side column left the conversation 77px wide at 375.
     <div className="setup-assistant">
-      <div className="panel" style={{ display: "flex", flexDirection: "column", height: "min(640px, 72vh)" }}>
-        <div style={{ flex: 1, overflowY: "auto", padding: "18px 18px 8px", display: "grid", gap: 10, alignContent: "start" }} role="log" aria-live="polite" tabIndex={0} aria-label="Conversation with Belle">
-          {lines.map((line, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: line.role === "user" ? "flex-end" : "flex-start" }}>
-              <p
-                style={{
-                  margin: 0,
-                  maxWidth: "78%",
-                  padding: "10px 13px",
-                  borderRadius: 14,
-                  fontSize: 14,
-                  lineHeight: 1.5,
-                  whiteSpace: "pre-wrap",
-                  background: line.role === "user" ? "var(--text)" : "var(--panel-2)",
-                  color: line.role === "user" ? "var(--bg)" : "var(--text)",
-                }}
-              >
-                {line.content}
-                {line.ticket && (
-                  <span style={{ display: "block", marginTop: 8, fontWeight: 600 }}>Ticket {line.ticket}</span>
-                )}
-                {line.help && (
-                  <span style={{ display: "block", marginTop: 10 }}>
-                    <a href={line.help.fix} className="btn btn-accent" style={{ display: "inline-block" }}>
-                      {line.help.title.replace(/^Step \d+ · /, "Go to ")}
-                    </a>
-                  </span>
-                )}
-              </p>
-            </div>
-          ))}
-          {busy && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Belle is saving that…</p>}
-          <div ref={end} />
-        </div>
-        {error && <p role="alert" style={{ margin: "0 18px 8px", fontSize: 12.5, color: "var(--bad)" }}>{error}</p>}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void send();
-          }}
-          style={{ display: "flex", gap: 8, padding: 12, borderTop: "1px solid var(--border)" }}
-        >
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="e.g. We're open 9 to 8, Saturday to Thursday"
-            aria-label="Your answer"
-            maxLength={2000}
-            style={{ flex: 1 }}
-          />
-          <button className="btn btn-accent" type="submit" disabled={busy || !draft.trim()}>
-            Send
-          </button>
-        </form>
-      </div>
+      <BelleChat locationId={locationId} step={step} greeting={greeting} initialDraft={initialDraft} onMissing={setMissing} />
 
       <aside className="panel" style={{ padding: "14px 16px" }}>
         <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{missing.length ? "Still to set up" : "Ready to answer"}</div>
