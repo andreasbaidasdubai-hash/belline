@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { getLocation, listCalls, listLocationsFor, upsertLocation } from "@/lib/store";
-import { factsFrom, journey, recordStep, type StepAction } from "@/lib/onboarding/journey";
+import { factsFrom, journey, recordStep, stepAfter, type StepAction } from "@/lib/onboarding/journey";
 import type { DestinationKind } from "@/lib/types";
 import type { RulesInput } from "@/lib/onboarding/rules";
 import { track } from "@/lib/reception/events";
@@ -69,5 +69,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ ok: true, requested: saved.onboarding?.integrationRequests ?? [] });
   }
-  return NextResponse.json({ ok: true, next: journey(saved, facts).next?.url ?? "/" });
+  // Onward from the step just saved, not back to the first one skipped.
+  const from = action.kind === "destination" ? "bookings" : "rules";
+  return NextResponse.json({ ok: true, next: stepAfter(journey(saved, facts), from)?.url ?? "/" });
 }

@@ -3,7 +3,7 @@ import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { getLocation, listLocationsFor, upsertLocation } from "@/lib/store";
 import { applyDraft, readiness, setupNote } from "@/lib/onboarding";
-import { journeyFor, markReviewed } from "@/lib/onboarding/journey";
+import { journeyFor, markReviewed, stepAfter } from "@/lib/onboarding/journey";
 import { draftFromRequest } from "@/lib/onboarding/uploads";
 import { publish } from "@/lib/brain";
 import { cleanConfirmed } from "@/lib/onboarding/review";
@@ -98,5 +98,5 @@ export async function PUT(req: Request) {
 
   // The page moves on to whatever the journey says is next, read from the venue
   // as it was just saved.
-  return NextResponse.json({ ok: true, readiness: readiness(updated), next: journeyFor(updated).next?.url ?? "/" });
+  return NextResponse.json({ ok: true, readiness: readiness(updated), next: stepAfter(journeyFor(updated), "import")?.url ?? "/" });
 }

@@ -25,12 +25,15 @@ const {
   NO_FACTS,
   backfillOnboarding,
   factsFrom,
+  answersRealCustomers,
+  channelStatuses,
+  checklistOf,
   isActivated,
   journey,
   journeyFor,
   markReviewed,
-  navCollapsed,
   recordStep,
+  stepAfter,
 } = await import("../src/lib/onboarding/journey");
 const { configDigest } = await import("../src/lib/onboarding/selftest-state");
 type Loc = import("../src/lib/types").Location;
@@ -281,18 +284,103 @@ await test("Go live is accepted when the journey allows it, and not twice", () =
   assert.ok(!again.ok && again.status === 409);
 });
 
-console.log("\n\x1b[1mThe nav\x1b[0m\n");
+console.log("\n\x1b[1mThe dashboard is never behind setup\x1b[0m\n");
 
-await test("an owner whose only business is in setup gets the collapsed nav; staff and live owners do not", () => {
-  const setup = withState(fresh, {});
-  const live = withState(fresh, { activatedAt: at });
-  assert.equal(navCollapsed([setup], false), true);
-  assert.equal(navCollapsed([setup], true), false);
-  assert.equal(navCollapsed([live], false), false);
-  assert.equal(navCollapsed([setup, live], false), false);
-  assert.equal(navCollapsed([], false), false);
-  // A venue that predates the journey and has not been backfilled yet is live.
-  assert.equal(navCollapsed([{ ...fresh, onboarding: undefined }], false), false);
+await test("the menu is the full seven destinations from signup: nothing collapses it until go-live", () => {
+  const shell = source("src/app/(app)/layout.tsx");
+  assert.doesNotMatch(shell, /navCollapsed|collapsed \?/, "the shell still collapses the menu");
+  assert.match(shell, /const nav = shape\.items;/);
+  assert.doesNotMatch(source("src/lib/onboarding/journey.ts"), /export function navCollapsed/);
+  // Signing in, or back in after a reset, lands on the dashboard, whose checklist leads into setup.
+  assert.match(source("src/app/api/auth/login/route.ts"), /const next = "\/";/);
+  assert.match(source("src/app/api/auth/reset/route.ts"), /const next = "\/";/);
+});
+
+await test("Today shows what is left as a checklist, n of 7, each item linking to its step", () => {
+  const list = checklistOf(journey(fresh, NO_FACTS, now));
+  assert.equal(list.total, 7);
+  assert.deepEqual(list.items.map((s) => s.id), ["business", "import", "review", "bookings", "rules", "channels", "test"]);
+  assert.equal(list.done, 1, "only the business is done at signup");
+  assert.equal(list.next?.id, "import");
+  const later = checklistOf(journey(withState(complete(fresh), { reviewedAt: at, destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }), NO_FACTS, now));
+  assert.equal(later.done, 5);
+  assert.ok(later.items.every((s) => s.url === `/setup/${s.id}`));
+  const home = source("src/app/(app)/page.tsx");
+  assert.match(home, /checklistOf\(path\)/);
+  assert.match(home, /data-testid="setup-checklist"/);
+  assert.match(home, /\{checklist\.done\} of \{checklist\.total\} done/);
+  assert.match(home, /checklist\.items\.map/);
+});
+
+await test("every step opens in any order, has Skip for now, and the dashboard is in the header", () => {
+  const page = source("src/app/setup/[step]/page.tsx");
+  assert.doesNotMatch(page, /Finish "\$\{next\.title\}" first/, "a later step still refuses to open");
+  assert.match(page, /const reachable = \(_s: Step\) => true;/);
+  assert.match(page, /Skip for now/);
+  assert.match(page, /data-testid="setup-dashboard"/);
+});
+
+await test("Continue and Skip go onward from the step, never back to an earlier skipped one", () => {
+  // Reading skipped, review and destination done: onward from bookings is rules, not import.
+  const j = journey(withState(complete(fresh), { reviewedAt: at, destination: { kind: "requests", setAt: at } }), NO_FACTS, now);
+  assert.equal(stepAfter(j, "bookings")?.id, "rules");
+  // Skipping the channels step from a venue with nothing done goes to the checks.
+  const bare = journey(fresh, NO_FACTS, now);
+  assert.equal(stepAfter(bare, "channels")?.id, "test");
+  // From the last unfinished step, back round to the first one left.
+  assert.equal(stepAfter(bare, "golive")?.id, "import");
+  // The saves use it.
+  assert.match(source("src/app/api/setup/journey/route.ts"), /stepAfter\(journey\(saved, facts\), from\)/);
+  assert.match(source("src/app/api/setup/route.ts"), /stepAfter\(journeyFor\(updated\), "import"\)/);
+  assert.match(source("src/app/api/setup/selftest/route.ts"), /stepAfter\(j, "test"\)/);
+});
+
+console.log("\n\x1b[1mAnswering real customers, channel by channel\x1b[0m\n");
+
+const passedAll = tested(withState(reviewed, { destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }));
+
+await test("nothing answers a real customer before Go live, whatever is connected", () => {
+  const connected = { ...passedAll, phone: "+97140000009", embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, channels: { phone: { forwardingVerifiedAt: at }, web: { domains: ["https://x.test"], detectedAt: at } } } };
+  assert.equal(answersRealCustomers(connected), false);
+  const s = channelStatuses(connected, NO_FACTS, { now });
+  assert.deepEqual(s.map((c) => [c.id, c.state]), [["phone", "waiting"], ["web", "waiting"], ["whatsapp", "not_set_up"]]);
+  assert.ok(s.every((c) => c.state !== "live"));
+  assert.match(s[0].detail, /not answering customers yet|when you press Go live/);
+});
+
+await test("a connected channel waiting on the checks says so", () => {
+  const unchecked = { ...withState(reviewed, { destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }), phone: "+97140000009" };
+  const venue = { ...unchecked, onboarding: { ...unchecked.onboarding!, channels: { phone: { forwardingVerifiedAt: at } } } };
+  const phone = channelStatuses(venue, NO_FACTS, { now })[0];
+  assert.equal(phone.state, "waiting");
+  assert.match(phone.detail, /checks/);
+});
+
+await test("after Go live each channel is live once connected, and one connected later goes live on its own", () => {
+  const live = { ...passedAll, phone: "+97140000009", embed: { enabled: true, key: "k", allowedOrigins: [] } as never, onboarding: { ...passedAll.onboarding!, activatedAt: at, channels: { phone: { forwardingVerifiedAt: at } } } };
+  assert.equal(answersRealCustomers(live), true);
+  const before = channelStatuses(live, NO_FACTS, { now });
+  assert.deepEqual(before.map((c) => [c.id, c.state]), [["phone", "live"], ["web", "waiting"], ["whatsapp", "not_set_up"]]);
+  // The widget is seen on the site: live, with no second Go live.
+  const later = { ...live, onboarding: { ...live.onboarding, channels: { ...live.onboarding.channels, web: { domains: ["https://x.test"], detectedAt: at } } } };
+  assert.equal(channelStatuses(later, NO_FACTS, { now })[1].state, "live");
+  assert.equal(channelStatuses(later, NO_FACTS, { now, whatsappConnected: true })[2].state, "live");
+});
+
+await test("no Belline number is not set up, never live", () => {
+  const s = channelStatuses({ ...fresh, phone: "" }, { ...NO_FACTS }, { now });
+  assert.equal(s[0].state, "not_set_up");
+});
+
+await test("the phone and WhatsApp refuse real customers before Go live; the forwarding test still answers", () => {
+  const voice = source("src/app/api/twilio/voice/route.ts");
+  const verification = voice.indexOf("isVerificationCall(location, params)");
+  const gate = voice.indexOf("if (!answersRealCustomers(location))");
+  const stream = voice.indexOf("<Stream");
+  assert.ok(verification > 0 && gate > verification && stream > gate, "the not-live gate is not between the forwarding test and the stream");
+  assert.match(source("src/lib/reception/respond.ts"), /conversation\.channel !== "webchat" && !answersRealCustomers\(location\)\) return \{ sent: false, skipped: "not_live" \}/);
+  // The website stays gated where it was, with the owner's own preview.
+  assert.match(source("src/lib/webchat-turn.ts"), /= isActivated,/);
 });
 
 console.log("\n\x1b[1mBackfill\x1b[0m\n");
@@ -359,11 +447,12 @@ await test("a venue saved without a record is backfilled on the next boot", () =
 
 console.log("\n\x1b[1mSurfaces read the journey\x1b[0m\n");
 
-await test("the shell, the nav, the home page, login and the setup save all use it", () => {
-  assert.match(source("src/app/(app)/layout.tsx"), /navCollapsed\(visible, isBellineStaff\(user\)\)/);
+await test("the home page, the channel screens, setup and the setup save all use it", () => {
   assert.match(source("src/app/setup/page.tsx"), /journeyFor\(venue\)\.next\?\.url/);
   assert.match(source("src/app/(app)/page.tsx"), /journeyFor\(location\)/);
-  assert.match(source("src/app/api/auth/login/route.ts"), /navCollapsed\(/);
+  assert.match(source("src/app/(app)/page.tsx"), /channelStatuses\(location/);
+  assert.match(source("src/app/(app)/channels/page.tsx"), /channelStatuses\(location/);
+  assert.match(source("src/app/setup/[step]/page.tsx"), /channelStatuses\(venue/);
   assert.match(source("src/app/api/setup/route.ts"), /markReviewed\(/);
   assert.match(source("src/app/api/setup/journey/route.ts"), /recordStep\(/);
 });

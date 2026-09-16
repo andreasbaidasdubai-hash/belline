@@ -126,10 +126,14 @@ export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now:
     review: Boolean(o.reviewedAt),
     bookings: Boolean(o.destination),
     rules: Boolean(o.rulesConfirmedAt),
-    // At least one way in. A forwarded call or a website conversation is the
-    // proof until the automatic forwarding test and widget detection exist.
+    // At least one way in: the widget seen on the site, forwarding proved by a
+    // test call, a real conversation on either, or WhatsApp connected.
     channels: Boolean(
-      o.channels.web?.detectedAt || o.channels.phone?.forwardingVerifiedAt || facts.phoneCalls > 0 || facts.webConversations > 0,
+      o.channels.web?.detectedAt ||
+        o.channels.phone?.forwardingVerifiedAt ||
+        o.channels.whatsapp?.status === "live" ||
+        facts.phoneCalls > 0 ||
+        facts.webConversations > 0,
     ),
     // The automatic checks, passed, against the setup as it is now. Talking to
     // it in the test console is useful, and proves nothing about the eight
@@ -159,7 +163,9 @@ export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now:
           ? "You changed your setup after the last checks. Run the checks again"
           : step.id === "test" && o.tests && !o.tests.passed
             ? "Some checks did not pass. Fix them and run the checks again"
-            : `${step.title} is not finished yet`;
+            : step.id === "test"
+              ? "The eight checks have not been run yet"
+              : `${step.title} is not finished yet`;
       blockers.push({ step: step.id, label, fix: step.url });
     }
     for (const m of readiness(location).missing) {
@@ -196,15 +202,162 @@ export function journeyFor(location: Location, now: Date = new Date()): Journey 
   return journey(location, factsFrom(location, listCalls(location.id)), now);
 }
 
+// ---------------------------------------------------------------------------
+// Using the dashboard is not answering customers
+// ---------------------------------------------------------------------------
+//
+// Until 2026-09-16 the dashboard menu collapsed to Setup and Account until a
+// venue went live, and each setup step refused to open until the one before it
+// was done. An owner who could not paste a line into their website was stuck.
+//
+// Two different questions had been answered as one:
+//
+//   Using the dashboard — always, from the moment the account exists. Every
+//   step opens in any order and can be skipped; what is left is a checklist on
+//   Today, not a wall.
+//
+//   Answering real customers — only once the owner has said so (Go live), the
+//   eight checks have passed, nothing readiness() needs is missing, and the
+//   channel is connected. Checked per channel: a venue that goes live with its
+//   phone answers the phone, and its website chat starts answering on its own
+//   the moment the widget is on the site, without another Go live.
+
+/** The steps shown as the setup checklist on Today: everything before going live. */
+export const CHECKLIST: readonly StepId[] = BEFORE_LIVE;
+
+export interface Checklist {
+  items: Step[];
+  done: number;
+  total: number;
+  /** The first item not done, for the one "next" button. */
+  next: Step | null;
+}
+
+export function checklistOf(j: Journey): Checklist {
+  const items = j.steps.filter((s) => CHECKLIST.includes(s.id));
+  const done = items.filter((s) => s.done).length;
+  return { items, done, total: items.length, next: items.find((s) => !s.done) ?? null };
+}
+
 /**
- * Collapse the dashboard nav to Setup, Belle and Account?
- *
- * Only for somebody all of whose venues are still being set up. Belline staff
- * always see everything, and one live venue is enough for the full nav.
+ * Where "Continue" or "Skip for now" goes from a step: the next unfinished step
+ * after it, or the first unfinished one before it, or the dashboard.
  */
-export function navCollapsed(locations: Location[], staff: boolean): boolean {
-  const own = locations.filter((l) => !l.internal && !l.demo?.enabled);
-  return !staff && own.length > 0 && own.every((l) => !isActivated(l));
+export function stepAfter(j: Journey, from: StepId): Step | null {
+  const at = STEP_IDS.indexOf(from);
+  const later = j.steps.find((s, i) => i > at && !s.done && s.id !== "first-week");
+  if (later) return later;
+  return j.steps.find((s) => !s.done && s.id !== from && s.id !== "first-week") ?? null;
+}
+
+export type ChannelId = "phone" | "web" | "whatsapp";
+export const CHANNEL_IDS: readonly ChannelId[] = ["phone", "web", "whatsapp"];
+
+/**
+ *   live        answering real customers now
+ *   waiting     connected or part way there, and not answering yet: the reason says why
+ *   not_set_up  nothing done on this channel
+ */
+export type ChannelState = "live" | "waiting" | "not_set_up";
+
+export interface ChannelStatus {
+  id: ChannelId;
+  label: string;
+  state: ChannelState;
+  /** One honest sentence. */
+  detail: string;
+  /** Where to act on it. */
+  href: string;
+}
+
+/** Is the channel connected: a real way for a customer to reach Belline on it? */
+export function channelConnected(location: Location, id: ChannelId, facts: JourneyFacts = NO_FACTS, opts: { whatsappConnected?: boolean } = {}): boolean {
+  const o = location.onboarding;
+  switch (id) {
+    case "phone":
+      return Boolean(location.phone.trim() && (o?.channels.phone?.forwardingVerifiedAt || facts.phoneCalls > 0));
+    case "web":
+      return Boolean(location.embed?.enabled && (o?.channels.web?.detectedAt || facts.webConversations > 0));
+    case "whatsapp":
+      return Boolean(opts.whatsappConnected || o?.channels.whatsapp?.status === "live");
+  }
+}
+
+/**
+ * May Belline answer a real customer on this venue at all?
+ *
+ * The owner's Go live, which the journey only allows once the checks passed
+ * against the setup, nothing readiness() needs is missing and a channel is
+ * connected. A venue that predates the journey, and our own demo and internal
+ * venues (backfilled live), answer as they always have.
+ */
+export function answersRealCustomers(location: Location): boolean {
+  return isActivated(location);
+}
+
+/** Said to a real caller on a venue that has not gone live. Nothing about setup, trials or money. */
+export function notLiveMessage(name: string): string {
+  return `Thank you for calling ${name}. Nobody is able to take your call on this line just now. Please try again a little later.`;
+}
+
+/** Every channel's state, for Today, the channels step and the Channels screen. */
+export function channelStatuses(
+  location: Location,
+  facts: JourneyFacts = NO_FACTS,
+  opts: { whatsappConnected?: boolean; now?: Date; clinicSelfServe?: boolean } = {},
+): ChannelStatus[] {
+  const live = answersRealCustomers(location);
+  const j = live ? null : journey(location, facts, opts.now, { clinicSelfServe: opts.clinicSelfServe });
+  // Why a connected channel is not answering yet: the first blocker other than
+  // "connect a channel", which it already is.
+  const blocker = j?.blockers.find((b) => b.step !== "channels");
+  const waitingWhy = blocker
+    ? `Connected, not answering customers yet: ${blocker.label.charAt(0).toLowerCase()}${blocker.label.slice(1)}.`
+    : "Connected. It starts answering customers when you press Go live.";
+  const o = location.onboarding;
+
+  const phone = ((): ChannelStatus => {
+    const base = { id: "phone" as const, label: "Phone", href: "/golive" };
+    if (channelConnected(location, "phone", facts)) {
+      return live
+        ? { ...base, state: "live", detail: `Forwarded calls are answered. Customers keep dialling the number they already have.` }
+        : { ...base, state: "waiting", detail: waitingWhy };
+    }
+    if (location.phone.trim()) {
+      return { ...base, state: "waiting", detail: "You have a Belline number. Forward your line to it and make one test call." };
+    }
+    return { ...base, state: "not_set_up", detail: "No Belline number yet." };
+  })();
+
+  const web = ((): ChannelStatus => {
+    const base = { id: "web" as const, label: "Website chat", href: "/website" };
+    if (channelConnected(location, "web", facts)) {
+      return live ? { ...base, state: "live", detail: "The chat on your website is answering visitors." } : { ...base, state: "waiting", detail: waitingWhy };
+    }
+    if (location.embed?.enabled) {
+      return {
+        ...base,
+        state: "waiting",
+        detail: live
+          ? "Switched on, and not seen on your website yet. It answers as soon as the line of code is on your site."
+          : "Switched on, and not seen on your website yet.",
+      };
+    }
+    return { ...base, state: "not_set_up", detail: "Not added to your website yet." };
+  })();
+
+  const whatsapp = ((): ChannelStatus => {
+    const base = { id: "whatsapp" as const, label: "WhatsApp", href: "/integrations" };
+    if (channelConnected(location, "whatsapp", facts, opts)) {
+      return live ? { ...base, state: "live", detail: "Belline answers your second WhatsApp number." } : { ...base, state: "waiting", detail: waitingWhy };
+    }
+    if (o?.channels.whatsapp && o.channels.whatsapp.status !== "none") {
+      return { ...base, state: "waiting", detail: "Being connected." };
+    }
+    return { ...base, state: "not_set_up", detail: "Not set up." };
+  })();
+
+  return [phone, web, whatsapp];
 }
 
 /**

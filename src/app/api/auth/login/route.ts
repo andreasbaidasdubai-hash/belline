@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE, isBellineStaff, login } from "@/lib/auth";
-import { listLocationsFor } from "@/lib/store";
-import { navCollapsed } from "@/lib/onboarding/journey";
+import { SESSION_COOKIE, login } from "@/lib/auth";
 import { sessionCookieOptions } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 
@@ -34,10 +32,10 @@ export async function POST(request: Request) {
   const maxAge = Math.floor(
     (Date.parse(result.session.expiresAt) - Date.now()) / 1000,
   );
-  // Somebody whose business is still being set up goes back to setup, which
-  // resumes on the step they left. Everybody else lands on the dashboard.
-  const venues = listLocationsFor(result.user.tenantId);
-  const next = navCollapsed(venues, isBellineStaff(result.user)) ? "/setup" : "/";
+  // Everybody lands on the dashboard. An owner part way through setup finds
+  // the checklist on Today with the next step one press away: setup never
+  // stands between an owner and their own dashboard.
+  const next = "/";
 
   const response = NextResponse.json({
     ok: true,

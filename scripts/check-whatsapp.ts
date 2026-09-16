@@ -747,7 +747,13 @@ console.log("\nSelf-serve states, with a fake Meta\n");
     const after = journey(withWa);
     assert.equal(after.canGoLive, before.canGoLive);
     assert.deepEqual(after.blockers, before.blockers);
-    assert.ok(!fsRead("src/lib/onboarding/journey.ts").includes("channels.whatsapp"), "journey() reads WhatsApp state");
+    // Since 2026-09-16 a connected WhatsApp counts as a channel (any one is
+    // enough), so journey() reads it. It can only ever remove a blocker, never
+    // add one: WhatsApp is still not something going live waits for.
+    const connected = { ...venue(), onboarding: { version: 1 as const, channels: { whatsapp: { status: "live" as const, since: "2026-09-15T10:00:00.000Z", number: "+97140000077" } } } };
+    const withLive = journey(connected);
+    assert.ok(withLive.blockers.every((b) => before.blockers.some((x) => x.label === b.label)), "a connected WhatsApp added a blocker");
+    assert.ok(!before.blockers.some((b) => /WhatsApp/i.test(b.label)), "going live waits for WhatsApp");
   });
 
   process.env.FLAG_CHANNEL_WHATSAPP_SELFSERVE = "on";
