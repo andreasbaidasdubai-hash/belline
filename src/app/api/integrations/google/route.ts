@@ -20,6 +20,7 @@ import {
   type ReturnTo,
 } from "@/lib/integrations/google";
 import { todayIn } from "@/lib/time";
+import { appOrigin } from "@/lib/origin";
 import { customerError, raiseException } from "@/lib/errors/customer";
 
 export const dynamic = "force-dynamic";
@@ -36,9 +37,19 @@ function redirectUri(request: Request): string {
 
 const COOKIE_PATH = "/api/integrations/google";
 
-/** Back to the step or page the owner started from. The state cookie goes either way: it is single use. */
-function land(request: Request, returnTo: ReturnTo, locationId: string | undefined, outcome: Outcome) {
-  const res = NextResponse.redirect(new URL(returnPath(returnTo, locationId, outcome), request.url));
+/**
+ * Back to the step or page the owner started from. The state cookie goes either
+ * way: it is single use.
+ *
+ * Against `appOrigin()`, never `request.url`. Behind Railway's proxy the URL
+ * this handler sees is the container's own `http://localhost:3000/...`, so a
+ * redirect resolved against it sent the owner to localhost after a connection
+ * that had otherwise succeeded. `redirectUri()` above reads the forwarded
+ * headers because Google must be told the address it will call back; this one
+ * is a browser redirect, and the app already knows its own public address.
+ */
+function land(_request: Request, returnTo: ReturnTo, locationId: string | undefined, outcome: Outcome) {
+  const res = NextResponse.redirect(new URL(returnPath(returnTo, locationId, outcome), appOrigin()));
   res.cookies.set(STATE_COOKIE, "", { ...sessionCookieOptions(0), path: COOKIE_PATH });
   return res;
 }

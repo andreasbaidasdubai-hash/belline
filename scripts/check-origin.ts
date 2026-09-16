@@ -107,7 +107,19 @@ await test("nothing under src/app takes the origin from req.url", () => {
   const patterns = [
     /new URL\(\s*(req|request)\.url\s*\)\.origin/,
     /redirect\(\s*new URL\([^)]*,\s*url\.origin\s*\)/,
+    // A redirect resolved against the request itself. The two patterns above
+    // both look for `.origin`, so this shape passed the sweep and shipped: the
+    // Google callback sent an owner to https://localhost:3000/integrations
+    // after a connection that had otherwise succeeded.
+    /redirect\(\s*new URL\([^;]*,\s*(req|request)\.url\s*\)/,
   ];
+
+  // Non-vacuous: the sweep must catch the line that got through, and must
+  // leave the fixed version alone.
+  const shipped = "  const res = NextResponse.redirect(new URL(returnPath(returnTo, locationId, outcome), request.url));";
+  const fixed = "  const res = NextResponse.redirect(new URL(returnPath(returnTo, locationId, outcome), appOrigin()));";
+  assert.ok(patterns.some((p) => p.test(shipped)), "the sweep would miss the redirect that shipped");
+  assert.ok(!patterns.some((p) => p.test(fixed)), "the sweep flags the corrected redirect");
   const walk = (dir: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
