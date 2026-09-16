@@ -17,18 +17,29 @@ export const dynamic = "force-dynamic";
  * answer within the hour.
  */
 
+/**
+ * Only the types something actually writes.
+ *
+ * `sent`, `replied`, `meeting_booked` and `suppressed` were offered as filters
+ * and can never match: nothing sends, nothing classifies a reply, nothing
+ * inserts into `sales.meeting`, and suppressing a company writes a row to
+ * `sales.suppression` plus an `approved`/`rejected` activity — never a
+ * `suppressed` one. A filter that always returns nothing reads as "no replies
+ * yet" rather than "this cannot happen", which is the more expensive of the
+ * two misunderstandings. They come back when their writers do — the activity
+ * types themselves still exist in the repo.
+ */
 const TYPES = [
   "discovered",
   "researched",
   "scored",
   "drafted",
   "approved",
-  "sent",
-  "replied",
+  "rejected",
+  "demo_issued",
   "demo_used",
-  "meeting_booked",
-  "suppressed",
   "agent_paused",
+  "error",
 ];
 
 export default async function ActivityPage({
@@ -115,7 +126,7 @@ export default async function ActivityPage({
           empty={
             agent || type
               ? "Nothing matches that filter."
-              : "Nothing has happened yet. Start the worker and run an agent."
+              : "Nothing has happened yet. Run an agent from the command line."
           }
         />
       </div>
