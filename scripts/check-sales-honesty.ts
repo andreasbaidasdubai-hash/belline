@@ -207,6 +207,36 @@ test("no enforcement claim while nothing reads the compliance config", () => {
   );
 });
 
+test("no unsubscribe link is written while nothing can honour one", () => {
+  // /u/ has never existed. A stored body carrying a link to it is a dead link
+  // in a draft a person can copy out of the approval queue by hand, and the
+  // literal "{token}" that used to be written there is the worst version of
+  // it: it looks like a link and cannot even be clicked.
+  if (fs.existsSync(path.join(process.cwd(), "src", "app", "u"))) return;
+  // Not `code()` here: its comment stripper treats the // in https:// as
+  // the start of a comment and eats the rest of the line — which is the
+  // exact shape of the thing being looked for, so it hid a real link. Drop
+  // whole comment lines instead, and compare as plain text.
+  const source =
+    read(path.join(SALES_LIB, "outreach", "run.ts")) +
+    read(path.join(SALES_LIB, "outreach", "templates.ts"));
+  const outreach = source
+    .split("\n")
+    .filter((l) => {
+      const s = l.trim();
+      return !s.startsWith("//") && !s.startsWith("*") && !s.startsWith("/*");
+    })
+    .join("\n");
+  assert.ok(
+    !outreach.includes("{token}"),
+    "a {token} placeholder is still written into stored bodies",
+  );
+  assert.ok(
+    !outreach.includes("/u/"),
+    "an unsubscribe URL is still being built, but /u/ does not exist",
+  );
+});
+
 test("the worker is not described as running the pipeline", () => {
   if (realHandlers.length > 0) return;
   const offenders: string[] = [];

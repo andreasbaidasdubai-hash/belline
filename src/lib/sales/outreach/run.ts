@@ -3,7 +3,7 @@ import { resolveAgentConfig } from "../config/agents";
 import { log } from "../db/repo/activity";
 import { isSuppressed } from "../compliance/suppression";
 import { personalise } from "./personalise";
-import { assemble, resolveFrame } from "./templates";
+import { assemble, resolveFrame, resolvePublicOrigin } from "./templates";
 
 /**
  * Draft first-touch outreach for qualified leads.
@@ -50,7 +50,10 @@ export async function draftOutreach(options: {
 }): Promise<DraftRunResult> {
   const { agent, config } = await resolveAgentConfig(options.agentId);
   const actor = options.actor ?? `agent:${agent.id}`;
-  const publicOrigin = process.env.PUBLIC_ORIGIN ?? "https://belline.ai";
+  // Throws. Checked before any candidate is loaded or any token is spent,
+  // because the alternative is a run that succeeds and produces a hundred
+  // drafts all pointing at the wrong site.
+  const publicOrigin = resolvePublicOrigin();
   const senderAddress = process.env.SENDER_POSTAL_ADDRESS ?? "Belline · Dubai, United Arab Emirates";
 
   const candidates = await query<{
@@ -186,9 +189,12 @@ export async function draftOutreach(options: {
         ? `${publicOrigin}/demo/${candidate.demo_slug}`
         : `${publicOrigin}/`;
 
-      // Signed at send time; a placeholder here would be a dead link in a
-      // draft someone might copy out of the approval queue by hand.
-      const unsubscribeUrl = `${publicOrigin}/u/{token}`;
+      // No sender exists, so there is no token to sign and nothing that could
+      // honour a click. This used to write the literal "{token}" into the
+      // stored body, which is worse than writing nothing: a dead link, in a
+      // queue a person copies out of by hand. The frame's reply-STOP sentence
+      // stays and is a real opt-out.
+      const unsubscribeUrl = null;
 
       const { body } = assemble({
         frame,

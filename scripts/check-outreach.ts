@@ -11,8 +11,14 @@
  */
 
 import assert from "node:assert";
+import fs from "node:fs";
 import { checkDraft, similarity, type GuardContext } from "../src/lib/sales/outreach/guards";
-import { assemble, resolveFrame, personalisedWordCount } from "../src/lib/sales/outreach/templates";
+import {
+  assemble,
+  resolveFrame,
+  personalisedWordCount,
+  resolvePublicOrigin,
+} from "../src/lib/sales/outreach/templates";
 import { looksLikeOptOut } from "../src/lib/sales/compliance/suppression";
 
 let passed = 0;
@@ -425,6 +431,65 @@ test("a true fact about their own team is not a claim about us", () => {
     CTX,
   );
   assert.ok(!r.problems.some((p) => p.includes("not live")), JSON.stringify(r.problems));
+});
+
+test("with no sender there is no link, and no fake one either", () => {
+  const draft = assemble({
+    frame: resolveFrame({ countryCode: "AE", language: "en" }),
+    firstName: "Ahmed",
+    ...GOOD,
+    demoUrl: "https://app.belline.ai/demo/dr-joy-9",
+    unsubscribeUrl: null,
+    senderAddress: "Belline · Dubai, UAE",
+  });
+  assert.match(draft.body, /reply STOP/i, "the opt-out sentence must survive");
+  assert.match(draft.body, /\[no unsubscribe link/, "it must say why there is no link");
+  assert.ok(!/\{token\}/.test(draft.body), "the placeholder must never reach a stored body");
+  assert.ok(!/\/u\//.test(draft.body), "a dead unsubscribe URL must not be written");
+});
+
+console.log("\n  Where a demo link points\n");
+
+test("a missing PUBLIC_ORIGIN fails the run rather than guessing", () => {
+  assert.throws(() => resolvePublicOrigin({}), /PUBLIC_ORIGIN is not set/);
+  assert.throws(() => resolvePublicOrigin({ PUBLIC_ORIGIN: "   " }), /PUBLIC_ORIGIN is not set/);
+});
+
+test("the marketing site is refused, because it does not serve demos", () => {
+  // The old default. Every demo link in every draft went to the homepage.
+  for (const origin of ["https://belline.ai", "https://www.belline.ai", "https://belline.ai/"]) {
+    assert.throws(() => resolvePublicOrigin({ PUBLIC_ORIGIN: origin }), /marketing site/, origin);
+  }
+});
+
+test("something that is not a URL is refused", () => {
+  assert.throws(() => resolvePublicOrigin({ PUBLIC_ORIGIN: "app.belline.ai" }), /not a URL/);
+});
+
+test("the app origin is accepted, without its trailing slash", () => {
+  assert.strictEqual(
+    resolvePublicOrigin({ PUBLIC_ORIGIN: "https://app.belline.ai/" }),
+    "https://app.belline.ai",
+  );
+  // A staging host is a perfectly good origin and must not be second-guessed.
+  assert.strictEqual(
+    resolvePublicOrigin({ PUBLIC_ORIGIN: "https://belline-staging.up.railway.app" }),
+    "https://belline-staging.up.railway.app",
+  );
+});
+
+test("the draft run resolves the origin rather than defaulting it", () => {
+  // resolvePublicOrigin is only worth having if run.ts calls it, and
+  // draftOutreach needs a database — so the wiring is pinned statically.
+  const src = fs.readFileSync("src/lib/sales/outreach/run.ts", "utf8");
+  assert.ok(
+    src.includes("resolvePublicOrigin()"),
+    "run.ts must resolve the origin, not read the variable itself",
+  );
+  assert.ok(
+    !src.includes("PUBLIC_ORIGIN ??"),
+    "run.ts still falls back to a default origin instead of failing the run",
+  );
 });
 
 console.log("\n  Opt-out detection\n");
