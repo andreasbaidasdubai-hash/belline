@@ -88,7 +88,11 @@ export async function scoreLeads(options: {
       scoring: config.scoring,
     });
 
-    const qualifies = score.score >= config.qualification_rules.min_score_to_contact;
+    // Not `score.score`. demo_used is worth 20 points and /api/demo-play is
+    // public and forgeable, so qualifying on the full score would let a
+    // stranger walk a lead over the threshold and into the drafting queue.
+    const qualifies =
+      score.scoreWithoutBehavioural >= config.qualification_rules.min_score_to_contact;
 
     await tx(async (c) => {
       await setScore(c, {

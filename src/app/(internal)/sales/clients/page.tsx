@@ -78,18 +78,33 @@ export default async function ClientsPage() {
 
   // Which venues have a WhatsApp number answered by Belle. Postgres, not the
   // file store, so read once for every tenant on the page.
+  //
+  // Wrapped, like every kpi/* query already is. Both of these throw when the
+  // sales database is unreachable, and awaiting them uncaught took down the
+  // one page that reads the money — which comes from the JSON store and was
+  // never affected. A WhatsApp column that cannot be read is worth a notice;
+  // it is not worth the revenue.
   const whatsapp = new Map<string, string>();
+  let whatsappUnavailable = false;
   if (isConfigured()) {
-    await migrateReception();
-    for (const tenantId of new Set(rows.map((r) => r.tenantId))) {
-      for (const a of await listAccounts(tenantId)) {
-        if (a.channel === "whatsapp" && a.status === "active" && a.locationId && a.phoneE164) {
-          whatsapp.set(a.locationId, a.phoneE164);
+    try {
+      await migrateReception();
+      for (const tenantId of new Set(rows.map((r) => r.tenantId))) {
+        for (const a of await listAccounts(tenantId)) {
+          if (a.channel === "whatsapp" && a.status === "active" && a.locationId && a.phoneE164) {
+            whatsapp.set(a.locationId, a.phoneE164);
+          }
         }
       }
+    } catch (err) {
+      whatsappUnavailable = true;
+      console.error(
+        "[sales/clients] could not read WhatsApp accounts:",
+        err instanceof Error ? err.message : String(err),
+      );
     }
   }
-  const whatsappReady = whatsappConfigured() && isConfigured();
+  const whatsappReady = whatsappConfigured() && isConfigured() && !whatsappUnavailable;
 
   return (
     <>
@@ -102,6 +117,21 @@ export default async function ClientsPage() {
           </a>
         }
       />
+
+      {whatsappUnavailable && (
+        <div
+          className="panel"
+          style={{ padding: "12px 16px", marginBottom: 18, borderColor: "var(--warn)" }}
+        >
+          <span style={{ color: "var(--warn)", fontWeight: 600, fontSize: 13 }}>
+            WhatsApp could not be read
+          </span>
+          <span className="muted" style={{ fontSize: 12.5, marginLeft: 8 }}>
+            The sales database did not answer. Everything else on this page comes from the
+            booking store and is unaffected.
+          </span>
+        </div>
+      )}
 
       <div className="stats">
         <Stat label="MRR" value={aed(t.mrrFils)} hint={mix || "nobody paying yet"} tone={t.mrrFils > 0 ? "ok" : undefined} />

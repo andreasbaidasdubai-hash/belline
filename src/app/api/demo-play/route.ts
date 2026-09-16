@@ -8,10 +8,12 @@ export const dynamic = "force-dynamic";
  * A prospect played their demo.
  *
  * Public and unauthenticated by necessity — the person pressing play has never
- * signed in. That makes it forgeable, which is acceptable for a funnel metric
- * and would not be for anything else: the endpoint can only ever increment a
- * play count on a demo that already exists, and `recordDemoPlay` will not
- * write a second `demo_used` activity row within the hour.
+ * signed in. That makes it forgeable, so nothing expensive may hang off it:
+ * `recordDemoPlay` counts a play at most once an hour per demo, with the
+ * counters and the activity row moving together, and clamps the seconds it
+ * will believe. The points a demo contributes are excluded from the number
+ * that decides whether a lead may be contacted, so the worst a forger achieves
+ * is a warmer-looking sort order.
  *
  * Always answers 204, even on failure. The page must not behave differently
  * depending on whether our analytics worked, and a prospect must never see an

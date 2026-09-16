@@ -48,12 +48,11 @@ const TREES = [
 const GUARDS_ITS_OWN_DOOR = /^(page|layout|route)\.tsx?$/;
 
 /**
- * The one deliberate exception: liveness for uptime monitoring, which cannot
- * sign in. It is still wrong today — it answers an anonymous GET with agent,
- * lead and live-demo counts — and that is fixed with the rest of the
- * don't-leak work, at which point it comes off this list.
+ * The one route a stranger may reach: liveness, because uptime monitoring
+ * cannot sign in. Exempt from the refusal below, and held to a stricter rule
+ * instead — see "the health route answers liveness and nothing else".
  */
-const PUBLIC_BY_DESIGN = [path.join("src", "app", "api", "sales", "health", "route.ts")];
+const LIVENESS_ONLY = [path.join("src", "app", "api", "sales", "health", "route.ts")];
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -83,20 +82,34 @@ test("there are pages and routes to check at all", () => {
 
 test("every page, layout and route refuses on isBellineStaff", () => {
   const ungated = files
-    .filter((f) => !PUBLIC_BY_DESIGN.includes(f))
+    .filter((f) => !LIVENESS_ONLY.includes(f))
     .filter((f) => !code(fs.readFileSync(f, "utf8")).includes("!isBellineStaff("));
   assert.deepEqual(ungated, [], `no isBellineStaff refusal in: ${ungated.join(", ")}`);
 });
 
-test("the list of deliberately public files has not grown", () => {
+test("the list of reachable-without-signing-in files has not grown", () => {
   // Adding a file here is a decision to publish it. It should be visible in a
   // diff and argued for, never a quiet way past the test above.
-  assert.deepEqual(PUBLIC_BY_DESIGN, [
+  assert.deepEqual(LIVENESS_ONLY, [
     path.join("src", "app", "api", "sales", "health", "route.ts"),
   ]);
-  for (const f of PUBLIC_BY_DESIGN) {
+  for (const f of LIVENESS_ONLY) {
     assert.ok(fs.existsSync(f), `${f} is listed as public but does not exist`);
   }
+});
+
+test("the health route answers liveness and nothing else", () => {
+  // It may stay open, but not while describing the business to whoever asks.
+  const text = fs.readFileSync(LIVENESS_ONLY[0], "utf8");
+  assert.match(text, /isBellineStaff/, "the counts are not gated on staff at all");
+  assert.match(text, /const counts = staff/, "the counts must hang off a staff check");
+  assert.match(text, /\.\.\.\(counts/, "the counts must be spread in only when present");
+  // The row counts must not be reachable from the unconditional query.
+  const probe = text.slice(text.indexOf("try {"), text.indexOf("const counts"));
+  assert.ok(
+    !/from sales\.(agent|lead|demo)/.test(probe),
+    "the liveness probe itself reads the pipeline tables",
+  );
 });
 
 test("no page or route is gated on the role instead of the tenant", () => {
@@ -118,6 +131,25 @@ test("it is the tenant that decides, not the role", async () => {
   const { isBellineStaff } = await import("../src/lib/auth");
   assert.equal(typeof isBellineStaff, "function");
 });
+
+// Run it. The unconfigured path answers before the auth check, so this needs
+// no session and no database — which is also the guarantee being tested.
+{
+  const saved = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+  const { GET } = await import("../src/app/api/sales/health/route");
+  const response = await GET();
+  const body = (await response.json()) as Record<string, unknown>;
+  if (saved !== undefined) process.env.DATABASE_URL = saved;
+
+  test("a stranger's GET carries no agent, lead or demo counts", () => {
+    assert.equal(response.status, 503);
+    assert.equal(body.configured, false);
+    for (const leak of ["agents", "leads", "liveDemos"]) {
+      assert.ok(!(leak in body), `health answered a stranger with ${leak}`);
+    }
+  });
+}
 
 console.log(`\n${failed ? "\x1b[31m" : "\x1b[32m"}✓ ${passed} passed, ${failed} failed\x1b[0m\n`);
 if (failed > 0) process.exitCode = 1;

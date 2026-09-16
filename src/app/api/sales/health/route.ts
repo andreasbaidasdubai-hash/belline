@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { requireApiUser } from "@/lib/auth-server";
+import { isBellineStaff } from "@/lib/auth";
 import { isConfigured, one } from "@/lib/sales/db/client";
 
 export const dynamic = "force-dynamic";
@@ -12,11 +14,15 @@ export const dynamic = "force-dynamic";
  * the right behaviour and it makes one question impossible to answer from
  * outside: *is it connected?* This answers it.
  *
- * Public, because it says nothing a stranger could use: three booleans, a row
- * count and a latency. No connection string, no host, no credentials, no
- * customer or prospect data. The alternative — putting it behind the owner
- * login — means it cannot be used by uptime monitoring, which is most of the
- * point.
+ * Reachable without signing in, because uptime monitoring cannot sign in —
+ * but only as far as liveness. It used to answer a stranger with how many
+ * agents we run, how many leads are in the pipeline and how many demos are
+ * live: the shape and size of the business, handed to anybody who guessed the
+ * URL. Those are staff-only now, and are not even queried for anyone else.
+ *
+ * What everyone still gets is three booleans and a latency — no connection
+ * string, no host, no credentials, no customer or prospect data — which is all
+ * a monitor needs.
  */
 export async function GET() {
   const started = Date.now();
@@ -28,21 +34,31 @@ export async function GET() {
     );
   }
 
+  // Asked after the answer above, so a monitor with no session and no
+  // database still gets a reply without ever reaching the auth code.
+  const auth = await requireApiUser();
+  const staff = Boolean(auth.user && isBellineStaff(auth.user));
+
   try {
-    const row = await one<{ agents: number; leads: number; demos: number }>(
-      `select
-         (select count(*)::int from sales.agent)                        as agents,
-         (select count(*)::int from sales.lead)                         as leads,
-         (select count(*)::int from sales.demo where expires_at > now()) as demos`,
-    );
+    // The probe a monitor needs. The counts are a second query rather than a
+    // wider first one, so an anonymous request never runs them at all.
+    await one<{ ok: number }>(`select 1 as ok`);
+    const counts = staff
+      ? await one<{ agents: number; leads: number; demos: number }>(
+          `select
+             (select count(*)::int from sales.agent)                        as agents,
+             (select count(*)::int from sales.lead)                         as leads,
+             (select count(*)::int from sales.demo where expires_at > now()) as demos`,
+        )
+      : null;
     return NextResponse.json(
       {
         ok: true,
         configured: true,
         reachable: true,
-        agents: row?.agents ?? 0,
-        leads: row?.leads ?? 0,
-        liveDemos: row?.demos ?? 0,
+        ...(counts
+          ? { agents: counts.agents, leads: counts.leads, liveDemos: counts.demos }
+          : {}),
         latencyMs: Date.now() - started,
       },
       { headers: { "Cache-Control": "no-store" } },
