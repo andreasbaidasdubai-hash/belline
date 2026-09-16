@@ -1058,12 +1058,19 @@ await test("no page says 'Works with' or 'Integrates with' for a system that is 
   }
 });
 
-await test("the strip names companies in text: no logo image, no external asset, nothing from their domains", () => {
+await test("the strip names companies in text under self-hosted icons: no external asset, nothing from their domains", () => {
   const brandHosts = /google\.|microsoft\.|outlook\.|office\.com|live\.com|fresha\.|sevenrooms\.|opentable\.|treatwell\.|clearbit|logo\.dev|brandfetch|simpleicons|wikimedia/i;
   for (const html of [visibleHtml("landing.html"), built("off"), built("on")]) {
     const strip = stripOf(html);
-    assert.doesNotMatch(strip, /<img\b|<svg\b|<picture\b|<object\b|<use\b|srcset=|style=|url\(/i, "the strip carries an image");
-    const hrefs = [...strip.matchAll(/\b(?:href|src)="([^"]+)"/g)].map((m) => m[1]);
+    assert.doesNotMatch(strip, /<svg\b|<picture\b|<object\b|<use\b|srcset=|style=|url\(/i, "the strip carries an image other than its icons");
+    // Icons only as decoration beside the name in text, and only from the site's own /img/logos.
+    const imgs = [...strip.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
+    assert.equal(imgs.length, INTEGRATIONS.length, "one icon per name");
+    for (const img of imgs) {
+      assert.match(img, /\bsrc="\/img\/logos\/[a-z-]+(?:\.[0-9a-f]{8})?\.png"/, `icon not self-hosted: ${img}`);
+      assert.match(img, /\balt=""/, `icon is not marked decorative: ${img}`);
+    }
+    const hrefs = [...strip.matchAll(/\bhref="([^"]+)"/g)].map((m) => m[1]);
     assert.deepEqual(hrefs, ["mailto:hello@belline.ai"], "the strip links somewhere other than the site's own contact address");
     // Across the whole page: no image or stylesheet reference to a logo from outside the site.
     const refs = [...html.matchAll(/\b(?:src|href|srcset|content)="([^"]+)"|url\(\s*['"]?([^'")]+)/gi)].map((m) => m[1] ?? m[2]);
@@ -1076,14 +1083,18 @@ await test("the strip names companies in text: no logo image, no external asset,
       }
     }
   }
-  // The stylesheet's strip rules draw nothing, and no asset is named after one of the six.
+  // The stylesheet's strip rules draw nothing, and the six icons in img/logos are the only assets named after one of the six.
   const css = fs.readFileSync(path.join(process.cwd(), "public", "site.css"), "utf8");
   const rules = css.slice(css.indexOf("/* --- Integrations strip"));
   assert.ok(rules.length > 0 && css.includes("/* --- Integrations strip"), "site.css has lost the strip's rules");
   assert.doesNotMatch(rules, /url\(/, "the strip's styles load an image");
   const files = fs.readdirSync(path.join(process.cwd(), "public"), { recursive: true }) as string[];
-  const named = files.filter((f) => /google|outlook|microsoft|fresha|seven-?rooms|open-?table|treatwell/i.test(f));
-  assert.deepEqual(named, [], "public/ holds a file named after one of the six companies");
+  const named = files
+    .map((f) => f.replace(/\\/g, "/"))
+    .filter((f) => /google|outlook|microsoft|fresha|seven-?rooms|open-?table|treatwell/i.test(f))
+    .sort();
+  assert.deepEqual(named, INTEGRATIONS.map((i) => `img/logos/${i.logo}`).sort(), "public/ holds a file named after one of the six companies outside img/logos");
+  for (const i of INTEGRATIONS) assert.ok(fs.existsSync(path.join(process.cwd(), "public", "img", "logos", i.logo)), `missing icon ${i.logo}`);
 });
 
 await test("the line under the strip asks for the missing system through the site's existing contact address", () => {

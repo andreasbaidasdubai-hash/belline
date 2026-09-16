@@ -13,11 +13,11 @@
  * by hand, so the site cannot say "Available" a day before the product does,
  * or keep saying "Coming soon" a day after.
  *
- * Wordmarks, not logos. Each name is set as plain text in the site's own
- * typeface. No logo file is downloaded, copied or embedded, and none may be
- * until a signed partnership or the company's published brand guidelines
- * permit that use; until then a text wordmark is the only honest, trademark-
- * safe way to name another company's product.
+ * Each name sits under that company's app icon, at the founder's decision on
+ * 2026-09-16 (the trademark question was raised and accepted). The icons are
+ * self-hosted copies in public/img/logos, never hotlinked, and the name is
+ * always there in text as well: the icon is decoration (alt=""), the words are
+ * what a screen reader and check-webchat read.
  *
  * public/landing.html carries the block as every flag-off build renders it,
  * which is also what the app serves from that template; check-webchat pins
@@ -33,6 +33,8 @@ export type IntegrationState = "available" | "soon" | "roadmap";
 
 export interface Integration {
   name: string;
+  /** Its app icon, a file in public/img/logos. */
+  logo: string;
   /** The flag that says it works on this deployment. */
   flag: FlagName;
   /** What the tag says while the flag is off. */
@@ -41,12 +43,12 @@ export interface Integration {
 
 /** In the order a visitor reads them: the two being built, then the partners. */
 export const INTEGRATIONS: readonly Integration[] = [
-  { name: "Google Calendar", flag: "booking.google", pending: "soon" },
-  { name: "Outlook", flag: "booking.outlook", pending: "soon" },
-  { name: "Fresha", flag: "booking.partner.fresha", pending: "roadmap" },
-  { name: "SevenRooms", flag: "booking.partner.sevenrooms", pending: "roadmap" },
-  { name: "OpenTable", flag: "booking.partner.opentable", pending: "roadmap" },
-  { name: "Treatwell", flag: "booking.partner.treatwell", pending: "roadmap" },
+  { name: "Google Calendar", logo: "google-calendar.png", flag: "booking.google", pending: "soon" },
+  { name: "Outlook", logo: "outlook.png", flag: "booking.outlook", pending: "soon" },
+  { name: "Fresha", logo: "fresha.png", flag: "booking.partner.fresha", pending: "roadmap" },
+  { name: "SevenRooms", logo: "sevenrooms.png", flag: "booking.partner.sevenrooms", pending: "roadmap" },
+  { name: "OpenTable", logo: "opentable.png", flag: "booking.partner.opentable", pending: "roadmap" },
+  { name: "Treatwell", logo: "treatwell.png", flag: "booking.partner.treatwell", pending: "roadmap" },
 ];
 
 export const INTEGRATIONS_HEADING = "Connecting to the tools you already use";
@@ -76,11 +78,12 @@ function esc(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** The list itself: six wordmarks, each with its state in words. */
+/** The list itself: six names under their icons, each with its state in words. */
 export function renderIntegrations(env: Env): string {
   const items = INTEGRATIONS.map((item) => {
     const state = integrationState(item, env);
     return `        <li class="connect" data-integration="${esc(item.flag)}" data-state="${state}">
+          <img class="connect-logo" src="/img/logos/${esc(item.logo)}" width="40" height="40" alt="" loading="lazy">
           <span class="connect-name">${esc(item.name)}</span>
           <span class="${STATE_CLASS[state]}">${STATE_LABEL[state]}</span>
         </li>`;
@@ -93,7 +96,7 @@ ${items}
 const START = "<!-- integrations:start";
 const END = "<!-- integrations:end -->";
 const MARKER_NOTE =
-  "<!-- integrations:start — generated from src/lib/flags.ts by scripts/site-integrations.ts. Tags follow the flags at build time; do not edit by hand. Text wordmarks only: no company logo until a partnership or its brand guidelines permit it. -->";
+  "<!-- integrations:start — generated from src/lib/flags.ts by scripts/site-integrations.ts. Tags follow the flags at build time; do not edit by hand. Each name under its self-hosted app icon (public/img/logos). -->";
 
 /**
  * Replace the block between the markers. Throws when they are gone, rather

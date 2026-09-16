@@ -3106,6 +3106,7 @@ footer a { color: var(--bl-ink-900); }
   border-left: 1px solid var(--bl-rule-soft);
 }
 .connect:first-child { padding-left: 0; border-left: 0; }
+.connect-logo { display: block; width: 40px; height: 40px; border-radius: 10px; object-fit: contain; }
 .connect-name {
   font-family: var(--bl-font-display);
   font-size: 1.125rem;
