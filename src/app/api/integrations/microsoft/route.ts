@@ -16,12 +16,13 @@ import {
   completeOutlookConnection,
   outlookAuthUrl,
   outlookReturnPath,
+  reportOutlookAdminApproval,
   reportOutlookMisconfigured,
   signOutlookState,
   verifyOutlookState,
   type OutlookOutcome,
 } from "@/lib/integrations/outlook";
-import { MicrosoftConfigError } from "@/lib/integrations/microsoft-api";
+import { MicrosoftAdminApprovalError, MicrosoftConfigError, classifyAuthorizeError } from "@/lib/integrations/microsoft-api";
 import type { ReturnTo } from "@/lib/integrations/oauth-state";
 import { copyUpcoming, resyncMovedCalendars } from "@/lib/integrations/calendar-sync";
 import { appOrigin } from "@/lib/origin";
@@ -55,6 +56,18 @@ function land(returnTo: ReturnTo, locationId: string | undefined, outcome: Outlo
 }
 
 /**
+ * What an IT admin sees after approving Belline for their organisation (or
+ * declining to). Plain HTML, no data, nothing changed.
+ */
+function adminConsentPage(approved: boolean) {
+  const text = approved
+    ? "Belline is approved for your organisation. The owner can now connect Outlook in Belline."
+    : "Belline was not approved for your organisation. Nothing has changed. If that was not intended, open the approval link again.";
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Belline</title></head><body style="font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem"><h1 style="font-size:1.4rem">Belline and Outlook</h1><p>${text}</p></body></html>`;
+  return new NextResponse(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
+/**
  * Start the connection, or finish it. The Outlook twin of the Google route.
  *
  * Without `state` this starts: the owner must be able to edit the venue, the
@@ -64,10 +77,15 @@ function land(returnTo: ReturnTo, locationId: string | undefined, outcome: Outlo
  * state checks out — the venue comes from the signed state, never the URL.
  */
 export async function GET(request: Request) {
-  const auth = await requireApiUser();
-  if (auth.response) return auth.response;
   const url = new URL(request.url);
   const state = url.searchParams.get("state");
+  // An organisation's IT admin back from the approval link: not a Belline user,
+  // and nothing to change here. Answered before sign-in is asked for.
+  if (!state && (url.searchParams.has("admin_consent") || url.searchParams.has("tenant"))) {
+    return adminConsentPage(url.searchParams.get("admin_consent")?.toLowerCase() === "true" && !url.searchParams.get("error"));
+  }
+  const auth = await requireApiUser();
+  if (auth.response) return auth.response;
 
   if (!state) {
     const returnTo: ReturnTo = url.searchParams.get("from") === "setup" ? "setup" : "integrations";
@@ -101,9 +119,20 @@ export async function GET(request: Request) {
   const described = url.searchParams.get("error_description") ?? "";
   // Logged either way: a run of declines from one venue is worth a look.
   if (oauthError) console.warn(`[outlook] ${location.name}: Microsoft sent the owner back with error=${oauthError.slice(0, 60)} ${described.slice(0, 120)}`);
-  if (oauthError === "access_denied") return land(checked.returnTo, location.id, "declined");
   if (oauthError) {
-    customerError("outlook", `oauth returned ${oauthError}`, "refused", location.id);
+    const said = classifyAuthorizeError(oauthError, described, url.searchParams.get("error_subcode") ?? "");
+    if (said.kind === "declined") return land(checked.returnTo, location.id, "declined");
+    if (said.kind === "admin") {
+      // The organisation, not the owner: said plainly, and the team sends the IT admin the link.
+      reportOutlookAdminApproval(location, auth.user.id, said.code);
+      return land(checked.returnTo, location.id, "outlook_admin_approval");
+    }
+    if (said.kind === "config") {
+      reportOutlookMisconfigured(location, said.error);
+      customerError("outlook", said.error, "not_configured", location.id);
+      return land(checked.returnTo, location.id, "outlook_unavailable");
+    }
+    customerError("outlook", `oauth returned ${oauthError} AADSTS${said.code}`, "refused", location.id);
     return land(checked.returnTo, location.id, "outlook_refused");
   }
   const code = url.searchParams.get("code");
@@ -120,9 +149,18 @@ export async function GET(request: Request) {
     return land(checked.returnTo, location.id, "connected");
   } catch (err) {
     // The raw error is logged with a trace id; the owner gets a sentence.
-    if (err instanceof OutlookScopeError || err instanceof OutlookNoCalendarError) {
+    if (err instanceof OutlookScopeError) {
       customerError("outlook", err, "refused", location.id);
       return land(checked.returnTo, location.id, "outlook_refused");
+    }
+    if (err instanceof OutlookNoCalendarError) {
+      // An account without a mailbox: which account to use instead is the owner's to know.
+      customerError("outlook", err, "no_calendar", location.id);
+      return land(checked.returnTo, location.id, "outlook_no_calendar");
+    }
+    if (err instanceof MicrosoftAdminApprovalError) {
+      reportOutlookAdminApproval(location, auth.user.id, err.code);
+      return land(checked.returnTo, location.id, "outlook_admin_approval");
     }
     if (err instanceof MicrosoftConfigError) {
       // Our client id, secret or redirect address, not the owner.

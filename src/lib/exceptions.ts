@@ -47,6 +47,7 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "outlook_token_expired",
   "outlook_misconfigured",
   "outlook_connect_abandoned",
+  "outlook_admin_approval",
 ];
 
 interface KindMeta {
@@ -120,6 +121,11 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
   outlook_connect_abandoned: {
     label: "Outlook connection never came back",
     next: "Usually a work account whose organisation needs its IT admin to approve Belline. Contact the owner, and send their IT admin the approval link in the reason.",
+    belle: false,
+  },
+  outlook_admin_approval: {
+    label: "Organisation must approve Belline for Outlook",
+    next: "Contact the owner and send their IT admin the approval link in the reason. Publisher verification of Belline's Entra app removes most of these.",
     belle: false,
   },
 };

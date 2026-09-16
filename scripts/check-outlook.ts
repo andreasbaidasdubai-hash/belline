@@ -43,7 +43,8 @@ const outlook = await import("../src/lib/integrations/outlook");
 const msApi = await import("../src/lib/integrations/microsoft-api");
 const google = await import("../src/lib/integrations/google");
 const { openCredentials } = await import("../src/lib/db/credentials");
-const { integrationErrorText, resetCustomerErrors } = await import("../src/lib/errors/customer");
+const errors = await import("../src/lib/errors/customer");
+const { integrationErrorText, resetCustomerErrors } = errors;
 type Loc = import("../src/lib/types").Location;
 
 let passed = 0;
@@ -206,7 +207,7 @@ await test("a decline lands where the owner started with 'No problem — request
   assert.equal(outlook.outlookReturnPath("integrations", salonBase.id, "declined"), `/integrations?loc=${salonBase.id}&error=outlook_declined`);
   assert.match(integrationErrorText("outlook_declined")!, /^No problem — requests for now\./);
   const route = source("src/app/api/integrations/microsoft/route.ts");
-  assert.match(route, /oauthError === "access_denied"\) return land\(checked\.returnTo, location\.id, "declined"\)/);
+  assert.match(route, /if \(said\.kind === "declined"\) return land\(checked\.returnTo, location\.id, "declined"\)/);
   assert.equal(route.match(/outlookAuthUrl\(/g)?.length, 1, "the callback builds a Microsoft URL");
   assert.ok(route.indexOf("outlookAuthUrl(") < route.indexOf("verifyOutlookState("));
 });
@@ -924,6 +925,226 @@ await test("the server runs one sweep for both calendars", () => {
   const server = source("server.ts");
   assert.match(server, /import\("\.\/src\/lib\/integrations\/calendar-sync"\)/);
   assert.match(server, /sweepCalendars/);
+});
+
+// ---------------------------------------------------------------------------
+head("Microsoft's refusals, in plain words: a wrong app setting, an organisation's IT admin, a declined screen, no mailbox");
+
+/** Answer the live client's fetches with these, in order, for the length of `fn`. */
+async function withMicrosoftReplies(replies: { status: number; body: unknown }[], fn: () => Promise<void>): Promise<string[]> {
+  const guard = globalThis.fetch;
+  const queue = [...replies];
+  const asked: string[] = [];
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input instanceof Request ? input.url : input);
+    asked.push(url);
+    assert.match(url, /^https:\/\/(login\.microsoftonline\.com\/common\/oauth2\/v2\.0\/token|graph\.microsoft\.com\/v1\.0\/)/, `the live client asked for ${url}`);
+    const next = queue.shift();
+    assert.ok(next, `an unexpected request to ${url}`);
+    return new Response(next!.status === 204 ? null : JSON.stringify(next!.body), { status: next!.status, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await fn();
+  } finally {
+    globalThis.fetch = guard;
+  }
+  return asked;
+}
+
+const aad = (error: string, code: number, text: string) => ({ error, error_description: `AADSTS${code}: ${text} Trace ID: 0000 Correlation ID: 0000`, error_codes: [code] });
+
+await test("the live client reads the token endpoint right: a bad client, secret or redirect is ours; admin approval is the organisation's; an idle token is the owner's", async () => {
+  const { liveMicrosoftApi, MicrosoftAdminApprovalError, MicrosoftApiError, MicrosoftAuthError, MicrosoftConfigError } = msApi;
+  await withMicrosoftReplies(
+    [
+      { status: 401, body: aad("invalid_client", 7000215, "Invalid client secret provided.") },
+      { status: 401, body: aad("invalid_client", 7000222, "The provided client secret keys for app are expired.") },
+      { status: 400, body: aad("unauthorized_client", 700016, "Application with identifier was not found in the directory.") },
+      { status: 400, body: aad("invalid_request", 50011, "The redirect URI specified in the request does not match the redirect URIs configured for the application.") },
+      { status: 400, body: aad("invalid_grant", 65001, "The user or administrator has not consented to use the application.") },
+      { status: 400, body: aad("invalid_grant", 700082, "The refresh token has expired due to inactivity.") },
+      { status: 400, body: aad("invalid_grant", 50173, "The provided grant has expired due to it being revoked.") },
+      { status: 400, body: aad("interaction_required", 50076, "Due to a configuration change made by your administrator, you must use multi-factor authentication.") },
+      { status: 400, body: aad("invalid_grant", 54005, "OAuth2 Authorization code was already redeemed.") },
+      { status: 200, body: { access_token: "a", refresh_token: "r2", scope: "https://graph.microsoft.com/Calendars.ReadWrite", expires_in: 3599 } },
+    ],
+    async () => {
+      const secret = await rejection(liveMicrosoftApi.exchangeCode("c", CALLBACK));
+      assert.ok(secret instanceof MicrosoftConfigError && secret.reason === "secret" && secret.code === "7000215", String(secret));
+      const expiredSecret = await rejection(liveMicrosoftApi.refresh("r"));
+      assert.ok(expiredSecret instanceof MicrosoftConfigError && expiredSecret.reason === "secret", String(expiredSecret));
+      const client = await rejection(liveMicrosoftApi.refresh("r"));
+      assert.ok(client instanceof MicrosoftConfigError && client.reason === "client", String(client));
+      const redirect = await rejection(liveMicrosoftApi.exchangeCode("c", CALLBACK));
+      assert.ok(redirect instanceof MicrosoftConfigError && redirect.reason === "redirect", String(redirect));
+      const admin = await rejection(liveMicrosoftApi.exchangeCode("c", CALLBACK));
+      assert.ok(admin instanceof MicrosoftAdminApprovalError && admin.code === "65001", String(admin));
+      assert.ok((await rejection(liveMicrosoftApi.refresh("r"))) instanceof MicrosoftAuthError, "an idle-expired token is not the owner's reconnect");
+      assert.ok((await rejection(liveMicrosoftApi.refresh("r"))) instanceof MicrosoftAuthError, "a revoked grant is not the owner's reconnect");
+      assert.ok((await rejection(liveMicrosoftApi.refresh("r"))) instanceof MicrosoftAuthError, "MFA required again is not the owner's reconnect");
+      const spent = await rejection(liveMicrosoftApi.exchangeCode("c", CALLBACK));
+      assert.ok(spent instanceof MicrosoftApiError && !(spent instanceof MicrosoftConfigError), "a spent code is not a lost connection");
+      const rotated = await liveMicrosoftApi.refresh("r1");
+      assert.equal(rotated.refreshToken, "r2", "the rotated refresh token is not handed back");
+    },
+  );
+});
+
+await test("the live client reads Graph right: no mailbox is said as such, 401 and 403 are the owner's, 503 is retried", async () => {
+  const { liveMicrosoftApi, MicrosoftApiError, MicrosoftAuthError, MicrosoftNoMailboxError } = msApi;
+  const asked = await withMicrosoftReplies(
+    [
+      { status: 404, body: { error: { code: "MailboxNotEnabledForRESTAPI", message: "The mailbox is either inactive, soft-deleted, or is hosted on-premise." } } },
+      { status: 401, body: { error: { code: "OrganizationFromTenantGuidNotFound", message: "The tenant for tenant guid does not exist." } } },
+      { status: 401, body: { error: { code: "InvalidAuthenticationToken", message: "Access token has expired or is not yet valid." } } },
+      { status: 403, body: { error: { code: "ErrorAccessDenied", message: "Access is denied. Check credentials and try again." } } },
+      { status: 503, body: { error: { code: "ServiceNotAvailable", message: "Service unavailable" } } },
+      { status: 200, body: { value: [{ id: "c1", name: "Calendar", canEdit: true, isDefaultCalendar: true }, { id: "c2", name: "Birthdays", canEdit: false }] } },
+      {
+        status: 200,
+        body: {
+          value: [
+            { id: "e1", showAs: "busy", start: { dateTime: "2026-09-20T09:00:00.0000000", timeZone: "UTC" }, end: { dateTime: "2026-09-20T10:00:00.0000000", timeZone: "UTC" } },
+            { id: "e2", showAs: "free", start: { dateTime: "2026-09-20T11:00:00.0000000" }, end: { dateTime: "2026-09-20T12:00:00.0000000" } },
+            { id: "e3", isCancelled: true, showAs: "busy", start: { dateTime: "2026-09-20T13:00:00.0000000" }, end: { dateTime: "2026-09-20T14:00:00.0000000" } },
+          ],
+          "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/calendars/c1/calendarView?$skip=3",
+        },
+      },
+      {
+        status: 200,
+        body: {
+          value: [
+            { id: "e4", showAs: "busy", start: { dateTime: "2026-09-20T15:00:00.0000000" }, end: { dateTime: "2026-09-20T16:00:00.0000000" }, singleValueExtendedProperties: [{ id: msApi.BOOKING_PROPERTY, value: "bk_1" }] },
+          ],
+        },
+      },
+      { status: 404, body: { error: { code: "ErrorItemNotFound" } } },
+      { status: 404, body: { error: { code: "ErrorItemNotFound" } } },
+    ],
+    async () => {
+      assert.ok((await rejection(liveMicrosoftApi.listCalendars("t"))) instanceof MicrosoftNoMailboxError, "no mailbox is not said as such");
+      assert.ok((await rejection(liveMicrosoftApi.listCalendars("t"))) instanceof MicrosoftNoMailboxError, "a personal account with no Outlook.com mailbox");
+      assert.ok((await rejection(liveMicrosoftApi.listCalendars("t"))) instanceof MicrosoftAuthError);
+      assert.ok((await rejection(liveMicrosoftApi.listCalendars("t"))) instanceof MicrosoftAuthError);
+      const busy = await rejection(liveMicrosoftApi.listCalendars("t"));
+      assert.ok(busy instanceof MicrosoftApiError && busy.status === 503);
+      assert.deepEqual(await liveMicrosoftApi.listCalendars("t"), [{ id: "c1", name: "Calendar", primary: true }], "a calendar that cannot be edited is offered");
+      const events = await liveMicrosoftApi.listEvents("t", "c1", "2026-09-20T00:00:00.000Z", "2026-09-21T12:00:00.000Z");
+      assert.deepEqual(
+        events.map((e) => [e.id, e.start, e.free, e.bellineBookingId]),
+        [
+          ["e1", "2026-09-20T09:00:00Z", false, undefined],
+          ["e2", "2026-09-20T11:00:00Z", true, undefined],
+          ["e4", "2026-09-20T15:00:00Z", false, "bk_1"],
+        ],
+      );
+      assert.equal(await liveMicrosoftApi.updateEvent("t", "c1", "gone", {} as never), false);
+      await liveMicrosoftApi.deleteEvent("t", "c1", "gone");
+    },
+  );
+  assert.match(decodeURIComponent(asked[6]), /calendarView\?startDateTime=2026-09-20T00:00:00\.000Z&endDateTime=/);
+  assert.equal(asked[7], "https://graph.microsoft.com/v1.0/me/calendars/c1/calendarView?$skip=3", "the next page was not followed");
+});
+
+await test("what Microsoft sends back on the redirect is read right: Cancel is a decline; 'Need admin approval' is the IT admin's; a bad redirect is ours", () => {
+  const { classifyAuthorizeError } = msApi;
+  assert.equal(classifyAuthorizeError("access_denied", "AADSTS65004: User declined to consent to access the app.").kind, "declined");
+  assert.equal(classifyAuthorizeError("access_denied", "", "cancel").kind, "declined");
+  const admin = classifyAuthorizeError("access_denied", "AADSTS90094: The grant requires admin permission.");
+  assert.deepEqual(admin, { kind: "admin", code: "90094" });
+  assert.equal(classifyAuthorizeError("access_denied", "AADSTS90095: Admin consent is required for the permissions requested by this application. An admin consent request may be sent to the admin.").kind, "admin");
+  assert.equal(classifyAuthorizeError("consent_required", "AADSTS65001: The user or administrator has not consented to use the application.").kind, "admin");
+  assert.equal(classifyAuthorizeError("access_denied", "AADSTS50105: Your administrator has configured the application to block users unless they are specifically granted access.").kind, "admin");
+  assert.equal(classifyAuthorizeError("access_denied", "AADSTS53003: Access has been blocked by Conditional Access policies.").kind, "admin");
+  const config = classifyAuthorizeError("invalid_request", "AADSTS700016: Application with identifier 'x' was not found in the directory 'y'.");
+  assert.ok(config.kind === "config" && config.error.reason === "client");
+  assert.equal(classifyAuthorizeError("server_error", "AADSTS90033: A transient error has occurred.").kind, "refused");
+});
+
+await test("an organisation that needs admin approval: refused before anything is stored, the owner told plainly, the team given the link", async () => {
+  resetCustomerErrors();
+  const venue = spareVenue();
+  fake.failTokens({ status: 400, body: aad("invalid_grant", 65001, "The user or administrator has not consented to use the application with ID.") });
+  let err: unknown;
+  try {
+    err = await rejection(outlook.completeOutlookConnection(venue, "stub-code", CALLBACK, "user_owner", now));
+  } finally {
+    fake.failTokens(null);
+  }
+  assert.ok(err instanceof msApi.MicrosoftAdminApprovalError, String(err));
+  assert.equal(getLocation(venue.id)!.outlook, undefined);
+  await errorsDuring(() => outlook.reportOutlookAdminApproval(getLocation(venue.id)!, "user_owner", "65001", now));
+  const queued = listExceptions({ locationId: venue.id, kind: "outlook_admin_approval" });
+  assert.equal(queued.length, 1, "no exception for the team");
+  assert.match(queued[0].reason, /IT admin[\s\S]*adminconsent\?client_id=/);
+  assert.ok(getLocation(venue.id)!.outlookAdminApprovalAt, "the venue does not remember why");
+  const said = integrationErrorText("outlook_admin_approval")!;
+  assert.match(said, /IT admin has to approve Belline/);
+  assert.doesNotMatch(`${said} ${outlook.OUTLOOK_ADMIN_APPROVAL_TEXT}`, /AADSTS|consent|tenant|Entra|OAuth|publisher|verified/i);
+  assert.equal(outlook.outlookReturnPath("setup", venue.id, "outlook_admin_approval"), "/setup/bookings?outlook=outlook_admin_approval");
+  const route = source("src/app/api/integrations/microsoft/route.ts");
+  assert.match(route, /if \(said\.kind === "admin"\) \{[\s\S]{0,200}reportOutlookAdminApproval\(location, auth\.user\.id, said\.code\);\s*return land\(checked\.returnTo, location\.id, "outlook_admin_approval"\)/);
+  assert.match(route, /if \(err instanceof MicrosoftAdminApprovalError\) \{\s*reportOutlookAdminApproval\(location, auth\.user\.id, err\.code\);\s*return land\(checked\.returnTo, location\.id, "outlook_admin_approval"\)/);
+  // Connecting later clears the notice.
+  const connected = await outlook.completeOutlookConnection(getLocation(venue.id)!, "stub-code", CALLBACK, "user_owner", now);
+  assert.equal(connected.outlookAdminApprovalAt, undefined);
+  upsertLocation(venue);
+});
+
+await test("the IT admin coming back from the approval link gets a plain page, before any sign-in", () => {
+  const route = source("src/app/api/integrations/microsoft/route.ts");
+  const adminAt = route.indexOf('url.searchParams.has("admin_consent")');
+  assert.ok(adminAt > 0 && adminAt < route.indexOf("await requireApiUser()"), "the approval return asks the IT admin to sign in to Belline");
+  assert.match(route, /Belline is approved for your organisation\./);
+});
+
+await test("a declined consent screen lands on 'No problem — requests for now', a wrong setting on 'not available yet', and nothing internal reaches the owner", () => {
+  const route = source("src/app/api/integrations/microsoft/route.ts");
+  assert.match(route, /if \(said\.kind === "config"\) \{\s*reportOutlookMisconfigured\(location, said\.error\);[\s\S]{0,160}"outlook_unavailable"\)/);
+  assert.match(integrationErrorText("outlook_unavailable")!, /not available on this account yet/);
+  const { looksInternal } = errors;
+  for (const code of ["outlook_unavailable", "outlook_refused", "outlook_declined", "outlook_failed", "outlook_in_use", "outlook_admin_approval", "outlook_no_calendar"]) {
+    const text = integrationErrorText(code)!;
+    assert.ok(text && !/Something did not work/.test(text), `${code} has no sentence`);
+    assert.ok(!looksInternal(text), `${code} says something internal: ${text}`);
+    assert.doesNotMatch(text, /AADSTS|Graph|tenant|OAuth|MICROSOFT_/);
+  }
+});
+
+await test("an account with no mailbox: refused at connect with its own sentence, and a mailbox lost later puts the venue on requests saying why", async () => {
+  const venue = spareVenue();
+  fake.failGraph({ status: 404, body: { error: { code: "MailboxNotEnabledForRESTAPI", message: "The mailbox is either inactive, soft-deleted, or is hosted on-premise." } } });
+  try {
+    const err = await rejection(outlook.completeOutlookConnection(venue, "stub-code", CALLBACK, "user_owner", now));
+    assert.ok(err instanceof outlook.OutlookNoCalendarError, String(err));
+    assert.equal(getLocation(venue.id)!.outlook, undefined);
+  } finally {
+    fake.failGraph(null);
+  }
+  const route = source("src/app/api/integrations/microsoft/route.ts");
+  assert.match(route, /if \(err instanceof OutlookNoCalendarError\) \{[\s\S]{0,200}return land\(checked\.returnTo, location\.id, "outlook_no_calendar"\)/);
+  assert.match(integrationErrorText("outlook_no_calendar")!, /no Outlook calendar Belline can use/);
+
+  // Later: the licence is removed from a connected account.
+  const loc = upsertLocation({
+    ...(await outlook.completeOutlookConnection(venue, "stub-code", CALLBACK, "user_owner", now)),
+    onboarding: { version: 1, channels: {}, destination: { kind: "outlook", setAt: at } },
+  });
+  fake.failGraph({ status: 404, body: { error: { code: "MailboxNotEnabledForRESTAPI", message: "The mailbox is either inactive, soft-deleted, or is hosted on-premise." } } });
+  try {
+    await errorsDuring(async () => {
+      assert.ok((await rejection(outlook.listOutlookCalendarsFor(loc))) instanceof msApi.MicrosoftNoMailboxError);
+    });
+    const after = getLocation(venue.id)!;
+    assert.ok(after.outlook!.expiredAt);
+    assert.equal(providerFor(after), requestOnlyProvider);
+    assert.equal(outlook.outlookConnectionState(after).detail, outlook.OUTLOOK_NO_CALENDAR_TEXT);
+    assert.equal(outlook.outlookConnector.waiting(new msApi.MicrosoftNoMailboxError("x")), true, "a booking would be counted as failing, not waiting");
+  } finally {
+    fake.failGraph(null);
+    upsertLocation(venue);
+  }
 });
 
 // __MORE__

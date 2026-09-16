@@ -16,6 +16,7 @@ import {
   MICROSOFT_SCOPES,
   MicrosoftAuthError,
   MicrosoftConfigError,
+  MicrosoftNoMailboxError,
   liveMicrosoftApi,
   type MicrosoftApi,
   type OutlookCalendarEntry,
@@ -88,6 +89,10 @@ export const OUTLOOK_MISCONFIGURED_TEXT =
   "Outlook is connected, but Microsoft is not letting Belline use it yet because of a setting on Belline's side. The Belline team has been told. Bookings are taken as requests until it is fixed; you don't need to do anything.";
 export const OUTLOOK_ABANDONED_TEXT =
   "Your last try at connecting Outlook never came back from Microsoft. If Microsoft said you need admin approval, your organisation only lets its IT admin approve apps like Belline: ask your IT admin to approve Belline (the Belline team can send them the link), then connect again. If you simply closed the window, connect again whenever you like.";
+export const OUTLOOK_ADMIN_APPROVAL_TEXT =
+  "Your organisation only lets its IT admin approve apps like Belline, so Outlook could not be connected yet. Ask your IT admin to approve Belline for your organisation (the Belline team can send them the link and help), then connect again. Belline takes booking requests in the meantime.";
+export const OUTLOOK_NO_CALENDAR_TEXT =
+  "That Microsoft account has no Outlook calendar Belline can use. This happens with a work account that has no Microsoft 365 mailbox licence, or a mailbox kept on your company's own servers. Connect an account whose calendar opens in Outlook on the web, or ask your IT team. Belline takes booking requests in the meantime.";
 export const OUTLOOK_WRITE_FAILED_TEXT =
   "Outlook did not accept the last booking change. The booking is safe in Belline, and Belline keeps trying.";
 
@@ -188,7 +193,9 @@ export type OutlookOutcome =
   | "outlook_unavailable"
   | "outlook_refused"
   | "outlook_failed"
-  | "outlook_in_use";
+  | "outlook_in_use"
+  | "outlook_admin_approval"
+  | "outlook_no_calendar";
 
 /** Where the owner lands after Microsoft, by where they started. Never Microsoft again. */
 export function outlookReturnPath(returnTo: ReturnTo, locationId: string | undefined, outcome: OutlookOutcome): string {
@@ -292,7 +299,13 @@ export async function completeOutlookConnection(
   const tokens = await api.exchangeCode(code, redirectUri);
   const missing = missingOutlookScopes(tokens.scope);
   if (missing.length) throw new OutlookScopeError(missing);
-  const calendars = await api.listCalendars(tokens.accessToken);
+  let calendars: OutlookCalendarEntry[];
+  try {
+    calendars = await api.listCalendars(tokens.accessToken);
+  } catch (err) {
+    if (err instanceof MicrosoftNoMailboxError) throw new OutlookNoCalendarError(err.message);
+    throw err;
+  }
   if (calendars.length === 0) throw new OutlookNoCalendarError();
 
   const previous = location.outlook;
@@ -303,7 +316,7 @@ export async function completeOutlookConnection(
   );
   const sealedToken = sealOutlookToken(tokens.refreshToken);
   accessCache().set(location.id, { token: tokens.accessToken, until: Date.now() + Math.max(60, tokens.expiresIn - 300) * 1000, sealed: sealedToken });
-  const { outlookConnectAbandonedAt: _abandoned, ...venue } = location;
+  const { outlookConnectAbandonedAt: _abandoned, outlookAdminApprovalAt: _approved, ...venue } = location;
   return {
     ...venue,
     outlook: {
@@ -374,6 +387,8 @@ export async function withOutlookAccess<T>(location: Location, fn: (token: strin
     }
   } catch (err) {
     if (err instanceof MicrosoftAuthError) markOutlookExpired(location.id, err.message);
+    // The mailbox went away since (a licence removed, say): the owner reconnects with an account that has one.
+    if (err instanceof MicrosoftNoMailboxError) markOutlookExpired(location.id, err.message, OUTLOOK_NO_CALENDAR_TEXT);
     if (err instanceof MicrosoftConfigError) markOutlookMisconfigured(location.id, err);
     throw err;
   }
@@ -418,6 +433,29 @@ export function reportOutlookMisconfigured(location: Location, err: MicrosoftCon
     kind: "outlook_misconfigured",
     reason: `Microsoft refused ${location.name}'s Outlook because of Belline's Entra app registration (AADSTS${err.code || "?"}). ${fix[err.reason]}`,
     context: { reason: err.reason, code: err.code },
+    source: "system",
+  });
+}
+
+/**
+ * The owner's organisation needs its IT admin to approve Belline. The venue is
+ * marked so the integrations page keeps saying so, and the team gets an
+ * exception with the approval link to send the admin. Once per venue until a
+ * connection succeeds, which clears the mark.
+ */
+export function reportOutlookAdminApproval(location: Location, userId: string, code: string, now = new Date()): void {
+  if (!location.outlookAdminApprovalAt) upsertLocation({ ...location, outlookAdminApprovalAt: now.toISOString() });
+  console.warn(`[outlook] ${location.name}: the owner's organisation requires admin approval (AADSTS${code || "?"})`);
+  openException({
+    tenantId: location.tenantId,
+    locationId: location.id,
+    kind: "outlook_admin_approval",
+    reason:
+      `The owner tried to connect Outlook and Microsoft said their organisation's IT admin must approve Belline (AADSTS${code || "?"}). ` +
+      "Belline's Entra app is multi-tenant and not publisher-verified, which most Microsoft 365 organisations do not let staff approve themselves. " +
+      `Contact the owner and send their IT admin this approval link (it asks for Calendars.ReadWrite and User.Read for their organisation): ${adminConsentUrl()} . ` +
+      "Once approved, the owner connects again. Publisher verification of the app removes most of these.",
+    context: { userId, code },
     source: "system",
   });
 }
@@ -694,7 +732,7 @@ export const outlookConnector: CalendarConnector = {
 
   busyFor: (location, date) => busyForOutlook(location, date),
   isBusy: (location, busy, slot) => isBusyOutlook(location, busy, slot),
-  waiting: (err) => err instanceof MicrosoftAuthError || err instanceof MicrosoftConfigError,
+  waiting: (err) => err instanceof MicrosoftAuthError || err instanceof MicrosoftConfigError || err instanceof MicrosoftNoMailboxError,
   noteWriteFailure: (locationId, raw) => noteOutlookWriteFailure(locationId, raw),
   noteWriteSuccess: (locationId, stillFailing, now) => noteOutlookWriteSuccess(locationId, stillFailing, now),
 };

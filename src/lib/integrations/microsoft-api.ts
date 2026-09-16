@@ -72,6 +72,74 @@ export class MicrosoftConfigError extends Error {
   }
 }
 
+/**
+ * The owner's organisation will not let them approve Belline themselves.
+ *
+ * Belline's app is multi-tenant and, until the founder completes Microsoft's
+ * publisher verification, from an unverified publisher. Microsoft 365
+ * organisations commonly allow staff to approve only verified apps, or none,
+ * and conditional-access or assignment rules can block an app outright. The
+ * owner is stopped at "Need admin approval" (AADSTS90094, or 90095 where the
+ * organisation has an approval workflow), or the grant arrives without consent
+ * (AADSTS65001), or the user is not assigned (AADSTS50105), or a sign-in policy
+ * blocks it (AADSTS53003). Only their IT admin can change any of that.
+ */
+export class MicrosoftAdminApprovalError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "MicrosoftAdminApprovalError";
+  }
+}
+
+/**
+ * The Microsoft account has no mailbox Graph can reach, so no calendar: a work
+ * account without an Exchange Online licence, a mailbox kept on the company's
+ * own Exchange servers, or a personal Microsoft account that never had an
+ * Outlook.com mailbox. Graph answers MailboxNotEnabledForRESTAPI and friends.
+ */
+export class MicrosoftNoMailboxError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MicrosoftNoMailboxError";
+  }
+}
+
+/** AADSTS codes that mean the organisation's IT admin has to act. */
+const ADMIN_CODES = new Set(["90094", "90095", "900941", "65001", "50105", "53003", "530003"]);
+/** The owner pressed Cancel or "No" on Microsoft's consent screen. */
+const DECLINED_CODES = new Set(["65004"]);
+
+/** Graph error codes for an account with no mailbox Belline can use. */
+const NO_MAILBOX_CODES = new Set([
+  "MailboxNotEnabledForRESTAPI",
+  "MailboxNotSupportedForRESTAPI",
+  "ErrorNonExistentMailbox",
+  "OrganizationFromTenantGuidNotFound",
+  "ErrorMailboxNotEnabledForRESTAPI",
+]);
+
+export type AuthorizeOutcome =
+  | { kind: "declined" }
+  | { kind: "admin"; code: string }
+  | { kind: "config"; error: MicrosoftConfigError }
+  | { kind: "refused"; code: string };
+
+/**
+ * What Microsoft's `error` and `error_description` on the redirect back mean.
+ * Exported for the tests, which feed it what Microsoft sends.
+ */
+export function classifyAuthorizeError(error: string, description = "", subcode = ""): AuthorizeOutcome {
+  const code = aadstsCode(description);
+  const config = CONFIG_CODES[code];
+  if (config) return { kind: "config", error: new MicrosoftConfigError(config, code, `authorize: ${error} AADSTS${code}`) };
+  if (ADMIN_CODES.has(code) || error === "consent_required" || error === "admin_consent_required") return { kind: "admin", code };
+  if (DECLINED_CODES.has(code) || (error === "access_denied" && (subcode === "cancel" || !code))) return { kind: "declined" };
+  return { kind: "refused", code };
+}
+
 /** The AADSTS number in an error description, as a string, or "". */
 export function aadstsCode(text: string | undefined): string {
   return /AADSTS(\d+)/.exec(text ?? "")?.[1] ?? "";
@@ -117,7 +185,11 @@ export function tokenFailure(status: number, data: TokenErrorBody, grant: "code"
   const config = CONFIG_CODES[code];
   if (config) return new MicrosoftConfigError(config, code, short);
   if (data.error === "invalid_client" || data.error === "unauthorized_client") return new MicrosoftConfigError("client", code, short);
-  if (grant === "refresh" && (data.error === "invalid_grant" || data.error === "interaction_required" || GRANT_CODES.has(code))) {
+  // At the connection, an organisation's rule: the IT admin has to act. On a
+  // refresh the same codes mean consent was withdrawn since, which a reconnect
+  // (and, if the rule still stands, the admin) fixes.
+  if (grant === "code" && ADMIN_CODES.has(code)) return new MicrosoftAdminApprovalError(code, short);
+  if (grant === "refresh" && (data.error === "invalid_grant" || data.error === "interaction_required" || GRANT_CODES.has(code) || ADMIN_CODES.has(code))) {
     return new MicrosoftAuthError(short);
   }
   return new MicrosoftApiError(status, short);
@@ -135,6 +207,7 @@ export function graphFailure(status: number, text: string, what: string): Error 
     message = text;
   }
   const short = `${what}: ${status} ${code} ${message}`.slice(0, 300);
+  if (NO_MAILBOX_CODES.has(code)) return new MicrosoftNoMailboxError(short);
   // Token no good, or a permission withdrawn since: only reconnecting fixes either.
   if (status === 401 || status === 403) return new MicrosoftAuthError(short);
   return new MicrosoftApiError(status, short);

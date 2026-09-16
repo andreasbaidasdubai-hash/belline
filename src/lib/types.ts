@@ -175,6 +175,8 @@ export interface Location {
   outlook?: OutlookLink;
   /** As `googleConnectAbandonedAt`, for Outlook: a connection that never came back from Microsoft. */
   outlookConnectAbandonedAt?: string;
+  /** When Microsoft last said the owner's organisation must approve Belline first. Cleared by a connection. */
+  outlookAdminApprovalAt?: string;
   /**
    * What one booking is typically worth here.
    *
@@ -1454,7 +1456,8 @@ export type ExceptionKind =
   | "outlook_sync_failed"
   | "outlook_token_expired"
   | "outlook_misconfigured"
-  | "outlook_connect_abandoned";
+  | "outlook_connect_abandoned"
+  | "outlook_admin_approval";
 
 export interface SupportException {
   id: string;
