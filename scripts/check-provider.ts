@@ -207,6 +207,19 @@ await test("requests: no instruction to check availability, and a plain rule aga
   assert.match(staticPrompt(withDestination(restaurant, { kind: "belline" }), "text"), /check_availability/);
 });
 
+await test("requests: the prompt forbids proposing a time, on both channels", () => {
+  // Voice streams, so there is no post-hoc guard there at all: the tools it is
+  // not given and the rules it is given are the whole control. That makes these
+  // lines load-bearing rather than decorative.
+  for (const channel of ["voice", "text"] as const) {
+    const prompt = staticPrompt(withDestination(restaurant, { kind: "requests" }), channel);
+    assert.match(prompt, /Never propose a time/, channel);
+    assert.match(prompt, /call take_booking_request in that same turn/, channel);
+    assert.match(prompt, /repeated once so they know you heard it/, channel);
+  }
+  assert.doesNotMatch(staticPrompt(withDestination(restaurant, { kind: "belline" }), "text"), /Never propose a time/);
+});
+
 await test("the owner's rules reach the prompt", () => {
   const venue = withDestination(restaurant, { kind: "requests", bookingLink: "https://book.example.test/" }, {
     requestRules: { askFor: ["partySize"], afterHours: "message", neverSay: ["Never promise a window seat"] },

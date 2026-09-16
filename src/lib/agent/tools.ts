@@ -100,7 +100,8 @@ export function toolsFor(
           name: "take_booking_request",
           description:
             "Pass a booking request to the team. This business confirms every booking itself: this books nothing, and you cannot see what is free. " +
-            "Call it once you have their name, a contact number you have read back, and when they would like to come. " +
+            "Call it once you have their name, a contact number you have read back, and when they would like to come — in that same turn, rather than asking them whether to pass it on. " +
+            "Never suggest a time of your own, and never say a time would fit: you cannot see what is free. " +
             "Afterwards say the request is with the team, who will get back to them to confirm. Never say it is booked, confirmed or reserved.",
           input_schema: {
             type: "object",

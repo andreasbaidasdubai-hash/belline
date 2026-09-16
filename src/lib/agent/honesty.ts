@@ -181,23 +181,98 @@ export function publishedTimes(location: Pick<Location, "hours" | "restaurant" |
 const HOURS_WORDS =
   /\b(open|opens|opening|close|closes|closed|closing|hours|until|till|last seating|last orders?|last booking|stop taking|cut-?off)\b/i;
 
+/**
+ * Words that frame a time as one the venue can give.
+ *
+ * Not a list of sentences that went wrong — the failure is *proposing a slot*,
+ * and a proposal is a shape: a clock time sitting inside a phrase that says the
+ * venue can put somebody in it. "I have 6:00", "how about 6:00", "I could fit
+ * you in at 6:00" and "6:00 is free" are one move wearing four costumes.
+ *
+ * Two tiers, because the two callers can afford different amounts of noise.
+ * `OFFER` is the precise one and applies everywhere, including venues with a
+ * real diary, where a false positive deletes an honest sentence about opening
+ * hours. `OFFER_WIDE` adds the looser idioms and is used only where Belline
+ * can never give a time at all, so over-firing costs a clause and under-firing
+ * costs a guest a slot that does not exist.
+ *
+ * Kept out of both: bare "open", "until" and "would", which is how an honest
+ * sentence about opening hours is written.
+ */
+const OFFER_CORE = String.raw`fit (?:you )?in|squeeze (?:you )?in|slot (?:you )?in|get you in|i have|we have|i've got|we've got|there(?:'s| is| are)|avail(?:able|ability)|free|how about|what about|shall we say|put you (?:down|in)|pencil(?:led)?(?: you)? in|book(?:ing)? you in|(?:could|can|might be able to|should be able to) (?:do|manage|offer|fit|squeeze|see you|take you|get you)|would work|does that work|works for you`;
+const OFFER_EXTRA = String.raw`earliest|latest|slot|come (?:in|by) at|see you at|offer(?:ing)? you|save you|reserve you`;
+
+const OFFER = new RegExp(String.raw`\b(?:${OFFER_CORE})\b`, "i");
+const OFFER_WIDE = new RegExp(String.raw`\b(?:${OFFER_CORE}|${OFFER_EXTRA})\b`, "i");
+
+/**
+ * A refusal is not an offer. "I can't say whether 8:00 is free" contains the
+ * word that makes an offer and is the opposite of one, so only the words before
+ * the phrase, in the same clause, are read — the same shape as HEDGE below.
+ * "will" is deliberately absent: "the team will fit you in at 5:30" is still a
+ * slot Belline has no business naming.
+ */
+const NOT_OFFERING =
+  /\b(can'?t|cannot|can not|don'?t|do not|won'?t|will not|never|not|no|unable|whether|nothing|isn'?t|aren'?t|hasn'?t|haven'?t)\b|n't\b/i;
+
+function framesAnOffer(clause: string, re: RegExp = OFFER): boolean {
+  for (const m of clause.matchAll(new RegExp(re.source, "gi"))) {
+    if (!NOT_OFFERING.test(clause.slice(0, m.index))) return true;
+  }
+  return false;
+}
+
 /** Sentences, as a person would split them. Keeps the punctuation. */
 function sentencesOf(text: string): string[] {
   return text.split(/(?<=[.!?])\s+/).filter((s) => s.trim());
+}
+
+/**
+ * Clauses, for a repair that has to keep half a sentence.
+ *
+ * The reply that prompted this was a single sentence carrying both the right
+ * answer and the wrong one: "We're open Thursdays 9 to 6, so 7 PM would be
+ * outside our hours — the latest we could fit you in is around 5:30 PM."
+ * Dropping the sentence drops the opening hours, which were correct and useful.
+ * So a dash, a semicolon, a colon or a comma before "but"/"so" is a seam a
+ * repair may cut on. The separators come back in the result, so a reply nothing
+ * was cut from is returned byte for byte.
+ */
+function clausesOf(text: string): { text: string; sep: string }[] {
+  const parts = text.split(/((?<=[.!?])\s+|\s*[—–;:]\s+|,\s+(?=(?:but|so|though|although|however)\b))/);
+  const out: { text: string; sep: string }[] = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    if (parts[i]?.trim()) out.push({ text: parts[i], sep: i === 0 ? "" : parts[i - 1] ?? " " });
+  }
+  return out;
 }
 
 export function checkTimes(
   reply: string,
   traces: ToolTrace[],
   published?: Set<Minutes>,
+  /**
+   * Times the customer named themselves, this turn. Their own words are as real
+   * a source as a tool's: told "can I come at 7 PM?", a reply that may not
+   * repeat "7 PM" cannot say it is outside the opening hours either, and
+   * refusing to name their own time is worse than naming it. Allowed only where
+   * the reply is not dressing it up as available — "7 PM is outside our hours"
+   * passes, "7 PM is free" does not.
+   */
+  said?: Set<Minutes>,
 ): HonestyVerdict {
   const offered = timesOffered(traces);
   const invented = new Set<Minutes>();
   for (const sentence of sentencesOf(reply)) {
     const aboutHours = HOURS_WORDS.test(sentence);
+    // An opening time offered as a slot is an invention even at the venue that
+    // opens then: "we're closed by then, but I could fit you in at 6:00" is a
+    // promise nothing made, and the hours exemption used to wave it through.
+    const offering = framesAnOffer(sentence);
     for (const t of timesIn(sentence)) {
       if (offered.has(t)) continue;
-      if (aboutHours && published?.has(t)) continue;
+      if (!offering && aboutHours && published?.has(t)) continue;
+      if (!offering && said?.has(t)) continue;
       invented.add(t);
     }
   }
@@ -222,15 +297,28 @@ export function checkTimes(
  * message ends on a question the next turn can answer honestly. Only when
  * nothing is left does the old replacement stand in.
  */
-export function repairReply(reply: string, verdict: HonestyVerdict): string {
+export function repairReply(
+  reply: string,
+  verdict: HonestyVerdict,
+  /**
+   * At a business that confirms its own bookings there is no diary to fall back
+   * on, and the honest alternative below is not honest there: "I haven't got
+   * anything free there" and "I'll tell you exactly what's free" both claim
+   * knowledge of a book Belline cannot see. That is what the repair sent to a
+   * request-only venue before this flag existed.
+   */
+  opts: { requestsOnly?: boolean } = {},
+): string {
   if (verdict.ok) return reply;
   const invented = new Set(verdict.invented);
   const kept = sentencesOf(reply).filter((s) => !timesIn(s).some((t) => invented.has(t)));
-  if (!kept.length) return honestAlternative(verdict);
+  if (!kept.length) return opts.requestsOnly ? REQUEST_NO_SLOT : honestAlternative(verdict);
 
-  const follow = verdict.offered.length
-    ? honestAlternative(verdict)
-    : "I'll tell you exactly what's free — which day would suit you?";
+  const follow = opts.requestsOnly
+    ? REQUEST_NO_SLOT
+    : verdict.offered.length
+      ? honestAlternative(verdict)
+      : "I'll tell you exactly what's free — which day would suit you?";
   return `${kept.join(" ")} ${follow}`;
 }
 
@@ -282,6 +370,68 @@ export function repairRequestReply(reply: string, verdict: ClaimVerdict): string
   if (verdict.ok) return reply;
   const kept = sentencesOf(reply).filter((s) => claimsIn(s).length === 0);
   return [...kept, REQUEST_HANDOVER].join(" ");
+}
+
+/**
+ * What to say having cut a proposed slot. Names no time, promises no diary, and
+ * ends somewhere the next turn can go.
+ */
+export const REQUEST_NO_SLOT =
+  "I can't hold a time here, but tell me when suits you and I'll pass it to the team to confirm.";
+
+export interface SlotVerdict {
+  ok: boolean;
+  /** The clauses that offered a time, kept for the audit log. */
+  offers: string[];
+}
+
+/**
+ * Did it propose a slot at a business whose diary it cannot see?
+ *
+ * Distinct from `checkTimes`, and needed alongside it, because the two are
+ * answering different questions. `checkTimes` asks where a time *came from* —
+ * and at a request-only venue a time can have an impeccable source and still be
+ * a promise nobody can keep: `take_booking_request` echoes the customer's own
+ * time back, which licenses "8:00 PM" for the rest of the conversation, and
+ * "I have 8:00 PM for you" would sail through. This asks what the reply *does*
+ * with the time. Here the answer is absolute: Belline confirms nothing, so no
+ * time may be framed as available, whatever licensed it.
+ *
+ * Stating the opening hours is untouched — those sentences frame no offer — and
+ * so is repeating the time the customer asked for.
+ */
+export function checkSlotOffers(reply: string): SlotVerdict {
+  const offers = clausesOf(reply)
+    .map((c) => c.text.trim())
+    .filter((text) => timesIn(text).length > 0 && framesAnOffer(text, OFFER_WIDE));
+  return { ok: offers.length === 0, offers };
+}
+
+/** The reply with the offered slots cut out and everything else left standing. */
+export function repairSlotOffers(reply: string, verdict: SlotVerdict): string {
+  if (verdict.ok) return reply;
+  const offers = new Set(verdict.offers);
+  let out = "";
+  let cut = false;
+  for (const clause of clausesOf(reply)) {
+    const text = clause.text.trim();
+    if (offers.has(text)) {
+      cut = true;
+      continue;
+    }
+    if (!out) out = text;
+    // A clause whose neighbour was cut starts a sentence rather than dangling
+    // off the separator that used to join them.
+    else if (cut) out = `${endStop(out)} ${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+    else out += `${clause.sep}${text}`;
+    cut = false;
+  }
+  return out ? `${endStop(out)} ${REQUEST_NO_SLOT}` : REQUEST_NO_SLOT;
+}
+
+function endStop(text: string): string {
+  const trimmed = text.replace(/[\s,;:—–]+$/, "");
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
 /**

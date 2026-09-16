@@ -4,7 +4,16 @@ import type { Conversation, Provider } from "./types";
 import { getCall, getLocation, saveCall } from "../store";
 import { startCall } from "../calls";
 import { AgentSession } from "../agent/runtime";
-import { checkRequestReply, checkTimes, publishedTimes, repairReply, repairRequestReply } from "../agent/honesty";
+import {
+  checkRequestReply,
+  checkSlotOffers,
+  checkTimes,
+  publishedTimes,
+  repairReply,
+  repairRequestReply,
+  repairSlotOffers,
+  timesIn,
+} from "../agent/honesty";
 import { takesRequestsOnly } from "../booking/destination";
 import { metaAdapter } from "./channel/meta";
 import { twilioAdapter } from "./channel/twilio";
@@ -204,7 +213,41 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   // 3:30 and 5:00" at a salon whose only free slots were before half past ten.
   // A guest turning up for an appointment that does not exist is the worst
   // failure this product has, so it is a check rather than a request.
-  const honesty = checkTimes(reply, call.toolCalls, publishedTimes(location));
+  // Did it propose a slot at a business that confirms its own bookings?
+  //
+  // First, and separately from the check below, because the two catch different
+  // things and this one cuts clauses rather than whole sentences. The reply that
+  // prompted it carried the opening hours and an invented slot in one sentence —
+  // "we're open Thursdays 9 to 6, so 7 PM is outside our hours, the latest we
+  // could fit you in is around 5:30" — and sentence-level repair threw the
+  // correct half away with the wrong one.
+  const requestsOnly = takesRequestsOnly(location);
+  if (requestsOnly) {
+    const offer = checkSlotOffers(reply);
+    if (!offer.ok) {
+      await track({
+        tenantId,
+        businessId: conversation.businessId,
+        channel: conversation.channel,
+        conversationId,
+        traceId,
+        name: "ai.offered_slot",
+        payload: { offers: offer.offers, replaced: reply },
+      });
+      reply = repairSlotOffers(reply, offer);
+    }
+  }
+
+  const honesty = checkTimes(
+    reply,
+    call.toolCalls,
+    publishedTimes(location),
+    // The customer's own words are a source like any other: told "can I come at
+    // 7 PM?", a reply forbidden from repeating 7 PM cannot tell them it is
+    // outside the opening hours either. Dressing it up as available is caught
+    // above, and by the offer test inside checkTimes.
+    new Set(timesIn(accepted.text)),
+  );
   if (!honesty.ok) {
     console.warn(
       `[reception ${traceId}] invented ${honesty.invented.join(", ")} — offered ${
@@ -226,13 +269,13 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
     // Only the sentences naming an invented time are taken out; the rest of
     // the answer stays. Repaired from the tool's own output rather than
     // regenerated: a second model call costs a second and might invent again.
-    reply = repairReply(reply, honesty);
+    reply = repairReply(reply, honesty, { requestsOnly });
   }
 
   // At a business that confirms its own bookings, nothing Belline writes may
   // tell somebody they hold one. Same shape as the check above: the original is
   // kept for audit, and only the sentences that claimed a booking are removed.
-  if (takesRequestsOnly(location)) {
+  if (requestsOnly) {
     const claim = checkRequestReply(reply);
     if (!claim.ok) {
       await track({

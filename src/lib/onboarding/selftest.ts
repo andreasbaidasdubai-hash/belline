@@ -5,7 +5,7 @@ import { getLocation, saveCall, upsertLocation } from "../store";
 import { startCall } from "../calls";
 import { callContext, staticPrompt } from "../agent/prompt";
 import { BOOKING_TOOL_NAMES, executeTool, toolsFor } from "../agent/tools";
-import { checkRequestReply, checkTimes, publishedTimes } from "../agent/honesty";
+import { checkRequestReply, checkSlotOffers, checkTimes, publishedTimes, timesIn } from "../agent/honesty";
 import { takesRequestsOnly } from "../booking/destination";
 import { meterModel } from "../billing/cost";
 import { raiseException } from "../errors/customer";
@@ -251,7 +251,9 @@ export function grade(location: Location, scenario: Scenario, run: Transcript): 
     return { passed: false, detail: "It did not reply at all. Try running the checks again; if it keeps happening, ask Belle." };
   }
 
-  const honesty = checkTimes(reply, run.traces, publishedTimes(location));
+  // The customer's own time is theirs to be repeated; everything else has to
+  // have come from a tool or from the venue's published hours.
+  const honesty = checkTimes(reply, run.traces, publishedTimes(location), new Set(timesIn(scenario.prompt)));
   if (!honesty.ok) {
     return {
       passed: false,
@@ -261,6 +263,17 @@ export function grade(location: Location, scenario: Scenario, run: Transcript): 
   }
 
   const requests = takesRequestsOnly(location);
+  // Nothing here can hold a time, so naming one as available is wrong even when
+  // the time itself is honest — the venue's own closing time, or the one the
+  // customer asked for, offered back as a slot.
+  if (requests && !checkSlotOffers(reply).ok) {
+    return {
+      passed: false,
+      detail:
+        "It offered the customer a time. Your team confirms bookings, so nothing here can hold one — the customer would arrive for a slot nobody agreed to.",
+      fix: "/setup/rules",
+    };
+  }
   if (requests && !checkRequestReply(reply).ok) {
     return {
       passed: false,

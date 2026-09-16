@@ -251,7 +251,25 @@ await test("a Twilio receipt carries the number it went out on", () => {
 // ---------------------------------------------------------------------------
 head("A business that confirms its own bookings is never told it has one");
 
-const { checkRequestReply, repairRequestReply, checkTimes } = await import("../src/lib/agent/honesty");
+const {
+  checkRequestReply,
+  checkSlotOffers,
+  checkTimes,
+  publishedTimes,
+  repairReply,
+  repairRequestReply,
+  repairSlotOffers,
+  REQUEST_NO_SLOT,
+} = await import("../src/lib/agent/honesty");
+type ToolTrace = import("../src/lib/types").ToolTrace;
+const trace = (name: string, output: unknown): ToolTrace => ({
+  at: new Date().toISOString(),
+  name,
+  input: {},
+  output,
+  ms: 3,
+  ok: true,
+});
 const { executeTool } = await import("../src/lib/agent/tools");
 const guardRoot = path.resolve(import.meta.dirname, "..");
 const requestVenue = {
@@ -308,6 +326,123 @@ await test("a request-only venue refuses a diary tool with words to say, not an 
   const out = await executeTool("check_availability", { date: "2030-01-01", service_ids: [] }, { location: requestVenue, call });
   assert.match(JSON.stringify(out.result), /not_supported/);
   assert.match(JSON.stringify(out.result), /take_booking_request/);
+});
+
+// ---------------------------------------------------------------------------
+head("A business that confirms nothing never proposes a time");
+
+/**
+ * Both cases come from Belline's own eight-scenario check, run against a real
+ * staging venue that takes requests. It proposed times it had no way to confirm
+ * twice: once offering to "send that through" at a time no tool had returned,
+ * and once — the instructive one — reasoning from the opening hours to a slot.
+ *
+ * Stating the hours was right. "The latest we could fit you in is around 5:30"
+ * was a promise nothing in the venue's setup could keep.
+ */
+const DAY = [{ start: 540, end: 1080 }]; // 9 to 6, every day
+const slotVenue = {
+  ...requestVenue,
+  closures: [],
+  hours: { 0: DAY, 1: DAY, 2: DAY, 3: DAY, 4: DAY, 5: DAY, 6: DAY },
+};
+const { grade, scenariosFor } = await import("../src/lib/onboarding/selftest");
+const scenarioOf = (id: string) => scenariosFor(slotVenue).find((s) => s.id === id)!;
+const graded = (id: string, reply: string, traces: ToolTrace[] = []) =>
+  grade(slotVenue, scenarioOf(id), { reply, traces });
+
+await test("the closed-day transcript: the invented slot goes, the hours and their own time stay", () => {
+  const reply =
+    "We're open Thursdays 9 to 6, so 7 PM would be outside our hours — the latest we could fit you in is around 5:30 PM to finish by 6.";
+  const verdict = checkSlotOffers(reply);
+  assert.equal(verdict.ok, false, "a proposed slot was not seen as one");
+  const repaired = repairSlotOffers(reply, verdict);
+  // What must survive: the hours, and the time the customer asked about.
+  assert.match(repaired, /open Thursdays 9 to 6/, repaired);
+  assert.match(repaired, /7 PM/, repaired);
+  // What must not: the slot, and any suggestion Belline can see a diary.
+  assert.doesNotMatch(repaired, /5:30|fit you in/i, repaired);
+  assert.doesNotMatch(repaired, /anything free|another day/i, repaired);
+  assert.match(repaired, /pass it to the team/, repaired);
+  // And the whole reply still fails the venue's own check, as it did on staging.
+  assert.equal(graded("out_of_hours", reply).passed, false);
+});
+
+await test("a slot dressed as the venue's own closing time is caught", () => {
+  // This passed every gate: 18:00 is a published closing time and the sentence
+  // mentions the hours, so the invention check exempted it and the setup check
+  // returned passed. The offer is what makes it wrong, not the number.
+  const reply = "We're closed by then, but I could fit you in at 6:00 PM.";
+  const verdict = checkTimes(reply, [], publishedTimes(slotVenue));
+  assert.equal(verdict.ok, false, "an offer still borrowed the opening-hours exemption");
+  assert.deepEqual(verdict.invented, [18 * 60]);
+  assert.equal(checkSlotOffers(reply).ok, false);
+  assert.equal(graded("out_of_hours", reply).passed, false, "the setup check passed a slot nothing can hold");
+});
+
+await test("a time the request tool echoed back may still not be offered", () => {
+  // Why this check exists next to the invention check rather than inside it:
+  // take_booking_request echoes the customer's own time, which licenses that
+  // time for the rest of the conversation. Licensed is not the same as free.
+  const traces = [trace("take_booking_request", { requested: true, requested_time: "20:00" })];
+  const reply = "I have 8:00 PM for you on Friday.";
+  assert.equal(checkTimes(reply, traces).ok, true, "precondition: the echo licenses the time");
+  assert.equal(checkSlotOffers(reply).ok, false, "offering it is still a slot nothing can hold");
+});
+
+await test("the booking transcript: asking whether to pass it on fails; taking the request passes", () => {
+  const asked =
+    "Good morning, Sam — happy to send that through. Just to confirm, that's tomorrow at 10:00 AM, to the number 050 123 4567 — shall I pass this on to the team?";
+  const askedVerdict = graded("booking", asked);
+  assert.equal(askedVerdict.passed, false);
+  assert.match(askedVerdict.detail!, /did not pass the booking request/);
+
+  const took = [trace("take_booking_request", { requested: true, requested_time: "10:00" })];
+  const done = "Thanks Sam — that's tomorrow at 10:00 AM on 050 123 4567, and it's with the team now to confirm.";
+  const doneVerdict = graded("booking", done, took);
+  assert.equal(doneVerdict.passed, true, JSON.stringify(doneVerdict));
+});
+
+await test("the honest replies a request-only venue must still be able to send", () => {
+  for (const reply of [
+    "We're open Thursdays 9 to 6, so 7 PM would be outside our hours.",
+    "We're open every day from 9:00 AM until 6:00 PM.",
+    "Your request for 8:00 PM on Friday is with the team, and they'll get back to you to confirm.",
+    "I can't see the diary, so I can't say whether 6:00 PM is free.",
+    "Thanks Sam — I've passed your request for 10:00 AM tomorrow to the team.",
+  ]) {
+    assert.equal(checkSlotOffers(reply).ok, true, reply);
+    // Untouched, byte for byte: a guard that rewrites honest replies is one
+    // somebody switches off.
+    assert.equal(repairSlotOffers(reply, checkSlotOffers(reply)), reply, reply);
+  }
+});
+
+await test("the repair at a request-only venue never claims to know what is free", () => {
+  const reply = "I have 5:30 PM free.";
+  const repaired = repairReply(reply, checkTimes(reply, []), { requestsOnly: true });
+  assert.equal(repaired, REQUEST_NO_SLOT);
+  assert.doesNotMatch(repaired, /anything free|another day|tell you exactly/i, repaired);
+  assert.doesNotMatch(repaired, /\d{1,2}:\d{2}/, repaired);
+});
+
+await test("a venue with its own diary may still offer the times it checked", () => {
+  // The offer test tightens the invention check for everyone, so this is the
+  // side that must not move: a checked time, offered, at a venue that can book.
+  const diary = getLocation(signed.location.id)!;
+  const traces = [trace("check_availability", { slots: [{ time: "10:00", startMin: 600 }] })];
+  assert.equal(checkTimes("I have 10:00 free tomorrow — shall I book it?", traces, publishedTimes(diary)).ok, true);
+});
+
+await test("the message path runs the slot guard before the invention check", () => {
+  const respond = fs.readFileSync(path.join(guardRoot, "src/lib/reception/respond.ts"), "utf8");
+  assert.match(respond, /checkSlotOffers\(reply\)/);
+  assert.match(respond, /ai\.offered_slot/);
+  assert.match(respond, /repairReply\(reply, honesty, \{ requestsOnly \}\)/);
+  assert.ok(
+    respond.indexOf("checkSlotOffers(reply)") < respond.indexOf("const honesty = checkTimes("),
+    "the clause-level repair must run before the sentence-level one",
+  );
 });
 
 // ---------------------------------------------------------------------------
