@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getLocation } from "@/lib/store";
 import { requireApiUser } from "@/lib/auth-server";
 import { speak, ttsEnabled } from "@/lib/providers/tts";
+import { languageChoiceOpen } from "@/lib/language";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,8 @@ export async function POST(request: Request) {
     voiceSpeed?: number;
     locationId?: string;
     text?: string;
+    /** The language being chosen on the agent page, which may not be saved yet. */
+    language?: string;
   };
   const voiceId = body.voiceId?.trim();
   if (!voiceId) {
@@ -51,6 +54,7 @@ export async function POST(request: Request) {
       modelId: body.voiceModel?.trim() || location?.agent.voiceModel,
       speed: body.voiceSpeed ?? location?.agent.voiceSpeed,
       format: "mp3_44100_128",
+      ...(body.language === "de" && languageChoiceOpen() ? { languageCode: "de" as const } : {}),
     })) {
       chunks.push(chunk);
     }
