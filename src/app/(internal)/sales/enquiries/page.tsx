@@ -1,6 +1,8 @@
 import { requireUser } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { listLeads } from "@/lib/store";
+import { isWaitlistLead } from "@/lib/leads/waitlist";
+import { MARKETS } from "@/lib/markets";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +54,8 @@ export default async function EnquiriesPage() {
       <div style={{ marginBottom: 18 }}>
         <h1 style={{ fontSize: 22, margin: 0, fontWeight: 600 }}>Enquiries</h1>
         <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-          People who asked for a call from the website. Newest first — these go cold fast.
+          People who asked for a call from the website, and the German pages&rsquo; waitlist (Germany, Austria,
+          Switzerland; no phone number asked). Newest first — these go cold fast.
         </p>
       </div>
 
@@ -60,10 +63,11 @@ export default async function EnquiriesPage() {
         <div className="panel" style={{ padding: "28px 24px" }}>
           <p style={{ margin: 0, fontSize: 14 }}>Nothing yet.</p>
           <p className="muted" style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6, maxWidth: "60ch" }}>
-            The website has no enquiry form at the moment — the landing page sends
-            people to the checkout, and &ldquo;Email us&rdquo; goes to hello@belline.ai.
-            Anything posted to <span className="mono">/api/leads</span> still lands here,
-            with its domain checked for deliverability first.
+            The English landing page sends people to the checkout, and &ldquo;Email us&rdquo; goes to
+            hello@belline.ai. The German pages&rsquo; waitlist posts to{" "}
+            <span className="mono">/api/leads/waitlist</span>, and anything posted to{" "}
+            <span className="mono">/api/leads</span> lands here too, with its domain checked for
+            deliverability first.
           </p>
         </div>
       ) : (
@@ -82,6 +86,11 @@ export default async function EnquiriesPage() {
                 <span style={{ fontSize: 15.5, fontWeight: 600 }}>{lead.company}</span>
                 <span className="muted" style={{ fontSize: 13 }}>{lead.name}</span>
                 <span className="pill">{lead.status}</span>
+                {isWaitlistLead(lead) && (
+                  <span className="pill" title="Joined the waitlist on a German page. Belline is not open there yet.">
+                    waitlist{lead.market ? ` · ${lead.market}` : ""}
+                  </span>
+                )}
                 {lead.emailCheck.role && (
                   <span className="pill" title="A shared mailbox rather than a person">
                     shared mailbox
@@ -105,9 +114,12 @@ export default async function EnquiriesPage() {
                 <a href={`mailto:${lead.email}`} style={{ fontSize: 13.5, fontWeight: 600 }}>
                   {lead.email}
                 </a>
-                <a href={`tel:${lead.phone}`} style={{ fontSize: 13.5, fontWeight: 600 }}>
-                  {lead.phone}
-                </a>
+                {/* The DACH waitlist asks for no phone number: no empty tel: link. */}
+                {lead.phone && (
+                  <a href={`tel:${lead.phone}`} style={{ fontSize: 13.5, fontWeight: 600 }}>
+                    {lead.phone}
+                  </a>
+                )}
               </div>
 
               <div
@@ -121,6 +133,7 @@ export default async function EnquiriesPage() {
               >
                 <Fact label="Wants" value={lead.intent} />
                 <Fact label="Trade" value={lead.vertical} />
+                <Fact label="Country" value={lead.market ? MARKETS[lead.market].name : undefined} />
                 <Fact label="Venues" value={lead.venues} />
                 <Fact label="Calls a day" value={lead.callVolume} />
                 <Fact label="Free" value={lead.availability} />

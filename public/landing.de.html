@@ -1,0 +1,998 @@
+<!doctype html>
+<html lang="de-DE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- translated-from: sha256 c6c7df412185fa883b58f31371e327473950b455b5c4751cc2d4fb0376ce71f3 -->
+<!--
+  Die deutsche Startseite, für Deutschland, Österreich und die Schweiz.
+
+  Eine Quelle, dreimal gebaut (scripts/site-locale.ts): /de-de, /de-at und
+  /de-ch, jede mit den geplanten Preisen ihres Markts. Geschrieben für
+  Deutschland; Pfade, Sprach-Tags und die Schweizer Schreibung ohne Eszett
+  setzt der Build.
+
+  Eine Übersetzung von public/landing.html, Abschnitt für Abschnitt, mit
+  denselben ids. Die Zeile "translated-from" oben hält fest, von welcher
+  englischen Fassung übersetzt wurde; check:translations schlägt fehl, wenn
+  sich die englische Seite seitdem geändert hat.
+
+  Ehrlich auf Deutsch: Belline ist in diesen drei Ländern noch nicht
+  verfügbar und antwortet auf Englisch. Die Seite sagt das oben, im Preisteil,
+  in den Fragen und im Fuß, und jeder Knopf, der auf Englisch "Connect your
+  business" heißt, führt hier zur Warteliste.
+-->
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="canonical" href="https://belline.ai/de-de">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Belline">
+<meta property="og:url" content="https://belline.ai/de-de">
+<meta property="og:title" content="Belline – Hier geht immer jemand ran">
+<meta property="og:description" content="Ein KI-Empfang für Unternehmen, die Anrufe, Nachrichten oder Buchungen erhalten. Noch nicht verfügbar in Deutschland, Österreich und der Schweiz: Tragen Sie sich auf die Warteliste ein.">
+<meta property="og:image" content="https://belline.ai/brand/belline-og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Der Belline-Glockenknopf neben den Worten: Someone always answers.">
+<meta property="og:locale" content="de_DE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Belline – Hier geht immer jemand ran">
+<meta name="twitter:description" content="Beantwortet Ihr Telefon und Ihre Website aus Ihren eigenen Informationen. Gibt den Rest an Ihr Team weiter.">
+<meta name="twitter:image" content="https://belline.ai/brand/belline-og.png">
+<title>Belline – KI-Empfang für Unternehmen, die Anrufe und Nachrichten erhalten</title>
+<meta name="description" content="Belline beantwortet die Anrufe und Website-Anfragen, die Ihr Team nicht schafft, aus Ihren eigenen Informationen und sorgt dafür, dass die richtige Person nachfasst. In Deutschland, Österreich und der Schweiz noch nicht verfügbar: Tragen Sie sich auf die Warteliste ein.">
+
+<!--
+  Strukturierte Daten. Die FAQ unten muss Wort für Wort der sichtbaren FAQ
+  entsprechen (check-billing vergleicht beide). Die Angebote und die zwei
+  Katalog-Antworten schreibt scripts/site-pricing-de.ts bei jedem Build neu.
+-->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "name": "Belline",
+      "url": "https://belline.ai/",
+      "logo": "https://belline.ai/brand/png/belline-mark-512.png",
+      "email": "hello@belline.ai",
+      "telephone": "+1-571-778-5920",
+      "areaServed": "AE",
+      "description": "Ein KI-Empfang für Unternehmen, die Anrufe, Nachrichten oder Buchungen erhalten. Beantwortet Ihr Telefon und Ihre Website aus Ihren eigenen Informationen und gibt den Rest an Ihr Team weiter."
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Belline",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://belline.ai/de-de",
+      "offers": [
+        { "@type": "Offer", "name": "Belline Starter", "price": "69", "priceCurrency": "EUR", "billingIncrement": "P1M", "availability": "https://schema.org/PreOrder" },
+        { "@type": "Offer", "name": "Belline Growth", "price": "129", "priceCurrency": "EUR", "billingIncrement": "P1M", "availability": "https://schema.org/PreOrder" },
+        { "@type": "Offer", "name": "Belline Scale", "price": "249", "priceCurrency": "EUR", "billingIncrement": "P1M", "availability": "https://schema.org/PreOrder" }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "Müssen wir unsere Telefonnummer ändern?", "acceptedAnswer": { "@type": "Answer", "text": "Nein. Sie behalten Ihre Nummer und richten an Ihrem bestehenden Anschluss eine Anrufweiterleitung ein. Sie können sie jederzeit selbst wieder ausschalten." } },
+        { "@type": "Question", "name": "Lässt sich Belline mit Fresha, SevenRooms oder OpenTable verbinden?", "acceptedAnswer": { "@type": "Answer", "text": "Noch nicht. Für diese Verbindungen braucht es eine Partnervereinbarung mit dem jeweiligen Unternehmen, und die haben wir noch nicht. Heute beantwortet Belline Ihre Kunden, nimmt ihre Daten und ihr Anliegen auf, und Ihr Team trägt die Buchung wie gewohnt in Ihr System ein. Sagen Sie uns, welches System Sie nutzen." } },
+        { "@type": "Question", "name": "Klingt Belline wie ein Roboter?", "acceptedAnswer": { "@type": "Answer", "text": "Sprechen Sie mit Belline und urteilen Sie selbst. Der Button auf dieser Seite verbindet Sie mit derselben Empfangskraft, die Ihre Kunden erreichen würden, derzeit auf Englisch. Fragt jemand, ob Belline eine KI ist, sagt Belline das." } },
+        { "@type": "Question", "name": "Was, wenn Belline etwas falsch macht?", "acceptedAnswer": { "@type": "Answer", "text": "Belline antwortet nur aus Ihren Informationen. Weiß Belline etwas nicht, nimmt Belline eine Nachricht auf. Zu jedem Gespräch gibt es eine Zusammenfassung und ein vollständiges Transkript, damit Sie genau sehen, was gesagt wurde." } },
+        { "@type": "Question", "name": "Kann Belline Anrufer zu uns durchstellen?", "acceptedAnswer": { "@type": "Answer", "text": "Ja. Geben Sie Belline eine Nummer Ihres Teams, und dringende Anrufe werden live durchgestellt. Nimmt niemand ab, erfährt der Anrufer, dass das Team zurückruft, und der Anruf steht ganz oben auf Ihrer Liste." } },
+        { "@type": "Question", "name": "Nimmt Belline Anrufe an, die unser Team angenommen hätte?", "acceptedAnswer": { "@type": "Answer", "text": "Nur wenn Sie sie weiterleiten. Die meisten Unternehmen leiten Anrufe weiter, wenn niemand abnimmt oder die Leitung besetzt ist. So nimmt das Team weiterhin zuerst ab." } },
+        { "@type": "Question", "name": "Verschickt Belline Erinnerungen oder Bestätigungen?", "acceptedAnswer": { "@type": "Answer", "text": "Noch nicht. Belline verschickt heute keine SMS und keine E-Mails an Ihre Kunden. Sobald das möglich ist, können Sie es einschalten." } },
+        { "@type": "Question", "name": "Was passiert, wenn unser Kontingent aufgebraucht ist?", "acceptedAnswer": { "@type": "Answer", "text": "Wenn ein Kontingent aufgebraucht ist, entscheiden Sie, was passiert: automatisch ein Paket hinzubuchen (100 zusätzliche Sprachminuten für 25 € oder 150 zusätzliche Textgespräche für 12 €), bis zu einer monatlichen Ausgabengrenze, die Sie festlegen; in den nächsten Tarif wechseln; oder beim Kontingent stoppen. Wir informieren Sie bei 70 %, 90 % und 100 %. Ihrer Rechnung wird nichts hinzugefügt, was Sie nicht selbst gewählt haben." } },
+        { "@type": "Question", "name": "Kostet uns die Anrufweiterleitung etwas?", "acceptedAnswer": { "@type": "Answer", "text": "Das kann sein, und wie viel, entscheidet Ihr Telefonanbieter. Belline nimmt Anrufe auf einer eigenen Nummer an. Liegt diese Nummer im Ausland, kann Ihr Anbieter für jeden weitergeleiteten Anruf einen Auslandstarif berechnen. Nummern in Deutschland, Österreich und der Schweiz hat Belline noch nicht. Das Dashboard zeigt die genaue Nummer." } },
+        { "@type": "Question", "name": "Sind wir vertraglich gebunden?", "acceptedAnswer": { "@type": "Answer", "text": "Nein. Monatliche Tarife sind jederzeit kündbar und laufen bis zum Ende des bezahlten Zeitraums. Jährliche Tarife werden im Voraus bezahlt und enthalten 1 Monat gratis." } },
+        { "@type": "Question", "name": "Passt Belline zu unserer Art von Unternehmen?", "acceptedAnswer": { "@type": "Answer", "text": "Ja, wenn Kunden Sie mit Fragen oder Anliegen anrufen oder Ihnen schreiben. Belline antwortet aus Ihren eigenen Informationen und gibt den Rest an Ihr Team weiter. Auf der Warteliste können Sie angeben, welche Branche am besten passt." } },
+        { "@type": "Question", "name": "Was machen Sie mit den Daten unserer Kunden?", "acceptedAnswer": { "@type": "Answer", "text": "Transkripte und Nachrichten werden gespeichert, damit Sie nachlesen können, was gesagt wurde. Anrufe werden nicht aufgezeichnet, mit einer Ausnahme, die der Anrufer selbst wählt: Bevor ein Unternehmen live geht, kann ein Anrufer eine Mailbox-Nachricht hinterlassen, und diese Aufnahme wird für das Unternehmen aufbewahrt. Die Daten gehören Ihrem Unternehmen, und wir übergeben sie Ihnen, wenn Sie gehen." } },
+        { "@type": "Question", "name": "Beantwortet Belline WhatsApp?", "acceptedAnswer": { "@type": "Answer", "text": "Ja, auf einer zweiten Nummer. Sie bekommen eine neue WhatsApp-Nummer für Ihr Unternehmen, die wir mit Ihnen einrichten. Belline beantwortet sie dann aus Ihren Informationen und gibt Anfragen an Ihr Team weiter. Ihr eigenes WhatsApp bleibt, wie es ist." } },
+        { "@type": "Question", "name": "Spricht Belline Deutsch?", "acceptedAnswer": { "@type": "Answer", "text": "Noch nicht. Belline antwortet auf Englisch, am Telefon, im Chat und auf WhatsApp." } }
+      ]
+    }
+  ]
+}
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="#">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" class="mark-ground"/><g class="mark-glyph" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>
+      <span>Belline</span>
+    </a>
+    <nav id="site-nav" data-open="false">
+      <a href="#channels">Wo Belline antwortet</a>
+      <a href="#how">So funktioniert’s</a>
+      <a href="#price">Preise</a>
+<!-- locale:start — generated by scripts/site-locale.ts: the country and language picker. Do not edit by hand. -->
+      <details class="locale" data-locale="DE">
+        <summary class="locale-btn"><svg class="locale-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"/></svg><span class="vh">Land und Sprache: </span><span class="locale-now">DE · Deutsch</span><svg class="locale-chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5"/></svg></summary>
+        <div class="locale-panel" id="locale-panel">
+          <div>
+            <p class="locale-h" id="locale-h-country">Land</p>
+            <ul class="locale-list" aria-labelledby="locale-h-country">
+            <li><a href="/" hreflang="en"><span class="locale-code" aria-hidden="true">AE</span><span class="locale-name">Vereinigte Arabische Emirate</span><span class="locale-money">AED</span></a></li>
+            <li><a href="/de-de" hreflang="de-DE" aria-current="page"><span class="locale-code" aria-hidden="true">DE</span><span class="locale-name">Deutschland</span><span class="locale-money">EUR</span></a></li>
+            <li><a href="/de-at" hreflang="de-AT"><span class="locale-code" aria-hidden="true">AT</span><span class="locale-name">Österreich</span><span class="locale-money">EUR</span></a></li>
+            <li><a href="/de-ch" hreflang="de-CH"><span class="locale-code" aria-hidden="true">CH</span><span class="locale-name">Schweiz</span><span class="locale-money">CHF</span></a></li>
+            </ul>
+          </div>
+          <div>
+            <p class="locale-h" id="locale-h-language">Sprache</p>
+            <ul class="locale-list" aria-labelledby="locale-h-language">
+            <li><a href="/de-de" lang="de" aria-current="page"><span class="locale-name">Deutsch</span></a></li>
+            <li><span class="locale-off"><span class="locale-name" lang="en">English</span><em>später</em></span></li>
+            </ul>
+          </div>
+        </div>
+      </details>
+<!-- locale:end -->
+      <a class="nav-cta" href="#warteliste">Auf die Warteliste</a>
+      <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Anmelden</a>
+    </nav>
+    <button class="menu-toggle" type="button" aria-expanded="false"
+            aria-controls="site-nav" aria-label="Menü öffnen">
+      <span class="bar"></span>
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!--
+    Der Hero: dieselben drei Gespräche und derselbe Kalender wie auf der
+    englischen Seite, übersetzt und als übersetzte Beispiele gekennzeichnet,
+    denn Belline selbst antwortet auf Englisch. Kein Gespräch endet mit einem
+    gebuchten Termin, und der Kalender trägt "Demnächst".
+  -->
+  <section class="hero">
+    <div class="wrap hero-in hero-demo">
+      <div class="hero-copy">
+        <p class="eyebrow rise">KI-Empfang für Telefon und Chat</p>
+        <h1 class="display rise rise-1">Hier geht immer jemand ran.</h1>
+        <p class="lead rise rise-2">
+          Belline beantwortet die Anrufe, Website-Chats und WhatsApp-Nachrichten,
+          die Ihr Team nicht schafft.
+          Belline antwortet aus Ihren eigenen Informationen und gibt alles andere
+          mit einer Zusammenfassung an Ihr Team weiter.
+          Bald kann Belline auch direkt in den Kalender buchen, den Sie schon nutzen.
+        </p>
+
+        <div class="cta-row rise rise-3">
+          <a class="btn" href="#warteliste" data-cta="hero">Auf die Warteliste</a>
+          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belline sprechen</a>
+        </div>
+
+        <p class="hero-note rise rise-4">
+          <strong>Noch nicht verfügbar in Deutschland, Österreich und der Schweiz.</strong>
+          Belline antwortet derzeit auf Englisch. Ihre Nummer bleibt.
+          <span class="gen" data-gen="trial-short">Geplant: 30 Tage kostenlos, ohne Karte.</span>
+        </p>
+      </div>
+
+      <div class="stage" role="group" aria-label="Drei Beispielgespräche, übersetzt, und ein Beispielkalender">
+        <!-- Website-Chat -->
+        <figure class="demo-card demo-chat">
+          <figcaption class="demo-head">
+            <span class="demo-badge" aria-hidden="true">
+              <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" class="mark-ground"/><g class="mark-glyph" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>
+            </span>
+            <span class="demo-title">Website-Chat</span>
+            <span class="demo-example">Beispiel, übersetzt</span>
+          </figcaption>
+          <ol class="chat-thread">
+            <li class="msg msg-visitor"><span class="vh">Besucher: </span>Bieten Sie Balayage an?</li>
+            <li class="msg msg-belline">
+              <span class="vh">Belline: </span>Ja. Balayage gibt es ab <span class="gen" data-gen="example-price">190 €</span> und dauert etwa drei Stunden, mit einer kurzen Beratung vorab.
+              <span class="msg-source">Aus Ihrer Preisliste</span>
+            </li>
+            <li class="msg msg-visitor"><span class="vh">Besucher: </span>Könnte ich am Donnerstag nach 18 Uhr kommen?</li>
+            <li class="msg msg-belline">
+              <span class="vh">Belline: </span>Ich gebe das mit Ihren Angaben an das Team weiter, und das Team stimmt einen Termin mit Ihnen ab. Auf welchen Namen darf ich es notieren?
+            </li>
+          </ol>
+        </figure>
+
+        <!-- Anruf -->
+        <figure class="demo-card demo-call">
+          <figcaption class="demo-head demo-head-ink">
+            <span class="demo-title">Anruf</span>
+            <span class="demo-example">Beispiel, übersetzt</span>
+          </figcaption>
+          <div class="call-bar">
+            <span class="call-who">
+              <span class="call-k">Anrufer</span>
+              <span class="call-num"><span class="gen" data-gen="example-caller">+49 151 ••• 4417</span></span>
+            </span>
+            <span class="call-level" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="call-time"><span class="vh">Gesprächsdauer </span>01:12</span>
+          </div>
+          <ol class="call-lines">
+            <li><span class="call-said-k">Anrufer</span> Hallo, ich hätte gern einen Tisch für sechs am Freitag, gegen acht.</li>
+            <li><span class="call-said-k">Belline</span> Das nehme ich gern für das Team auf. Wie ist Ihr Name?</li>
+            <li><span class="call-said-k">Anrufer</span> Laura Schneider.</li>
+            <li><span class="call-said-k">Belline</span> Danke, Frau Schneider. Das Team ruft Sie zurück, um Ihren Tisch abzustimmen.</li>
+          </ol>
+          <div class="call-sent">
+            <p class="call-sent-head">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              An Ihr Team gesendet
+            </p>
+            <dl>
+              <div><dt>Name</dt><dd>Laura Schneider</dd></div>
+              <div><dt>Anliegen</dt><dd>Tisch für 6, Freitag gegen 20:00</dd></div>
+            </dl>
+          </div>
+        </figure>
+
+        <!-- Der Kalender, in dem die Anfrage landet. Noch nicht live. -->
+        <figure class="cal">
+          <figcaption class="cal-head">
+            <span class="cal-day">
+              <span class="cal-dow">Freitag</span>
+              <span class="cal-sub">Beispielkalender</span>
+            </span>
+            <span class="state state-soon cal-soon">Demnächst: bucht in Ihren Kalender</span>
+          </figcaption>
+          <div class="cal-body">
+            <ol class="cal-hours" aria-hidden="true">
+              <li>18:00</li><li>19:00</li><li>20:00</li><li>21:00</li>
+            </ol>
+            <ul class="cal-events">
+              <li class="cal-ev cal-ev-a"><span class="cal-time">18:00</span>Anna K.<span class="cal-what">Tisch für 2</span></li>
+              <li class="cal-ev cal-ev-b"><span class="cal-time">19:00</span>Jonas M., Tisch für 4</li>
+              <li class="cal-ev cal-ev-new">
+                <span class="cal-new-k">Neue Anfrage von Belline</span>
+                <span class="cal-new-what">Laura S., Tisch für 6, gegen 20:00</span>
+                <span class="cal-new-state">Wartet auf Ihr Team</span>
+              </li>
+            </ul>
+          </div>
+        </figure>
+
+        <!-- WhatsApp, auf einer zweiten Nummer. Endet mit der Anfrage beim Team. -->
+        <figure class="demo-card demo-wa">
+          <figcaption class="demo-head demo-head-wa">
+            <span class="demo-wa-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path fill="currentColor" d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z"/></svg>
+            </span>
+            <span class="demo-title">WhatsApp</span>
+            <span class="demo-example">Beispiel, übersetzt</span>
+          </figcaption>
+          <ol class="chat-thread wa-thread">
+            <li class="msg msg-visitor"><span class="vh">Kundin: </span>Hallo, kann ich für Samstagvormittag eine Maniküre bekommen?</li>
+            <li class="msg msg-belline">
+              <span class="vh">Belline: </span>Ich gebe das an das Team weiter, und das Team stimmt hier einen Termin mit Ihnen ab. Auf welchen Namen darf ich es notieren?
+            </li>
+          </ol>
+        </figure>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <ul class="plain-facts">
+        <li><strong>Ihre Nummer bleibt</strong> Leiten Sie Anrufe von Ihrem bestehenden Anschluss an Belline weiter.</li>
+        <li><strong>Ihre eigenen Informationen</strong> Belline antwortet anhand Ihrer Leistungen, Preise, Öffnungszeiten und Regeln.</li>
+        <li><strong>Die schwierigen Fälle gehen an Ihr Team</strong> Was Belline nicht beantworten sollte, geht mit einer Zusammenfassung an eine Person.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!--
+    Die Verbindungsleiste. Nichts davon ist heute verbunden: "Verbindungen zu",
+    nie "funktioniert mit" oder "integriert mit". Die Zustände kommen aus den
+    Flags (scripts/site-integrations.ts), auf Deutsch.
+  -->
+  <section id="connects" class="connects" aria-labelledby="connects-h">
+    <div class="wrap">
+      <div class="connects-head">
+        <h2 class="connects-h" id="connects-h">Verbindungen zu den Tools, die Sie schon nutzen</h2>
+        <button class="connects-pause" type="button" aria-pressed="false" hidden>Anhalten</button>
+      </div>
+<!-- integrations:start — generated from src/lib/flags.ts by scripts/site-integrations.ts. Tags follow the flags at build time; do not edit by hand. Each name under its self-hosted app icon (public/img/logos). -->
+      <ul class="connects-list" aria-label="Buchungssysteme und Kalender, und wo jede Verbindung steht">
+        <li class="connect" data-integration="booking.google" data-state="soon">
+          <img class="connect-logo" src="/img/logos/google-calendar.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">Google Calendar</span>
+          <span class="state state-soon">Demnächst</span>
+        </li>
+        <li class="connect" data-integration="booking.outlook" data-state="soon">
+          <img class="connect-logo" src="/img/logos/outlook.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">Outlook</span>
+          <span class="state state-soon">Demnächst</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.fresha" data-state="roadmap">
+          <img class="connect-logo" src="/img/logos/fresha.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">Fresha</span>
+          <span class="state state-roadmap">Geplant</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.sevenrooms" data-state="roadmap">
+          <img class="connect-logo" src="/img/logos/sevenrooms.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">SevenRooms</span>
+          <span class="state state-roadmap">Geplant</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.opentable" data-state="roadmap">
+          <img class="connect-logo" src="/img/logos/opentable.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">OpenTable</span>
+          <span class="state state-roadmap">Geplant</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.treatwell" data-state="roadmap">
+          <img class="connect-logo" src="/img/logos/treatwell.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">Treatwell</span>
+          <span class="state state-roadmap">Geplant</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.zenoti" data-state="roadmap">
+          <img class="connect-logo" src="/img/logos/zenoti.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">Zenoti</span>
+          <span class="state state-roadmap">Geplant</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.mindbody" data-state="roadmap">
+          <img class="connect-logo" src="/img/logos/mindbody.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">Mindbody</span>
+          <span class="state state-roadmap">Geplant</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.calendly" data-state="roadmap">
+          <img class="connect-logo" src="/img/logos/calendly.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">Calendly</span>
+          <span class="state state-roadmap">Geplant</span>
+        </li>
+      </ul>
+<!-- integrations:end -->
+      <p class="connects-ask">
+        Sie nutzen ein Buchungssystem, das hier noch fehlt?
+        <a href="mailto:hello@belline.ai">Sagen Sie es uns</a>.
+      </p>
+    </div>
+  </section>
+
+  <section class="rule problem">
+    <div class="wrap">
+      <h2 class="display problem-h">Wer nicht durchkommt, geht zum Nächsten.</h2>
+      <div class="problem-grid">
+        <div>
+          <h3>Am Telefon</h3>
+          <p>
+            Das Telefon klingelt, während Sie bei einem Kunden sind, mitten im
+            Hochbetrieb oder nach Feierabend. Wer keine Antwort bekommt, ruft
+            genauso leicht beim Nächsten auf der Liste an.
+          </p>
+        </div>
+        <div>
+          <h3>Auf Ihrer Website</h3>
+          <p>
+            Jemand liest spätabends Ihre Leistungen und hat vor dem Buchen noch
+            eine Frage. Die Frage landet in Ihrem Chat, niemand antwortet, und
+            die nächste Website ist nur einen Fingertipp entfernt.
+          </p>
+        </div>
+      </div>
+      <p class="problem-coda">Die Anfragen, die Sie verpasst haben, sehen Sie nicht. Sie sehen nur die, die durchgekommen sind.</p>
+    </div>
+  </section>
+
+  <section id="channels" class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="display">Wo Belline antwortet.</h2>
+        <p class="sec-lead lead">
+          Am Telefon, auf Ihrer Website und auf einer zweiten WhatsApp-Nummer,
+          mit denselben Informationen und denselben Regeln.
+        </p>
+      </div>
+
+      <ul class="channels channels-4">
+        <li>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16.4v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 1.1 3.7 2 2 0 0 1 3.1 1.5h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L7.1 9.3a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.8 2Z" transform="translate(1 1) scale(.92)"/></svg>
+          <div class="channel-head">
+            <h3>Ihr Telefon</h3>
+            <span class="state state-available">In den VAE verfügbar</span>
+          </div>
+          <p>Ihre Nummer bleibt. Leiten Sie Anrufe an Belline weiter, wenn niemand abnimmt oder die Leitung besetzt ist. Ihr Telefonanbieter kann für weitergeleitete Anrufe Gebühren berechnen.</p>
+          <p class="channel-how">Eine Einstellung an Ihrem bestehenden Anschluss.</p>
+        </li>
+        <li>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
+          <div class="channel-head">
+            <h3>Ein Sprach-Button auf Ihrer Website</h3>
+            <span class="state state-available">In den VAE verfügbar</span>
+          </div>
+          <p>Besucher tippen darauf und sprechen sofort mit Belline, direkt im Browser.</p>
+          <p class="channel-how">Eine Zeile HTML.</p>
+        </li>
+        <li>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1.5 1.5 0 0 1 1.5 1.5v10A1.5 1.5 0 0 1 20 17h-9l-5 4v-4H4a1.5 1.5 0 0 1-1.5-1.5v-10A1.5 1.5 0 0 1 4 4Z"/><path d="M7 9h10M7 12.5h6"/></svg>
+          <div class="channel-head">
+            <h3>Chat auf Ihrer Website</h3>
+            <span class="state state-available">In den VAE verfügbar</span>
+          </div>
+          <p>Für Besucher, die lieber schreiben. Ihr Team kann jedes Gespräch aus dem Posteingang übernehmen.</p>
+          <p class="channel-how">Dieselbe Zeile HTML.</p>
+        </li>
+        <li>
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z"/><path fill="currentColor" stroke="none" d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z"/></svg>
+          <div class="channel-head">
+            <h3>WhatsApp für Ihr Unternehmen</h3>
+            <span class="state state-available">In den VAE verfügbar</span>
+          </div>
+          <p>Belline beantwortet eine zweite WhatsApp-Nummer, die Sie bei Belline registrieren. Ihr eigenes WhatsApp bleibt, wie es ist. Kunden schreiben dieser Nummer wie jedem anderen Unternehmen auf WhatsApp.</p>
+          <p class="channel-how">Wir richten die Nummer mit Ihnen ein. <a href="https://app.belline.ai/whatsapp">Schreiben Sie Belle</a>, Bellines eigener Empfangskraft, um es auszuprobieren, auf Englisch.</p>
+        </li>
+      </ul>
+
+      <div class="cta-row">
+        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belline sprechen</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="works" class="rule works">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="display">Passt zu Ihren bestehenden Abläufen.</h2>
+        <p class="sec-lead lead">
+          Belline kommt als zusätzliche Kraft am Empfang dazu. Ihre Nummer, Ihre
+          Art zu buchen und das Team, das entscheidet, bleiben.
+        </p>
+      </div>
+
+      <div class="works-grid">
+        <div>
+          <h3>Ihre Nummer bleibt</h3>
+          <p>Belline nimmt die Anrufe an, die Sie weiterleiten. Ihre Einträge, Schilder und Visitenkarten bleiben, wie sie sind.</p>
+        </div>
+        <div>
+          <h3>Ihre Art zu buchen bleibt</h3>
+          <p>Heute nimmt Belline die Daten und das Anliegen des Kunden auf, und Ihr Team bucht dort, wo es immer bucht.</p>
+        </div>
+        <div>
+          <h3>Ihr Team behält die Entscheidung</h3>
+          <p>Geben Sie Belline eine Team-Nummer, und dringende Anrufe werden direkt durchgestellt. Alles andere kommt mit Zusammenfassung und vollständigem Transkript an.</p>
+        </div>
+      </div>
+
+      <h3 class="routes-h">Egal, womit Sie buchen</h3>
+      <dl class="routes">
+        <div>
+          <dt>Fresha, SevenRooms oder OpenTable</dt>
+          <dd>Behalten Sie es. Belline nimmt die Anfrage auf, und Ihr Team bucht sie in Ihrem System. Direkt dort hineinbuchen kann Belline erst mit einer Partnervereinbarung, die wir noch nicht haben.</dd>
+        </div>
+        <div>
+          <dt>Google Calendar oder Outlook</dt>
+          <dd>Belline nimmt heute Buchungsanfragen auf. Direkt in Google Calendar buchen kann Belline demnächst.</dd>
+        </div>
+        <div>
+          <dt>Kein Buchungssystem</dt>
+          <dd>Belline beantwortet Fragen, nimmt Nachrichten und Anfragen auf und sorgt dafür, dass die richtige Person nachfasst.</dd>
+        </div>
+      </dl>
+
+      <div class="cta-row">
+        <a class="btn" href="#warteliste" data-cta="works">Auf die Warteliste</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="stop" class="rule stop">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="display">Belline weiß, wann Schluss ist.</h2>
+        <p class="sec-lead lead">
+          Belline hält sich an das, was Sie vorgegeben haben, und übergibt den Rest an eine Person.
+        </p>
+      </div>
+
+      <div class="stop-rows">
+        <div>
+          <h3>Belline erfindet nichts.</h3>
+          <p>Belline antwortet aus den Informationen, die Sie hinterlegen. Steht die Antwort nicht darin, sagt Belline, dass sich jemand aus dem Team meldet, und nimmt eine Nachricht auf.</p>
+        </div>
+        <div>
+          <h3>Im Website-Chat erfindet Belline keine Uhrzeiten.</h3>
+          <p>Nennt eine Antwort eine Uhrzeit, die die Verfügbarkeitsprüfung nicht geliefert hat, wird dieser Satz vor dem Senden entfernt, und Belline fragt stattdessen, welcher Tag passt.</p>
+        </div>
+        <div>
+          <h3>Dringende Anrufe gehen an eine Person.</h3>
+          <p>Geben Sie Belline eine Team-Nummer, und dringende Anrufe werden direkt durchgestellt. Nimmt niemand ab, hört der Anrufer, dass das Team zurückruft.</p>
+        </div>
+        <div>
+          <h3>Medizinische Fragen und Beschwerden gehen an Ihr Team.</h3>
+          <p>Sie kommen als dringend markiert an, mit der Nummer des Anrufers und dem, was gesagt wurde.</p>
+        </div>
+        <div>
+          <h3>Jedes Gespräch wird festgehalten.</h3>
+          <p>Eine Zusammenfassung und das vollständige Transkript, damit Sie nachlesen können, was gesagt wurde.</p>
+        </div>
+      </div>
+
+      <p class="stop-small">Noch nicht: Belline verschickt keine Bestätigungen oder Erinnerungen per SMS an Ihre Kunden.</p>
+
+      <div class="cta-row">
+        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belline sprechen</a>
+        <span class="cta-aside">Stellen Sie eine unbequeme Frage, auf Englisch.</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="for" class="rule audience">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="display">Für jedes Unternehmen, das Anrufe, Nachrichten oder Buchungen erhält.</h2>
+        <p class="sec-lead lead">
+          Wenn Kunden Sie anrufen, Ihnen schreiben oder nach einem Termin fragen,
+          kann Belline aus Ihren eigenen Informationen antworten und dafür sorgen,
+          dass Ihr Team nachfasst.
+        </p>
+      </div>
+
+      <!--
+        Beispiele, keine Links. Kliniken und Zahnarztpraxen bleiben
+        zurückhaltend: Belline nimmt dort nur Terminanfragen auf, nie
+        medizinische Angaben.
+      -->
+      <ul class="kinds" aria-label="Beispiele für Unternehmen, für die Belline antworten kann">
+        <li>Salons &amp; Spas</li>
+        <li>Restaurants &amp; Cafés</li>
+        <li>Kliniken</li>
+        <li>Zahnarztpraxen</li>
+        <li>Fitness &amp; Studios</li>
+        <li>Immobilien</li>
+        <li>Werkstätten &amp; Autoservice</li>
+        <li>Nachhilfe &amp; Schulen</li>
+        <li>Handwerk &amp; Hausdienste</li>
+        <li>Hotels</li>
+        <li>Tierpflege</li>
+        <li>Beratung &amp; Dienstleistungen</li>
+      </ul>
+
+      <p class="kinds-note">
+        Kliniken und Zahnarztpraxen: Belline nimmt nur Terminanfragen auf,
+        niemals medizinische Angaben.
+        Etwas anderes? <a href="mailto:hello@belline.ai">Sagen Sie uns, was Sie machen</a>.
+      </p>
+    </div>
+  </section>
+
+  <section id="how" class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="display">Eingerichtet aus dem, was Sie schon haben.</h2>
+        <p class="sec-lead lead">
+          Die meiste Arbeit ist, zu prüfen, was Belline gefunden hat. Sie
+          entscheiden, wann Kunden Belline erreichen.
+        </p>
+      </div>
+
+      <ol class="steps steps-home">
+        <li class="step">
+          <div class="num" aria-hidden="true">1</div>
+          <h3>Geben Sie Belline Ihre Website, Preisliste oder Broschüre</h3>
+          <p>Belline liest sie und entwirft daraus Ihre Leistungen, Preise, Öffnungszeiten und häufigen Fragen.</p>
+        </li>
+        <li class="step">
+          <div class="num" aria-hidden="true">2</div>
+          <h3>Prüfen Sie, was Belline gefunden hat</h3>
+          <p>Korrigieren Sie, was nicht stimmt, füllen Sie Lücken oder sagen Sie es Belle im Chat.</p>
+        </li>
+        <li class="step">
+          <div class="num" aria-hidden="true">3</div>
+          <h3>Schalten Sie Belline ein</h3>
+          <p>Rufen Sie zuerst selbst an. Leiten Sie dann Ihre Leitung weiter und fügen Sie eine Zeile HTML in Ihre Website ein. Kunden erreichen Belline erst, wenn Sie das tun.</p>
+        </li>
+      </ol>
+
+      <div class="cta-row">
+        <a class="btn" href="#warteliste" data-cta="steps">Auf die Warteliste</a>
+      </div>
+    </div>
+  </section>
+
+  <!--
+    Der Rechner, als ein Satz mit den eigenen Zahlen. Die Antwort für die
+    Beispielzahlen ist generiert (scripts/site-pricing-de.ts), die Währung
+    auch, damit die Seite ohne JavaScript nichts Falsches sagt.
+  -->
+  <section id="worth" class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="display">Was Ihnen unbeantwortete Anfragen wert sind.</h2>
+        <p class="sec-lead lead">
+          Setzen Sie Ihre eigenen Zahlen ein. Die angezeigten sind ein Beispiel
+          zum Ersetzen, keine Durchschnittswerte.
+        </p>
+      </div>
+
+      <form class="roi roi-sentence-form" id="roi" novalidate>
+        <p class="roi-sentence">
+          Wenn
+          <label class="roi-field"><span class="vh">Personen pro Woche, die Sie nicht erreichen</span><input name="missed" type="number" min="0" step="1" value="10" inputmode="numeric"></label>
+          Personen pro Woche Sie nicht erreichen und
+          <label class="roi-field"><span class="vh">Prozent davon, die gebucht hätten</span><input name="share" type="number" min="0" max="100" step="5" value="30" inputmode="numeric"></label>&nbsp;%
+          davon gebucht hätten, bei
+          <label class="roi-field roi-field-wide"><span class="vh">Wert einer Buchung</span><input name="value" type="number" min="0" step="10" value="250" inputmode="numeric"></label>
+          <span class="gen" data-gen="roi-currency">€</span> pro Buchung …
+        </p>
+
+        <div class="roi-result">
+          <p class="roi-out" id="roi-out" aria-live="polite">Etwa 3.250 € pro Monat</p>
+          <p class="roi-detail"><span class="gen" data-gen="roi-detail">Das sind etwa 13 Buchungen pro Monat, mehr als Growth kostet.</span></p>
+          <label class="roi-pick">
+            <span>Im Vergleich mit</span>
+            <select name="plan">
+              <option value="69" data-name="Starter">Starter – 69 € pro Monat</option>
+              <option value="129" data-name="Growth" selected>Growth – 129 € pro Monat</option>
+              <option value="249" data-name="Scale">Scale – 249 € pro Monat</option>
+            </select>
+          </label>
+        </div>
+      </form>
+
+      <p class="roi-fine">
+        Wie viele Anfragen unbeantwortet bleiben, wissen nur Sie. Zu Anrufen
+        kann Ihr Telefonanbieter meist Auskunft geben.
+      </p>
+    </div>
+  </section>
+
+  <section id="price" class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 class="display">Wählen Sie, wie viel Belline beantwortet.</h2>
+        <p class="sec-lead lead">
+          Jeder Tarif beantwortet Ihr Telefon, Ihre Website und eine
+          WhatsApp-Nummer, die Sie bei Belline registrieren. Die Tarife
+          unterscheiden sich darin, wie viele Sprachminuten und Textgespräche
+          sie enthalten.
+          <span class="gen" data-gen="trial-short">Geplant: 30 Tage kostenlos, ohne Karte.</span>
+        </p>
+      </div>
+
+<!-- pricing:start — generated from src/lib/billing/plans.ts by scripts/site-pricing-de.ts. Change the catalogue, then run npm run pricing; do not edit by hand. -->
+      <p class="market-note" data-market-note="DE"><strong>Geplante Preise für Deutschland</strong>, netto. Belline ist in Deutschland noch nicht verfügbar, Sie können noch nichts kaufen. Bis zum Start können sich Preise und Konditionen ändern.</p>
+      <div class="cycle" role="group" aria-label="Abrechnungszeitraum">
+        <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monatlich</button>
+        <button type="button" class="cycle-opt" data-cycle="annual" aria-pressed="false">
+          Jährlich <span class="cycle-save">1 Monat gratis</span>
+        </button>
+      </div>
+
+      <div class="market" data-market="DE">
+      <div class="plans">
+        <div class="plan">
+          <div class="plan-tag" aria-hidden="true"></div>
+          <h3>Starter</h3>
+          <p class="plan-sub">Für kleinere Unternehmen, bei denen jede Anfrage eine Antwort bekommen soll.</p>
+          <div class="plan-price">
+            <span class="amt" data-monthly="69 €" data-annual="63 €">69 €</span>
+            <span class="per">pro Standort, pro Monat</span>
+            <span class="billed" data-monthly="Monatliche Abrechnung, jederzeit kündbar."
+                  data-annual="759 € einmal jährlich abgerechnet.">Monatliche Abrechnung, jederzeit kündbar.</span>
+          </div>
+          <ul>
+            <li>75 Sprachminuten pro Monat, geteilt zwischen Ihrer Telefonleitung und dem Sprach-Button auf Ihrer Website</li>
+            <li>200 Textgespräche pro Monat, geteilt zwischen Ihrem Website-Chat und WhatsApp</li>
+            <li>Bis zu 2 Nutzer in Ihrem Dashboard</li>
+            <li>Ein Standort</li>
+            <li>Ihre Nummer bleibt – Sie leiten sie an Belline weiter</li>
+            <li>Beantwortet Fragen anhand Ihrer eigenen Öffnungszeiten, Preise und Regeln</li>
+            <li>Nimmt Buchungsanfragen auf und gibt sie an Ihr Team weiter</li>
+            <li>Zusammenfassung und vollständiges Transkript jedes Anrufs und Chats</li>
+            <li>Ihr Team kann jeden Chat aus dem Posteingang übernehmen</li>
+            <li>Ihre eigenen Texte und Farben auf den Website-Buttons</li>
+          </ul>
+          <a class="btn line" href="#warteliste" data-cta="plan-v2_starter">Auf die Warteliste</a>
+        </div>
+
+        <div class="plan is-best">
+          <div class="plan-tag">Empfohlen</div>
+          <h3>Growth</h3>
+          <p class="plan-sub">Für Unternehmen, bei denen Belline auf allen Kanälen antworten und Buchungsanfragen aufnehmen soll.</p>
+          <div class="plan-price">
+            <span class="amt" data-monthly="129 €" data-annual="118 €">129 €</span>
+            <span class="per">pro Standort, pro Monat</span>
+            <span class="billed" data-monthly="Monatliche Abrechnung, jederzeit kündbar."
+                  data-annual="1.419 € einmal jährlich abgerechnet.">Monatliche Abrechnung, jederzeit kündbar.</span>
+          </div>
+          <ul>
+            <li>250 Sprachminuten pro Monat, geteilt zwischen Ihrer Telefonleitung und dem Sprach-Button auf Ihrer Website</li>
+            <li>600 Textgespräche pro Monat, geteilt zwischen Ihrem Website-Chat und WhatsApp</li>
+            <li>Bis zu 5 Nutzer in Ihrem Dashboard</li>
+            <li>Alles aus Starter</li>
+            <li>Stellt dringende Anrufe live zu Ihrem Team durch</li>
+            <li>Ihre eigenen Regeln dafür, was Belline entscheiden darf und was nicht</li>
+            <li>Jede Änderung versioniert, mit Zurücksetzen per Klick</li>
+          </ul>
+          <a class="btn" href="#warteliste" data-cta="plan-v2_growth">Auf die Warteliste</a>
+        </div>
+
+        <div class="plan">
+          <div class="plan-tag" aria-hidden="true"></div>
+          <h3>Scale</h3>
+          <p class="plan-sub">Für Teams mit mehr Anfragen und komplexeren Regeln am Empfang.</p>
+          <div class="plan-price">
+            <span class="amt" data-monthly="249 €" data-annual="228 €">249 €</span>
+            <span class="per">pro Standort, pro Monat</span>
+            <span class="billed" data-monthly="Monatliche Abrechnung, jederzeit kündbar."
+                  data-annual="2.739 € einmal jährlich abgerechnet.">Monatliche Abrechnung, jederzeit kündbar.</span>
+          </div>
+          <ul>
+            <li>500 Sprachminuten pro Monat, geteilt zwischen Ihrer Telefonleitung und dem Sprach-Button auf Ihrer Website</li>
+            <li>1.500 Textgespräche pro Monat, geteilt zwischen Ihrem Website-Chat und WhatsApp</li>
+            <li>Bis zu 15 Nutzer in Ihrem Dashboard</li>
+            <li>Alles aus Growth</li>
+            <li>Feste Ansprechperson für Einrichtung und Änderungen</li>
+            <li>Bevorzugter Support</li>
+          </ul>
+          <a class="btn line" href="#warteliste" data-cta="plan-v2_scale">Auf die Warteliste</a>
+        </div>
+      </div>
+      </div>
+
+      <p class="compare">Ein Telefonservice nimmt eine Nachricht auf. Belline beantwortet die Frage, nimmt die Details auf und sagt Ihrem Team, was als Nächstes zu tun ist.</p>
+
+      <div class="terms terms-4">
+        <div>
+          <h4>Was als Minute zählt</h4>
+          <p>Eine Minute ist die Zeit, die Belline in einem laufenden Gespräch mit Ihrem Anrufer verbringt – über Ihre Telefonleitung oder den Sprach-Button auf Ihrer Website –, vom Annehmen bis zum Ende des Anrufs, aufgerundet auf die nächste volle Minute. Anrufe aus Ihrer eigenen Testkonsole zählen nicht, ebenso wenig Anrufe, die durch einen Fehler auf unserer Seite abbrechen.</p>
+        </div>
+        <div>
+          <h4>Was als Gespräch zählt</h4>
+          <p>Ein Gespräch ist der Verlauf eines Kunden in Ihrem Website-Chat oder auf WhatsApp, in dem Belline mindestens einmal antwortet. Alles, was dieser Kunde in den 24 Stunden nach Bellines erster Antwort schreibt, gehört zum selben Gespräch. Verläufe, die Ihr Team ohne Belline beantwortet, zählen nicht.</p>
+        </div>
+        <div>
+          <h4>Wenn ein Kontingent aufgebraucht ist</h4>
+          <p>Wenn ein Kontingent aufgebraucht ist, entscheiden Sie, was passiert: automatisch ein Paket hinzubuchen (100 zusätzliche Sprachminuten für 25 € oder 150 zusätzliche Textgespräche für 12 €), bis zu einer monatlichen Ausgabengrenze, die Sie festlegen; in den nächsten Tarif wechseln; oder beim Kontingent stoppen. Wir informieren Sie bei 70 %, 90 % und 100 %. Ihrer Rechnung wird nichts hinzugefügt, was Sie nicht selbst gewählt haben.</p>
+        </div>
+        <div>
+          <h4>30 Tage kostenlos</h4>
+          <p>30 Tage kostenlos: 30 Sprachminuten und 50 Textgespräche. Das Telefon, der Sprach-Button auf Ihrer Website, Ihr Website-Chat und WhatsApp sind dabei alle eingeschaltet. Keine Karte, keine Kosten. Die Standard-Einrichtung ist kostenlos.</p>
+        </div>
+      </div>
+<!-- pricing:end -->
+    </div>
+  </section>
+
+  <!--
+    Die FAQ. Muss Wort für Wort den strukturierten Daten im <head>
+    entsprechen; check-billing vergleicht beide. Die Antworten zu Kontingent
+    und Bindung sind aus dem Katalog generiert (data-gen), an beiden Stellen.
+  -->
+  <section id="faq" class="rule">
+    <div class="wrap">
+      <h2 class="display">Was Inhaber zuerst fragen.</h2>
+      <div class="faq">
+        <details>
+          <summary>Müssen wir unsere Telefonnummer ändern?</summary>
+          <div class="answer"><p>Nein. Sie behalten Ihre Nummer und richten an Ihrem bestehenden Anschluss eine Anrufweiterleitung ein. Sie können sie jederzeit selbst wieder ausschalten.</p></div>
+        </details>
+        <details>
+          <summary>Lässt sich Belline mit Fresha, SevenRooms oder OpenTable verbinden?</summary>
+          <div class="answer"><p>Noch nicht. Für diese Verbindungen braucht es eine Partnervereinbarung mit dem jeweiligen Unternehmen, und die haben wir noch nicht. Heute beantwortet Belline Ihre Kunden, nimmt ihre Daten und ihr Anliegen auf, und Ihr Team trägt die Buchung wie gewohnt in Ihr System ein. Sagen Sie uns, welches System Sie nutzen.</p></div>
+        </details>
+        <details>
+          <summary>Klingt Belline wie ein Roboter?</summary>
+          <div class="answer"><p>Sprechen Sie mit Belline und urteilen Sie selbst. Der Button auf dieser Seite verbindet Sie mit derselben Empfangskraft, die Ihre Kunden erreichen würden, derzeit auf Englisch. Fragt jemand, ob Belline eine KI ist, sagt Belline das.</p></div>
+        </details>
+        <details>
+          <summary>Was, wenn Belline etwas falsch macht?</summary>
+          <div class="answer"><p>Belline antwortet nur aus Ihren Informationen. Weiß Belline etwas nicht, nimmt Belline eine Nachricht auf. Zu jedem Gespräch gibt es eine Zusammenfassung und ein vollständiges Transkript, damit Sie genau sehen, was gesagt wurde.</p></div>
+        </details>
+        <details>
+          <summary>Kann Belline Anrufer zu uns durchstellen?</summary>
+          <div class="answer"><p>Ja. Geben Sie Belline eine Nummer Ihres Teams, und dringende Anrufe werden live durchgestellt. Nimmt niemand ab, erfährt der Anrufer, dass das Team zurückruft, und der Anruf steht ganz oben auf Ihrer Liste.</p></div>
+        </details>
+        <details>
+          <summary>Nimmt Belline Anrufe an, die unser Team angenommen hätte?</summary>
+          <div class="answer"><p>Nur wenn Sie sie weiterleiten. Die meisten Unternehmen leiten Anrufe weiter, wenn niemand abnimmt oder die Leitung besetzt ist. So nimmt das Team weiterhin zuerst ab.</p></div>
+        </details>
+        <details>
+          <summary>Verschickt Belline Erinnerungen oder Bestätigungen?</summary>
+          <div class="answer"><p>Noch nicht. Belline verschickt heute keine SMS und keine E-Mails an Ihre Kunden. Sobald das möglich ist, können Sie es einschalten.</p></div>
+        </details>
+        <details>
+          <summary>Was passiert, wenn unser Kontingent aufgebraucht ist?</summary>
+          <div class="answer"><p class="gen" data-gen="faq-allowance">Wenn ein Kontingent aufgebraucht ist, entscheiden Sie, was passiert: automatisch ein Paket hinzubuchen (100 zusätzliche Sprachminuten für 25 € oder 150 zusätzliche Textgespräche für 12 €), bis zu einer monatlichen Ausgabengrenze, die Sie festlegen; in den nächsten Tarif wechseln; oder beim Kontingent stoppen. Wir informieren Sie bei 70 %, 90 % und 100 %. Ihrer Rechnung wird nichts hinzugefügt, was Sie nicht selbst gewählt haben.</p></div>
+        </details>
+        <details>
+          <summary>Kostet uns die Anrufweiterleitung etwas?</summary>
+          <div class="answer"><p>Das kann sein, und wie viel, entscheidet Ihr Telefonanbieter. Belline nimmt Anrufe auf einer eigenen Nummer an. Liegt diese Nummer im Ausland, kann Ihr Anbieter für jeden weitergeleiteten Anruf einen Auslandstarif berechnen. Nummern in Deutschland, Österreich und der Schweiz hat Belline noch nicht. Das Dashboard zeigt die genaue Nummer.</p></div>
+        </details>
+        <details>
+          <summary>Sind wir vertraglich gebunden?</summary>
+          <div class="answer"><p class="gen" data-gen="faq-tied-in">Nein. Monatliche Tarife sind jederzeit kündbar und laufen bis zum Ende des bezahlten Zeitraums. Jährliche Tarife werden im Voraus bezahlt und enthalten 1 Monat gratis.</p></div>
+        </details>
+        <details>
+          <summary>Passt Belline zu unserer Art von Unternehmen?</summary>
+          <div class="answer"><p>Ja, wenn Kunden Sie mit Fragen oder Anliegen anrufen oder Ihnen schreiben. Belline antwortet aus Ihren eigenen Informationen und gibt den Rest an Ihr Team weiter. Auf der Warteliste können Sie angeben, welche Branche am besten passt.</p></div>
+        </details>
+        <details>
+          <summary>Was machen Sie mit den Daten unserer Kunden?</summary>
+          <div class="answer"><p>Transkripte und Nachrichten werden gespeichert, damit Sie nachlesen können, was gesagt wurde. Anrufe werden nicht aufgezeichnet, mit einer Ausnahme, die der Anrufer selbst wählt: Bevor ein Unternehmen live geht, kann ein Anrufer eine Mailbox-Nachricht hinterlassen, und diese Aufnahme wird für das Unternehmen aufbewahrt. Die Daten gehören Ihrem Unternehmen, und wir übergeben sie Ihnen, wenn Sie gehen.</p></div>
+        </details>
+        <details>
+          <summary>Beantwortet Belline WhatsApp?</summary>
+          <div class="answer"><p>Ja, auf einer zweiten Nummer. Sie bekommen eine neue WhatsApp-Nummer für Ihr Unternehmen, die wir mit Ihnen einrichten. Belline beantwortet sie dann aus Ihren Informationen und gibt Anfragen an Ihr Team weiter. Ihr eigenes WhatsApp bleibt, wie es ist.</p></div>
+        </details>
+        <details>
+          <summary>Spricht Belline Deutsch?</summary>
+          <div class="answer"><p>Noch nicht. Belline antwortet auf Englisch, am Telefon, im Chat und auf WhatsApp.</p></div>
+        </details>
+      </div>
+      <p class="fine">Wenn Sie einen Vertrag zur Auftragsverarbeitung brauchen, schreiben Sie an <a href="mailto:hello@belline.ai">hello@belline.ai</a>.</p>
+    </div>
+  </section>
+
+  <!--
+    Der Abschluss, mit der Warteliste statt "Connect your business": Belline
+    verkauft in diesen Ländern nichts. Das Formular geht an
+    app.belline.ai/api/leads/waitlist (src/lib/leads/waitlist.ts). Ohne
+    JavaScript schickt der Browser es direkt ab und bekommt eine deutsche
+    Bestätigungsseite; mit JavaScript bleibt man auf der Seite.
+  -->
+  <section id="book" class="rule closer">
+    <div class="wrap closer-in">
+      <div>
+        <h2 class="display">Sorgen Sie dafür, dass jemand rangeht.</h2>
+        <p class="lead">Belline ist in Deutschland, Österreich und der Schweiz noch nicht verfügbar und antwortet derzeit auf Englisch. Tragen Sie sich auf die Warteliste ein, und wir melden uns, wenn Belline in Ihrem Land startet.</p>
+
+        <form class="book-form waitlist" id="warteliste" action="https://app.belline.ai/api/leads/waitlist" method="post" novalidate>
+          <input type="hidden" name="page" value="/de-de">
+          <div class="f-row">
+            <label class="f">
+              <span>Ihr Name</span>
+              <input name="name" type="text" autocomplete="name" maxlength="120" required>
+              <em class="f-err" hidden></em>
+            </label>
+            <label class="f">
+              <span>E-Mail</span>
+              <input name="email" type="email" autocomplete="email" maxlength="254" required>
+              <em class="f-err" hidden></em>
+            </label>
+          </div>
+          <div class="f-row">
+            <label class="f">
+              <span>Unternehmen</span>
+              <input name="company" type="text" autocomplete="organization" maxlength="160" required>
+              <em class="f-err" hidden></em>
+            </label>
+            <label class="f">
+              <span>Land</span>
+              <select name="country" required>
+                <option value="DE" selected>Deutschland</option>
+                <option value="AT">Österreich</option>
+                <option value="CH">Schweiz</option>
+              </select>
+              <em class="f-err" hidden></em>
+            </label>
+          </div>
+          <label class="f">
+            <span>Branche <span class="opt">(optional)</span></span>
+            <select name="businessType">
+              <option value="">Bitte wählen</option>
+              <option value="salon">Salon &amp; Spa</option>
+              <option value="restaurant">Restaurant &amp; Café</option>
+              <option value="clinic">Klinik</option>
+              <option value="dental">Zahnarztpraxis</option>
+              <option value="fitness">Fitness &amp; Studio</option>
+              <option value="real-estate">Immobilien</option>
+              <option value="garage">Werkstatt &amp; Autoservice</option>
+              <option value="education">Nachhilfe &amp; Schule</option>
+              <option value="home-services">Handwerk &amp; Hausdienste</option>
+              <option value="hotel">Hotel</option>
+              <option value="pet-care">Tierpflege</option>
+              <option value="professional">Beratung &amp; Dienstleistungen</option>
+              <option value="other">Etwas anderes</option>
+            </select>
+            <em class="f-err" hidden></em>
+          </label>
+          <div class="hp" aria-hidden="true">
+            <label>Website <input name="website2" type="text" tabindex="-1" autocomplete="off"></label>
+          </div>
+          <p class="f-note waitlist-privacy">
+            Wir speichern Name, E-Mail-Adresse, Unternehmen, Land und Branche,
+            um Sie zu kontaktieren, wenn Belline in Ihrem Land startet. Wir
+            schicken Ihnen jetzt keine E-Mail. Löschen lassen können Sie Ihren
+            Eintrag jederzeit über <a href="mailto:hello@belline.ai">hello@belline.ai</a>.
+            Mehr in der <a href="/de-de/datenschutz">Datenschutzerklärung</a>.
+          </p>
+          <button class="btn book-submit" type="submit">Auf die Warteliste</button>
+          <p class="f-note waitlist-note" role="status" aria-live="polite"></p>
+        </form>
+        <p class="fine"><span class="gen" data-gen="trial-short">Geplant: 30 Tage kostenlos, ohne Karte.</span></p>
+      </div>
+
+      <div class="proof">
+        <h3>Probieren Sie Belline vorher aus.</h3>
+        <p>
+          Sprechen Sie kostenlos im Browser mit Belline, derzeit auf Englisch.
+          Es ist dieselbe Empfangskraft, die Ihre Kunden erreichen würden.
+        </p>
+        <ul>
+          <li>Fragen Sie, was es kostet</li>
+          <li>Stellen Sie eine unbequeme Frage</li>
+          <li>Bitten Sie darum, mit einer Person zu sprechen</li>
+        </ul>
+        <div class="cta-row">
+          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belline sprechen</a>
+        </div>
+        <p class="fine">
+          Oder <a class="dial-inline" href="https://app.belline.ai/whatsapp">schreiben Sie Belle auf WhatsApp</a>,
+          oder rufen Sie <a class="dial-inline" href="tel:+15717785920">+1 571 778 5920</a> an.
+          Das ist ein Anruf in die USA, es gelten Ihre üblichen Auslandsgebühren.
+        </p>
+      </div>
+    </div>
+    <div class="wrap">
+      <p class="fine closer-more">
+        Mehrere Standorte oder etwas Besonderes?
+        <a href="mailto:hello@belline.ai">Schreiben Sie uns</a>, und ein Mensch antwortet.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <a class="brand" href="#">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" class="mark-ground"/><g class="mark-glyph" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>
+      <span>Belline</span>
+    </a>
+    <p>
+      KI-Empfang für Telefon und Chat, für Unternehmen, die Anrufe, Nachrichten oder Buchungen erhalten.
+      In Deutschland, Österreich und der Schweiz noch nicht verfügbar.<br>
+      <a href="tel:+15717785920">+1 571 778 5920</a> (ein Anruf in die USA) ·
+      <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
+      <a href="https://app.belline.ai/login" rel="nofollow">Anmeldung für Mitarbeitende</a><br>
+      <a href="/de-de/datenschutz">Datenschutzerklärung</a> ·
+      <a href="/de-de/nutzungsbedingungen">Nutzungsbedingungen</a>
+    </p>
+  </div>
+</footer>
+
+<!-- Die drei Wege zu Belle, wie auf der englischen Seite. Belle antwortet auf Englisch. -->
+<a class="wa-fab" href="https://app.belline.ai/whatsapp" aria-label="Belle auf WhatsApp schreiben, auf Englisch">
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z"
+          stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z"
+          fill="currentColor"/>
+  </svg>
+  <span class="wa-fab-say">Belle auf WhatsApp</span>
+</a>
+
+<button class="chat-fab" type="button" hidden
+        data-chat="https://app.belline.ai/embed/be_belline_site/chat"
+        aria-label="Mit Belle schreiben, auf Englisch">
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M3 11.2C3 6.9 7.03 3.5 12 3.5s9 3.4 9 7.7c0 4.3-4.03 7.7-9 7.7a11 11 0 0 1-2.4-.26L5.4 20.5l.5-3.2A7.7 7.7 0 0 1 3 11.2Z"
+          stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <circle cx="12" cy="7.4" r="1.05" fill="currentColor"/>
+    <path d="M8.7 13.1a3.3 3.3 0 0 1 6.6 0Z" fill="currentColor"/>
+    <rect x="7.8" y="13.8" width="8.4" height="1.35" rx=".68" fill="currentColor"/>
+  </svg>
+  <span class="chat-fab-say">Mit Belle schreiben</span>
+</button>
+
+<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Jetzt mit Belline sprechen, auf Englisch">
+  <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+    <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
+    <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
+    <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
+  </svg>
+  <span class="bell-fab-say">Mit Belline sprechen</span>
+</a>
+
+<script src="/site.js"></script>
+</body>
+</html>

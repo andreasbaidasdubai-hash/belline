@@ -63,6 +63,26 @@ export const STATE_LABEL: Record<IntegrationState, string> = {
   roadmap: "On our roadmap",
 };
 
+/** The page language the strip is written in. */
+export type StripLang = "en" | "de";
+
+/**
+ * The German pages' strip: the same states from the same flags, in German.
+ * "Demnächst" and "Geplant", never "funktioniert mit" or "integriert mit".
+ */
+export const INTEGRATIONS_HEADING_DE = "Verbindungen zu den Tools, die Sie schon nutzen";
+
+export const STATE_LABEL_DE: Record<IntegrationState, string> = {
+  available: "Verfügbar",
+  soon: "Demnächst",
+  roadmap: "Geplant",
+};
+
+const LIST_LABEL: Record<StripLang, string> = {
+  en: "Booking systems and calendars, and where each connection stands",
+  de: "Buchungssysteme und Kalender, und wo jede Verbindung steht",
+};
+
 const STATE_CLASS: Record<IntegrationState, string> = {
   available: "state state-available",
   soon: "state state-soon",
@@ -87,16 +107,17 @@ function esc(text: string): string {
  * site.js turns it into a slow moving strip; without JavaScript, or with
  * reduced motion asked for, it stays this still list.
  */
-export function renderIntegrations(env: Env): string {
+export function renderIntegrations(env: Env, lang: StripLang = "en"): string {
+  const labels = lang === "de" ? STATE_LABEL_DE : STATE_LABEL;
   const items = INTEGRATIONS.map((item) => {
     const state = integrationState(item, env);
     return `        <li class="connect" data-integration="${esc(item.flag)}" data-state="${state}">
           <img class="connect-logo" src="/img/logos/${esc(item.logo)}" width="40" height="40" alt="" loading="lazy">
           <span class="connect-name">${esc(item.name)}</span>
-          <span class="${STATE_CLASS[state]}">${STATE_LABEL[state]}</span>
+          <span class="${STATE_CLASS[state]}">${labels[state]}</span>
         </li>`;
   }).join("\n");
-  return `      <ul class="connects-list" aria-label="Booking systems and calendars, and where each connection stands">
+  return `      <ul class="connects-list" aria-label="${LIST_LABEL[lang]}">
 ${items}
       </ul>`;
 }
@@ -110,11 +131,11 @@ const MARKER_NOTE =
  * Replace the block between the markers. Throws when they are gone, rather
  * than build a page whose strip has silently stopped following the flags.
  */
-export function applyIntegrations(html: string, env: Env): string {
+export function applyIntegrations(html: string, env: Env, lang: StripLang = "en"): string {
   const from = html.indexOf(START);
   const to = html.indexOf(END);
   if (from < 0 || to < 0 || to < from) {
-    throw new Error("public/landing.html has lost its integrations:start / integrations:end markers.");
+    throw new Error(`public/${lang === "de" ? "landing.de.html" : "landing.html"} has lost its integrations:start / integrations:end markers.`);
   }
-  return `${html.slice(0, from)}${MARKER_NOTE}\n${renderIntegrations(env)}\n${html.slice(to)}`;
+  return `${html.slice(0, from)}${MARKER_NOTE}\n${renderIntegrations(env, lang)}\n${html.slice(to)}`;
 }

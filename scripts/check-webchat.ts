@@ -861,6 +861,8 @@ const connectionClaims = (text: string, notLive: string[]) =>
 
 /** The privacy page from the same builds, by flag state. */
 const builtPrivacy = new Map<"off" | "on", string>();
+/** The German pages from the same builds, keyed "off de-ch", "on de-de privacy" and so on. */
+const builtGerman = new Map<string, string>();
 
 /** Build the whole site into a throwaway folder with exactly this env on top of a scrubbed one. */
 function buildLanding(extra: Record<string, string>): string {
@@ -878,7 +880,12 @@ function buildLanding(extra: Record<string, string>): string {
   });
   try {
     assert.equal(run.status, 0, `the site build failed:\n${run.stdout}\n${run.stderr}`);
-    builtPrivacy.set(extra.FLAG_BOOKING_GOOGLE === "on" ? "on" : "off", fs.readFileSync(path.join(out, "privacy.html"), "utf8"));
+    const which = extra.FLAG_BOOKING_GOOGLE === "on" ? "on" : "off";
+    builtPrivacy.set(which, fs.readFileSync(path.join(out, "privacy.html"), "utf8"));
+    for (const slug of ["de-de", "de-at", "de-ch"]) {
+      builtGerman.set(`${which} ${slug}`, fs.readFileSync(path.join(out, slug, "index.html"), "utf8"));
+      builtGerman.set(`${which} ${slug} privacy`, fs.readFileSync(path.join(out, slug, "datenschutz.html"), "utf8"));
+    }
     return fs.readFileSync(path.join(out, "index.html"), "utf8");
   } finally {
     fs.rmSync(out, { recursive: true, force: true });
@@ -1113,6 +1120,195 @@ await test("the line under the strip asks for the missing system through the sit
   assert.match(plainText(strip), /Using a booking system we don’t list yet\? Tell us \./);
   const elsewhere = html.slice(0, html.indexOf('<section id="connects"')) + html.slice(html.indexOf("</section>", html.indexOf('<section id="connects"')));
   assert.ok(elsewhere.includes('href="mailto:hello@belline.ai"'), "the strip's contact address is not one the page already uses");
+});
+
+head("The German pages");
+
+/**
+ * /de-de, /de-at and /de-ch: one German source, three builds. Belline is not
+ * open in any of the three countries and answers in English, so the pages
+ * must say both; must sell nothing; must not say "funktioniert mit" or
+ * "integriert mit" about a system that is not live; and must not carry the
+ * English page's UAE-only statements. The strip and the calendar lines follow
+ * the same flags as the English page, in German.
+ */
+const {
+  INTEGRATIONS_HEADING_DE,
+  STATE_LABEL_DE,
+} = await import("./site-integrations");
+
+/** "funktioniert mit", "integriert mit", "arbeitet mit", "kompatibel mit" in a sentence naming a system that is not live. */
+const connectionClaimsDe = (text: string, notLive: string[]) =>
+  [...text.matchAll(/[^.?!]*\b(?:funktioniert|funktionieren|integriert|integrieren|arbeitet|kompatibel)\s+(?:\S+\s+){0,2}?mit\b[^.?!]*/gi)]
+    .map((m) => m[0].trim())
+    .filter((sentence) => notLive.some((name) => sentence.toLowerCase().includes(name.toLowerCase())));
+
+/** A German sentence about booking into a calendar that does not say "bald" or "demnächst". */
+const unsoonedCalendarClaimsDe = (text: string) =>
+  [...text.matchAll(/[^.?!<>]*\bbuch(?:t|en|ung)?\b[^.?!<>]*\bKalender\b[^.?!<>]*/gi)].map((m) => m[0]).filter((s) => !/\b(?:bald|demnächst)\b/i.test(s));
+
+const germanPages = () => [
+  // Raw, not visibleHtml: the generated blocks' markers are comments, and the tests below need them.
+  { file: "public/landing.de.html", html: fs.readFileSync(path.join(process.cwd(), "public", "landing.de.html"), "utf8") },
+  ...["de-de", "de-at", "de-ch"].flatMap((slug) => [
+    { file: `/${slug} (flag off)`, html: builtGerman.get(`off ${slug}`)! },
+    { file: `/${slug} (flag on)`, html: builtGerman.get(`on ${slug}`)! },
+  ]),
+];
+
+await test("the German patterns catch the dishonest versions and spare the honest ones", () => {
+  assert.equal(connectionClaimsDe("Belline funktioniert mit Fresha und OpenTable.", STRIP_NAMES).length, 1);
+  assert.equal(connectionClaimsDe("Belline ist integriert mit Google Calendar.", STRIP_NAMES).length, 1);
+  assert.equal(connectionClaimsDe("Funktioniert direkt mit Treatwell.", STRIP_NAMES).length, 1);
+  assert.deepEqual(connectionClaimsDe("Passt zu Ihren Abläufen. Lässt sich Belline mit Fresha verbinden? Noch nicht.", STRIP_NAMES), []);
+  assert.ok(unsoonedCalendarClaimsDe("Belline bucht direkt in Ihren Kalender.").length > 0);
+  assert.deepEqual(unsoonedCalendarClaimsDe("Bald kann Belline auch direkt in den Kalender buchen, den Sie schon nutzen."), []);
+});
+
+await test("built and in the source, no German page says 'funktioniert mit' or 'integriert mit' for a system that is not live", () => {
+  built("off");
+  built("on");
+  for (const { file, html } of germanPages()) {
+    const notLive = file.includes("flag on") ? STRIP_NAMES.filter((n) => n !== "Google Calendar") : STRIP_NAMES;
+    assert.deepEqual(connectionClaimsDe(plainText(html), notLive), [], file);
+    assert.deepEqual(connectionClaims(plainText(html), notLive), [], `${file} (English phrasing)`);
+    assert.doesNotMatch(plainText(stripOf(html)), /\b(?:funktioniert|integriert|arbeitet)\b/i, `${file}: the strip claims a connection`);
+  }
+});
+
+await test("the German strip follows the flags in German: Demnächst and Geplant, and Verfügbar only when a flag is on", () => {
+  assert.deepEqual(STATE_LABEL_DE, { available: "Verfügbar", soon: "Demnächst", roadmap: "Geplant" });
+  const source = fs.readFileSync(path.join(process.cwd(), "public", "landing.de.html"), "utf8").replace(/\r\n/g, "\n");
+  assert.ok(source.slice(source.indexOf("<!-- integrations:start"), source.indexOf("<!-- integrations:end -->")).includes(renderIntegrations({}, "de")), "public/landing.de.html's strip differs from the flag-off German render");
+  const expected = (google: string) => [
+    ["Google Calendar", google],
+    ["Outlook", "Demnächst"],
+    ...PARTNERS.map((p) => [p, "Geplant"]),
+  ];
+  for (const slug of ["de-de", "de-at", "de-ch"]) {
+    const off = builtGerman.get(`off ${slug}`)!;
+    const on = builtGerman.get(`on ${slug}`)!;
+    assert.match(off, new RegExp(`<h2 class="connects-h" id="connects-h">${INTEGRATIONS_HEADING_DE}</h2>`));
+    assert.deepEqual(tagsIn(stripOf(off)), expected("Demnächst"), `${slug} flag off`);
+    assert.deepEqual(tagsIn(stripOf(on)), expected("Verfügbar"), `${slug} flag on`);
+    assert.doesNotMatch(stripOf(off), /Coming soon|On our roadmap|Available/, `${slug}: English tags on a German page`);
+  }
+});
+
+await test("the German hero keeps the calendar 'Demnächst', the request waiting, and the examples labelled as translated", () => {
+  for (const { file, html } of germanPages().filter((p) => !p.file.includes("flag on"))) {
+    const hero = heroOf(html);
+    const plain = hero.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    assert.match(hero, /<span class="state state-soon cal-soon">Demnächst: bucht in Ihren Kalender<\/span>/, `${file}: no Demnächst badge`);
+    assert.deepEqual(unsoonedCalendarClaimsDe(plain), [], `${file}: the hero says calendar booking works today`);
+    assert.match(hero, /Wartet auf Ihr Team/);
+    assert.doesNotMatch(plain, /\b(?:gebucht|fest gebucht|reserviert|ist bestätigt)\b/i, `${file}: something in the hero reads as booked`);
+    assert.doesNotMatch(hero, /state-available/);
+    assert.equal((hero.match(/<span class="demo-example">Beispiel, übersetzt<\/span>/g) ?? []).length, 3, `${file}: examples not labelled as translated`);
+  }
+  for (const slug of ["de-de", "de-ch"]) {
+    const hero = heroOf(builtGerman.get(`on ${slug}`)!);
+    assert.match(hero, /Bucht in Google Calendar/, `${slug}: the flag-on badge is missing`);
+    assert.doesNotMatch(hero, /Demnächst: bucht/, `${slug}: flag on still says Demnächst`);
+  }
+});
+
+await test("the German pages say Belline answers in English and is not available in DACH yet, and sell nothing", () => {
+  for (const { file, html } of germanPages()) {
+    const visible = html.replace(/<!--[\s\S]*?-->/g, "");
+    const plain = plainText(visible);
+    assert.match(plain, /Belline antwortet derzeit auf Englisch/, `${file}: the hero does not say English`);
+    assert.match(plain, /Noch nicht verfügbar in Deutschland, Österreich und der Schweiz/, `${file}: the hero does not say not available`);
+    assert.match(plain, /Spricht Belline Deutsch\? Noch nicht\. Belline antwortet auf Englisch/, `${file}: the FAQ does not say English`);
+    assert.doesNotMatch(visible, /app\.belline\.ai\/checkout|Connect your business|Unternehmen verbinden|Start free|Kostenlos starten/, `${file}: a way to buy`);
+    for (const cta of visible.matchAll(/<a class="(?:btn|nav-cta)[^"]*" href="([^"]+)"[^>]*>([^<]+)<\/a>/g)) {
+      const [, href, label] = cta;
+      assert.ok(href === "#warteliste" || /call\?start=1/.test(href), `${file}: "${label}" goes to ${href}`);
+      if (href === "#warteliste") assert.equal(label.trim(), "Auf die Warteliste");
+    }
+    assert.match(visible, /id="warteliste"/, `${file}: no waitlist form to go to`);
+  }
+});
+
+await test("the German pages carry none of the English page's UAE-only statements", () => {
+  for (const { file, html } of germanPages()) {
+    const outsidePicker = html.replace(/<!-- locale:start[\s\S]*?<!-- locale:end -->/, "");
+    const plain = plainText(outsidePicker);
+    assert.doesNotMatch(plain, /\bAED\b|\bUAE\b|VAE-Unternehmen|Unternehmen in den VAE|\+971|from the UAE|aus den VAE/, `${file}: a UAE-only statement`);
+    // Channels are available in the UAE, not here: the tag says where.
+    const channels = outsidePicker.slice(outsidePicker.indexOf('<section id="channels"'), outsidePicker.indexOf("</section>", outsidePicker.indexOf('<section id="channels"')));
+    assert.doesNotMatch(channels, /state-available">Verfügbar</, `${file}: a channel is "Verfügbar" with no country`);
+    // The demo line is a US number; the page says so wherever it is shown.
+    for (const at of [...plain.matchAll(/\+1 571 778 5920/g)].map((m) => m.index!)) {
+      assert.match(plain.slice(at, at + 160), /in die USA/, `${file}: the +1 number without saying it is a call to the USA`);
+    }
+  }
+  const ch = builtGerman.get("off de-ch")!;
+  assert.doesNotMatch(ch, /ß/, "/de-ch still writes ß");
+  assert.match(ch, /<html lang="de-CH">/);
+  assert.doesNotMatch(renderIntegrations({}, "de") + builtGerman.get("off de-de")!.slice(0, 0), /ß/);
+});
+
+await test("the app's server re-applies the German strip and calendar lines, Swiss spelling included", async () => {
+  const { pageWithFlags } = await import("../src/lib/marketing");
+  for (const slug of ["de-de", "de-ch"]) {
+    const served = pageWithFlags(`${slug}/index.html`, Buffer.from(builtGerman.get(`off ${slug}`)!), GOOGLE_ON).toString("utf8");
+    assert.deepEqual(tagsIn(stripOf(served))[0], ["Google Calendar", "Verfügbar"], slug);
+    assert.match(heroOf(served), /Bucht in Google Calendar/, slug);
+    assert.match(served, /Verbinden Sie Google Calendar, und Belline prüft dort/, slug);
+    const back = pageWithFlags(`${slug}/index.html`, Buffer.from(builtGerman.get(`on ${slug}`)!), {}).toString("utf8");
+    assert.match(heroOf(back), /Demnächst: bucht in Ihren Kalender/, slug);
+    const privacy = pageWithFlags(`${slug}/datenschutz.html`, Buffer.from(builtGerman.get(`off ${slug} privacy`)!), GOOGLE_ON).toString("utf8");
+    assert.match(privacy, /Die Verbindung eines Google Kalenders ist optional\./, `${slug} privacy`);
+  }
+  // Austria too: the path decides the source, not only /de-de and /de-ch.
+  const at = pageWithFlags("de-at/index.html", Buffer.from(builtGerman.get("off de-at")!), GOOGLE_ON).toString("utf8");
+  assert.match(heroOf(at), /Bucht in Google Calendar/);
+});
+
+await test("the picker is on all four landing pages, before the main button, and works without JavaScript", async () => {
+  const { COUNTRY_PAGES } = await import("./site-locale");
+  const pages = [
+    { code: "AE", html: built("off") },
+    { code: "DE", html: builtGerman.get("off de-de")! },
+    { code: "AT", html: builtGerman.get("off de-at")! },
+    { code: "CH", html: builtGerman.get("off de-ch")! },
+  ];
+  for (const { code, html } of pages) {
+    const nav = html.slice(html.indexOf('<nav id="site-nav"'), html.indexOf("</nav>"));
+    const picker = nav.slice(nav.indexOf('<details class="locale"'), nav.indexOf("</details>"));
+    assert.ok(picker.length > 0, `${code}: no picker`);
+    assert.ok(nav.indexOf('<details class="locale"') < nav.indexOf('class="nav-cta"'), `${code}: the picker is not before the main button`);
+    assert.match(picker, new RegExp(`<span class="locale-now">${code} · ${code === "AE" ? "English" : "Deutsch"}</span>`));
+    // Every country is a real link to its page, with its currency; the current one is marked.
+    for (const page of COUNTRY_PAGES) {
+      assert.match(picker, new RegExp(`<a href="${page.path}" hreflang="[^"]+"[^>]*><span class="locale-code" aria-hidden="true">${page.code}</span><span class="locale-name">[^<]+</span><span class="locale-money">${page.currency}</span></a>`), `${code}: ${page.code} is not a link`);
+    }
+    assert.equal((picker.match(/aria-current="page"/g) ?? []).length, 2, `${code}: not exactly the current country and language marked`);
+    // Only languages that exist are links; the rest are greyed, not links.
+    const languages = picker.slice(picker.indexOf('id="locale-h-language"'));
+    assert.equal((languages.match(/<a /g) ?? []).length, 1, `${code}: a language that does not exist is a link`);
+    assert.match(languages, code === "AE" ? /<span class="locale-off"><span class="locale-name" lang="ar" dir="rtl">العربية<\/span><em>later<\/em>/ : /<span class="locale-off"><span class="locale-name" lang="en">English<\/span><em>später<\/em>/);
+  }
+  // The hreflang alternates name all four pages on each.
+  for (const { html } of pages) {
+    for (const [lang, href] of [["en", "https://belline.ai/"], ["de-DE", "https://belline.ai/de-de"], ["de-AT", "https://belline.ai/de-at"], ["de-CH", "https://belline.ai/de-ch"], ["x-default", "https://belline.ai/"]]) {
+      assert.ok(html.includes(`<link rel="alternate" hreflang="${lang}" href="${href}">`), `missing hreflang ${lang}`);
+    }
+  }
+  // site.js turns it into a real button, and closes it on Escape and outside clicks.
+  const js = fs.readFileSync(path.join(process.cwd(), "public", "site.js"), "utf8");
+  const block = js.slice(js.indexOf("/* --- country and language"), js.indexOf("/* --- the waitlist"));
+  assert.match(block, /button\.setAttribute\("aria-expanded", "false"\)/);
+  assert.match(block, /button\.setAttribute\("aria-controls", panel\.id\)/);
+  assert.match(block, /e\.key !== "Escape"/);
+  assert.match(block, /!wrap\.contains\(e\.target\)/);
+  const templates = [visibleHtml("landing.html"), visibleHtml("landing.de.html")];
+  const { renderLocalePicker } = await import("./site-locale");
+  const raw = (f: string) => fs.readFileSync(path.join(process.cwd(), "public", f), "utf8").replace(/\r\n/g, "\n");
+  assert.ok(raw("landing.html").includes(renderLocalePicker("AE")), "public/landing.html's picker is not the generated one");
+  assert.ok(raw("landing.de.html").includes(renderLocalePicker("DE")), "public/landing.de.html's picker is not the generated one");
+  assert.ok(templates.every((t) => t.includes('<details class="locale"')));
 });
 
 head("The chat link: a channel with no website");

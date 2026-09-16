@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { applySiteFlags } from "./site-flags";
+import { applySiteFlags, swissSpelling } from "./site-flags";
 import { applyIntegrations } from "../../scripts/site-integrations";
 
 /**
@@ -58,13 +58,27 @@ function cacheFor(ext: string): string {
  */
 export function pageWithFlags(relPath: string, bytes: Buffer, env: Record<string, string | undefined> = process.env): Buffer {
   const name = relPath.split(path.sep).join("/");
-  const source = name === "index.html" ? "landing.html" : name;
+  const german = germanSourceOf(name);
+  const source = german?.source ?? (name === "index.html" ? "landing.html" : name);
+  const spelling = german?.swiss ? swissSpelling : undefined;
   const html = bytes.toString("utf8");
-  let out = applySiteFlags(source, html, env);
-  if (source === "landing.html" && out.includes("<!-- integrations:start") && out.includes("<!-- integrations:end -->")) {
-    out = applyIntegrations(out, env);
+  let out = applySiteFlags(source, html, env, spelling);
+  if ((source === "landing.html" || source === "landing.de.html") && out.includes("<!-- integrations:start") && out.includes("<!-- integrations:end -->")) {
+    out = applyIntegrations(out, env, source === "landing.de.html" ? "de" : "en");
   }
   return out === html ? bytes : Buffer.from(out, "utf8");
+}
+
+/**
+ * The German pages the build writes (scripts/site-locale.ts): /de-de, /de-at
+ * and /de-ch, each with its landing page and two legal pages, rendered from
+ * one German source each. Switzerland's are spelled with "ss".
+ */
+function germanSourceOf(name: string): { source: string; swiss: boolean } | null {
+  const match = /^de-(de|at|ch)\/(index|datenschutz|nutzungsbedingungen)\.html$/.exec(name);
+  if (!match) return null;
+  const source = { index: "landing.de.html", datenschutz: "privacy.de.html", nutzungsbedingungen: "terms.de.html" }[match[2] as "index"];
+  return { source, swiss: match[1] === "ch" };
 }
 
 export function marketingSiteExists(): boolean {

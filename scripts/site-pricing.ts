@@ -250,14 +250,37 @@ export function applyPricing(html: string): string {
   return html;
 }
 
+/**
+ * The two landing sources as the checks pin them: the English one with its
+ * pricing and its picker, the German one as the Germany render of its
+ * pricing, its flag-off strip and its picker. Paths, spelling and hreflang are
+ * left to the build (scripts/site-locale.ts).
+ */
+export async function refreshSources(english: string, german: string): Promise<{ english: string; german: string }> {
+  const { applyLocalePicker } = await import("./site-locale");
+  const { applyPricingDe } = await import("./site-pricing-de");
+  const { applyIntegrations } = await import("./site-integrations");
+  return {
+    english: applyLocalePicker(applyPricing(english), "AE"),
+    german: applyLocalePicker(applyIntegrations(applyPricingDe(german, "DE"), {}, "de"), "DE"),
+  };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public", "landing.html");
-  const before = fs.readFileSync(file, "utf8");
-  const after = applyPricing(before);
-  if (after === before) {
-    console.log("  public/landing.html pricing is already current.");
-  } else {
-    fs.writeFileSync(file, after, "utf8");
-    console.log("  public/landing.html pricing rewritten from src/lib/billing/plans.ts.");
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public");
+  const files = { english: path.join(dir, "landing.html"), german: path.join(dir, "landing.de.html") };
+  const before = { english: fs.readFileSync(files.english, "utf8"), german: fs.readFileSync(files.german, "utf8") };
+  const rendered = await refreshSources(before.english, before.german);
+  // The generated blocks are written with \n; a CRLF checkout keeps CRLF throughout, rather than a file of mixed endings.
+  const keep = (source: string, out: string) => (source.includes("\r\n") ? out.replace(/\r?\n/g, "\r\n") : out);
+  const after = { english: keep(before.english, rendered.english), german: keep(before.german, rendered.german) };
+  for (const key of ["english", "german"] as const) {
+    const name = `public/${path.basename(files[key])}`;
+    if (after[key] === before[key]) {
+      console.log(`  ${name} pricing is already current.`);
+    } else {
+      fs.writeFileSync(files[key], after[key], "utf8");
+      console.log(`  ${name} pricing rewritten from src/lib/billing/plans.ts.`);
+    }
   }
 }

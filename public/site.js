@@ -4,7 +4,15 @@
  * Two pieces: the call panel in the hero, and the mobile menu. Both are
  * deliberately plain — no framework, no build step, and nothing here runs
  * before the markup it enhances already reads correctly.
+ *
+ * The German pages (/de-de, /de-at, /de-ch) load the same file. Every word it
+ * writes into a page follows <html lang>, and so does how it writes money.
  */
+
+/** A German page? Read once; every block below asks. */
+var SITE_DE = /^de(?:-|$)/i.test(document.documentElement.getAttribute("lang") || "");
+/** Swiss German writes "CHF 3’250" rather than "3.250 €". */
+var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "");
 
 /* --- the call panel --------------------------------------------------------
    Scenes come from a JSON block in the page rather than being hard-coded
@@ -349,7 +357,7 @@
   function setOpen(open) {
     nav.setAttribute("data-open", String(open));
     toggle.setAttribute("aria-expanded", String(open));
-    toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    toggle.setAttribute("aria-label", SITE_DE ? (open ? "Menü schließen" : "Menü öffnen") : open ? "Close menu" : "Open menu");
     // The nav comes before the toggle in the page, so Tab from the toggle went
     // to the page behind the menu. Opening it puts the first link in reach —
     // after the 0.18s fade, because a link still at visibility: hidden cannot
@@ -443,11 +451,11 @@
     dock = document.createElement("div");
     dock.className = "call-dock";
     dock.setAttribute("role", "region");
-    dock.setAttribute("aria-label", "Call with Belline");
+    dock.setAttribute("aria-label", SITE_DE ? "Anruf mit Belline" : "Call with Belline");
 
     var frame = document.createElement("iframe");
     frame.src = bell.getAttribute("href");
-    frame.title = "Call with Belline";
+    frame.title = SITE_DE ? "Anruf mit Belline" : "Call with Belline";
     // Without this the microphone is blocked inside the frame and the call is
     // silent with no error a visitor could act on.
     frame.allow = "microphone";
@@ -456,7 +464,7 @@
     var shut = document.createElement("button");
     shut.type = "button";
     shut.className = "call-shut";
-    shut.setAttribute("aria-label", "Close the call");
+    shut.setAttribute("aria-label", SITE_DE ? "Anruf schließen" : "Close the call");
     shut.textContent = "×";
     shut.addEventListener("click", close);
 
@@ -533,14 +541,14 @@
     dock = document.createElement("div");
     dock.className = "chat-dock";
     dock.setAttribute("role", "region");
-    dock.setAttribute("aria-label", "Chat with Belline");
+    dock.setAttribute("aria-label", SITE_DE ? "Chat mit Belline" : "Chat with Belline");
 
     var frame = document.createElement("iframe");
     // Our origin goes in the URL so the edge can name it in frame-ancestors.
     // Without it the browser refuses the page before it is parsed.
     frame.src =
       fab.getAttribute("data-chat") + "?o=" + encodeURIComponent(location.origin);
-    frame.title = "Chat with Belline";
+    frame.title = SITE_DE ? "Chat mit Belline" : "Chat with Belline";
     frame.className = "chat-frame";
     // For the voice note. The browser asks only when the visitor holds the
     // microphone button inside the chat, never on opening.
@@ -549,7 +557,7 @@
     var shut = document.createElement("button");
     shut.type = "button";
     shut.className = "call-shut";
-    shut.setAttribute("aria-label", "Close the chat");
+    shut.setAttribute("aria-label", SITE_DE ? "Chat schließen" : "Close the chat");
     shut.textContent = "×";
     shut.addEventListener("click", close);
 
@@ -886,6 +894,17 @@
     return "AED " + Math.round(n).toLocaleString("en-AE");
   }
 
+  // A German page writes money as scripts/site-pricing-de.ts does, by hand
+  // rather than through Intl, so the number the page ships with and the one
+  // written here are the same characters: "3.250 €", or "CHF 3’250".
+  var currency = form.querySelector('[data-gen="roi-currency"]');
+  function money(n) {
+    if (!SITE_DE) return aed(n);
+    var digits = String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, SITE_CH ? "’" : ".");
+    var code = currency ? currency.textContent.trim() : "€";
+    return code === "€" ? digits + " €" : code + " " + digits;
+  }
+
   // The line under the big number: bookings, and the comparison with the
   // chosen plan. Same words as renderRoi() in scripts/site-pricing.ts.
   var detail = form.querySelector('[data-gen="roi-detail"]');
@@ -898,7 +917,7 @@
     var price = parseFloat(plan.value) || 0;
     var planName = plan.options[plan.selectedIndex].getAttribute("data-name");
     if (!missed || !share || !value) {
-      out.textContent = "Fill in all three numbers";
+      out.textContent = SITE_DE ? "Bitte alle drei Zahlen ausfüllen" : "Fill in all three numbers";
       if (detail) detail.textContent = "";
       return;
     }
@@ -906,6 +925,16 @@
     var bookings = (missed * share * 52) / 12;
     var worth = Math.round(bookings * value);
     var n = Math.round(bookings);
+    if (SITE_DE) {
+      // Dieselben Worte wie renderRoiDe() in scripts/site-pricing-de.ts.
+      out.textContent = "Etwa " + money(worth) + " pro Monat";
+      if (detail) {
+        detail.textContent =
+          "Das sind etwa " + n + " " + (n === 1 ? "Buchung" : "Buchungen") + " pro Monat, " +
+          (worth >= price ? "mehr" : "weniger") + " als " + planName + " kostet.";
+      }
+      return;
+    }
     out.textContent = "About " + aed(worth) + " a month";
     if (detail) {
       detail.textContent =
@@ -971,7 +1000,233 @@
     pause.addEventListener("click", function () {
       var paused = section.classList.toggle("is-paused");
       pause.setAttribute("aria-pressed", paused ? "true" : "false");
-      pause.textContent = paused ? "Play" : "Pause";
+      pause.textContent = SITE_DE ? (paused ? "Abspielen" : "Anhalten") : paused ? "Play" : "Pause";
     });
+  }
+})();
+
+/* --- country and language --------------------------------------------------
+   The picker ships as a <details>, which opens and navigates with no
+   JavaScript (scripts/site-locale.ts). Here it becomes a real button with
+   aria-expanded controlling the panel, and the panel closes on Escape, on a
+   click outside and when focus leaves it. In the phone menu it is the same
+   element, full width, with the panel in the flow of the menu. */
+(function () {
+  var details = document.querySelector("details.locale");
+  if (!details) return;
+  var summary = details.querySelector("summary");
+  var panel = details.querySelector(".locale-panel");
+  if (!summary || !panel || !panel.id) return;
+
+  var wrap = document.createElement("div");
+  wrap.className = "locale";
+  wrap.setAttribute("data-locale", details.getAttribute("data-locale") || "");
+
+  var button = document.createElement("button");
+  button.type = "button";
+  button.className = "locale-btn";
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-controls", panel.id);
+  while (summary.firstChild) button.appendChild(summary.firstChild);
+
+  panel.hidden = true;
+  wrap.appendChild(button);
+  wrap.appendChild(panel);
+  details.parentNode.replaceChild(wrap, details);
+
+  function isOpen() {
+    return button.getAttribute("aria-expanded") === "true";
+  }
+
+  function setOpen(open) {
+    button.setAttribute("aria-expanded", String(open));
+    panel.hidden = !open;
+    wrap.classList.toggle("is-open", open);
+  }
+
+  button.addEventListener("click", function () {
+    setOpen(!isOpen());
+  });
+
+  document.addEventListener("click", function (e) {
+    if (isOpen() && !wrap.contains(e.target)) setOpen(false);
+  });
+
+  // Capturing, and stopped here: in the phone menu, Escape closes the picker
+  // first and leaves the menu open, rather than shutting both at once.
+  document.addEventListener(
+    "keydown",
+    function (e) {
+      if (e.key !== "Escape" || !isOpen()) return;
+      e.stopPropagation();
+      setOpen(false);
+      button.focus();
+    },
+    true,
+  );
+
+  wrap.addEventListener("focusout", function (e) {
+    if (isOpen() && e.relatedTarget && !wrap.contains(e.relatedTarget)) setOpen(false);
+  });
+})();
+
+/* --- the waitlist ------------------------------------------------------------
+   Only on the German pages, where nothing is for sale yet. The form posts to
+   app.belline.ai/api/leads/waitlist; without JavaScript the browser submits it
+   and gets a plain German page back. With it, the visitor stays here, each
+   problem is written next to its field, and a typo in a big mail provider's
+   domain is asked about once, as the book-a-call form does. */
+(function () {
+  var form = document.getElementById("warteliste");
+  if (!form || !form.getAttribute("action")) return;
+
+  var note = form.querySelector(".waitlist-note");
+  var submit = form.querySelector(".book-submit");
+  var endpoint = form.getAttribute("action");
+  var label = submit ? submit.textContent : "";
+
+  function slot(input) {
+    var field = input.closest(".f");
+    return field && field.querySelector(".f-err");
+  }
+
+  function clear(input) {
+    input.classList.remove("is-bad");
+    input.classList.remove("is-hint");
+    input.removeAttribute("aria-invalid");
+    var s = slot(input);
+    if (s) {
+      s.hidden = true;
+      s.textContent = "";
+    }
+  }
+
+  function fail(input, message, suggestion, onKeep) {
+    input.classList.add(onKeep ? "is-hint" : "is-bad");
+    input.setAttribute("aria-invalid", "true");
+    var s = slot(input);
+    if (!s) return;
+    s.hidden = false;
+    s.textContent = message + " ";
+    if (suggestion) {
+      var use = document.createElement("button");
+      use.type = "button";
+      use.textContent = suggestion + " verwenden";
+      use.addEventListener("click", function () {
+        input.value = suggestion;
+        clear(input);
+        input.focus();
+      });
+      s.appendChild(use);
+    }
+    if (onKeep) {
+      s.appendChild(document.createTextNode(" oder "));
+      var keep = document.createElement("button");
+      keep.type = "button";
+      keep.textContent = "meine behalten";
+      keep.addEventListener("click", onKeep);
+      s.appendChild(keep);
+    }
+  }
+
+  function say(message, tone) {
+    if (!note) return;
+    note.textContent = message;
+    note.classList.toggle("is-good", tone === "good");
+    note.classList.toggle("is-bad", tone === "bad");
+  }
+
+  form.addEventListener("input", function (e) {
+    if (e.target.classList && (e.target.classList.contains("is-bad") || e.target.classList.contains("is-hint"))) clear(e.target);
+    // Once nothing is marked any more, the summary under the button goes too.
+    if (note && note.classList.contains("is-bad") && !form.querySelector(".is-bad, .is-hint")) say("");
+  });
+
+  var REQUIRED = {
+    name: "Bitte geben Sie Ihren Namen an.",
+    email: "Bitte geben Sie Ihre E-Mail-Adresse an.",
+    company: "Bitte geben Sie den Namen Ihres Unternehmens an.",
+    country: "Bitte wählen Sie Ihr Land."
+  };
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var firstBad = null;
+    Object.keys(REQUIRED).forEach(function (name) {
+      var input = form.elements[name];
+      clear(input);
+      var value = input.value.trim();
+      var message = !value ? REQUIRED[name] : name === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? "Diese E-Mail-Adresse ist nicht vollständig." : "";
+      if (message) {
+        fail(input, message);
+        if (!firstBad) firstBad = input;
+      }
+    });
+    if (firstBad) {
+      firstBad.focus();
+      say("Bitte korrigieren Sie die markierten Felder.", "bad");
+      return;
+    }
+    send(false);
+  });
+
+  function send(emailConfirmed) {
+    var payload = { emailConfirmed: emailConfirmed ? true : false };
+    ["name", "email", "company", "country", "businessType", "page", "website2"].forEach(function (name) {
+      if (form.elements[name]) payload[name] = form.elements[name].value;
+    });
+
+    submit.disabled = true;
+    submit.textContent = "Wird gesendet…";
+    say("");
+
+    fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        return res.json().then(function (body) { return { status: res.status, body: body }; });
+      })
+      .then(function (result) {
+        if (result.status === 200 && result.body.ok) {
+          var done = document.createElement("div");
+          done.className = "waitlist-done";
+          done.setAttribute("role", "status");
+          var head = document.createElement("h3");
+          head.textContent = "Danke, Sie stehen auf der Warteliste.";
+          head.tabIndex = -1;
+          var text = document.createElement("p");
+          text.textContent = result.body.message || "Wir melden uns, wenn Belline in Ihrem Land startet. Eine E-Mail schicken wir Ihnen jetzt nicht.";
+          done.appendChild(head);
+          done.appendChild(text);
+          form.parentNode.replaceChild(done, form);
+          head.focus();
+          return;
+        }
+
+        submit.disabled = false;
+        submit.textContent = label;
+        var field = result.body.field && form.elements[result.body.field];
+        if (!field) {
+          say(result.body.error || "Das hat nicht geklappt. Schreiben Sie uns an hello@belline.ai.", "bad");
+          return;
+        }
+        if (result.body.confirmable) {
+          fail(field, result.body.error, result.body.suggestion, function () {
+            clear(field);
+            send(true);
+          });
+        } else {
+          fail(field, result.body.error, result.body.suggestion);
+        }
+        field.focus();
+        say(result.body.confirmable ? "Bitte prüfen Sie kurz Ihre E-Mail-Adresse." : "Fast geschafft: Bitte korrigieren Sie das markierte Feld.", "bad");
+      })
+      .catch(function () {
+        submit.disabled = false;
+        submit.textContent = label;
+        say("Wir konnten Belline gerade nicht erreichen. Versuchen Sie es gleich noch einmal, oder schreiben Sie an hello@belline.ai.", "bad");
+      });
   }
 })();

@@ -615,7 +615,7 @@ test("no shipped copy states a trial length other than the catalogue's", () => {
 });
 
 test("the legal pages claim nothing that is not live", () => {
-  // The privacy policy changed on the 16th: Vercel no longer hosts the website, Microsoft joined for Outlook, and it names voicemail recordings left before Go live.
+  // The privacy policy changed on the 16th: Vercel no longer hosts the website, Microsoft joined for Outlook, it names voicemail recordings left before Go live, and it says what the German pages' waitlist stores.
   const updated: Record<string, string> = { "terms.html": "15 September 2026", "privacy.html": "16 September 2026" };
   for (const file of ["terms.html", "privacy.html"]) {
     const html = publicPages.find((p) => p.file === file)!.html.replace(/<!--[\s\S]*?-->/g, "");
@@ -632,6 +632,145 @@ test("the legal pages claim nothing that is not live", () => {
   }
   const terms = publicPages.find((p) => p.file === "terms.html")!.html;
   assert.match(terms, /second WhatsApp number/, "the terms do not say WhatsApp is a second number registered with Belline");
+});
+
+// ---------------------------------------------------------------------------
+// The German pages: the same promises, in German, for markets that are not open
+// ---------------------------------------------------------------------------
+
+console.log("\nWhat the German pages are allowed to say\n");
+
+const de = await import("../src/lib/billing/speak-de");
+const { applyPricingDe, renderPricingDe, GERMAN_PAGES } = await import("./site-pricing-de");
+const { renderGermanLanding, renderGermanLegal } = await import("./site-locale");
+const { refreshSources } = await import("./site-pricing");
+const { calendarConnectionText, calendarConnectionTextDe } = await import("../src/lib/site-flags");
+const DACH = ["DE", "AT", "CH"] as const;
+const germanSource = (file: string) => fs.readFileSync(path.join(ROOT, "public", file), "utf8");
+const landingDe = germanSource("landing.de.html");
+const germanLandings = DACH.map((m) => ({ market: m, html: renderGermanLanding(landingDe, m, {}) }));
+const lf = (s: string) => s.replace(/\r\n/g, "\n");
+
+test("every v2 summary and feature has a German translation, and the calendar line matches the flags' German", () => {
+  for (const { english } of de.germanCatalogueTexts()) assert.doesNotThrow(() => de.catalogueDe(english), english);
+  for (const on of [{ google: true, outlook: false }, { google: false, outlook: true }, { google: true, outlook: true }]) {
+    assert.equal(de.catalogueDe(calendarConnectionText(on)), calendarConnectionTextDe(on));
+  }
+  assert.throws(() => de.catalogueDe("A feature nobody translated"), /CATALOGUE_DE/);
+});
+
+test("German prices are the catalogue's, written the German way: 69 € and CHF 79, 1.419 € and CHF 1’639", () => {
+  assert.equal(formatMoney(6900, "DE", "de-DE"), "69 €");
+  assert.equal(formatMoney(141900, "AT", "de-AT"), "1.419 €");
+  assert.equal(formatMoney(7900, "CH", "de-CH"), "CHF 79");
+  assert.equal(formatMoney(163900, "CH", "de-CH"), "CHF 1’639");
+  assert.equal(formatMoney(19865, "DE", "de-DE"), "198,65 €");
+  for (const market of DACH) {
+    const { locale } = GERMAN_PAGES[market];
+    const html = renderPricingDe(market);
+    for (const product of plans.offered(market)) {
+      assert.ok(html.includes(`>${formatMoney(priceOf(product.id, market), market, locale)}<`), `${market} ${product.name} monthly`);
+      assert.ok(html.includes(`${formatMoney(periodFee([product.id], market, "annual"), market, locale)} einmal jährlich abgerechnet`), `${market} ${product.name} annual`);
+      for (const line of de.publicLinesDe(product, locale)) assert.ok(html.includes(line.replace(/&/g, "&amp;")), `${market} ${product.id}: "${line}" is live but missing`);
+    }
+    assert.equal(html.match(/Empfohlen/g)?.length, 1);
+    assert.doesNotMatch(html, /Most popular|Beliebt/, "a plan is called popular where nobody has bought one");
+    assert.match(html, /is-best[\s\S]*?<h3>Growth<\/h3>/);
+    assert.match(html, new RegExp(`data-market-note="${market}"><strong>Geplante Preise für`), `${market}: the prices are not labelled as planned`);
+    assert.match(html, /noch nicht verfügbar, Sie können noch nichts kaufen/);
+    assert.ok(html.includes(de.overLimitSentenceDe(market, locale)), `${market}: the pack prices are not this market's`);
+    assert.ok(html.includes(de.trialSentenceDe()));
+    assert.ok(html.includes(de.MINUTE_DEFINITION_DE) && html.includes(de.CONVERSATION_DEFINITION_DE));
+    assert.doesNotMatch(html, /checkout|app\.belline\.ai|Start free|Jetzt kaufen|Unternehmen verbinden/i, `${market}: the pricing links somewhere that sells`);
+    assert.equal((html.match(/href="#warteliste"/g) ?? []).length, plans.offered(market).length, `${market}: not every plan goes to the waitlist`);
+  }
+  assert.doesNotMatch(renderPricingDe("CH"), /€/, "the Swiss page shows euros");
+  assert.doesNotMatch(renderPricingDe("DE") + renderPricingDe("AT"), /CHF|AED/, "a euro page shows another currency");
+});
+
+const refreshed = await refreshSources(germanSource("landing.html"), landingDe);
+test("the German landing source is the Germany render of its generated blocks — run npm run pricing if not", () => {
+  assert.equal(lf(refreshed.german), lf(landingDe), "public/landing.de.html is stale against the catalogue, the flags or the picker");
+});
+
+test("each German page's pricing applies whatever the source's line endings", () => {
+  const crlf = lf(landingDe).replace(/\n/g, "\r\n");
+  for (const market of DACH) {
+    let out = "";
+    assert.doesNotThrow(() => { out = applyPricingDe(crlf, market); }, `${market}: applyPricingDe threw on CRLF`);
+    assert.match(out, /<select name="plan">\r?\n\s*<option value="\d+"[\s\S]*?data-name="Growth" selected/);
+  }
+});
+
+test("on every German page the visible FAQ and the structured-data FAQ say exactly the same words", () => {
+  const decode = (s: string) =>
+    s.replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&amp;/g, "&").trim();
+  for (const { market, html } of germanLandings) {
+    const visible = [...html.matchAll(/<summary>([\s\S]*?)<\/summary>\s*<div class="answer">([\s\S]*?)<\/div>/g)].map((m) => ({ q: decode(m[1]), a: decode(m[2]) }));
+    const ld = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    assert.ok(ld, `${market}: no structured data`);
+    const graph = JSON.parse(ld![1])["@graph"] as { "@type": string; mainEntity?: { name: string; acceptedAnswer: { text: string } }[]; offers?: { priceCurrency: string; price: string }[] }[];
+    const faq = graph.find((g) => g["@type"] === "FAQPage")!.mainEntity!.map((e) => ({ q: e.name, a: e.acceptedAnswer.text }));
+    assert.ok(visible.length >= 10, `${market}: only ${visible.length} visible questions`);
+    assert.ok(faq.every((f) => f.a.length > 0), `${market}: an empty structured answer`);
+    assert.deepEqual(faq, visible, `${market}: the FAQ structured data differs from the visible FAQ`);
+    const offers = graph.find((g) => g["@type"] === "SoftwareApplication")!.offers!;
+    assert.deepEqual(offers.map((o) => [o.price, o.priceCurrency]), plans.offered(market).map((p) => [String(priceOf(p.id, market) / 100), market === "CH" ? "CHF" : "EUR"]));
+  }
+});
+
+test("the German pages carry no not-yet feature in German, no per-minute rate, and only their own trial length", () => {
+  const notYet = de.germanCatalogueTexts().filter((t) => t.status === "not-yet").map((t) => de.catalogueDe(t.english));
+  assert.ok(notYet.length >= 5, "the not-yet translations are not being read");
+  const pages = [
+    ...["landing.de.html", "privacy.de.html", "terms.de.html"].map((f) => ({ file: `public/${f}`, html: germanSource(f) })),
+    ...germanLandings.map((g) => ({ file: `/${GERMAN_PAGES[g.market].slug}`, html: g.html })),
+  ];
+  for (const { file, html } of pages) {
+    for (const feature of notYet) assert.ok(!html.includes(feature), `${file} advertises "${feature}", which does not work yet`);
+    assert.doesNotMatch(html, /\d+[.,]\d{2}\s*(?:€|CHF)\s*(?:pro|je)\s*(?:Minute|Gespräch)/i, `${file} quotes a per-unit rate`);
+    for (const match of html.matchAll(/\b(\d{1,3})[\s -]?Tage?n?\b/g)) {
+      const near = html.slice(Math.max(0, match.index! - 60), match.index! + match[0].length + 60);
+      if (!/kostenlos|Testphase/i.test(near)) continue;
+      assert.equal(Number(match[1]), TRIAL.days, `${file} states a ${match[1]}-day trial: "${match[0]}"`);
+    }
+  }
+});
+
+test("the German legal pages keep their dates and claim nothing that is not live, in German", () => {
+  const updated: Record<string, string> = { "terms.de.html": "15. September 2026", "privacy.de.html": "16. September 2026" };
+  for (const file of ["terms.de.html", "privacy.de.html"]) {
+    const english = file.replace(".de", "");
+    const html = germanSource(file).replace(/<!--[\s\S]*?-->/g, "");
+    assert.match(html, new RegExp(`Zuletzt aktualisiert am ${updated[file]}`), `${file}: last-updated date`);
+    // The same day as the English page it translates.
+    const englishDate = /Last updated (\d+) (\w+) (\d{4})/.exec(publicPages.find((p) => p.file === english)!.html)!;
+    assert.equal(updated[file], `${englishDate[1]}. ${englishDate[2]} ${englishDate[3]}`, `${file}: not dated as ${english}`);
+    for (const [pattern, what] of [
+      [/\bbuch(?:t|en|ung)\b[^.<]{0,40}\b(?:direkt|unmittelbar)\s+in\s+(?:Ihren|den|seinen|ihren)\s+(?:\w+\s)?Kalender\b/i, "books straight into a calendar"],
+      [/Erinnerungs-?SMS|SMS-Erinnerung|Erinnerung vor dem Termin/i, "reminder texts"],
+      [/Anzahlungslink|Link zur Anzahlung|<h2>[^<]*Anzahlung/i, "deposits"],
+      [/\b24\s?\/\s?7\b|rund um die Uhr/i, "24/7"],
+    ] as [RegExp, string][]) {
+      assert.doesNotMatch(html, pattern, `${file}: ${what}`);
+    }
+    assert.match(html, /<p class="legal-lang">Dies ist eine Übersetzung[^<]*<a href="\/(?:privacy|terms)" hreflang="en" lang="en">englische Fassung<\/a>/, `${file}: no notice that the English version governs`);
+  }
+  assert.match(germanSource("terms.de.html"), /zweite WhatsApp-Nummer/);
+});
+
+test("the German terms carry the German trial and over-limit sentences, built for every country", () => {
+  const source = germanSource("terms.de.html");
+  assert.ok(source.includes(de.overLimitSentenceDe("AE", "de-DE")), `terms.de.html does not carry: "${de.overLimitSentenceDe("AE", "de-DE")}"`);
+  for (const market of DACH) {
+    const built = renderGermanLegal("terms.html", source, market, {});
+    const spell = (s: string) => (market === "CH" ? s.replace(/ß/g, "ss") : s);
+    assert.ok(built.includes(spell(de.trialSentenceDe())), `${market}: the trial sentence is not the catalogue's`);
+    assert.match(built, new RegExp(`<html lang="de-${market}">`));
+    assert.match(built, new RegExp(`<link rel="canonical" href="https://belline\\.ai/de-${market.toLowerCase()}/nutzungsbedingungen">`));
+    assert.match(built, /<link rel="alternate" hreflang="en" href="https:\/\/belline\.ai\/terms">/);
+    if (market === "CH") assert.doesNotMatch(built, /ß/, "the Swiss terms still write ß");
+  }
 });
 
 test("Belle's trial answer is generated from the catalogue", () => {

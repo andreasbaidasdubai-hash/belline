@@ -3203,3 +3203,160 @@ footer a { color: var(--bl-ink-900); }
   .connects.is-moving .connect:first-child,
   .connects.is-moving .connect:nth-child(n) { width: 160px; padding: 18px 14px 20px; }
 }
+
+/* --- Land und Sprache ------------------------------------------------------
+   Der Wähler im Kopf, vor "Connect your business" (scripts/site-locale.ts).
+   Im Markup ein <details>: ohne JavaScript klappt er auf, und jedes Land ist
+   ein Link. site.js macht daraus einen Knopf mit aria-expanded. Links die
+   Länder mit ihrer Währung, rechts nur die Sprachen, die es für dieses Land
+   gibt; die übrigen grau und ohne Link. Auf dem Telefon steht er im Menü in
+   voller Breite, und das Panel liegt im Fluss statt darüber. */
+@media (min-width: 901px) {
+  .top nav a { white-space: nowrap; }
+}
+.locale { position: relative; }
+.locale > summary { list-style: none; }
+.locale > summary::-webkit-details-marker { display: none; }
+.locale-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--bl-rule-strong);
+  border-radius: var(--bl-radius-pill);
+  background: transparent;
+  color: var(--bl-text-2);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.locale-btn:hover { color: var(--bl-ink-900); border-color: var(--bl-ink-900); }
+.locale-btn:focus-visible { outline: 2px solid var(--bl-blue); outline-offset: 2px; }
+.locale-globe { width: 16px; height: 16px; flex: none; }
+.locale-chev { width: 10px; height: 10px; flex: none; transition: transform 0.2s ease; }
+.locale[open] .locale-chev,
+.locale.is-open .locale-chev { transform: rotate(180deg); }
+.locale-panel {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  z-index: 40;
+  width: 530px;
+  padding: 18px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 18px;
+  background: #FFFFFF;
+  border: 1px solid var(--bl-rule);
+  border-radius: var(--bl-radius-card);
+  box-shadow: 0 18px 50px rgba(18, 32, 74, 0.14);
+}
+.locale[open] > .locale-panel,
+.locale.is-open > .locale-panel { display: grid; }
+.locale-panel[hidden] { display: none !important; }
+.locale-h {
+  margin: 0 0 8px;
+  padding: 0 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bl-muted);
+}
+.locale-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.top nav .locale-list a,
+.locale-off {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  font-family: var(--bl-font-text);
+  font-size: 0.92rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--bl-ink-900);
+  text-decoration: none;
+  white-space: normal;
+}
+.top nav .locale-list a:hover { background: var(--bl-blue-tint); color: var(--bl-ink-900); }
+.top nav .locale-list a[aria-current="page"] { background: var(--bl-blue-tint); font-weight: 600; }
+.locale-code {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 20px;
+  border-radius: 5px;
+  background: #F1F3F7;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--bl-text-2);
+}
+.locale-money { margin-left: auto; font-size: 0.78rem; color: var(--bl-muted); font-variant-numeric: tabular-nums; }
+.locale-off { color: var(--bl-muted); cursor: default; }
+.locale-off em { margin-left: auto; font-style: normal; font-size: 0.74rem; }
+@media (min-width: 901px) and (max-width: 1180px) {
+  .top nav { gap: 18px; }
+  .top nav a { font-size: 0.88rem; }
+  .top nav .nav-cta { padding: 10px 16px; }
+}
+@media (max-width: 900px) {
+  .top nav .locale { width: 100%; margin-top: 14px; }
+  .top nav .locale-btn { width: 100%; height: 46px; justify-content: flex-start; font-size: 0.95rem; }
+  .top nav .locale-btn .locale-chev { margin-left: auto; }
+  .top nav .locale-panel {
+    position: static;
+    width: auto;
+    margin-top: 8px;
+    padding: 12px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    box-shadow: none;
+  }
+  .top nav .locale-list a,
+  .top nav .locale-list a:last-child { border-bottom: 0; }
+}
+
+/* --- Warteliste und Hinweise der deutschen Seiten -------------------------- */
+.market-note {
+  max-width: 70ch;
+  margin: 34px 0 26px;
+  padding: 14px 18px;
+  border: 1px solid var(--card-line);
+  border-radius: var(--bl-radius-panel);
+  background: var(--bl-blue-tint);
+  color: var(--bl-text-2);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.market-note strong { color: var(--bl-ink-900); }
+.waitlist { margin-top: 30px; }
+.waitlist select { appearance: auto; }
+.waitlist .f-note a { color: var(--bl-accent-text); }
+.waitlist-privacy { max-width: 62ch; line-height: 1.55; }
+.waitlist-done {
+  margin-top: 30px;
+  padding: 20px 22px;
+  border: 1px solid var(--bl-lagoon);
+  border-radius: var(--bl-radius-panel);
+  background: #FFFFFF;
+}
+.waitlist-done h3 { margin: 0 0 6px; font-size: 1.1rem; }
+.waitlist-done p { margin: 0; color: var(--bl-text-2); }
+.legal-lang {
+  padding: 12px 16px;
+  border: 1px solid var(--card-line);
+  border-radius: var(--bl-radius-panel);
+  background: var(--bl-blue-tint);
+  font-size: 0.92rem;
+}
+@media (max-width: 760px) {
+  .waitlist .f-row { grid-template-columns: minmax(0, 1fr); }
+}

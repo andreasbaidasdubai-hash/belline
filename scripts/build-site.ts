@@ -17,6 +17,16 @@ import { VERTICALS, type Vertical } from "./site-content";
 import { applyPricing, trialSentence } from "./site-pricing";
 import { applyIntegrations } from "./site-integrations";
 import { applySiteFlags } from "../src/lib/site-flags";
+import {
+  LEGAL_PAGES,
+  applyAlternates,
+  legalAlternates,
+  localiseEnglishLanding,
+  renderGermanLanding,
+  renderGermanLegal,
+  type LegalPage,
+} from "./site-locale";
+import { GERMAN_PAGES } from "./site-pricing-de";
 import { TRIAL } from "../src/lib/billing/plans";
 
 const SOURCE = "public";
@@ -65,7 +75,18 @@ function assetsUnder(dir: string, prefix = ""): string[] {
  * to be named here to ship — a new one that is not is a build error, not a
  * leak.
  */
-const PAGES = ["landing.html", "404.html", "privacy.html", "terms.html"];
+const PAGES = ["landing.html", "404.html", "privacy.html", "terms.html", "landing.de.html", "privacy.de.html", "terms.de.html"];
+
+/**
+ * German sources: never published under their own names. Each is rendered
+ * once per DACH country, into /de-de, /de-at and /de-ch, by
+ * scripts/site-locale.ts (see the end of the page loop).
+ */
+const GERMAN_SOURCES: Record<string, "landing" | LegalPage> = {
+  "landing.de.html": "landing",
+  "privacy.de.html": "privacy.html",
+  "terms.de.html": "terms.html",
+};
 
 /**
  * Who the legal pages name.
@@ -82,6 +103,12 @@ const LEGAL = {
   address: "",
   /** Governing law and courts, e.g. "the laws of the Emirate of Dubai and the federal laws of the UAE, with the courts of Dubai". */
   law: "",
+  /**
+   * The same governing law in German, for the German translation of the terms
+   * ("dem Recht des Emirats Dubai …"): it completes a German sentence, so the
+   * English wording cannot be dropped in. Empty keeps the German default.
+   */
+  lawDe: "",
 };
 if (!LEGAL.entity || !LEGAL.address || !LEGAL.law) {
   console.warn(
@@ -102,14 +129,16 @@ function fillTrial(html: string): string {
   return html.replace(slot, (_m, open: string, close: string) => `${open}${trialSentence()}${close}`);
 }
 
-function fillLegal(html: string): string {
+function fillLegal(html: string, lang: "en" | "de" = "en"): string {
   const put = (key: string, value: string) =>
     value
       ? html.replace(new RegExp(`<span data-legal="${key}">[^<]*</span>`, "g"), `<span data-legal="${key}">${value}</span>`)
       : html;
   html = put("entity", LEGAL.entity);
+  // The address completes a sentence ("reachable at …" / "erreichbar unter …")
+  // only while it is empty; filled, it is the address itself in either language.
   html = put("address", LEGAL.address);
-  html = put("law", LEGAL.law);
+  html = put("law", lang === "de" ? LEGAL.lawDe : LEGAL.law);
   return html;
 }
 const pages = PAGES.filter((f) => {
@@ -269,6 +298,7 @@ function repoint(text: string): string {
 
 let bytes = 0;
 for (const page of pages) {
+  if (page in GERMAN_SOURCES) continue;
   const target = RENAME[page] ?? page;
   let html = fs.readFileSync(path.join(SOURCE, page), "utf8");
 
@@ -294,6 +324,9 @@ for (const page of pages) {
   // booking.google on is what turns Google Calendar "Available", and nothing
   // else does. Throws if the strip's markers are gone.
   if (page === "landing.html") html = applyIntegrations(html, process.env);
+  // The country and language picker, and hreflang to the German pages.
+  if (page === "landing.html") html = localiseEnglishLanding(html);
+  if (page in LEGAL_PAGES) html = applyAlternates(html, legalAlternates(page as LegalPage));
   // The hand-written sentences about a flagged capability — the hero's
   // calendar badge and lead, "Whatever you book with", the privacy page's
   // Google section — follow the same flags (src/lib/site-flags.ts). The app's
@@ -306,6 +339,29 @@ for (const page of pages) {
   fs.writeFileSync(path.join(OUT, target), html, "utf8");
   bytes += Buffer.byteLength(html);
   console.log(`  ${page.padEnd(16)} →  ${OUT}/${target}`);
+}
+
+// --- German pages -------------------------------------------------------------
+//
+// One source each, three countries each: /de-de, /de-at and /de-ch, with that
+// market's planned prices, its own language tag and Swiss spelling for de-CH.
+// The legal pages are convenience translations; the English pages govern and
+// each German one says so and links to it.
+for (const [source, kind] of Object.entries(GERMAN_SOURCES)) {
+  const german = fs.readFileSync(path.join(SOURCE, source), "utf8");
+  for (const page of Object.values(GERMAN_PAGES)) {
+    const env = process.env;
+    const rendered =
+      kind === "landing"
+        ? renderGermanLanding(german, page.market, env)
+        : renderGermanLegal(kind, german, page.market, env);
+    const target = path.posix.join(page.slug, kind === "landing" ? "index.html" : `${LEGAL_PAGES[kind].german}.html`);
+    const html = repoint(fillLegal(rendered, "de"));
+    fs.mkdirSync(path.join(OUT, page.slug), { recursive: true });
+    fs.writeFileSync(path.join(OUT, target), html, "utf8");
+    bytes += Buffer.byteLength(html);
+    console.log(`  ${source.padEnd(16)} →  ${OUT}/${target}`);
+  }
 }
 
 // Without this the pages deploy with a broken logo and no favicon — the

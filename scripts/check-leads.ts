@@ -309,6 +309,184 @@ test("every origin the site fetches is allowed by the site's CSP", () => {
   }
 });
 
+console.log("\nThe waitlist on the German pages\n");
+
+const waitlist = await import("../src/lib/leads/waitlist");
+const store = await import("../src/lib/store");
+type EmailCheckT = Awaited<ReturnType<typeof verify>>;
+
+/** A DNS-free checker: shape and spelling as the real one, MX assumed. */
+const offline = async (email: string): Promise<EmailCheckT> => {
+  const shape = checkShape(email);
+  return shape.valid ? { ...shape, mx: true } : shape;
+};
+
+const entry = {
+  name: "Julia Brandt",
+  email: "julia@salon-brandt.de",
+  company: "Salon Brandt",
+  country: "DE",
+  businessType: "salon",
+  page: "/de-de",
+};
+
+/** The route, with its own store-backed deps and a fresh limiter unless one is given. */
+function route(limiter = waitlist.createWaitlistLimiter()) {
+  return { limiter, list: store.listLeads, save: (lead: Parameters<typeof store.saveLead>[0]) => void store.saveLead(lead), check: offline };
+}
+
+function post(body: unknown, headers: Record<string, string> = {}) {
+  return new Request("https://app.belline.ai/api/leads/waitlist", {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: "https://www.belline.ai", "x-forwarded-for": "203.0.113.7", ...headers },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
+
+test("a complete entry is accepted and stored as a dach-waitlist lead with its country, and nothing else is asked", async () => {
+  const res = await waitlist.handleWaitlist(post(entry), route());
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.match(body.message, /Eine E-Mail schicken wir Ihnen jetzt nicht/);
+  const saved = store.listLeads().find((l) => l.email === entry.email);
+  assert.ok(saved, "the entry was not stored");
+  assert.equal(saved!.source, "dach-waitlist /de-de");
+  assert.ok(waitlist.isWaitlistLead(saved!));
+  assert.equal(saved!.market, "DE");
+  assert.equal(saved!.company, "Salon Brandt");
+  assert.equal(saved!.vertical, "salon");
+  assert.equal(saved!.phone, "", "a phone number appeared that nobody typed");
+  assert.equal(saved!.status, "new");
+});
+
+test("it is stored durably: the JSON store on disk has it after a reload", async () => {
+  const file = fs.readdirSync(process.env.DATA_DIR!).find((f) => /lead/.test(f));
+  const onDisk = fs
+    .readdirSync(process.env.DATA_DIR!)
+    .map((f) => fs.readFileSync(path.join(process.env.DATA_DIR!, f), "utf8"))
+    .join("\n");
+  assert.ok(onDisk.includes(entry.email), `not written to ${process.env.DATA_DIR} (${file ?? "no leads file"})`);
+});
+
+test("each required field is named in German when it is missing, and the country must be DE, AT or CH", async () => {
+  for (const field of ["name", "email", "company", "country"]) {
+    const result = await waitlist.buildWaitlistEntry({ ...entry, [field]: "" }, offline);
+    assert.equal(result.ok, false, `${field} was allowed to be empty`);
+    if (!result.ok) {
+      assert.equal(result.field, field);
+      assert.match(result.error, /Bitte/, `${field}: "${result.error}" is not a German instruction`);
+    }
+  }
+  for (const country of ["AE", "GB", "XX"]) {
+    const result = await waitlist.buildWaitlistEntry({ ...entry, country }, offline);
+    assert.equal(result.ok, false, `${country} was accepted`);
+  }
+  for (const country of ["DE", "AT", "CH", "ch"]) assert.equal((await waitlist.buildWaitlistEntry({ ...entry, country }, offline)).ok, true, country);
+  const odd = await waitlist.buildWaitlistEntry({ ...entry, businessType: "casino" }, offline);
+  assert.equal(odd.ok, false, "a business type outside the list was stored");
+  assert.equal((await waitlist.buildWaitlistEntry({ ...entry, businessType: "" }, offline)).ok, true, "the business type is optional");
+});
+
+test("a bad address says what to fix; a likely typo is asked about once, then accepted", async () => {
+  const bad = await waitlist.buildWaitlistEntry({ ...entry, email: "julia.salon-brandt.de" }, offline);
+  assert.ok(!bad.ok && bad.field === "email" && /E-Mail-Adresse/.test(bad.error));
+  const typo = await waitlist.buildWaitlistEntry({ ...entry, email: "julia@gmial.com" }, offline);
+  assert.ok(!typo.ok && typo.confirmable === true && typo.suggestion === "julia@gmail.com", "the typo was not asked about");
+  assert.equal((await waitlist.buildWaitlistEntry({ ...entry, email: "julia@gmial.com", emailConfirmed: true }, offline)).ok, true);
+  const res = await waitlist.handleWaitlist(post({ ...entry, email: "" }), route());
+  assert.equal(res.status, 422);
+  assert.equal((await res.json()).field, "email");
+});
+
+test("input is bounded, and the honeypot gets a quiet success and stores nothing", async () => {
+  const long = await waitlist.buildWaitlistEntry({ ...entry, company: "x".repeat(5000) }, offline);
+  assert.ok(long.ok && long.lead.company.length === 160);
+  const before = store.listLeads().length;
+  const res = await waitlist.handleWaitlist(post({ ...entry, email: "bot@example.org", website2: "http://spam.example" }), route());
+  assert.equal(res.status, 200);
+  assert.equal(store.listLeads().length, before, "the honeypot entry was stored");
+});
+
+test("the same address twice is one entry", async () => {
+  const before = store.listLeads().length;
+  const res = await waitlist.handleWaitlist(post({ ...entry, company: "Salon Brandt GmbH" }), route());
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).duplicate, true);
+  assert.equal(store.listLeads().length, before);
+});
+
+test("rate limited like signup: five entries an hour from one address, then a German 429", async () => {
+  const deps = route();
+  for (let i = 0; i < 5; i++) {
+    const res = await waitlist.handleWaitlist(post({ ...entry, email: `person${i}@salon-brandt.de` }, { "x-forwarded-for": "198.51.100.9" }), deps);
+    assert.equal(res.status, 200, `entry ${i + 1} was refused`);
+  }
+  const sixth = await waitlist.handleWaitlist(post({ ...entry, email: "person6@salon-brandt.de" }, { "x-forwarded-for": "198.51.100.9" }), deps);
+  assert.equal(sixth.status, 429);
+  assert.match((await sixth.json()).error, /in einer Stunde/);
+  // Somebody else is not caught by it.
+  const other = await waitlist.handleWaitlist(post({ ...entry, email: "other@salon-brandt.de" }, { "x-forwarded-for": "198.51.100.10" }), deps);
+  assert.equal(other.status, 200);
+  const { SIGNUP_LIMITS } = await import("../src/lib/onboarding/limit");
+  assert.equal(SIGNUP_LIMITS.maxAccounts, 5, "the signup limit changed; this test counts to five");
+});
+
+test("CORS answers Belline's own website origins only, and a browser post from anywhere else is refused", async () => {
+  for (const origin of ["https://belline.ai", "https://www.belline.ai", "https://belline-staging.up.railway.app"]) {
+    const pre = await waitlist.handleWaitlist(new Request("https://app.belline.ai/api/leads/waitlist", { method: "OPTIONS", headers: { origin } }), route());
+    assert.equal(pre.status, 204, origin);
+    assert.equal(pre.headers.get("access-control-allow-origin"), origin);
+    assert.match(pre.headers.get("access-control-allow-methods") ?? "", /POST/);
+  }
+  for (const origin of ["https://evil.example", "https://belline.ai.evil.example", "http://belline.ai", "null"]) {
+    const pre = await waitlist.handleWaitlist(new Request("https://app.belline.ai/api/leads/waitlist", { method: "OPTIONS", headers: { origin } }), route());
+    assert.equal(pre.status, 403, origin);
+    assert.equal(pre.headers.get("access-control-allow-origin"), null, `${origin} was allowed`);
+    const before = store.listLeads().length;
+    const res = await waitlist.handleWaitlist(post({ ...entry, email: "cors@salon-brandt.de" }, { origin }), route());
+    assert.equal(res.status, 403, `${origin} could post`);
+    assert.equal(store.listLeads().length, before);
+  }
+  assert.equal(waitlist.waitlistCors("https://www.belline.ai")["access-control-allow-origin"], "https://www.belline.ai");
+  assert.equal(waitlist.waitlistCors("*")["access-control-allow-origin"], undefined);
+});
+
+test("without JavaScript the form still works: a form post gets a German page back, linking only to a German page", async () => {
+  const form = new URLSearchParams({ ...entry, email: "nojs@salon-brandt.de", page: "/de-ch" });
+  const res = await waitlist.handleWaitlist(
+    new Request("https://app.belline.ai/api/leads/waitlist", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://belline.ai" }, body: form }),
+    route(),
+  );
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type") ?? "", /text\/html/);
+  const html = await res.text();
+  assert.match(html, /Danke, Sie stehen auf der Warteliste/);
+  assert.match(html, /href="https:\/\/belline\.ai\/de-ch#warteliste"/);
+  const sneaky = new URLSearchParams({ ...entry, email: "", page: "https://evil.example" });
+  const bad = await waitlist.handleWaitlist(
+    new Request("https://app.belline.ai/api/leads/waitlist", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: sneaky }),
+    route(),
+  );
+  assert.equal(bad.status, 422);
+  const text = await bad.text();
+  assert.match(text, /E-Mail-Adresse/);
+  assert.doesNotMatch(text, /evil\.example/, "the page links back to a URL the request chose");
+});
+
+test("the route runs this handler, the German pages post to it, and nothing on the way sends an email", () => {
+  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.slice(1)), "..");
+  const routeSrc = fs.readFileSync(path.join(root, "src", "app", "api", "leads", "waitlist", "route.ts"), "utf8");
+  assert.match(routeSrc, /handleWaitlist\(request, deps\)/);
+  const lib = fs.readFileSync(path.join(root, "src", "lib", "leads", "waitlist.ts"), "utf8");
+  assert.doesNotMatch(lib, /sendEmail|sendMail|resend|postmark|nodemailer|twilio/i, "the waitlist sends something");
+  const page = fs.readFileSync(path.join(root, "public", "landing.de.html"), "utf8");
+  assert.match(page, /<form class="book-form waitlist" id="warteliste" action="https:\/\/app\.belline\.ai\/api\/leads\/waitlist" method="post"/);
+  for (const field of ["name", "email", "company", "country", "businessType", "website2", "page"]) assert.match(page, new RegExp(`name="${field}"`), field);
+  const enquiries = fs.readFileSync(path.join(root, "src", "app", "(internal)", "sales", "enquiries", "page.tsx"), "utf8");
+  assert.match(enquiries, /isWaitlistLead\(lead\)/, "staff cannot tell a waitlist entry on the Enquiries screen");
+});
+
 queue.then(() => {
   fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
   console.log(
