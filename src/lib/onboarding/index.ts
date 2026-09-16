@@ -19,6 +19,7 @@ import { MARKETS, isMarket, marketDefaults, marketOf, type Market } from "../mar
 import { passwordProblem, tradeFromParam, tradeLabel, verticalForTrade } from "../signup-rules";
 import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
+import { copy } from "../customer-copy";
 import { MENU_QUESTION, type Confirmed, type CurrentVenue } from "./review";
 import { serviceLengthsRequired, takesRequestsOnly } from "../booking/destination";
 
@@ -172,6 +173,8 @@ export function blankVenue(input: SignupInput, tenantId: string, businessId: str
     // From the market, never guessed from the timezone: every Europe/* zone
     // used to get pounds, including a UAE business set up from Zurich.
     currency: defaults.currency,
+    // English until the owner chooses otherwise on the agent page. See language.ts.
+    language: "en",
     hours: everyDay(9 * 60, 18 * 60),
     closures: [],
     subscription: trialSubscription(timezone, input.products, input.market),
@@ -179,7 +182,8 @@ export function blankVenue(input: SignupInput, tenantId: string, businessId: str
     onboarding: { version: 1, channels: {} },
     agent: {
       displayName: "Belline",
-      greeting: `Thank you for calling ${name}, this is Belline. How can I help?`,
+      // customer-copy.ts, so a German venue can recognise it as untouched.
+      greeting: copy("en", "greeting.default", { name }),
       voiceId: process.env.ELEVENLABS_VOICE_ID ?? "21m00Tcm4TlvDq8ikWAM",
       model: "claude-sonnet-5",
       persona:

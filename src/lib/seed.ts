@@ -702,6 +702,7 @@ function refreshInternalVenues(): void {
 export function seedIfEmpty(): void {
   if (isEmpty()) {
     replaceAll({ locations: FIXTURES, bookings: [], calls: [] });
+    ensureLanguage();
     ensureTenancy();
     baselineBrains();
     ensureOnboarding();
@@ -710,6 +711,7 @@ export function seedIfEmpty(): void {
   // First, before anything reads a venue's numbers.
   splitVenuePhones();
   addMissingVenues();
+  ensureLanguage();
   backfillAgentDefaults();
   // Once per venue, on the first boot of the modular catalogue: pilots keep
   // the plan they bought for 90 days. See billing/grandfather.ts.
@@ -762,6 +764,22 @@ export function splitVenuePhones(now: Date = new Date()): { id: string; rule: Ph
     );
   }
   return decided;
+}
+
+/**
+ * Give every venue a language, once: English, which is what every venue saved
+ * before the field existed was answered in. Writes only a missing value, so
+ * the second boot touches nothing, and a venue an owner switched to German is
+ * never switched back. Returns the ids it filled.
+ */
+export function ensureLanguage(): string[] {
+  const filled: string[] = [];
+  for (const location of listLocations({ includeInternal: true, includeArchived: true })) {
+    if (location.language) continue;
+    upsertLocation({ ...location, language: "en" });
+    filled.push(location.id);
+  }
+  return filled;
 }
 
 /**
