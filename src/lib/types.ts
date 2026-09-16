@@ -1385,6 +1385,7 @@ export type ExceptionKind =
   | "import_failed_3x"
   | "payment_failed_final"
   | "stripe_off_trial_end"
+  | "trial_cap_reached"
   | "deletion_legal_hold"
   | "owner_requested_human"
   | "vendor_balance_low"

@@ -6,7 +6,8 @@ import { isBellineStaff } from "@/lib/auth";
 import { readiness } from "@/lib/onboarding";
 import { isActivated, journeyFor } from "@/lib/onboarding/journey";
 import { testsStale } from "@/lib/onboarding/selftest-state";
-import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
+import { ownerNotice } from "@/lib/billing/entitlement";
+import { raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
 import { todayIn } from "@/lib/time";
 import { callDurationSeconds } from "@/lib/calls";
 import { isRestaurant, terms } from "@/lib/verticals";
@@ -68,7 +69,10 @@ export default async function OverviewPage({
   // and the summary used to say it was listening. The missing list already
   // existed for the setup screen; the home page is where it is needed.
   const setup = readiness(location);
-  const service = serviceState(location, todayIn(location.timezone));
+  const today = todayIn(location.timezone);
+  // Before the sentence that says the team has been told, so it is true.
+  raiseTrialCapIfPaymentsClosed(location, today);
+  const notice = ownerNotice(location, today);
   // Before going live the home page has one call to action: the journey's next
   // step. A live venue keeps the page it had.
   const path = isActivated(location) ? null : journeyFor(location);
@@ -87,15 +91,21 @@ export default async function OverviewPage({
       <LocationTabs base="/" active={location.id} />
 
       {/* The two things that stop a real call arriving, above everything else. */}
-      {(service.lapsed || (!path && !location.phone)) && !location.demo?.enabled && (
-        <div className="panel" style={{ padding: "15px 18px", marginBottom: 14, borderColor: service.lapsed ? "var(--bad)" : "var(--warn)" }}>
+      {(notice || (!path && !location.phone)) && !location.demo?.enabled && (
+        <div className="panel" role={notice?.stopped ? "alert" : undefined} style={{ padding: "15px 18px", marginBottom: 14, borderColor: notice ? "var(--bad)" : "var(--warn)" }}>
           <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
-            {service.lapsed
-              ? lapseSentence(service.lapsed, !service.answering)
-              : "No phone line points at Belline yet, so no real call can reach it."}{" "}
-            <Link href={`/golive?loc=${location.id}`} style={{ color: "var(--accent)", textDecoration: "underline" }}>
-              Go live
-            </Link>
+            {notice ? notice.sentence : "No phone line points at Belline yet, so no real call can reach it."}{" "}
+            {notice ? (
+              notice.choosePlan && (
+                <Link href="/checkout" style={{ color: "var(--accent)", textDecoration: "underline" }}>
+                  Choose a plan
+                </Link>
+              )
+            ) : (
+              <Link href={`/golive?loc=${location.id}`} style={{ color: "var(--accent)", textDecoration: "underline" }}>
+                Go live
+              </Link>
+            )}
           </div>
         </div>
       )}
