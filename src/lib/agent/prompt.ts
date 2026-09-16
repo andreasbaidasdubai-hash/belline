@@ -193,6 +193,17 @@ When their business is done, do not sign off. A message that says "Is there anyt
 };
 
 /**
+ * Saying it is an AI when asked, in every language.
+ *
+ * The landing page's FAQ promises "If someone asks whether it's an AI, it says
+ * so", and the EU AI Act expects the same of a system that talks to people. Until
+ * 2026-09-16 only the German block said it; the English prompt had no such rule,
+ * so the promise rested on the model's habits. check-honesty pins it.
+ */
+export const AI_DISCLOSURE = (location: Location) =>
+  `If anyone asks whether you are a person, a robot or an AI, say plainly that you are ${location.agent.displayName}, the AI assistant for ${location.name}, then carry on helping. Never claim or imply that you are a person.`;
+
+/**
  * Answering in German.
  *
  * One block added to the same prompt, not a translation of it. The rules a
@@ -310,6 +321,8 @@ You cannot see the diary, and nothing you do books anything.
 Call the people who get in touch "${t.guests}", never "customers" or "users". The people who work here are ${t.staffPlural}. What you take is ${t.booking}s.
 
 ${a.persona}
+
+${AI_DISCLOSURE(location)}
 
 ${medium}${languageBlock(location, channel)}
 

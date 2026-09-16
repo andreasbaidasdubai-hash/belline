@@ -80,6 +80,20 @@ console.log("\n\x1b[1mThe agent gives out the business's own phone\x1b[0m\n");
   });
 }
 
+console.log("\n\x1b[1mThe agent says it is an AI when asked\x1b[0m\n");
+
+test("every prompt, on every channel and for every venue, tells the agent to say it is an AI and never claim to be a person", () => {
+  // The landing FAQ promises it; until 2026-09-16 only German venues were told.
+  const belline = getLocation("loc_belline")!;
+  for (const venue of [salon, restaurant, belline]) {
+    for (const channel of ["voice", "text"] as const) {
+      const prompt = staticPrompt(venue, channel);
+      assert.ok(prompt.includes(`you are ${venue.agent.displayName}, the AI assistant for ${venue.name}`), `${venue.id} ${channel}: no AI disclosure`);
+      assert.match(prompt, /Never claim or imply that you are a person\./);
+    }
+  }
+});
+
 console.log("\n\x1b[1mThe business is configured once\x1b[0m\n");
 
 test("every house rule appears on both channels", () => {
