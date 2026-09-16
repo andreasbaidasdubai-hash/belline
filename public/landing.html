@@ -286,7 +286,11 @@
   -->
   <section id="connects" class="connects" aria-labelledby="connects-h">
     <div class="wrap">
-      <h2 class="connects-h" id="connects-h">Connecting to the tools you already use</h2>
+      <div class="connects-head">
+        <h2 class="connects-h" id="connects-h">Connecting to the tools you already use</h2>
+        <!-- Shown by site.js only while the strip moves: moving content needs a way to stop it. -->
+        <button class="connects-pause" type="button" aria-pressed="false" hidden>Pause</button>
+      </div>
 <!-- integrations:start — generated from src/lib/flags.ts by scripts/site-integrations.ts. Tags follow the flags at build time; do not edit by hand. Each name under its self-hosted app icon (public/img/logos). -->
       <ul class="connects-list" aria-label="Booking systems and calendars, and where each connection stands">
         <li class="connect" data-integration="booking.google" data-state="soon">
@@ -317,6 +321,21 @@
         <li class="connect" data-integration="booking.partner.treatwell" data-state="roadmap">
           <img class="connect-logo" src="/img/logos/treatwell.png" width="40" height="40" alt="" loading="lazy">
           <span class="connect-name">Treatwell</span>
+          <span class="state state-roadmap">On our roadmap</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.zenoti" data-state="roadmap">
+          <img class="connect-logo" src="/img/logos/zenoti.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">Zenoti</span>
+          <span class="state state-roadmap">On our roadmap</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.mindbody" data-state="roadmap">
+          <img class="connect-logo" src="/img/logos/mindbody.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">Mindbody</span>
+          <span class="state state-roadmap">On our roadmap</span>
+        </li>
+        <li class="connect" data-integration="booking.partner.calendly" data-state="roadmap">
+          <img class="connect-logo" src="/img/logos/calendly.png" width="40" height="40" alt="" loading="lazy">
+          <span class="connect-name">Calendly</span>
           <span class="state state-roadmap">On our roadmap</span>
         </li>
       </ul>

@@ -929,3 +929,49 @@
    three ways of reaching Belline at the one moment everybody sees — the first
    paint — so it is gone. They are on screen from the start, and the hero is
    given the room instead (see "Platz für die Knöpfe" in site.css). */
+
+/* --- the integrations strip ------------------------------------------------
+   A slow, continuous line of the systems Belline connects to (or plans to).
+   The page ships a still list; this only adds the movement, and only for
+   visitors who have not asked for reduced motion. A hidden copy of the list
+   follows the first so the loop has no seam, and the Pause button is there
+   because moving content must be stoppable (WCAG 2.2.2), not just on hover. */
+(function () {
+  var section = document.getElementById("connects");
+  if (!section) return;
+  var list = section.querySelector(".connects-list");
+  var pause = section.querySelector(".connects-pause");
+  if (!list || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  var rail = document.createElement("div");
+  rail.className = "connects-rail";
+  var track = document.createElement("div");
+  track.className = "connects-track";
+  list.parentNode.insertBefore(rail, list);
+  rail.appendChild(track);
+  track.appendChild(list);
+
+  var copy = list.cloneNode(true);
+  copy.setAttribute("aria-hidden", "true");
+  copy.removeAttribute("aria-label");
+  track.appendChild(copy);
+
+  // Lazy icons would wait for the viewport and slide in blank: load them all now (they are tiny).
+  Array.prototype.forEach.call(section.querySelectorAll("img"), function (img) { img.loading = "eager"; });
+  section.classList.add("is-moving");
+  // About 30px a second, whatever the screen: the duration follows the list's width.
+  var speed = function () {
+    track.style.setProperty("--connects-duration", Math.max(20, list.scrollWidth / 30) + "s");
+  };
+  speed();
+  window.addEventListener("resize", speed);
+
+  if (pause) {
+    pause.hidden = false;
+    pause.addEventListener("click", function () {
+      var paused = section.classList.toggle("is-paused");
+      pause.setAttribute("aria-pressed", paused ? "true" : "false");
+      pause.textContent = paused ? "Play" : "Pause";
+    });
+  }
+})();

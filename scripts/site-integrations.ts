@@ -1,10 +1,10 @@
 /**
  * The integrations strip on the landing page, generated from the flags.
  *
- * Six systems an operator already books with. None of them is connected when
+ * Nine systems an operator already books with. None of them is connected when
  * this was written: Google Calendar and Outlook are being built, and Fresha,
- * SevenRooms, OpenTable and Treatwell issue credentials only under a partner
- * agreement Belline does not have. So the strip never says "works with" or
+ * SevenRooms, OpenTable, Treatwell, Zenoti, Mindbody and Calendly issue
+ * credentials only under a partner agreement Belline does not have. So the strip never says "works with" or
  * "integrates with", and every name carries its state as words, not colour.
  *
  * The state comes from `src/lib/flags.ts` at build time and nowhere else:
@@ -49,6 +49,10 @@ export const INTEGRATIONS: readonly Integration[] = [
   { name: "SevenRooms", logo: "sevenrooms.png", flag: "booking.partner.sevenrooms", pending: "roadmap" },
   { name: "OpenTable", logo: "opentable.png", flag: "booking.partner.opentable", pending: "roadmap" },
   { name: "Treatwell", logo: "treatwell.png", flag: "booking.partner.treatwell", pending: "roadmap" },
+  // Added 2026-09-16 at the founder's request; which partners to approach is still to be decided.
+  { name: "Zenoti", logo: "zenoti.png", flag: "booking.partner.zenoti", pending: "roadmap" },
+  { name: "Mindbody", logo: "mindbody.png", flag: "booking.partner.mindbody", pending: "roadmap" },
+  { name: "Calendly", logo: "calendly.png", flag: "booking.partner.calendly", pending: "roadmap" },
 ];
 
 export const INTEGRATIONS_HEADING = "Connecting to the tools you already use";
@@ -78,7 +82,11 @@ function esc(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** The list itself: six names under their icons, each with its state in words. */
+/**
+ * The list itself: every name under its icon, each with its state in words.
+ * site.js turns it into a slow moving strip; without JavaScript, or with
+ * reduced motion asked for, it stays this still list.
+ */
 export function renderIntegrations(env: Env): string {
   const items = INTEGRATIONS.map((item) => {
     const state = integrationState(item, env);

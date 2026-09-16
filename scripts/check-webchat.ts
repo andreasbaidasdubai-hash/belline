@@ -831,7 +831,8 @@ const {
   renderIntegrations,
 } = await import("./site-integrations");
 
-const STRIP_NAMES = ["Google Calendar", "Outlook", "Fresha", "SevenRooms", "OpenTable", "Treatwell"];
+const STRIP_NAMES = ["Google Calendar", "Outlook", "Fresha", "SevenRooms", "OpenTable", "Treatwell", "Zenoti", "Mindbody", "Calendly"];
+const PARTNERS = STRIP_NAMES.slice(2);
 
 const stripOf = (html: string) => {
   const start = html.indexOf('<section id="connects"');
@@ -897,7 +898,7 @@ const built = (which: "off" | "on") => {
   return builds.get(which)!;
 };
 
-await test("the strip sits directly under the hero, with its heading and all six names, each tagged in words", () => {
+await test("the strip sits directly under the hero, with its heading and all nine names, each tagged in words", () => {
   const html = visibleHtml("landing.html");
   const heroEnd = html.indexOf("</section>", html.indexOf('<section class="hero">'));
   const next = html.indexOf("<section", heroEnd);
@@ -906,7 +907,7 @@ await test("the strip sits directly under the hero, with its heading and all six
   assert.match(strip, new RegExp(`<h2 class="connects-h" id="connects-h">${INTEGRATIONS_HEADING}</h2>`));
   assert.equal(INTEGRATIONS_HEADING, "Connecting to the tools you already use");
   assert.deepEqual(INTEGRATIONS.map((i) => i.name), STRIP_NAMES);
-  assert.deepEqual(tagsIn(strip).map(([name]) => name), STRIP_NAMES, "the strip does not show the six names in order, each with a tag");
+  assert.deepEqual(tagsIn(strip).map(([name]) => name), STRIP_NAMES, "the strip does not show the nine names in order, each with a tag");
 });
 
 await test("the committed template is the flag-off strip, generated, never hand-edited", () => {
@@ -920,6 +921,9 @@ await test("the committed template is the flag-off strip, generated, never hand-
     ["SevenRooms", "On our roadmap"],
     ["OpenTable", "On our roadmap"],
     ["Treatwell", "On our roadmap"],
+    ["Zenoti", "On our roadmap"],
+    ["Mindbody", "On our roadmap"],
+    ["Calendly", "On our roadmap"],
   ]);
 });
 
@@ -932,6 +936,9 @@ await test("built with booking.google off, Google Calendar reads Coming soon and
     ["SevenRooms", "On our roadmap"],
     ["OpenTable", "On our roadmap"],
     ["Treatwell", "On our roadmap"],
+    ["Zenoti", "On our roadmap"],
+    ["Mindbody", "On our roadmap"],
+    ["Calendly", "On our roadmap"],
   ]);
   assert.doesNotMatch(stripOf(built("off")), /Available|state-available/);
 });
@@ -944,6 +951,9 @@ await test("built with booking.google on, Google Calendar reads Available and no
     ["SevenRooms", "On our roadmap"],
     ["OpenTable", "On our roadmap"],
     ["Treatwell", "On our roadmap"],
+    ["Zenoti", "On our roadmap"],
+    ["Mindbody", "On our roadmap"],
+    ["Calendly", "On our roadmap"],
   ]);
   assert.match(stripOf(built("on")), /<span class="state state-available">Available<\/span>/);
 });
@@ -1025,7 +1035,7 @@ await test("Outlook and each booking platform follow their own flags, and stubs 
     }),
     "available",
   );
-  for (const name of ["Fresha", "SevenRooms", "OpenTable", "Treatwell"]) {
+  for (const name of PARTNERS) {
     const item = byName(name);
     assert.match(item.flag, /^booking\.partner\.[a-z0-9-]+$/);
     assert.equal(integrationState(item, {}), "roadmap");
@@ -1059,7 +1069,7 @@ await test("no page says 'Works with' or 'Integrates with' for a system that is 
 });
 
 await test("the strip names companies in text under self-hosted icons: no external asset, nothing from their domains", () => {
-  const brandHosts = /google\.|microsoft\.|outlook\.|office\.com|live\.com|fresha\.|sevenrooms\.|opentable\.|treatwell\.|clearbit|logo\.dev|brandfetch|simpleicons|wikimedia/i;
+  const brandHosts = /google\.|microsoft\.|outlook\.|office\.com|live\.com|fresha\.|sevenrooms\.|opentable\.|treatwell\.|zenoti\.|mindbody|calendly\.|clearbit|logo\.dev|brandfetch|simpleicons|wikimedia/i;
   for (const html of [visibleHtml("landing.html"), built("off"), built("on")]) {
     const strip = stripOf(html);
     assert.doesNotMatch(strip, /<svg\b|<picture\b|<object\b|<use\b|srcset=|style=|url\(/i, "the strip carries an image other than its icons");
@@ -1079,11 +1089,11 @@ await test("the strip names companies in text under self-hosted icons: no extern
       if (!external) continue;
       assert.doesNotMatch(ref, /logo|\.(?:svg|png|jpe?g|webp|gif)(?:\?|$)/i, `the page references an external image: ${ref}`);
       if (!/^https:\/\/fonts\.(?:googleapis|gstatic)\.com(?:\/|$)/.test(ref)) {
-        assert.doesNotMatch(ref, brandHosts, `the page references one of the six companies' sites: ${ref}`);
+        assert.doesNotMatch(ref, brandHosts, `the page references one of the companies' sites: ${ref}`);
       }
     }
   }
-  // The stylesheet's strip rules draw nothing, and the six icons in img/logos are the only assets named after one of the six.
+  // The stylesheet's strip rules draw nothing, and the six icons in img/logos are the only assets named after one of them.
   const css = fs.readFileSync(path.join(process.cwd(), "public", "site.css"), "utf8");
   const rules = css.slice(css.indexOf("/* --- Integrations strip"));
   assert.ok(rules.length > 0 && css.includes("/* --- Integrations strip"), "site.css has lost the strip's rules");
@@ -1091,9 +1101,9 @@ await test("the strip names companies in text under self-hosted icons: no extern
   const files = fs.readdirSync(path.join(process.cwd(), "public"), { recursive: true }) as string[];
   const named = files
     .map((f) => f.replace(/\\/g, "/"))
-    .filter((f) => /google|outlook|microsoft|fresha|seven-?rooms|open-?table|treatwell/i.test(f))
+    .filter((f) => /google|outlook|microsoft|fresha|seven-?rooms|open-?table|treatwell|zenoti|mindbody|calendly/i.test(f))
     .sort();
-  assert.deepEqual(named, INTEGRATIONS.map((i) => `img/logos/${i.logo}`).sort(), "public/ holds a file named after one of the six companies outside img/logos");
+  assert.deepEqual(named, INTEGRATIONS.map((i) => `img/logos/${i.logo}`).sort(), "public/ holds a file named after one of the companies outside img/logos");
   for (const i of INTEGRATIONS) assert.ok(fs.existsSync(path.join(process.cwd(), "public", "img", "logos", i.logo)), `missing icon ${i.logo}`);
 });
 

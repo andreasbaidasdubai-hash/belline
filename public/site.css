@@ -3147,3 +3147,59 @@ footer a { color: var(--bl-ink-900); }
 @media (prefers-reduced-motion: reduce) {
   .connect-name { transition: none; }
 }
+
+/* The moving strip. site.js adds .is-moving, wraps the list in a rail and a
+   track, and appends a hidden copy so the loop has no seam. Without it (no
+   JavaScript, or reduced motion) the list above stays still. */
+.connects-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.connects-pause {
+  flex: none;
+  margin: 0 0 22px;
+  padding: 4px 12px;
+  border: 1px solid var(--bl-rule-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--bl-text-2);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.connects-pause:hover { color: var(--bl-ink-900); border-color: var(--bl-ink-900); }
+.connects-pause:focus-visible { outline: 2px solid var(--bl-accent-text); outline-offset: 2px; }
+.connects.is-moving .connects-rail {
+  overflow: hidden;
+  border-top: 1px solid var(--bl-rule);
+  border-bottom: 1px solid var(--bl-rule);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
+}
+.connects.is-moving .connects-track {
+  display: flex;
+  width: max-content;
+  animation: connects-slide var(--connects-duration, 60s) linear infinite;
+}
+.connects.is-moving .connects-rail:hover .connects-track,
+.connects.is-moving.is-paused .connects-track { animation-play-state: paused; }
+.connects.is-moving .connects-list {
+  display: flex;
+  flex: none;
+  border: 0;
+}
+.connects.is-moving .connect,
+.connects.is-moving .connect:first-child,
+.connects.is-moving .connect:nth-child(n) {
+  width: 200px;
+  flex: none;
+  padding: 22px 20px 24px;
+  border: 0;
+  border-left: 1px solid var(--bl-rule-soft);
+}
+@keyframes connects-slide {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@media (max-width: 600px) {
+  .connects.is-moving .connect,
+  .connects.is-moving .connect:first-child,
+  .connects.is-moving .connect:nth-child(n) { width: 160px; padding: 18px 14px 20px; }
+}
