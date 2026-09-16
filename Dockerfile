@@ -31,6 +31,11 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/site ./site
 COPY package.json next.config.mjs tsconfig.json server.ts ./
 COPY src ./src
+# Operator scripts (user resets, the customer wipe, orphan checks) run inside
+# the container with `railway ssh`, because the book lives on this machine's
+# volume and nowhere else. Without them there is no way to act on the data
+# except through the dashboard.
+COPY scripts ./scripts
 
 # The directory is created here, but the persistent disk is attached by the
 # host. Railway rejects a Dockerfile VOLUME outright, and on Fly or Render it

@@ -50,10 +50,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // that move setup forward, not the twenty that assume it is done.
   const collapsed = navCollapsed(visible, isBellineStaff(user));
 
-  // The rest is decided in nav.ts, which holds both shapes: the diary
-  // navigation this product grew, and the seven destinations it is becoming.
-  // A venue actually running on Belline's diary keeps the first whatever the
-  // flag says — see `simplifiedFor`.
+  // The rest is decided in nav.ts: the seven destinations, with every other
+  // page one click away under "Everything else". The diary navigation this
+  // product grew was retired on 2026-09-16.
   const shape = navFor(user, visible, { outstanding, dueBack });
 
   const nav = collapsed

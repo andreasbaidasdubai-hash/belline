@@ -1,10 +1,6 @@
 import type { Location, User } from "./types";
 import { canManageUsers, isBellineStaff } from "./auth";
 import { destinationOf } from "./booking/destination";
-import { flag } from "./flags";
-
-/** As flags.ts reads it: names to values, not Node's own ProcessEnv. */
-type Env = Record<string, string | undefined>;
 
 /**
  * What an owner sees down the left-hand side.
@@ -59,69 +55,20 @@ export function usesDiary(location: Pick<Location, "onboarding">): boolean {
 }
 
 /**
- * Does this person get the simplified navigation?
+ * Does this person get the simplified navigation? Always, now.
  *
- * Two conditions, and the second is the one that matters. The flag is the
- * deployment's choice. The diary check is the promise: a venue that is
- * actually booking through Belline keeps every page it uses today, whatever
- * the flag says, because taking the floor plan out of a restaurant's
- * navigation on the morning of a pivot is not a re-organisation, it is an
- * outage.
+ * Until 2026-09-16 this was a flag plus a promise: a venue booking through
+ * Belline's own diary kept the old twenty-two-link menu, so a pilot would not
+ * lose its floor plan on the morning of the pivot. There were no such pilots —
+ * only Belline's own demo lines — and the exception meant the founder, signed
+ * in to the account holding those demo lines, kept seeing the old dashboard.
+ * So the old navigation was retired. Every diary page is still one click away
+ * under "Everything else", and search still reaches all of them.
  *
- * Deliberately conservative about mixed accounts: one diary venue among
- * several and the whole account keeps the old shape. The cost of being wrong
- * in that direction is a fuller menu; the other way it is a manager who
- * cannot find the rota.
+ * Kept as a function because search.ts asks the same question.
  */
-export function simplifiedFor(locations: Pick<Location, "onboarding">[], env: Env = process.env): boolean {
-  if (!flag("ui.simplified", env)) return false;
-  return !locations.some(usesDiary);
-}
-
-/** The old navigation, exactly as it was. */
-function fullNav(user: User, locations: Location[], counts: NavCounts): NavItem[] {
-  const { outstanding = 0, dueBack = 0 } = counts;
-  const hasTables = locations.some((l) => l.restaurant);
-  const hasPeople = locations.some((l) => l.salon);
-
-  return [
-    { href: "/attention", label: "Needs you", badge: outstanding || undefined },
-    { href: "/", label: "Overview" },
-    { href: "/calendar", label: "Calendar" },
-    ...(hasTables ? [{ href: "/floor", label: "Floor" }] : []),
-    { href: "/calls", label: "Calls" },
-    { href: "/inbox", label: "Messages" },
-    { href: "/bookings", label: "Bookings" },
-    { href: "/waitlist", label: "Waitlist" },
-    ...(dueBack > 0 ? [{ href: "/recall", label: "Recall", badge: dueBack, quiet: true }] : []),
-    { href: "/guests", label: "Customers" },
-    { href: "/test", label: "Test console" },
-    { href: "/golive", label: "Go live" },
-    // Floor staff read the book; they do not rewrite the agent's rules.
-    ...(user.role !== "staff"
-      ? [
-          { href: "/agents", label: "Agent" },
-          { href: "/venue", label: "How it works" },
-          { href: "/locations", label: "Locations" },
-          ...(hasPeople ? [{ href: "/rota", label: "Rota" }] : []),
-          { href: "/reports", label: "Reports" },
-          { href: "/website", label: "Your website" },
-          { href: "/integrations", label: "Integrations" },
-        ]
-      : []),
-    ...(canManageUsers(user)
-      ? [
-          // Money is a manager's concern, not floor staff's.
-          { href: "/billing", label: "Plan and usage" },
-          { href: "/demo", label: "Demo line" },
-          { href: "/team", label: "Team" },
-        ]
-      : []),
-    // Personalised demos are built *for* a prospect but are still a selling
-    // tool, so they stay owner-only. Kept here exactly as it was: a venue on
-    // the diary sees the navigation it saw yesterday, link for link.
-    ...(isBellineStaff(user) ? [{ href: "/prospects", label: "Personalised demos" }] : []),
-  ];
+export function simplifiedFor(_locations: Pick<Location, "onboarding">[]): boolean {
+  return true;
 }
 
 /**
@@ -235,8 +182,7 @@ export function advancedGroups(user: User, locations: Location[]): AdvancedGroup
  *
  * `locations` is already filtered to what they may see; this never widens it.
  */
-export function navFor(user: User, locations: Location[], counts: NavCounts = {}, env: Env = process.env): NavShape {
-  if (!simplifiedFor(locations, env)) return { items: fullNav(user, locations, counts), advanced: null };
+export function navFor(user: User, _locations: Location[], counts: NavCounts = {}): NavShape {
   return {
     items: simplifiedNav(user, counts),
     advanced: { href: "/advanced", label: "Everything else" },

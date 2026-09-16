@@ -184,20 +184,16 @@ await test("saving without naming a mode does not silently change one", () => {
   venue = enableEmbed(edited, ["https://marinahair.ae"], undefined, "both");
 });
 
-await test("the dashboard screen exists and is reachable, on either navigation", () => {
+await test("the dashboard screen exists and is reachable from Channels", () => {
   // This feature shipped once without a screen: the endpoint was real and the
   // only way to use it was to POST by hand. A page nobody can navigate to has
   // not shipped.
   //
-  // There are two navigations now — the diary one this product grew, and the
-  // seven destinations it is becoming — so this asserts the route is reachable
-  // on both. On the simplified one the website widget is a channel, so the way
-  // in is the Channels screen rather than a link of its own.
+  // The old diary navigation linked it directly; that navigation was retired
+  // on 2026-09-16. In the seven destinations the website widget is a channel,
+  // so the way in is the Channels screen.
   const page = path.join(process.cwd(), "src", "app", "(app)", "website", "page.tsx");
   assert.ok(fs.existsSync(page), "no /website screen");
-
-  const nav = fs.readFileSync(path.join(process.cwd(), "src", "lib", "nav.ts"), "utf8");
-  assert.ok(nav.includes('href: "/website"'), "the screen is not in the diary navigation");
 
   const channels = fs.readFileSync(
     path.join(process.cwd(), "src", "app", "(app)", "channels", "page.tsx"),
