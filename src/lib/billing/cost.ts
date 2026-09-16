@@ -136,7 +136,18 @@ export const RATE_CARD: Record<string, Rate> = {
 
   // --- WhatsApp: Meta -----------------------------------------------------
   META_SERVICE_REPLY: { usd: 0, per: "message", source: "strategy §1.2: replies inside the 24-hour customer service window are free", verified: true },
-  META_UTILITY_TEMPLATE_AE: { usd: 0.0285, per: "message", source: "strategy §1.2; developers.facebook.com/docs/whatsapp/pricing — utility template, UAE", verified: true },
+  // Corrected 16 September 2026: strategy §1.2's UAE utility rate predates the
+  // rise of 1 October 2025 and understated it by about half. The current band
+  // is AED 0.15–0.20; the top of it is priced here, because a floor on margin
+  // is worth more than an accurate midpoint. A market estimate, not a quote we
+  // hold, so it stays unverified until the rate card itself is read.
+  META_UTILITY_TEMPLATE_AE: {
+    usd: 0.055,
+    per: "message",
+    source:
+      "Meta UAE rate card, raised 1 Oct 2025; range AED 0.15–0.20, using the top; re-check against the Meta rate card PDF",
+    verified: false,
+  },
   META_UTILITY_TEMPLATE_GB: { usd: 0.0171, per: "message", source: "strategy §1.2 — utility template, UK", verified: true },
   META_UTILITY_TEMPLATE_US: { usd: 0.004, per: "message", source: "strategy §1.2 — utility template, US", verified: true },
 
@@ -206,7 +217,8 @@ export function countryOfNumber(e164: string | undefined): "US" | "GB" | "AU" | 
   return "US";
 }
 
-function modelKey(model: string): { key: string; onCard: boolean } {
+/** A model id as the rate card names it. Exported so the margin bases can be pinned to the model we ship. */
+export function modelKey(model: string): { key: string; onCard: boolean } {
   if (model.startsWith("claude-haiku-4-5")) return { key: "HAIKU_4_5", onCard: true };
   if (model.startsWith("claude-sonnet-5")) return { key: "SONNET_5", onCard: true };
   if (model.startsWith("claude-opus-5")) return { key: "OPUS_5", onCard: true };

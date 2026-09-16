@@ -241,9 +241,9 @@ test("inside the allowance the invoice is just the plan", () => {
 test("a v2 plan shows two pooled meters: voice minutes and text conversations, each against its pool", () => {
   const account = accountFor(subscribe({}), "2026-03-15")!;
   assert.deepEqual(account.usage.meters.map((m) => m.id), ["minutes", "conversations"]);
-  assert.equal(meterOf(account, "minutes").included, 250);
+  assert.equal(meterOf(account, "minutes").included, 300);
   assert.deepEqual(meterOf(account, "minutes").channels, ["phone", "web_voice"]);
-  assert.equal(meterOf(account, "conversations").included, 600);
+  assert.equal(meterOf(account, "conversations").included, 750);
   assert.deepEqual(meterOf(account, "conversations").channels, ["chat", "whatsapp"]);
 });
 
