@@ -10,6 +10,7 @@ import { cleanConfirmed } from "@/lib/onboarding/review";
 import { customerError } from "@/lib/errors/customer";
 import { serviceLengthsRequired } from "@/lib/booking/destination";
 import { normaliseOrigin } from "@/lib/embed";
+import { venueMarket } from "@/lib/onboarding/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,7 @@ export async function PUT(req: Request) {
   // Every field is checked, hours included: the old handler cast whatever
   // arrived to WeeklyHours and saved it.
   // A length for each service only where Belline books it into a day itself.
-  const checked = cleanConfirmed(body, { lengthsRequired: serviceLengthsRequired(location) });
+  const checked = cleanConfirmed(body, { lengthsRequired: serviceLengthsRequired(location), country: venueMarket(location) });
   // With the field it is about, so the page can show it under that input.
   if (!checked.ok) return NextResponse.json({ error: checked.error, field: checked.field, service: checked.service }, { status: 422 });
 

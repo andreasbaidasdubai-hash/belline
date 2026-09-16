@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import PhoneField, { type PhoneFieldHandle } from "@/components/PhoneField";
+import { readStoredPhone } from "@/lib/phone";
 import type { AgentConfig } from "@/lib/types";
 import {
   VOICE_MODELS,
@@ -53,10 +55,16 @@ function Field({
 export default function AgentEditor({
   locationId,
   initial,
+  country = "AE",
 }: {
   locationId: string;
   initial: AgentConfig;
+  /** The business's own market (ISO), for the transfer number's country picker. */
+  country?: string;
 }) {
+  const transfer = useRef<PhoneFieldHandle | null>(null);
+  const [saveError, setSaveError] = useState<{ message: string; field?: string } | null>(null);
+  const initialTransfer = readStoredPhone(initial.transferNumber, country).e164 ?? (initial.transferNumber ?? "");
   const router = useRouter();
   const [agent, setAgent] = useState<AgentConfig>(initial);
   const [saving, setSaving] = useState(false);
@@ -147,6 +155,9 @@ export default function AgentEditor({
   }
 
   async function save() {
+    setSaveError(null);
+    // The transfer number is checked at its field first: red, the reason under it, focus on it.
+    if (!transfer.current?.check()) return;
     setSaving(true);
     try {
       const res = await fetch("/api/agent", {
@@ -157,6 +168,9 @@ export default function AgentEditor({
       if (res.ok) {
         setSaved(true);
         router.refresh();
+      } else {
+        const body = (await res.json().catch(() => ({}))) as { error?: string; field?: string };
+        setSaveError({ message: body.error ?? "That did not save. Try again.", field: body.field });
       }
     } finally {
       setSaving(false);
@@ -324,12 +338,26 @@ export default function AgentEditor({
           </Field>
         </div>
 
-        <Field label="Transfer number" hint="Leave blank to disable transfers entirely.">
-          <input
-            value={agent.transferNumber ?? ""}
-            onChange={(e) => set("transferNumber", e.target.value)}
+        <div style={{ marginBottom: 14 }}>
+          <PhoneField
+            ref={transfer}
+            id="agent-transfer-number"
+            label="Transfer number"
+            value={initial.transferNumber}
+            defaultCountry={country}
+            hint="With its country code. Leave blank to disable transfers entirely."
+            serverError={saveError?.field === "transferNumber" ? saveError.message : undefined}
+            onValue={(p) => {
+              if (p.error) return;
+              if (p.e164 !== initialTransfer || agent.transferNumber !== initial.transferNumber) set("transferNumber", p.e164);
+            }}
           />
-        </Field>
+        </div>
+        {saveError && saveError.field !== "transferNumber" && (
+          <p role="alert" style={{ color: "var(--bad)", fontSize: 13 }}>
+            {saveError.message}
+          </p>
+        )}
       </div>
 
       <div className="panel" style={{ padding: 18 }}>

@@ -294,6 +294,7 @@ function Body({
           current={currentVenue(venue)}
           start={step.id === "review" ? "review" : "ask"}
           lengthsRequired={serviceLengthsRequired(venue)}
+          country={venueMarket(venue)}
         />
       );
 
@@ -348,6 +349,7 @@ function Body({
             mode={destinationOf(venue) === "belline" ? "belline" : "requests"}
             restaurant={venue.vertical === "restaurant"}
             country={MARKETS[venueMarket(venue)].name}
+            countryIso={venueMarket(venue)}
             initial={{
               askFor: rules.askFor.length > 0,
               transferNumber: o?.escalation?.transferNumber || venue.agent.transferNumber || venue.phone,

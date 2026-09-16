@@ -190,7 +190,10 @@ async function rules(page: Page, j: Journey) {
   await j.step("rules", async () => {
     await page.waitForURL("**/setup/rules");
     const form = page.locator("form");
-    expect(await form.locator("input:visible, select:visible, textarea:visible").count()).toBeLessThanOrEqual(6);
+    // Six questions at most. Since 2026-09-16 each phone number has a country picker beside it,
+    // which is part of that number's question, not another one: the pickers are not counted.
+    expect(await form.locator('input:visible, select:visible:not([aria-label="Country code"]), textarea:visible').count()).toBeLessThanOrEqual(6);
+    await expect(form.getByLabel("Country code")).toHaveCount(2);
     const confirm = page.getByRole("button", { name: "Confirm these rules" });
     await expect(confirm).toBeInViewport();
 

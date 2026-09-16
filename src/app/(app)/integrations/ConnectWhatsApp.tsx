@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import PhoneField, { type PhoneFieldHandle } from "@/components/PhoneField";
 
 /**
  * Two steps, a minute apart: the number, then the code Meta texts to it.
@@ -26,6 +27,7 @@ export default function ConnectWhatsApp({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const numberField = useRef<PhoneFieldHandle | null>(null);
 
   async function call(method: "POST" | "PUT" | "PATCH" | "DELETE", body?: Record<string, unknown>) {
     setBusy(true);
@@ -59,19 +61,21 @@ export default function ConnectWhatsApp({
       <form
         onSubmit={async (e) => {
           e.preventDefault();
+          // With its country code: checked at the field before Meta is asked anything.
+          if (!numberField.current?.check()) return;
           if (await call("POST", { number, displayName: name })) setStep("code");
         }}
         style={{ display: "grid", gap: 12, maxWidth: 420, marginTop: 14 }}
       >
         <div>
-          <label htmlFor="wa-number">The number Belle should answer</label>
-          <input
+          <PhoneField
+            ref={numberField}
             id="wa-number"
-            value={number}
-            onChange={(e) => setNumber(e.target.value)}
-            placeholder="+9715XXXXXXXX"
-            inputMode="tel"
-            required
+            label="The number Belle should answer"
+            value={pending?.number}
+            defaultCountry="AE"
+            optional={false}
+            onValue={(p) => setNumber(p.e164)}
           />
           <p className="muted" style={{ fontSize: 12, margin: "6px 0 0", lineHeight: 1.5 }}>
             A number that has never been on WhatsApp — a new SIM is the easy way. Keep the SIM to

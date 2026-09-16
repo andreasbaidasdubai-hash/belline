@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import PhoneField, { type PhoneFieldHandle } from "@/components/PhoneField";
+import { COUNTRIES, normaliseOwnerPhone, readStoredPhone } from "@/lib/phone";
 
 /**
  * The buttons and small forms on the setup steps.
@@ -278,32 +280,51 @@ export function RulesForm({
   mode,
   restaurant,
   country,
+  countryIso,
   initial,
 }: {
   mode: "requests" | "belline";
   restaurant: boolean;
   country: string;
+  /** The business's own market, the country every phone field starts on. */
+  countryIso: string;
   initial: RulesInitial;
 }) {
   const [v, setV] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; field?: string } | null>(null);
   const set = <K extends keyof RulesInitial>(k: K, value: RulesInitial[K]) => setV((s) => ({ ...s, [k]: value }));
+  const transfer = useRef<PhoneFieldHandle | null>(null);
+  const transferE164 = useRef<string>("");
+  const notifyInput = useRef<HTMLInputElement | null>(null);
+  const [notifyCountry, setNotifyCountry] = useState(() => (initial.notify.includes("@") ? countryIso : readStoredPhone(initial.notify, countryIso).country));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+    // Numbers are checked at the field before anything is sent: red, the reason under it, focus on it.
+    if (!transfer.current?.check()) return;
+    let notify = v.notify.trim();
+    if (mode === "requests" && notify && !notify.includes("@")) {
+      const out = normaliseOwnerPhone(notify, notifyCountry);
+      if (!out.ok) {
+        setError({ message: `For WhatsApp alerts: ${out.reason}`, field: "notify" });
+        notifyInput.current?.focus();
+        return;
+      }
+      notify = out.e164;
+    }
+    setBusy(true);
     const rules =
       mode === "requests"
         ? {
             askFor: v.askFor ? [restaurant ? "partySize" : "service"] : [],
-            transferNumber: v.transferNumber,
-            notify: v.notify,
+            transferNumber: transferE164.current,
+            notify,
             afterHours: v.afterHours,
             neverSay: v.neverSay,
           }
-        : { transferNumber: v.transferNumber };
+        : { transferNumber: transferE164.current };
     const out = await send({ action: "rules", rules });
     if (out.error) {
       setError({ message: out.error, field: out.field });
@@ -337,24 +358,19 @@ export function RulesForm({
           </div>
         )}
 
-        <div>
-          <label htmlFor="transfer-number" style={{ textTransform: "none", letterSpacing: 0, fontSize: 14 }}>
-            Number for urgent calls
-          </label>
-          <input
-            id="transfer-number"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            value={v.transferNumber}
-            onChange={(e) => set("transferNumber", e.target.value)}
-            {...invalid("transferNumber")}
-          />
-          <p className="muted" style={hint}>
-            Belline puts urgent calls through to this number. It has to be a number in {country}.
-          </p>
-          {fieldError("transferNumber")}
-        </div>
+        <PhoneField
+          ref={transfer}
+          id="transfer-number"
+          label="Number for urgent calls"
+          value={initial.transferNumber}
+          defaultCountry={countryIso}
+          hint={<>Belline puts urgent calls through to this number. It has to be a number in {country}, with its country code.</>}
+          serverError={error?.field === "transferNumber" ? error.message : undefined}
+          onValue={(p) => {
+            transferE164.current = p.e164;
+            if (error?.field === "transferNumber") setError(null);
+          }}
+        />
 
         {mode === "requests" && (
           <>
@@ -362,9 +378,33 @@ export function RulesForm({
               <label htmlFor="notify" style={{ textTransform: "none", letterSpacing: 0, fontSize: 14 }}>
                 Your own email or WhatsApp, for new requests
               </label>
-              <input id="notify" type="text" autoComplete="email" value={v.notify} onChange={(e) => set("notify", e.target.value)} {...invalid("notify")} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <select
+                  aria-label="Country code"
+                  value={notifyCountry}
+                  onChange={(e) => setNotifyCountry(e.target.value)}
+                  style={{ width: "auto", maxWidth: 150, flex: "0 0 auto" }}
+                  title="Used when this is a WhatsApp number"
+                >
+                  {COUNTRIES.map((c) => (
+                    <option key={c.iso} value={c.iso}>
+                      {c.iso} +{c.dial}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  ref={notifyInput}
+                  id="notify"
+                  type="text"
+                  autoComplete="email"
+                  value={v.notify}
+                  onChange={(e) => set("notify", e.target.value)}
+                  {...invalid("notify")}
+                  style={{ flex: 1, minWidth: 0, ...(error?.field === "notify" ? { borderColor: "var(--bad)" } : {}) }}
+                />
+              </div>
               <p className="muted" style={hint}>
-                Your own email address or your own WhatsApp number, where Belline tells you about a new request. This is not
+                Your own email address or your own WhatsApp number (the country code beside it is used for a number), where Belline tells you about a new request. This is not
                 Belline&apos;s WhatsApp and customers never see it. Requests always appear in your Inbox. Email and WhatsApp alerts
                 are being prepared, and will go here when they are ready.
               </p>

@@ -140,7 +140,9 @@ await test("a UAE number is saved where transfer_call reads it, and the step is 
 
 await test("a WhatsApp alert number follows the same country rule; bad emails and long lists are refused", () => {
   assert.equal(applyRules(inSetup, { notify: "+44 7700 900123" }).ok, false);
-  const wa = applyRules(inSetup, { notify: "050 123 4567" });
+  // With its country code (since 2026-09-16 a number is never saved without one; the field converts a local entry).
+  assert.equal(applyRules(inSetup, { notify: "050 123 4567" }).ok, false);
+  const wa = applyRules(inSetup, { notify: "+971 50 123 4567" });
   assert.ok(wa.ok && wa.location.onboarding!.escalation!.notifyWhatsApp === "+971501234567");
   assert.equal(applyRules(inSetup, { notify: "owner@" }).ok, false);
   assert.equal(applyRules(inSetup, { neverSay: Array.from({ length: 11 }, (_, i) => `rule ${i}`).join("\n") }).ok, false);
