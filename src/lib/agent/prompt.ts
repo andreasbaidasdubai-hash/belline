@@ -274,7 +274,7 @@ ${CLINIC_MEDICAL_RULE}`
   }
 
 # ${location.name}
-Phone: ${location.phone}
+Phone: ${location.businessPhone}
 Opening hours:
 ${weeklyHoursLine(location)}
 

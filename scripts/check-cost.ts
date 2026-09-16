@@ -73,7 +73,7 @@ await test("a 3-minute phone call on a US number lands at the lean $0.063 a minu
   const ctx = { venueId: "loc_x", callId: call.id, channel: "phone" as const };
 
   // What the session reports when the call ends: the line, Media Streams, speech-to-text.
-  cost.meterCallTime(call, { phone: "+15717785920" }, 180, { stt: true });
+  cost.meterCallTime(call, { bellineNumber: { number: "+15717785920", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" } }, 180, { stt: true });
   // What ElevenLabs is sent across the call: ~400 characters a minute, Flash.
   cost.meterTts(ctx, 1200, "eleven_flash_v2_5");
   // Six Sonnet turns against a warm cache: ~5k cached tokens a turn.
@@ -114,13 +114,13 @@ console.log("\nWhich rate prices what\n");
 await test("a UAE number is priced at the UAE line rate, and the rate can be overridden", () => {
   const first = aCall("call_ae_1", "phone", 60);
   saveCall(first);
-  cost.meterCallTime(first, { phone: "+97145550142" }, 60, { stt: false });
+  cost.meterCallTime(first, { bellineNumber: { number: "+97145550142", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" } }, 60, { stt: false });
   assert.equal(cost.costOfCall(first.id).byVendor.twilio?.toFixed(4), (0.045 + 0.0044).toFixed(4));
 
   process.env.RATE_TWILIO_INBOUND_AE = "0.03";
   const second = aCall("call_ae_2", "phone", 60);
   saveCall(second);
-  cost.meterCallTime(second, { phone: "+97145550142" }, 60, { stt: false });
+  cost.meterCallTime(second, { bellineNumber: { number: "+97145550142", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" } }, 60, { stt: false });
   assert.equal(cost.costOfCall(second.id).byVendor.twilio?.toFixed(4), (0.03 + 0.0044).toFixed(4));
   delete process.env.RATE_TWILIO_INBOUND_AE;
 });
@@ -128,7 +128,7 @@ await test("a UAE number is priced at the UAE line rate, and the rate can be ove
 await test("Twilio rounds a partial minute up; Deepgram bills the seconds", () => {
   const call = aCall("call_61", "phone", 61);
   saveCall(call);
-  cost.meterCallTime(call, { phone: "+15550001111" }, 61, { stt: true });
+  cost.meterCallTime(call, { bellineNumber: { number: "+15550001111", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" } }, 61, { stt: true });
   // Events are batched for a second before they are written; read what was written.
   cost.flushCosts();
   const events = listCosts({ callId: call.id });
@@ -141,7 +141,7 @@ await test("Twilio rounds a partial minute up; Deepgram bills the seconds", () =
 await test("a web voice call pays for speech-to-text but not for a phone line", () => {
   const call = aCall("call_bell", "embed", 120);
   saveCall(call);
-  cost.meterCallTime(call, { phone: "+15550001111" }, 120, { stt: true });
+  cost.meterCallTime(call, { bellineNumber: { number: "+15550001111", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" } }, 120, { stt: true });
   cost.flushCosts();
   const events = listCosts({ callId: call.id });
   // Not vacuous: an empty list would satisfy both checks below.
@@ -228,7 +228,7 @@ await test("at 50 samples the measured figure takes over", () => {
   for (let i = 0; i < cost.MIN_SAMPLES; i++) {
     const call = aCall(`call_many_${i}`, "phone", 120, "loc_many");
     saveCall(call);
-    cost.meterCallTime(call, { phone: "+15550002222" }, 120, { stt: true });
+    cost.meterCallTime(call, { bellineNumber: { number: "+15550002222", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" } }, 120, { stt: true });
     cost.meterTts({ venueId: "loc_many", callId: call.id, channel: "phone" }, 800, "eleven_flash_v2_5");
   }
   const units = cost.unitCosts();

@@ -570,10 +570,10 @@ await test("the phone is plainly optional, with a way to skip it on the channels
   assert.match(step, /Skip the phone for now/);
   assert.doesNotMatch(step, /Waiting for the test call/);
   // Belle says the same.
-  // Stamped as assigned: an unstamped phone on a new signup is the owner's own line, not Belline's.
-  upsertLocation({ ...fresh(), phone: "+97140000009", onboarding: { ...fresh().onboarding!, channels: { ...fresh().onboarding!.channels, phone: { numberAssignedAt: "2026-09-16T08:00:00.000Z" } } } });
+  // A Belline number assigned: its own field, never the business's phone.
+  upsertLocation({ ...fresh(), bellineNumber: { number: "+97140000009", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" } });
   const said = executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "mobile" });
-  upsertLocation({ ...fresh(), phone: "" });
+  upsertLocation({ ...fresh(), bellineNumber: undefined });
   assert.ok(said.ok, said.say);
   assert.match(said.say, /\*\*61\*\+97140000009#/);
   assert.match(said.say, /nothing is forwarded until they do/);
@@ -583,9 +583,9 @@ await test("the phone is plainly optional, with a way to skip it on the channels
 await test("the owner's own number on the rules step is not Belline's: Belle gives no codes to it", () => {
   // The review step saved the business's own mobile; nothing was assigned.
   const f = fresh();
-  upsertLocation({ ...f, phone: "0502992339", onboarding: { ...f.onboarding!, channels: { ...f.onboarding!.channels, phone: {} } } });
+  upsertLocation({ ...f, businessPhone: "+971502992339", onboarding: { ...f.onboarding!, channels: { ...f.onboarding!.channels, phone: {} } } });
   const said = executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "mobile" });
-  upsertLocation({ ...fresh(), phone: "" });
+  upsertLocation({ ...fresh(), businessPhone: "" });
   assert.ok(said.ok, said.say);
   assert.doesNotMatch(said.say, /0502992339|502992339/, "Belle told the owner to forward calls to their own phone");
   assert.match(said.say, /being prepared/);

@@ -397,7 +397,7 @@ export function buildProspectLocation(found: Extracted, sourceUrl: string, slug:
     businessId: `biz_prospect_${slug}`,
     name: found.name,
     address: found.address,
-    phone: "",
+    businessPhone: "",
     timezone: found.timezone || "Europe/London",
     vertical: found.vertical,
     // Guessed from the timezone rather than read off the page: a currency is

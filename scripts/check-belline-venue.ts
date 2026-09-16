@@ -495,7 +495,7 @@ async function dial(to: string): Promise<string | null> {
 
 test("Belline's own number reaches Belline, not the first customer", async () => {
   const belline = getLocation(BELLINE_LOCATION_ID)!;
-  const answered = await dial(belline.phone);
+  const answered = await dial(belline.bellineNumber!.number);
   assert.equal(
     answered,
     BELLINE_LOCATION_ID,
@@ -506,7 +506,7 @@ test("Belline's own number reaches Belline, not the first customer", async () =>
 test("a customer's own number still reaches them", async () => {
   const customer = listLocations()[0];
   assert.ok(customer, "no customer venue to test against");
-  assert.equal(await dial(customer.phone), customer.id);
+  assert.equal(await dial(customer.bellineNumber!.number), customer.id);
 });
 
 test("a number nobody owns is refused rather than given to whoever sorts first", async () => {

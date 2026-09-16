@@ -296,7 +296,7 @@ function VenueDrawer({
             <PhoneField
               ref={phoneField}
               id="location-phone"
-              label="Phone"
+              label="Business phone"
               compact
               value={venue?.phone}
               defaultCountry="AE"

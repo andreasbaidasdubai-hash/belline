@@ -160,9 +160,9 @@ console.log("\n\x1b[1mThe guard, as a table\x1b[0m\n");
 
 await test("allowed kinds follow the venue's state", () => {
   const loc = getLocation(salon.id)!;
-  const none = { ...loc, phone: "" };
-  // A Belline number is one Belline assigned (telephony/number.ts), stamped when it was.
-  const has = { ...loc, phone: "+97145550000", onboarding: { ...loc.onboarding!, channels: { ...loc.onboarding!.channels, phone: { numberAssignedAt: "2026-09-16T08:00:00.000Z" } } } };
+  const none = { ...loc, bellineNumber: undefined };
+  // A Belline number is its own field, set only when Belline assigns one.
+  const has = { ...loc, bellineNumber: { number: "+97145550000", via: "staff" as const, assignedAt: "2026-09-16T08:00:00.000Z" } };
   const once = [{ role: "user" as const, content: "can I talk to someone" }];
   const cases: [unknown, typeof loc, typeof once, boolean][] = [
     ["pool_empty", none, [], true],
@@ -180,7 +180,7 @@ await test("allowed kinds follow the venue's state", () => {
     ["help_with_website", has, [], false],
     [undefined, has, [], false],
   ];
-  for (const [kind, v, history, expected] of cases) assert.equal(exceptionAllowed(kind, v, history).ok, expected, `${String(kind)} phone=${v.phone}`);
+  for (const [kind, v, history, expected] of cases) assert.equal(exceptionAllowed(kind, v, history).ok, expected, `${String(kind)} bellineNumber=${v.bellineNumber?.number}`);
 });
 
 console.log("\n\x1b[1mNo model switched on\x1b[0m\n");
@@ -239,14 +239,14 @@ await test("every tool from the plan is offered", () => {
 
 await test("explain_forwarding: mobile codes, the PBX note, and no unverified Virgin codes", () => {
   const s = getLocation(salon.id)!;
-  upsertLocation({ ...s, phone: "+97145550000", onboarding: { ...s.onboarding!, channels: { ...s.onboarding!.channels, phone: { numberAssignedAt: "2026-09-16T08:00:00.000Z" } } } });
+  upsertLocation({ ...s, bellineNumber: { number: "+97145550000", via: "pool", assignedAt: "2026-09-16T08:00:00.000Z" } });
   const mobile = executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "mobile" });
   assert.match(mobile.say, /\*\*61\*\+97145550000#/);
   assert.match(executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "du", line: "landline" }).say, /\b155\b/);
   assert.match(executeSetupTool(salon.id, salon.by, "explain_forwarding", { line: "pbx" }).say, /phone system/);
   const virgin = executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "virgin", line: "mobile" });
   assert.ok(!virgin.say.includes("**61"), virgin.say);
-  upsertLocation({ ...getLocation(salon.id)!, phone: "" });
+  upsertLocation({ ...getLocation(salon.id)!, bellineNumber: undefined });
   assert.match(executeSetupTool(salon.id, salon.by, "explain_forwarding", { carrier: "eand", line: "mobile" }).say, /being prepared/);
 });
 

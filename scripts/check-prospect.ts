@@ -108,7 +108,8 @@ await test("carries its own website widget — chat and voice — capped, and fr
 
 await test("has no phone number, so nothing can dial it by accident", () => {
   const loc = buildProspectLocation(found, "https://meridian.example", "meridian-dental");
-  assert.equal(loc.phone, "");
+  assert.equal(loc.businessPhone, "");
+  assert.equal(loc.bellineNumber, undefined);
 });
 
 await test("clamps an absurd service duration rather than trusting the model", () => {

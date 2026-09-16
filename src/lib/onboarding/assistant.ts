@@ -657,7 +657,10 @@ function summary(location: Location): string {
     location.salon ? `Staff: ${location.salon.staff.map((s) => s.name).join(", ") || "none"}` : "",
     `Bookings: ${location.onboarding?.destination?.kind ?? "not chosen yet"}`,
     `Urgent calls to: ${location.agent.transferNumber || "not set"}`,
-    `Belline number: ${bellineNumberOf(location) || "being prepared"}`,
+    // Two different numbers, named apart: the owner's own line, which callers
+    // dial and which forwards, and the Belline number it forwards to.
+    `Business phone (their own line, which customers dial): ${location.businessPhone || "not given yet"}`,
+    `Belline number (forward calls to this): ${bellineNumberOf(location) || "being prepared"}`,
     `FAQs: ${location.agent.faqs.length}; rules: ${location.agent.policies.length}`,
   ];
   return lines.filter(Boolean).join("\n");

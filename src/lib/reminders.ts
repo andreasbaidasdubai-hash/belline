@@ -108,7 +108,7 @@ export function reminderMessage(location: Location, booking: Booking): string {
     booking.deposit?.status === "required" && booking.deposit.link
       ? ` The ${booking.deposit.currency} ${booking.deposit.amount} deposit is still open: ${booking.deposit.link}`
       : "";
-  const change = location.phone ? ` To change or cancel, call ${location.phone}.` : "";
+  const change = location.businessPhone ? ` To change or cancel, call ${location.businessPhone}.` : "";
 
   return `${location.name}: a reminder of your ${what} ${when}. Reference ${booking.ref}.${change}${deposit}`;
 }

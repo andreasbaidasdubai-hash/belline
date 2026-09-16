@@ -1112,7 +1112,7 @@ head("The chat link: a channel with no website");
   if (!made.ok) throw new Error("could not create the link venue");
   const id = made.location.id;
   const fresh = () => getLocation(id)!;
-  upsertLocation({ ...fresh(), phone: "+97145550123" });
+  upsertLocation({ ...fresh(), businessPhone: "+97145550123" });
 
   await test("making the link is idempotent, uses its own key, and resolves as a link — never as the widget", () => {
     const first = link.ensureChatLink(fresh(), "usr_owner");
@@ -1134,7 +1134,7 @@ head("The chat link: a channel with no website");
     assert.equal(page.kind, "refused");
     const said = page.kind === "refused" ? page.message : "";
     assert.equal(said, link.LINK_NOT_LIVE);
-    for (const leak of [fresh().name, "Link Only", fresh().agent.displayName, fresh().phone, "4555", "salon", "Dubai"]) {
+    for (const leak of [fresh().name, "Link Only", fresh().agent.displayName, fresh().businessPhone, "4555", "salon", "Dubai"]) {
       assert.ok(!said.toLowerCase().includes(String(leak).toLowerCase()), `the not-live page leaked "${leak}"`);
     }
     // The page's title and robots name nothing either, and the page only opens through the same gate as the widget.

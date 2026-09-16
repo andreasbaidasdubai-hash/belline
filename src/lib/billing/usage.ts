@@ -108,10 +108,14 @@ export function channelOfCall(call: Pick<Call, "channel">): Channel | null {
  *   Calls that ended in `failed` — the status a call is given when the server
  *   stopped underneath it. A rule that bills for our own crash is the wrong
  *   rule at any volume.
+ *
+ *   Voicemails left before Go live. Belline never answered: Twilio played a
+ *   greeting and recorded the message, so no minute of Belline was spent.
  */
 export function billableVoiceMinutes(call: Call): number {
   const channel = channelOfCall(call);
   if (call.isDemo) return 0;
+  if (call.voicemail) return 0;
   if (channel !== "phone" && channel !== "web_voice") return 0;
   if (call.status !== "completed") return 0;
   if (!call.endedAt) return 0;

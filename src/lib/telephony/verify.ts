@@ -87,7 +87,8 @@ export function openWindow(location: Location, carrier: Phone["carrier"] | undef
 
 /** The owner's own line, which forwarding should come from. */
 function businessNumbers(location: Location): string[] {
-  return [location.onboarding?.escalation?.transferNumber, location.agent.transferNumber].map(digits).filter((d) => d.length >= 8);
+  // The business phone first: it is the line the owner forwards.
+  return [location.businessPhone, location.onboarding?.escalation?.transferNumber, location.agent.transferNumber].map(digits).filter((d) => d.length >= 8);
 }
 
 /**

@@ -135,7 +135,24 @@ export interface Location {
    */
   tradeKey?: string;
   timezone: string;
-  phone: string;
+  /**
+   * The business's own phone number, E.164, or "" when not given: the number
+   * its customers already dial. Saved on the setup review and the venue's
+   * details, and what the agent and every message give out ("Please ring us
+   * on …"). Never a number calls are forwarded to — that is `bellineNumber`,
+   * and nothing that assigns one may touch this.
+   *
+   * Both used to share one `phone` field, so assigning a Belline number
+   * overwrote the owner's own line and setup told an owner to forward calls
+   * to their own mobile. seed.ts `splitVenuePhones` moved stored venues across.
+   */
+  businessPhone: string;
+  /**
+   * The Belline number: where the business forwards its calls, and the number
+   * /api/twilio/voice finds this venue by. Absent until one is assigned. See
+   * telephony/pool.ts and the staff "Record a number" route.
+   */
+  bellineNumber?: BellineNumber;
   address: string;
   currency: string;
   hours: WeeklyHours;
@@ -270,7 +287,24 @@ export interface Location {
   onboarding?: OnboardingState;
 }
 
-export type DestinationKind = "requests" | "belline" | "google" | "outlook" | "partner";
+/**
+ * A Belline number on a venue, and how it got there.
+ *
+ *   pool    handed out by code from the number pool (telephony/pool.ts)
+ *   staff   recorded by a person at Belline on the sales console
+ *   legacy  the number a demo, internal or pre-journey venue already answered
+ *           on when the phone fields were split (seed.ts `splitVenuePhones`)
+ */
+export interface BellineNumber {
+  /** E.164. */
+  number: string;
+  via: "pool" | "staff" | "legacy";
+  assignedAt: string;
+  /** The staff user id, for `staff`. */
+  by?: string;
+}
+
+export type DestinationKind ="requests" | "belline" | "google" | "outlook" | "partner";
 
 export interface RequestRules {
   /** Details a request needs besides a name and a number. */
@@ -1343,6 +1377,24 @@ export interface Call {
   isTest?: boolean;
   /** Twilio's id for a phone call, so a retried webhook cannot record it twice. */
   callSid?: string;
+  /**
+   * A voicemail the caller chose to leave on a venue that had not gone live.
+   *
+   * No agent, no stream and no speech-to-text: Twilio played a greeting and
+   * recorded the message. Only Twilio's handles are kept — the recording
+   * itself stays with Twilio and is played to the owner through
+   * /api/voicemail/<callId> — and nothing transcribes it. Never billed as
+   * minutes (billing/usage.ts). See telephony/voicemail.ts.
+   */
+  voicemail?: {
+    /** Twilio's RecordingSid. One recording is one inbox item, however often Twilio calls back. */
+    recordingSid: string;
+    /** Twilio's RecordingUrl, fetched with our Twilio credentials, never linked to directly. */
+    recordingUrl: string;
+    durationSeconds: number;
+    /** Left before the owner pressed Go live. The only case voicemail is offered in. */
+    beforeLive: true;
+  };
 }
 
 /** A pre-bought Belline number waiting in, or taken from, the pool. See telephony/pool.ts. */

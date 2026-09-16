@@ -11,6 +11,7 @@ import { raisePacksHeldIfPaymentsClosed, raiseTrialCapIfPaymentsClosed } from "@
 import { todayIn } from "@/lib/time";
 import { callDurationSeconds } from "@/lib/calls";
 import { listCalls } from "@/lib/store";
+import { bellineNumberOf } from "@/lib/telephony/number";
 import { isRestaurant, terms } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
@@ -86,7 +87,7 @@ export default async function OverviewPage({
     <>
       <PageHeader
         title={location.name}
-        subtitle={[location.address, location.phone || "no number yet"].filter(Boolean).join(" · ")}
+        subtitle={[location.address, location.businessPhone || "no number yet"].filter(Boolean).join(" · ")}
         right={
           <Link href={`/calendar?loc=${location.id}`} className="btn btn-accent">
             Today&apos;s diary
@@ -96,7 +97,7 @@ export default async function OverviewPage({
       <LocationTabs base="/" active={location.id} />
 
       {/* The two things that stop a real call arriving, above everything else. */}
-      {(notice || (!path && !location.phone)) && !location.demo?.enabled && (
+      {(notice || (!path && !bellineNumberOf(location))) && !location.demo?.enabled && (
         <div className="panel" role={notice?.stopped ? "alert" : undefined} style={{ padding: "15px 18px", marginBottom: 14, borderColor: notice ? "var(--bad)" : "var(--warn)" }}>
           <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
             {notice ? notice.sentence : "No phone line points at Belline yet, so no real call can reach it."}{" "}

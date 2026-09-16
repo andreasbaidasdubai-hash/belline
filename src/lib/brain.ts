@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { AgentConfig, Location, User, Vertical } from "./types";
 import { getLocation, upsertLocation, id } from "./store";
+import { bellineNumberOf, sameNumber } from "./telephony/number";
 
 /**
  * The Business Brain.
@@ -89,7 +90,11 @@ export function snapshotOf(location: Location): BrainSnapshot {
     company: {
       name: location.name,
       address: location.address,
-      phone: location.phone,
+      // The business's own phone, which the agent gives out. Still called
+      // `phone` here: versions published before the split carry that key, and
+      // renaming it would read as a change on every venue's next publish. The
+      // Belline number is routing, not configuration, and is not versioned.
+      phone: location.businessPhone,
       timezone: location.timezone,
       currency: location.currency,
       vertical: location.vertical,
@@ -255,7 +260,14 @@ export function revertTo(
     ...location,
     name: target.snapshot.company.name,
     address: target.snapshot.company.address,
-    phone: target.snapshot.company.phone,
+    // A version from before the phone split may hold the Belline number here,
+    // when that was the venue's only number. Restoring it as the business's
+    // own phone would have the agent give out the forwarding line, so that
+    // one case keeps the current business phone. Reverting never moves the
+    // Belline number: calls route by it.
+    businessPhone: sameNumber(target.snapshot.company.phone, bellineNumberOf(location))
+      ? location.businessPhone
+      : target.snapshot.company.phone,
     timezone: target.snapshot.company.timezone,
     currency: target.snapshot.company.currency,
     vertical: target.snapshot.company.vertical,

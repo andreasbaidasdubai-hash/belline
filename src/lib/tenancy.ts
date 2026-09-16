@@ -91,7 +91,7 @@ function businessFrom(location: Location, tenantId: string): Business {
         : location.vertical === "clinic"
           ? "Clinic"
           : "Salon & spa",
-    phone: location.phone,
+    phone: location.businessPhone,
     // Never on by default. A business that has never been asked has not opted
     // in, and the whole value of the flag is that it means something.
     discoverable: false,
