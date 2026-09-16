@@ -45,6 +45,7 @@ const {
   checkSelection,
   grandfatherOf,
   isSellable,
+  offered,
   periodFee,
   poolOf,
   priceOf,
@@ -100,7 +101,38 @@ test("every price is whole minor units and a whole unit of currency", () => {
 test("exactly the three v2 plans are sold in the UAE, and nothing is sold anywhere else yet", () => {
   assert.deepEqual(sellable("AE").map((p) => p.id), V2);
   for (const m of MARKET_CODES.filter((m) => m !== "AE")) assert.deepEqual(sellable(m).map((p) => p.id), [], m);
-  for (const id of V2) assert.deepEqual(Object.keys(productById(id).prices), ["AE"], `${id} is priced outside the UAE`);
+  // Priced outside the UAE only for the German waitlist pages, provisionally.
+  for (const id of V2) assert.deepEqual(Object.keys(productById(id).prices).sort(), ["AE", "AT", "CH", "DE"], `${id} is priced somewhere unexpected`);
+});
+
+test("Germany, Austria and Switzerland are priced as the founder decided, provisional, and not sold", () => {
+  const plans = (m: Market) => V2.map((id) => major(id, m));
+  const annual = (m: Market) => V2.map((id) => periodFee([id], m, "annual") / 100);
+  assert.deepEqual(plans("DE"), [69, 129, 249]);
+  assert.deepEqual(plans("AT"), [69, 129, 249]);
+  assert.deepEqual(plans("CH"), [79, 149, 279]);
+  assert.deepEqual(annual("DE"), [759, 1419, 2739]);
+  assert.deepEqual(annual("AT"), [759, 1419, 2739]);
+  assert.deepEqual(annual("CH"), [869, 1639, 3069]);
+  for (const m of ["DE", "AT", "CH"] as Market[]) {
+    for (const id of V2) {
+      assert.equal(periodFee([id], m, "annual"), priceOf(id, m) * 11, `${id} ${m} annual is not eleven months`);
+      assert.ok(productById(id).provisional?.includes(m), `${id} ${m} is not marked provisional`);
+    }
+    assert.equal(MARKETS[m].status, "not-yet", `${m} is open`);
+    assert.deepEqual(sellable(m), [], `something is sellable in ${m}`);
+    assert.deepEqual(offered(m).map((p) => p.id), V2, `${m}'s waitlist page would not show the three plans`);
+  }
+  const pack = (pool: "minutes" | "conversations") => PACKS.find((p) => p.pool === pool)!;
+  assert.deepEqual([pack("minutes").prices.DE, pack("minutes").prices.AT, pack("minutes").prices.CH], [2500, 2500, 2900]);
+  assert.deepEqual([pack("conversations").prices.DE, pack("conversations").prices.AT, pack("conversations").prices.CH], [1200, 1200, 1400]);
+  for (const p of PACKS) assert.deepEqual(p.provisional, ["DE", "AT", "CH"], p.id);
+  // The September bundles: Germany and Austria as Ireland.
+  for (const id of SEPTEMBER) {
+    assert.equal(priceOf(id, "DE"), priceOf(id, "IE"), `${id} DE`);
+    assert.equal(priceOf(id, "AT"), priceOf(id, "IE"), `${id} AT`);
+    for (const m of ["DE", "AT"] as Market[]) assert.ok(productById(id).provisional?.includes(m), `${id} ${m} is not provisional`);
+  }
 });
 
 test("the UAE prices are the ones decided: AED 249 / 499 / 999 a month", () => {

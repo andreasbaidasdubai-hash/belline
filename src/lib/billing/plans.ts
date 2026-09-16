@@ -31,7 +31,8 @@
  *   "2026-09"  — the everything_* bundles, per-channel allowances. Sold for a
  *                few weeks; the venues on them keep them indefinitely.
  *   "2026-10"  — v2: Starter / Growth / Scale, per location, pooled voice
- *                minutes and text conversations, UAE only.
+ *                minutes and text conversations. Sold in the UAE only;
+ *                provisionally priced for Germany, Austria and Switzerland.
  */
 
 import { MARKETS, MARKET_CODES, formatMoney, type Market } from "../markets";
@@ -222,12 +223,23 @@ export interface Product {
 }
 
 /** Major units in, minor units out, in the MARKETS order. */
-function price(ae: number, gb: number, au: number, ca: number, us: number, sg: number, ie: number, nz: number, ch: number) {
-  const major: Record<Market, number> = { AE: ae, GB: gb, AU: au, CA: ca, US: us, SG: sg, IE: ie, NZ: nz, CH: ch };
+function price(ae: number, gb: number, au: number, ca: number, us: number, sg: number, ie: number, nz: number, ch: number, de: number, at: number) {
+  const major: Record<Market, number> = { AE: ae, GB: gb, AU: au, CA: ca, US: us, SG: sg, IE: ie, NZ: nz, CH: ch, DE: de, AT: at };
   return Object.fromEntries(MARKET_CODES.map((m) => [m, major[m] * 100])) as Record<Market, number>;
 }
 
 const EXCEPT_AE: Market[] = MARKET_CODES.filter((m) => m !== "AE");
+
+/**
+ * The German-speaking markets, priced for their waitlist pages (founder,
+ * 2026-09-16). Planning figures: provisional, not-yet markets, never sold.
+ */
+const DACH: Market[] = ["DE", "AT", "CH"];
+
+/** Monthly or annual prices for the UAE and the DACH markets, major units in. */
+function dach(ae: number, eur: number, chf: number) {
+  return { AE: ae * 100, DE: eur * 100, AT: eur * 100, CH: chf * 100 };
+}
 
 const DEPOSITS: Feature = {
   text: "Deposit links by text, paid into your own Stripe account",
@@ -394,8 +406,8 @@ export const PRODUCTS: Product[] = [
   //
   // Decided by the founder: AED 249 / 499 / 999 per location per month, annual
   // stored at 2,739 / 5,489 / 10,989, and the allowances 75 / 250 / 500 voice
-  // minutes and 200 / 600 / 1,500 text conversations. UAE only; no other
-  // market is priced until it opens.
+  // minutes and 200 / 600 / 1,500 text conversations. Sold in the UAE only;
+  // the DACH prices below are for waitlist pages, not for sale.
   //
   // Pricing v3 ("Option C"), decided 16 September 2026. It supersedes the
   // allowances merged earlier the same day (Growth 300/750, Scale 600/2,000),
@@ -412,6 +424,11 @@ export const PRODUCTS: Product[] = [
   // Unchanged: users per plan, the trial, the packs, the usage policy and its
   // alerts, and every feature list.
   //
+  // Germany, Austria and Switzerland (founder, 2026-09-16): €69 / €129 / €249
+  // and CHF 79 / 149 / 279 a month, annual at eleven months. Provisional, and
+  // the markets are not-yet, so these reach only the German waitlist pages and
+  // no checkout (`isSellable`).
+  //
   // The UAE rates underneath these margins are still estimates, not quotes —
   // TWILIO_INBOUND_AE and TWILIO_NUMBER_AE above all (margin.ts
   // unverifiedLines). A real carrier quote is the last input needed to trust
@@ -426,8 +443,9 @@ export const PRODUCTS: Product[] = [
     allowances: {},
     pools: { minutes: 75, conversations: 200 },
     users: 2,
-    prices: { AE: 249 * 100 },
-    annualPrices: { AE: 2739 * 100 },
+    prices: dach(249, 69, 79),
+    annualPrices: dach(2739, 759, 869),
+    provisional: DACH,
     features: V2_STARTER_FEATURES,
   },
   {
@@ -441,8 +459,9 @@ export const PRODUCTS: Product[] = [
     allowances: {},
     pools: { minutes: 250, conversations: 600 },
     users: 5,
-    prices: { AE: 499 * 100 },
-    annualPrices: { AE: 5489 * 100 },
+    prices: dach(499, 129, 149),
+    annualPrices: dach(5489, 1419, 1639),
+    provisional: DACH,
     features: V2_GROWTH_FEATURES,
   },
   {
@@ -455,8 +474,9 @@ export const PRODUCTS: Product[] = [
     allowances: {},
     pools: { minutes: 500, conversations: 1500 },
     users: 15,
-    prices: { AE: 999 * 100 },
-    annualPrices: { AE: 10989 * 100 },
+    prices: dach(999, 249, 279),
+    annualPrices: dach(10989, 2739, 3069),
+    provisional: DACH,
     features: V2_SCALE_FEATURES,
   },
 
@@ -536,7 +556,7 @@ export const PRODUCTS: Product[] = [
     summary: "The September 2026 Starter bundle.",
     status: "live",
     allowances: { phone: 200, web_voice: 100, chat: 150, whatsapp: 300 },
-    prices: price(299, 65, 119, 109, 79, 109, 69, 129, 299),
+    prices: price(299, 65, 119, 109, 79, 109, 69, 129, 299, 69, 69),
     provisional: EXCEPT_AE,
     features: STARTER_FEATURES,
     grandfather: "indefinite",
@@ -549,7 +569,7 @@ export const PRODUCTS: Product[] = [
     summary: "The September 2026 Business bundle.",
     status: "live",
     allowances: { phone: 600, web_voice: 200, chat: 400, whatsapp: 800 },
-    prices: price(599, 129, 239, 219, 155, 219, 139, 269, 599),
+    prices: price(599, 129, 239, 219, 155, 219, 139, 269, 599, 139, 139),
     provisional: EXCEPT_AE,
     features: BUSINESS_FEATURES,
     grandfather: "indefinite",
@@ -562,7 +582,7 @@ export const PRODUCTS: Product[] = [
     summary: "The September 2026 Pro bundle.",
     status: "live",
     allowances: { phone: 1500, web_voice: 300, chat: 1000, whatsapp: 1500 },
-    prices: price(1199, 259, 479, 429, 309, 429, 289, 539, 1099),
+    prices: price(1199, 259, 479, 429, 309, 429, 289, 539, 1099, 289, 289),
     provisional: EXCEPT_AE,
     features: PRO_FEATURES,
     grandfather: "indefinite",
@@ -628,6 +648,8 @@ export interface Pack {
   pool: Pool;
   units: number;
   prices: Partial<Record<Market, number>>;
+  /** Markets whose pack price is a planning figure, not a decision. */
+  provisional?: Market[];
   status: "live" | "not-yet";
   gap?: string;
 }
@@ -639,7 +661,8 @@ export const PACKS: Pack[] = [
     name: "100 extra voice minutes",
     pool: "minutes",
     units: 100,
-    prices: { AE: 99 * 100 },
+    prices: dach(99, 25, 29),
+    provisional: DACH,
     status: "live",
   },
   {
@@ -648,7 +671,8 @@ export const PACKS: Pack[] = [
     name: "150 extra text conversations",
     pool: "conversations",
     units: 150,
-    prices: { AE: 49 * 100 },
+    prices: dach(49, 12, 14),
+    provisional: DACH,
     status: "live",
   },
 ];
@@ -778,9 +802,27 @@ export function priceOf(id: ProductId, market: Market): number {
   return amount;
 }
 
-/** Sellable on the website and at checkout, in this market. */
-export function isSellable(product: Product, market: Market): boolean {
+/**
+ * A live plan with a price in this market, open or not: what a country's
+ * waitlist page may show as planned prices. Never a reason to take money —
+ * that is `isSellable`.
+ */
+export function isOffered(product: Product, market: Market): boolean {
   return product.kind === "plan" && product.status === "live" && product.prices[market] !== undefined;
+}
+
+export function offered(market: Market): Product[] {
+  return PRODUCTS.filter((p) => isOffered(p, market));
+}
+
+/**
+ * Sellable on the website and at checkout, in this market: offered there, and
+ * the market is open. Germany, Austria and Switzerland are priced for their
+ * waitlist pages, and this is what keeps the checkout, signup, the API and
+ * Belle from selling in them.
+ */
+export function isSellable(product: Product, market: Market): boolean {
+  return isOffered(product, market) && MARKETS[market].status === "live";
 }
 
 export function sellable(market: Market): Product[] {

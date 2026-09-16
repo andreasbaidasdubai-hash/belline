@@ -344,6 +344,17 @@ await test("a market we do not serve yet, or a made-up one, is refused before an
   }
 });
 
+await test("Germany, Austria and Switzerland are priced for their waitlist pages, and signup still refuses them", async () => {
+  // The German pages show planned prices; nothing on them may open an account.
+  for (const market of ["DE", "AT", "CH"]) {
+    const before = counts();
+    const result = await signUp({ businessName: "Wartende GmbH", email: `dach-${market.toLowerCase()}@example.test`, password: PASSWORD, market, products: ["v2_growth"] });
+    assert.equal(result.ok, false, `${market} was accepted`);
+    if (!result.ok) assert.equal(result.field, "market");
+    assert.deepEqual(counts(), before, `${market}: something was written`);
+  }
+});
+
 await test("the kind of business is optional, and ?trade= only prefills", async () => {
   const made = await signUp({ businessName: "Any Business Co", email: "any@example.test", password: PASSWORD, vertical: "" });
   assert.ok(made.ok, made.ok ? "" : made.error);

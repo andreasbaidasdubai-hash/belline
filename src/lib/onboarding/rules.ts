@@ -31,6 +31,9 @@ const DIALLING: Record<Market, Dialling> = {
   IE: { code: "353", digits: [7, 9], premium: /^15/ },
   NZ: { code: "64", digits: [8, 10], premium: /^900/ },
   CH: { code: "41", digits: [9, 9], premium: /^90/ },
+  // German and Austrian numbers vary in length by area; 0900 and 090x/093x are premium rate.
+  DE: { code: "49", digits: [6, 11], premium: /^900/ },
+  AT: { code: "43", digits: [6, 12], premium: /^9[03]/ },
 };
 
 /** Which country a venue is in: its plan's market, else its currency and clock. */

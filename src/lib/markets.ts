@@ -11,7 +11,7 @@
  * imports this.
  */
 
-export type Market = "AE" | "GB" | "AU" | "CA" | "US" | "SG" | "IE" | "NZ" | "CH";
+export type Market = "AE" | "GB" | "AU" | "CA" | "US" | "SG" | "IE" | "NZ" | "CH" | "DE" | "AT";
 
 export interface MarketInfo {
   code: Market;
@@ -23,7 +23,9 @@ export interface MarketInfo {
   spoken: { one: string; many: string };
   /**
    * `live` — we can take a customer here today: a number, a checkout, support.
-   * `not-yet` — priced and ready in the catalogue, never shown on a public page.
+   * `not-yet` — priced and ready in the catalogue, never sold. Its prices reach
+   * a public page only on that country's own waitlist page (DE, AT and CH, in
+   * German), labelled there as planned, with no way to buy.
    */
   status: "live" | "not-yet";
   gap?: string;
@@ -151,6 +153,30 @@ export const MARKETS: Record<Market, MarketInfo> = {
       "German speech recognition is not built.",
     planningUsdRate: 1.2,
   },
+  // Germany and Austria: German landing pages with a waitlist (2026-09-16),
+  // nothing sold. Belline answers in English only, so the pages say so.
+  DE: {
+    code: "DE",
+    name: "Germany",
+    currency: "EUR",
+    timezone: "Europe/Berlin",
+    prefix: "€",
+    spoken: { one: "euro", many: "euros" },
+    status: "not-yet",
+    gap: `${NOT_OPEN} German speech is not built either: Belline answers in English.`,
+    planningUsdRate: 1.12,
+  },
+  AT: {
+    code: "AT",
+    name: "Austria",
+    currency: "EUR",
+    timezone: "Europe/Vienna",
+    prefix: "€",
+    spoken: { one: "euro", many: "euros" },
+    status: "not-yet",
+    gap: `${NOT_OPEN} German speech is not built either: Belline answers in English.`,
+    planningUsdRate: 1.12,
+  },
 };
 
 export const MARKET_CODES = Object.keys(MARKETS) as Market[];
@@ -185,13 +211,35 @@ export function liveMarkets(): Market[] {
  * invoice line and a pricing page is not one. Anything fractional keeps both
  * digits.
  */
-export function formatMoney(minor: number, market: Market): string {
+export function formatMoney(minor: number, market: Market, locale: PriceLocale = "en"): string {
   const info = MARKETS[market];
   const major = minor / 100;
+  if (locale !== "en") return germanMoney(major, info, locale);
   const digits = Number.isInteger(major)
     ? major.toLocaleString("en-GB")
     : major.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${info.prefix}${digits}`;
+}
+
+/** The languages a public page writes a price in. */
+export type PriceLocale = "en" | "de-DE" | "de-AT" | "de-CH";
+
+/** A no-break space: "69 €" and "CHF 79" never wrap between number and currency. */
+const NBSP = " ";
+
+/**
+ * A price as a German page writes it, by hand rather than through Intl so the
+ * build, the checks and site.js all produce the same characters on every
+ * machine: "1.419 €" in Germany and Austria, "CHF 1’639" in Switzerland, and
+ * any other currency by its code before the number ("AED 99").
+ */
+function germanMoney(major: number, info: MarketInfo, locale: Exclude<PriceLocale, "en">): string {
+  const swiss = locale === "de-CH";
+  const [whole, cents] = Math.abs(major).toFixed(Number.isInteger(major) ? 0 : 2).split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, swiss ? "’" : ".");
+  const digits = `${major < 0 ? "-" : ""}${grouped}${cents ? `${swiss ? "." : ","}${cents}` : ""}`;
+  if (info.currency === "EUR") return `${digits}${NBSP}€`;
+  return `${info.currency}${NBSP}${digits}`;
 }
 
 /** Minor units of a market's currency, in US dollars. Internal arithmetic only. */

@@ -35,7 +35,7 @@ const { getLocation, upsertLocation } = await import("../src/lib/store");
 const { applyStripeEvent, checkoutParams, lookupKeyFor, stripeEnabled } = await import("../src/lib/billing/stripe");
 const { grandfatherLegacyPlans } = await import("../src/lib/billing/grandfather");
 const { MARKET_CODES } = await import("../src/lib/markets");
-const { CATALOGUE_VERSION, GRANDFATHER_DAYS, PRODUCTS, TRIAL, annualPerMonth, periodFee, priceOf, sellable } = await import(
+const { CATALOGUE_VERSION, GRANDFATHER_DAYS, PRODUCTS, TRIAL, annualPerMonth, checkPurchased, checkSelection, offered, periodFee, priceOf, recommendedPlan, sellable } = await import(
   "../src/lib/billing/plans"
 );
 const { addDays, todayIn } = await import("../src/lib/time");
@@ -166,6 +166,47 @@ await test("the venue, plan, market, cycle, amount and catalogue version ride on
     assert.equal(meta?.belline_amount, String(periodFee(["v2_growth"], "AE", "monthly")));
     assert.equal(meta?.belline_catalogue, CATALOGUE_VERSION);
   }
+});
+
+console.log("\n\x1b[1mGermany, Austria and Switzerland: priced, never sold\x1b[0m\n");
+
+await test("a DACH market's plans are offered for its waitlist page and refused by every selling path", () => {
+  for (const market of ["DE", "AT", "CH"] as const) {
+    assert.equal(offered(market).length, 3, `${market} has no planned prices to show`);
+    assert.deepEqual(sellable(market), [], `${market} is sellable`);
+    for (const id of ["v2_starter", "v2_growth", "v2_scale"]) {
+      const selection = checkSelection([id], market);
+      assert.equal(selection.ok, false, `${id} can be chosen in ${market}`);
+      assert.equal(checkPurchased([id], market).ok, false, `${id} counts as bought in ${market}`);
+    }
+    assert.equal(recommendedPlan(market).id, "v2_growth", "the fallback plan changed");
+  }
+});
+
+await test("the checkout page falls back to the UAE for a closed market, and offers only open ones", () => {
+  const page = fs.readFileSync(path.join(process.cwd(), "src", "app", "checkout", "page.tsx"), "utf8");
+  assert.match(page, /MARKETS\[asked\]\.status === "live"\s*\?\s*asked\s*:\s*"AE"/, "?market=DE could price the checkout in euros");
+  assert.match(page, /markets=\{liveMarkets\(\)\}/);
+  const route = fs.readFileSync(path.join(process.cwd(), "src", "app", "api", "checkout", "route.ts"), "utf8");
+  assert.match(route, /const selection = checkSelection\(raw, market\);\s*if \(!selection\.ok\)/, "the checkout route no longer checks the selection against the market");
+});
+
+await test("a paid checkout that claims a DACH market changes nothing", async () => {
+  const dach = await account("Dach Probe Salon");
+  const before = JSON.stringify(getLocation(dach.id));
+  applyStripeEvent(
+    event("checkout.session.completed", {
+      id: "cs_test_dach",
+      customer: "cus_test_dach",
+      subscription: "sub_test_dach",
+      client_reference_id: dach.id,
+      metadata: { belline_location: dach.id, belline_products: "v2_growth", belline_market: "DE", belline_cycle: "monthly", belline_catalogue: CATALOGUE_VERSION },
+    }),
+  );
+  const after = getLocation(dach.id)!;
+  assert.notEqual(after.subscription?.status, "active", "a DE checkout activated a plan");
+  assert.notEqual(after.subscription?.market, "DE");
+  assert.equal(JSON.stringify(after.subscription), JSON.stringify(JSON.parse(before).subscription));
 });
 
 console.log("\n\x1b[1mThe trial takes no card\x1b[0m\n");
