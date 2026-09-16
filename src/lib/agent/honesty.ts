@@ -1,5 +1,6 @@
-import type { Location, Minutes, Slot, ToolTrace } from "../types";
+import type { Location, Minutes, Slot, ToolTrace, VenueLanguage } from "../types";
 import { minutesToClock } from "../time";
+import { copy } from "../customer-copy";
 
 /**
  * Did it say a time that nothing came back with?
@@ -46,8 +47,17 @@ const SOURCES = new Set([
  * misread them onto a calendar, and adding them here would mean parsing
  * English numbers to guard a channel that has a different failure mode.
  */
-export function timesIn(text: string): Minutes[] {
+export function timesIn(text: string, language: VenueLanguage = "en"): Minutes[] {
   const found: Minutes[] = [];
+
+  // "17 Uhr", "9 Uhr" — German's bare hour, which needs no meridiem to be a
+  // time: "Uhr" says so. "14.30 Uhr" is already caught below as 14.30.
+  if (language === "de") {
+    for (const m of text.matchAll(/(?<![:.\d])\b(\d{1,2})\s*Uhr\b/gi)) {
+      const hour = Number(m[1]);
+      if (hour <= 24) found.push((hour % 24) * 60);
+    }
+  }
 
   // 4:30, 16:30, 4:30 pm, 4.30pm
   const withMinutes = /\b(\d{1,2})[:.](\d{2})\s*(a\.?m\.?|p\.?m\.?)?/gi;
@@ -205,6 +215,88 @@ const OFFER_EXTRA = String.raw`earliest|latest|slot|come (?:in|by) at|see you at
 const OFFER = new RegExp(String.raw`\b(?:${OFFER_CORE})\b`, "i");
 const OFFER_WIDE = new RegExp(String.raw`\b(?:${OFFER_CORE}|${OFFER_EXTRA})\b`, "i");
 
+// ---------------------------------------------------------------------------
+// The same guards, in German
+// ---------------------------------------------------------------------------
+
+/**
+ * German is not a way round any of this.
+ *
+ * A German venue is guarded by the English patterns *and* these — a reply can
+ * mix the two, and "I have 18:00" is as much an invention in a German thread.
+ * The words are the same moves in German clothes: "ich hätte", "wie wäre es
+ * mit", "da ist noch frei", "ich kann Sie um … eintragen". Boundaries are
+ * written with `\p{L}` rather than `\b`, which knows nothing of ä, ö, ü or ß
+ * and would never find "Öffnungszeiten" at all.
+ *
+ * English venues never read this section: their guards are the ones above,
+ * byte for byte.
+ */
+// "Wir haben bis 18 Uhr geöffnet" is how German states opening hours, so "wir
+// haben" only counts when the sentence is not about being open.
+const DE_OFFER_CORE = String.raw`ich habe|ich hätte|(?:wir haben|haben wir)(?![^.!?]*(?:geöffnet|offen|geschlossen|Ruhetag|Öffnungszeit))|wir hätten|hätte ich|hätten wir|habe ich|es gibt|gibt es|frei|verfügbar|wie wäre es mit|wie wäre|was halten Sie von|passt (?:Ihnen|es Ihnen|das)|würde (?:Ihnen )?(?:das )?passen|(?:kann|könnte) (?:ich )?(?:Ihnen|Sie)|anbieten|einschieben|dazwischenschieben|eintragen|einplanen|reinnehmen|dazunehmen|vormerken`;
+const DE_OFFER_EXTRA = String.raw`frühestens|spätestens|frühester|spätester|frühestmöglich|kommen Sie (?:gern |gerne )?(?:um|vorbei)|sehen uns um|reservieren`;
+
+const L = String.raw`\p{L}\p{N}_`;
+const OFFER_DE = new RegExp(String.raw`(?<![${L}])(?:${OFFER_CORE}|${DE_OFFER_CORE})(?![${L}])`, "iu");
+const OFFER_WIDE_DE = new RegExp(
+  String.raw`(?<![${L}])(?:${OFFER_CORE}|${OFFER_EXTRA}|${DE_OFFER_CORE}|${DE_OFFER_EXTRA})(?![${L}])`,
+  "iu",
+);
+
+const NOT_OFFERING_DE = new RegExp(
+  String.raw`(?<![${L}])(?:nicht|kein|keine|keinen|keinem|keiner|nie|niemals|ob|nichts|leider nicht|unmöglich)(?![${L}])`,
+  "iu",
+);
+
+const HOURS_WORDS_DE = new RegExp(
+  String.raw`(?<![${L}])(?:geöffnet|öffnen|öffnet|offen|Öffnungszeit(?:en)?|schließen|schließt|geschlossen|schliessen|schliesst|Ruhetag|bis|letzte (?:Bestellung|Buchung|Annahme|Behandlung)|Annahmeschluss|Küchenschluss)(?![${L}])`,
+  "iu",
+);
+
+/**
+ * Words that tell somebody in German they hold a booking. See CLAIM.
+ *
+ * "Bestätigt" is a participle and a present tense at once — "Sie sind
+ * bestätigt" claims a booking, "das Team bestätigt Ihnen den Termin" promises
+ * one — so the participles only count with the auxiliary that makes them a
+ * fact ("ist", "sind", "habe … eingetragen"), or alone as the whole reply
+ * ("Gebucht!"). A negation inside the claim ("ist nichts gebucht") unmakes it.
+ */
+const PARTICIPLES_DE = String.raw`bestätigt|gebucht|reserviert|eingetragen|vorgemerkt`;
+const CLAIM_DE = new RegExp(
+  String.raw`(?<![${L}])(?:(?:ist|sind|wurde|wurden|habe|haben|hat)(?![${L}])[^.!?]{0,60}?(?<![${L}])(?:${PARTICIPLES_DE})|^\s*(?:${PARTICIPLES_DE})|fest eingeplant|bis dann|bis (?:morgen|bald|später|nachher|Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag)|wir sehen uns|wir freuen uns auf (?:Sie|Ihren Besuch|Ihr Kommen)|alles erledigt|ist erledigt|ist fix|steht fest)(?![${L}])`,
+  "giu",
+);
+
+/**
+ * What undoes a German claim from inside it, between the auxiliary and the
+ * participle: "ist noch nicht gebucht", "ist beim Team, und sobald es bestätigt".
+ */
+const UNMADE_DE = new RegExp(
+  String.raw`(?<![${L}])(?:nicht|nichts|kein|keine|keinen|sobald|wenn|falls|sofern|bevor|erst|wird|werden)(?![${L}])`,
+  "iu",
+);
+
+/** What makes a German claim word future or conditional: "sobald es bestätigt ist". */
+const HEDGE_DE = new RegExp(
+  String.raw`(?<![${L}])(?:wird|werden|würde|sobald|wenn|falls|sofern|nicht|nichts|noch|kein|keine|bevor|erst|muss|müsste|soll|sollte|kann|könnte)(?![${L}])`,
+  "iu",
+);
+
+/**
+ * The patterns one language's guard reads. German reads its own and English's.
+ *
+ * `negated` is German's negation, read across the whole clause rather than only
+ * before the offer word: German puts "nicht" after the verb — "ich kann Sie um
+ * 18 Uhr leider nicht eintragen" — where the English rule would never see it.
+ */
+function patterns(language: VenueLanguage) {
+  return language === "de"
+    ? { offer: OFFER_DE, offerWide: OFFER_WIDE_DE, notOffering: [NOT_OFFERING], negated: NOT_OFFERING_DE, hours: [HOURS_WORDS, HOURS_WORDS_DE] }
+    : { offer: OFFER, offerWide: OFFER_WIDE, notOffering: [NOT_OFFERING], negated: null, hours: [HOURS_WORDS] };
+}
+
 /**
  * A refusal is not an offer. "I can't say whether 8:00 is free" contains the
  * word that makes an offer and is the opposite of one, so only the words before
@@ -215,9 +307,16 @@ const OFFER_WIDE = new RegExp(String.raw`\b(?:${OFFER_CORE}|${OFFER_EXTRA})\b`, 
 const NOT_OFFERING =
   /\b(can'?t|cannot|can not|don'?t|do not|won'?t|will not|never|not|no|unable|whether|nothing|isn'?t|aren'?t|hasn'?t|haven'?t)\b|n't\b/i;
 
-function framesAnOffer(clause: string, re: RegExp = OFFER): boolean {
-  for (const m of clause.matchAll(new RegExp(re.source, "gi"))) {
-    if (!NOT_OFFERING.test(clause.slice(0, m.index))) return true;
+function framesAnOffer(
+  clause: string,
+  re: RegExp = OFFER,
+  notOffering: RegExp[] = [NOT_OFFERING],
+  negated: RegExp | null = null,
+): boolean {
+  if (negated?.test(clause)) return false;
+  for (const m of clause.matchAll(new RegExp(re.source, re.flags.includes("u") ? "giu" : "gi"))) {
+    const before = clause.slice(0, m.index);
+    if (!notOffering.some((no) => no.test(before))) return true;
   }
   return false;
 }
@@ -238,8 +337,12 @@ function sentencesOf(text: string): string[] {
  * repair may cut on. The separators come back in the result, so a reply nothing
  * was cut from is returned byte for byte.
  */
-function clausesOf(text: string): { text: string; sep: string }[] {
-  const parts = text.split(/((?<=[.!?])\s+|\s*[—–;:]\s+|,\s+(?=(?:but|so|though|although|however)\b))/);
+function clausesOf(text: string, language: VenueLanguage = "en"): { text: string; sep: string }[] {
+  const parts = text.split(
+    language === "de"
+      ? /((?<=[.!?])\s+|\s*[—–;:]\s+|,\s+(?=(?:but|so|though|although|however|aber|also|doch|jedoch|allerdings)\b))/
+      : /((?<=[.!?])\s+|\s*[—–;:]\s+|,\s+(?=(?:but|so|though|although|however)\b))/,
+  );
   const out: { text: string; sep: string }[] = [];
   for (let i = 0; i < parts.length; i += 2) {
     if (parts[i]?.trim()) out.push({ text: parts[i], sep: i === 0 ? "" : parts[i - 1] ?? " " });
@@ -260,20 +363,29 @@ export function checkTimes(
    * passes, "7 PM is free" does not.
    */
   said?: Set<Minutes>,
+  /** The venue's, from language.ts `answersIn`. German reads the German patterns as well. */
+  language: VenueLanguage = "en",
 ): HonestyVerdict {
   const offered = timesOffered(traces);
   const invented = new Set<Minutes>();
+  const p = patterns(language);
   for (const sentence of sentencesOf(reply)) {
-    const aboutHours = HOURS_WORDS.test(sentence);
-    // An opening time offered as a slot is an invention even at the venue that
-    // opens then: "we're closed by then, but I could fit you in at 6:00" is a
-    // promise nothing made, and the hours exemption used to wave it through.
-    const offering = framesAnOffer(sentence);
-    for (const t of timesIn(sentence)) {
-      if (offered.has(t)) continue;
-      if (!offering && aboutHours && published?.has(t)) continue;
-      if (!offering && said?.has(t)) continue;
-      invented.add(t);
+    const aboutHours = p.hours.some((re) => re.test(sentence));
+    // German judges the offer clause by clause: its negation is read across a
+    // whole clause, and "um 19 Uhr sind wir nicht mehr offen, aber ich hätte 18
+    // Uhr" must not let the "nicht" of the first half excuse the second.
+    const parts = language === "de" ? clausesOf(sentence, language).map((c) => c.text) : [sentence];
+    for (const part of parts) {
+      // An opening time offered as a slot is an invention even at the venue that
+      // opens then: "we're closed by then, but I could fit you in at 6:00" is a
+      // promise nothing made, and the hours exemption used to wave it through.
+      const offering = framesAnOffer(part, p.offer, p.notOffering, p.negated);
+      for (const t of timesIn(part, language)) {
+        if (offered.has(t)) continue;
+        if (!offering && aboutHours && published?.has(t)) continue;
+        if (!offering && said?.has(t)) continue;
+        invented.add(t);
+      }
     }
   }
   // A reply naming no times cannot invent one.
@@ -307,18 +419,20 @@ export function repairReply(
    * knowledge of a book Belline cannot see. That is what the repair sent to a
    * request-only venue before this flag existed.
    */
-  opts: { requestsOnly?: boolean } = {},
+  opts: { requestsOnly?: boolean; language?: VenueLanguage } = {},
 ): string {
   if (verdict.ok) return reply;
+  const language = opts.language ?? "en";
+  const noSlot = copy(language, "guard.request_no_slot");
   const invented = new Set(verdict.invented);
-  const kept = sentencesOf(reply).filter((s) => !timesIn(s).some((t) => invented.has(t)));
-  if (!kept.length) return opts.requestsOnly ? REQUEST_NO_SLOT : honestAlternative(verdict);
+  const kept = sentencesOf(reply).filter((s) => !timesIn(s, language).some((t) => invented.has(t)));
+  if (!kept.length) return opts.requestsOnly ? noSlot : honestAlternative(verdict, undefined, language);
 
   const follow = opts.requestsOnly
-    ? REQUEST_NO_SLOT
+    ? noSlot
     : verdict.offered.length
-      ? honestAlternative(verdict)
-      : "I'll tell you exactly what's free — which day would suit you?";
+      ? honestAlternative(verdict, undefined, language)
+      : copy(language, "guard.which_day");
   return `${kept.join(" ")} ${follow}`;
 }
 
@@ -349,35 +463,41 @@ export interface ClaimVerdict {
   claims: string[];
 }
 
-function claimsIn(sentence: string): string[] {
+function claimsIn(sentence: string, language: VenueLanguage = "en"): string[] {
   const found: string[] = [];
   for (const m of sentence.matchAll(CLAIM)) {
     const before = sentence.slice(0, m.index);
-    if (!HEDGE.test(before)) found.push(m[0].toLowerCase());
+    if (!HEDGE.test(before) && !(language === "de" && HEDGE_DE.test(before))) found.push(m[0].toLowerCase());
+  }
+  if (language === "de") {
+    for (const m of sentence.matchAll(CLAIM_DE)) {
+      const before = sentence.slice(0, m.index);
+      if (HEDGE_DE.test(before) || HEDGE.test(before) || UNMADE_DE.test(m[0])) continue;
+      found.push(m[0].toLowerCase());
+    }
   }
   return found;
 }
 
-export function checkRequestReply(reply: string): ClaimVerdict {
-  const claims = sentencesOf(reply).flatMap(claimsIn);
+export function checkRequestReply(reply: string, language: VenueLanguage = "en"): ClaimVerdict {
+  const claims = sentencesOf(reply).flatMap((s) => claimsIn(s, language));
   return { ok: claims.length === 0, claims: [...new Set(claims)] };
 }
 
-export const REQUEST_HANDOVER = "Your request is with the team, and they'll get back to you to confirm.";
+export const REQUEST_HANDOVER = copy("en", "guard.request_handover");
 
 /** The reply with every sentence that claimed a booking taken out, ending on the honest line. */
-export function repairRequestReply(reply: string, verdict: ClaimVerdict): string {
+export function repairRequestReply(reply: string, verdict: ClaimVerdict, language: VenueLanguage = "en"): string {
   if (verdict.ok) return reply;
-  const kept = sentencesOf(reply).filter((s) => claimsIn(s).length === 0);
-  return [...kept, REQUEST_HANDOVER].join(" ");
+  const kept = sentencesOf(reply).filter((s) => claimsIn(s, language).length === 0);
+  return [...kept, copy(language, "guard.request_handover")].join(" ");
 }
 
 /**
  * What to say having cut a proposed slot. Names no time, promises no diary, and
  * ends somewhere the next turn can go.
  */
-export const REQUEST_NO_SLOT =
-  "I can't hold a time here, but tell me when suits you and I'll pass it to the team to confirm.";
+export const REQUEST_NO_SLOT = copy("en", "guard.request_no_slot");
 
 export interface SlotVerdict {
   ok: boolean;
@@ -400,20 +520,22 @@ export interface SlotVerdict {
  * Stating the opening hours is untouched — those sentences frame no offer — and
  * so is repeating the time the customer asked for.
  */
-export function checkSlotOffers(reply: string): SlotVerdict {
-  const offers = clausesOf(reply)
+export function checkSlotOffers(reply: string, language: VenueLanguage = "en"): SlotVerdict {
+  const p = patterns(language);
+  const offers = clausesOf(reply, language)
     .map((c) => c.text.trim())
-    .filter((text) => timesIn(text).length > 0 && framesAnOffer(text, OFFER_WIDE));
+    .filter((text) => timesIn(text, language).length > 0 && framesAnOffer(text, p.offerWide, p.notOffering, p.negated));
   return { ok: offers.length === 0, offers };
 }
 
 /** The reply with the offered slots cut out and everything else left standing. */
-export function repairSlotOffers(reply: string, verdict: SlotVerdict): string {
+export function repairSlotOffers(reply: string, verdict: SlotVerdict, language: VenueLanguage = "en"): string {
   if (verdict.ok) return reply;
+  const noSlot = copy(language, "guard.request_no_slot");
   const offers = new Set(verdict.offers);
   let out = "";
   let cut = false;
-  for (const clause of clausesOf(reply)) {
+  for (const clause of clausesOf(reply, language)) {
     const text = clause.text.trim();
     if (offers.has(text)) {
       cut = true;
@@ -426,7 +548,7 @@ export function repairSlotOffers(reply: string, verdict: SlotVerdict): string {
     else out += `${clause.sep}${text}`;
     cut = false;
   }
-  return out ? `${endStop(out)} ${REQUEST_NO_SLOT}` : REQUEST_NO_SLOT;
+  return out ? `${endStop(out)} ${noSlot}` : noSlot;
 }
 
 function endStop(text: string): string {
@@ -441,10 +563,10 @@ function endStop(text: string): string {
  * call costs a second and might invent a different set. This is the same
  * pattern as the tools themselves, where a failure carries its own recovery.
  */
-export function honestAlternative(verdict: HonestyVerdict, slots?: Slot[]): string {
+export function honestAlternative(verdict: HonestyVerdict, slots?: Slot[], language: VenueLanguage = "en"): string {
   const times = (slots?.length ? slots.map((s) => s.startMin) : verdict.offered)
     .slice(0, 3)
-    .map(minutesToClock);
+    .map((m) => (language === "de" ? `${minutesToClock(m)} Uhr` : minutesToClock(m)));
 
   if (!times.length) {
     // A dead end is its own failure. The first version of this line said there
@@ -456,11 +578,11 @@ export function honestAlternative(verdict: HonestyVerdict, slots?: Slot[]): stri
     // It cannot promise to go and look, because nothing here will: the guard
     // replaces a reply, it does not run another turn. So it asks, and the
     // answer arrives on the next message, which is a turn that can look.
-    return "I haven't got anything free there, I'm afraid. Would you like me to look at another day?";
+    return copy(language, "guard.nothing_free");
   }
   const list =
     times.length === 1
       ? times[0]
-      : `${times.slice(0, -1).join(", ")} or ${times[times.length - 1]}`;
-  return `Sorry — let me be accurate about that. What I actually have is ${list}. Would any of those work?`;
+      : copy(language, "guard.or", { rest: times.slice(0, -1).join(", "), last: times[times.length - 1] });
+  return copy(language, "guard.actually_free", { times: list });
 }

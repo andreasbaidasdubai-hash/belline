@@ -1,4 +1,5 @@
 import type { EmbedAppearance } from "./types";
+import { copy, type CopyLanguage } from "./customer-copy";
 
 /**
  * The widget's look — pure, and safe in the browser.
@@ -127,14 +128,17 @@ export function parseAppearance(
   return { ok: true, appearance: out };
 }
 
-/** The appearance with every default filled in and the colours resolved — what the widget is told. */
-export function resolveAppearance(appearance: EmbedAppearance | undefined) {
+/**
+ * The appearance with every default filled in and the colours resolved — what the widget is told.
+ * `language` is the venue's: a German venue that never wrote its own labels gets German ones.
+ */
+export function resolveAppearance(appearance: EmbedAppearance | undefined, language: CopyLanguage = "en") {
   const accent = accentHex(appearance?.accent) ?? EMBED_PALETTE.indigo;
   const text = textOn(accent);
   return {
-    voiceLabel: appearance?.voiceLabel ?? "Talk to us",
-    chatLabel: appearance?.chatLabel ?? "Chat with us",
-    whatsappLabel: appearance?.whatsappLabel ?? "WhatsApp us",
+    voiceLabel: appearance?.voiceLabel ?? (language === "en" ? "Talk to us" : copy(language, "embed.voice_label")),
+    chatLabel: appearance?.chatLabel ?? (language === "en" ? "Chat with us" : copy(language, "embed.chat_label")),
+    whatsappLabel: appearance?.whatsappLabel ?? (language === "en" ? "WhatsApp us" : copy(language, "embed.whatsapp_label")),
     accent,
     accentText: text,
     // The mark on the filled button takes the words' colour: white on indigo and

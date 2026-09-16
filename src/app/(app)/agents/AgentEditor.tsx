@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PhoneField, { type PhoneFieldHandle } from "@/components/PhoneField";
 import { readStoredPhone } from "@/lib/phone";
-import type { AgentConfig } from "@/lib/types";
+import type { AgentConfig, VenueLanguage } from "@/lib/types";
+import { LANGUAGES } from "@/lib/customer-copy";
 import {
   VOICE_MODELS,
   DEFAULT_VOICE_MODEL,
@@ -22,6 +23,8 @@ interface VoiceOption {
   name: string;
   description: string;
   cloned?: boolean;
+  /** Languages ElevenLabs has verified this voice in, as ISO 639-1. Empty when unknown. */
+  languages?: string[];
 }
 
 const MODELS = [
@@ -56,12 +59,19 @@ export default function AgentEditor({
   locationId,
   initial,
   country = "AE",
+  initialLanguage = "en",
+  languageOpen = false,
 }: {
   locationId: string;
   initial: AgentConfig;
   /** The business's own market (ISO), for the transfer number's country picker. */
   country?: string;
+  /** What the venue has saved. See language.ts. */
+  initialLanguage?: VenueLanguage;
+  /** Whether the `language.de` flag lets an owner choose. Off, the picker is not shown. */
+  languageOpen?: boolean;
 }) {
+  const [language, setLanguage] = useState<VenueLanguage>(initialLanguage);
   const transfer = useRef<PhoneFieldHandle | null>(null);
   const [saveError, setSaveError] = useState<{ message: string; field?: string } | null>(null);
   const initialTransfer = readStoredPhone(initial.transferNumber, country).e164 ?? (initial.transferNumber ?? "");
@@ -72,7 +82,7 @@ export default function AgentEditor({
   // Whether anything differs from what was loaded. The Save button was three
   // and a half thousand pixels below the first field with no sign that leaving
   // would lose the edit.
-  const dirty = JSON.stringify(agent) !== JSON.stringify(initial);
+  const dirty = JSON.stringify(agent) !== JSON.stringify(initial) || language !== initialLanguage;
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -117,6 +127,7 @@ export default function AgentEditor({
           voiceId: agent.voiceId,
           voiceModel: agent.voiceModel,
           voiceSpeed: agent.voiceSpeed,
+          ...(languageOpen ? { language } : {}),
           locationId,
           // Preview the line this voice will actually open with.
           text: agent.greeting,
@@ -148,6 +159,11 @@ export default function AgentEditor({
   }
 
   const knownVoice = voices.some((v) => v.id === agent.voiceId);
+  // For a German venue, the voices verified in German come first and say so.
+  const german = languageOpen && language === "de";
+  const speaksGerman = (v: VoiceOption) => Boolean(v.languages?.includes("de"));
+  const listed = german ? [...voices].sort((a, b) => Number(speaksGerman(b)) - Number(speaksGerman(a))) : voices;
+  const chosen = voices.find((v) => v.id === agent.voiceId);
 
   function set<K extends keyof AgentConfig>(key: K, value: AgentConfig[K]) {
     setAgent((a) => ({ ...a, [key]: value }));
@@ -163,7 +179,7 @@ export default function AgentEditor({
       const res = await fetch("/api/agent", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locationId, agent }),
+        body: JSON.stringify({ locationId, agent, ...(languageOpen ? { language } : {}) }),
       });
       if (res.ok) {
         setSaved(true);
@@ -185,6 +201,28 @@ export default function AgentEditor({
         <Field label="Agent name" hint="How it introduces itself.">
           <input value={agent.displayName} onChange={(e) => set("displayName", e.target.value)} />
         </Field>
+
+        {languageOpen && (
+          <Field
+            label="Language customers are answered in"
+            hint="Calls, the website button, chat, WhatsApp, and the texts and emails customers get. Your dashboard stays in English. Write the opening line below in the same language."
+          >
+            <select
+              aria-label="Language customers are answered in"
+              value={language}
+              onChange={(e) => {
+                setLanguage(e.target.value === "de" ? "de" : "en");
+                setSaved(false);
+              }}
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
 
         <Field
           label="Opening line"
@@ -229,11 +267,12 @@ export default function AgentEditor({
               }}
               style={{ flex: 1 }}
             >
-              {voices.map((v) => (
+              {listed.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.cloned ? "★ " : ""}
                   {v.name}
                   {v.description ? ` — ${v.description}` : ""}
+                  {german && speaksGerman(v) ? " (German)" : ""}
                 </option>
               ))}
               <option value="__custom">Another voice id…</option>
@@ -258,6 +297,11 @@ export default function AgentEditor({
           {previewError && (
             <div style={{ color: "var(--bad)", fontSize: 11.5, marginTop: 6 }}>
               {previewError}
+            </div>
+          )}
+          {german && chosen && !speaksGerman(chosen) && (
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+              This voice is not verified in German. It will speak German, usually with an accent — pick one marked (German) for callers in Germany, Austria or Switzerland.
             </div>
           )}
           {/* Lives in the DOM so the click that starts a preview can unlock it

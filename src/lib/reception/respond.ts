@@ -5,16 +5,17 @@ import { getCall, getLocation, saveCall } from "../store";
 import { startCall } from "../calls";
 import { AgentSession } from "../agent/runtime";
 import {
-  checkRequestReply,
-  checkSlotOffers,
+  checkRequestReply as checkRequestReplyIn,
+  checkSlotOffers as checkSlotOffersIn,
   checkTimes,
   publishedTimes,
-  repairReply,
+  repairReply as repairReplyIn,
   repairRequestReply,
   repairSlotOffers,
   timesIn,
 } from "../agent/honesty";
 import { takesRequestsOnly } from "../booking/destination";
+import { answersIn, inHouseSpelling, lineFor } from "../language";
 import { metaAdapter } from "./channel/meta";
 import { twilioAdapter } from "./channel/twilio";
 import { internalAdapter } from "./channel/internal";
@@ -139,10 +140,15 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   // a receptionist who received a photograph and replied about opening hours
   // is worse than one who says it cannot see it.
   if (!accepted.text) {
+    const english = answersIn(location) === "en";
     const say =
       accepted.message.content.type === "audio"
-        ? "I can't listen to voice notes just yet — could you type it instead?"
-        : "I can't open that here. Could you tell me in a message what you need?";
+        ? english
+          ? "I can't listen to voice notes just yet — could you type it instead?"
+          : lineFor(location, "messages.voice_note")
+        : english
+          ? "I can't open that here. Could you tell me in a message what you need?"
+          : lineFor(location, "messages.attachment");
     return sendAndRecord(accepted, account, location, say, traceId, {
       history: (await agentHistory(tenantId, conversationId)) as Anthropic.MessageParam[],
       skipModel: true,
@@ -229,6 +235,14 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   // could fit you in is around 5:30" — and sentence-level repair threw the
   // correct half away with the wrong one.
   const requestsOnly = takesRequestsOnly(location);
+  // German venues are guarded in German as well as English: see honesty.ts.
+  // The guards below are bound to the venue's language once, here, so no
+  // call to them can forget it.
+  const language = answersIn(location);
+  const checkSlotOffers = (text: string) => checkSlotOffersIn(text, language);
+  const checkRequestReply = (text: string) => checkRequestReplyIn(text, language);
+  const repairReply = (text: string, verdict: Parameters<typeof repairReplyIn>[1], opts: { requestsOnly: boolean }) =>
+    repairReplyIn(text, verdict, { ...opts, language });
   if (requestsOnly) {
     const offer = checkSlotOffers(reply);
     if (!offer.ok) {
@@ -241,7 +255,7 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
         name: "ai.offered_slot",
         payload: { offers: offer.offers, replaced: reply },
       });
-      reply = repairSlotOffers(reply, offer);
+      reply = repairSlotOffers(reply, offer, language);
     }
   }
 
@@ -253,7 +267,8 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
     // 7 PM?", a reply forbidden from repeating 7 PM cannot tell them it is
     // outside the opening hours either. Dressing it up as available is caught
     // above, and by the offer test inside checkTimes.
-    new Set(timesIn(accepted.text)),
+    new Set(timesIn(accepted.text, language)),
+    language,
   );
   if (!honesty.ok) {
     console.warn(
@@ -294,9 +309,13 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
         name: "ai.claimed_confirmation",
         payload: { claims: claim.claims, replaced: reply },
       });
-      reply = repairRequestReply(reply, claim);
+      reply = repairRequestReply(reply, claim, language);
     }
   }
+
+  // Swiss spelling for a Swiss venue, whatever the model wrote. A no-op for
+  // everyone else.
+  reply = inHouseSpelling(location, reply);
 
   if (modelError && !reply) {
     // Nothing usable came back. Escalating is the honest answer: a customer
@@ -307,6 +326,7 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
       conversationId,
       "the agent could not answer",
       `Belline failed to produce a reply (${modelError}). The customer is waiting.`,
+      lineFor(location, "messages.handed_over_unanswered"),
     );
     return { sent: false, failed: modelError };
   }
@@ -458,6 +478,8 @@ async function escalate(
   conversationId: number,
   reason: string,
   summary: string,
+  /** What the customer sees in the thread, in their language. The reason above stays the team's. */
+  body: string = `Handed to the team: ${reason}`,
 ): Promise<void> {
   await transition(tenantId, conversationId, "HANDOFF_REQUESTED", {
     expect: ["AI_ACTIVE"],
@@ -469,7 +491,7 @@ async function escalate(
     conversationId,
     sender: "system",
     direction: "out",
-    body: `Handed to the team: ${reason}`,
+    body,
   });
 }
 

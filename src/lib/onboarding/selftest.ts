@@ -10,6 +10,7 @@ import { takesRequestsOnly } from "../booking/destination";
 import { meterModel } from "../billing/cost";
 import { raiseException } from "../errors/customer";
 import { flag } from "../flags";
+import { answersIn } from "../language";
 import { addDays, minutesToClock, todayIn, weekdayOf } from "../time";
 import { configDigest } from "./selftest-state";
 
@@ -268,7 +269,8 @@ export function grade(location: Location, scenario: Scenario, run: Transcript): 
 
   // The customer's own time is theirs to be repeated; everything else has to
   // have come from a tool or from the venue's published hours.
-  const honesty = checkTimes(reply, run.traces, publishedTimes(location), new Set(timesIn(scenario.prompt)));
+  const language = answersIn(location);
+  const honesty = checkTimes(reply, run.traces, publishedTimes(location), new Set(timesIn(scenario.prompt, language)), language);
   if (!honesty.ok) {
     return {
       passed: false,
@@ -281,14 +283,14 @@ export function grade(location: Location, scenario: Scenario, run: Transcript): 
   // Nothing here can hold a time, so naming one as available is wrong even when
   // the time itself is honest — the venue's own closing time, or the one the
   // customer asked for, offered back as a slot.
-  if (requests && !checkSlotOffers(reply).ok) {
+  if (requests && !checkSlotOffers(reply, language).ok) {
     return {
       passed: false,
       detail:
         "It offered the customer a time. Your team confirms bookings, so nothing here can hold one — the customer would arrive for a slot nobody agreed to.",
     };
   }
-  if (requests && !checkRequestReply(reply).ok) {
+  if (requests && !checkRequestReply(reply, language).ok) {
     return {
       passed: false,
       detail: "It told the customer a booking was confirmed, but your team confirms bookings. The customer would think they have one.",

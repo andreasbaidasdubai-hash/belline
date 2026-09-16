@@ -1,6 +1,8 @@
-import type { Call, Location } from "../types";
+import type { Call, Location, VenueLanguage } from "../types";
 import { id, listCalls, saveCall } from "../store";
 import { isE164 } from "../phone";
+import { answersIn } from "../language";
+import { copy } from "../customer-copy";
 
 /**
  * A voicemail for callers who reach a venue that has not gone live.
@@ -27,15 +29,34 @@ import { isE164 } from "../phone";
 export const VOICEMAIL_MAX_SECONDS = 60;
 
 /** What the caller hears. The business's name and nothing about setup, trials or Belline. */
-export function voicemailGreeting(businessName: string): string {
-  return `Thanks for calling ${businessName}. Please leave your name and number after the tone, and the team will call you back.`;
+export function voicemailGreeting(businessName: string, language: VenueLanguage = "en"): string {
+  return copy(language, "voicemail.greeting", { name: businessName });
 }
 
 /** Said once the message is in. */
-export const VOICEMAIL_THANKS = "Thank you. The team will call you back.";
+export const VOICEMAIL_THANKS = copy("en", "voicemail.thanks");
 
 function escapeXml(value: string): string {
   return value.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c]!);
+}
+
+/**
+ * The voice Twilio reads a line in, before any stream is open.
+ *
+ * English keeps Polly.Joanna with no language attribute, exactly as it always
+ * was. German is Polly.Vicki (neural, de-DE): Twilio lists German voices under
+ * de-DE only, and neither Polly's Austrian nor its Swiss voice is on Twilio's
+ * list, so Vienna and Zurich hear the German one too.
+ */
+export const SAY_VOICE: Record<VenueLanguage, { voice: string; language?: string }> = {
+  en: { voice: "Polly.Joanna" },
+  de: { voice: "Polly.Vicki-Neural", language: "de-DE" },
+};
+
+/** A `<Say>` element in the venue's language. `text` is escaped here. */
+export function sayTwiml(language: VenueLanguage, text: string): string {
+  const { voice, language: tag } = SAY_VOICE[language];
+  return `<Say voice="${voice}"${tag ? ` language="${tag}"` : ""}>${escapeXml(text)}</Say>`;
 }
 
 /**
@@ -49,11 +70,12 @@ function escapeXml(value: string): string {
  * webhook again and replay the greeting. An empty recording goes to the
  * `<Hangup/>` after it.
  */
-export function voicemailTwiml(location: Pick<Location, "id" | "name">): string {
+export function voicemailTwiml(location: Pick<Location, "id" | "name" | "language">): string {
   const loc = encodeURIComponent(location.id);
+  const language = answersIn(location);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">${escapeXml(voicemailGreeting(location.name))}</Say>
+  ${sayTwiml(language, voicemailGreeting(location.name, language))}
   <Record maxLength="${VOICEMAIL_MAX_SECONDS}" finishOnKey="#" timeout="5" playBeep="true" action="/api/twilio/voicemail?loc=${loc}&amp;via=action" method="POST" recordingStatusCallback="/api/twilio/voicemail?loc=${loc}&amp;via=status" recordingStatusCallbackMethod="POST" recordingStatusCallbackEvent="completed" />
   <Hangup/>
 </Response>`;

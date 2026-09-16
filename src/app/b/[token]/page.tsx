@@ -1,17 +1,29 @@
 import type { Metadata } from "next";
 import { verifyBookingToken } from "@/lib/auth";
 import { getBooking, getLocation } from "@/lib/store";
-import { manageable, whatWasBooked, withWhom } from "@/lib/booking/manage";
+import { bookingWhen, manageable, whatWasBooked, withWhom } from "@/lib/booking/manage";
 import { lateCancelNotice } from "@/lib/booking/policy";
-import { dateToSpoken, minutesToSpoken } from "@/lib/time";
+import { answersIn, inHouseSpelling } from "@/lib/language";
+import { MANAGE_KEYS, copy, copyTable, type CopyKey } from "@/lib/customer-copy";
 import ManageBooking from "./ManageBooking";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Your booking",
-  robots: { index: false, follow: false },
-};
+/** In the guest's language where the link names a venue; English where it names nothing. */
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  const bookingId = verifyBookingToken(token);
+  const booking = bookingId ? getBooking(bookingId) : undefined;
+  const location = booking ? getLocation(booking.locationId) : undefined;
+  return {
+    title: copy(location ? answersIn(location) : "en", "manage.page_title"),
+    robots: { index: false, follow: false },
+  };
+}
+
+function spelled<K extends string>(table: Record<K, string>, spell: (text: string) => string): Record<K, string> {
+  return Object.fromEntries(Object.entries<string>(table).map(([k, v]) => [k, spell(v)])) as Record<K, string>;
+}
 
 /** The page behind "Change or cancel" in a guest's confirmation. */
 export default async function BookingPage({ params }: { params: Promise<{ token: string }> }) {
@@ -20,8 +32,8 @@ export default async function BookingPage({ params }: { params: Promise<{ token:
   const booking = bookingId ? getBooking(bookingId) : undefined;
   const location = booking ? getLocation(booking.locationId) : undefined;
 
-  const shell = (children: React.ReactNode) => (
-    <main style={{ minHeight: "100vh", background: "var(--bl-ground)", color: "var(--bl-ink-900)", padding: "48px 20px" }}>
+  const shell = (children: React.ReactNode, lang = "en") => (
+    <main lang={lang === "en" ? undefined : lang} style={{ minHeight: "100vh", background: "var(--bl-ground)", color: "var(--bl-ink-900)", padding: "48px 20px" }}>
       <div style={{ maxWidth: 520, margin: "0 auto" }}>{children}</div>
     </main>
   );
@@ -35,14 +47,16 @@ export default async function BookingPage({ params }: { params: Promise<{ token:
     );
   }
 
-  const state = manageable(location, booking);
+  const language = answersIn(location);
+  const t = (key: CopyKey, vars?: Record<string, string | number>) => inHouseSpelling(location, copy(language, key, vars));
+  const state = manageable(location, booking, Date.now(), language);
   const who = withWhom(location, booking);
   const rows: [string, string][] = [
-    ["What", whatWasBooked(location, booking)],
-    ...(who ? ([["With", who]] as [string, string][]) : []),
-    ["When", `${dateToSpoken(booking.date, location.timezone)} at ${minutesToSpoken(booking.startMin)}`],
-    ["Where", location.address || location.name],
-    ["Reference", booking.ref],
+    [t("booking.label_what"), whatWasBooked(location, booking, language)],
+    ...(who ? ([[t("booking.label_with"), who]] as [string, string][]) : []),
+    [t("booking.label_when"), bookingWhen(location, booking, language)],
+    [t("booking.label_where"), location.address || location.name],
+    [t("booking.label_reference"), booking.ref],
   ];
 
   return shell(
@@ -51,7 +65,7 @@ export default async function BookingPage({ params }: { params: Promise<{ token:
         {location.name}
       </p>
       <h1 style={{ fontFamily: "var(--bl-font-display)", fontWeight: 700, fontSize: 34, lineHeight: 1.1, margin: "12px 0 22px" }}>
-        {booking.status === "cancelled" ? "This booking is cancelled." : "Your booking"}
+        {booking.status === "cancelled" ? t("manage.is_cancelled") : t("manage.heading")}
       </h1>
 
       <dl style={{ display: "grid", gridTemplateColumns: "96px 1fr", rowGap: 10, margin: 0, fontSize: 15.5 }}>
@@ -65,8 +79,8 @@ export default async function BookingPage({ params }: { params: Promise<{ token:
 
       {booking.deposit?.status === "required" && booking.status === "confirmed" && (
         <p style={{ marginTop: 18, fontSize: 14.5, color: "var(--bl-text-2)" }}>
-          A {booking.deposit.currency} {booking.deposit.amount} deposit is due.{" "}
-          {booking.deposit.link && <a href={booking.deposit.link}>Pay it now</a>}
+          {t("manage.deposit_due", { currency: booking.deposit.currency, amount: booking.deposit.amount })}{" "}
+          {booking.deposit.link && <a href={booking.deposit.link}>{t("manage.pay_now")}</a>}
         </p>
       )}
 
@@ -74,15 +88,18 @@ export default async function BookingPage({ params }: { params: Promise<{ token:
         <ManageBooking
           token={token}
           calendarHref={`/b/${token}/calendar.ics`}
-          policy={lateCancelNotice(location)}
+          policy={lateCancelNotice(location, language)}
           phone={location.businessPhone}
           venueName={location.name}
+          language={language}
+          copy={spelled(copyTable(language, MANAGE_KEYS), (text) => inHouseSpelling(location, text))}
         />
       ) : (
         <p style={{ marginTop: 24, color: "var(--bl-text-2)", fontSize: 15 }}>
-          {state.why} {location.businessPhone ? `For anything else, call ${location.name} on ${location.businessPhone}.` : ""}
+          {state.why} {location.businessPhone ? t("manage.anything_else", { name: location.name, phone: location.businessPhone }) : ""}
         </p>
       )}
     </>,
+    language,
   );
 }

@@ -6,6 +6,7 @@ import type { AgentConfig } from "@/lib/types";
 import { publish } from "@/lib/brain";
 import { requireE164 } from "@/lib/phone";
 import { checkTransferNumber, venueMarket } from "@/lib/onboarding/rules";
+import { languageChoiceOpen, parseLanguage } from "@/lib/language";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,8 @@ export async function PATCH(request: Request) {
   const body = (await request.json()) as {
     locationId?: string;
     agent?: Partial<AgentConfig>;
+    /** The language customers are answered in. Only accepted while `language.de` is on. */
+    language?: unknown;
     /** One line on what changed, kept with the version in the history. */
     note?: string;
   };
@@ -76,7 +79,21 @@ export async function PATCH(request: Request) {
     faqs: (body.agent.faqs ?? location.agent.faqs).filter((f) => f.q.trim() && f.a.trim()),
   };
 
-  upsertLocation({ ...location, agent: next });
+  // A language is a choice only where the flag offers one. Sent while it is
+  // off, anything but English is refused rather than stored for later: a venue
+  // that silently becomes German the day the flag is switched on is a surprise
+  // for an owner who tried it once.
+  let language = location.language;
+  if (body.language !== undefined) {
+    const chosen = parseLanguage(body.language);
+    if (!chosen) return NextResponse.json({ error: "Choose a language from the list.", field: "language" }, { status: 422 });
+    if (chosen !== "en" && !languageChoiceOpen()) {
+      return NextResponse.json({ error: "German is not available yet.", field: "language" }, { status: 422 });
+    }
+    language = chosen;
+  }
+
+  upsertLocation({ ...location, agent: next, ...(language ? { language } : {}) });
 
   // Record the change. Publishing after the save rather than instead of it
   // keeps the live venue as the single source of truth for the next call,
@@ -90,6 +107,7 @@ export async function PATCH(request: Request) {
   return NextResponse.json({
     ok: true,
     agent: next,
+    language: language ?? "en",
     version: published?.version.number,
     changed: published?.changed ?? false,
   });

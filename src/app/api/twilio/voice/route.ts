@@ -8,7 +8,9 @@ import { serviceState } from "@/lib/billing/entitlement";
 import { todayIn } from "@/lib/time";
 import { answersRealCustomers } from "@/lib/onboarding/journey";
 import { venueForDialledNumber } from "@/lib/telephony/number";
-import { voicemailTwiml } from "@/lib/telephony/voicemail";
+import { sayTwiml, voicemailTwiml } from "@/lib/telephony/voicemail";
+import { answersIn } from "@/lib/language";
+import { copy } from "@/lib/customer-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -117,9 +119,10 @@ export async function POST(request: Request) {
   const service = serviceState(location, todayIn(location.timezone), { channel: "phone" });
   if (!service.answering) {
     console.warn("[twilio] not answering for %s: %s", location.id, service.refused);
+    const language = answersIn(location);
     return xml(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">${escapeXml(service.callerMessage ?? "Nobody is able to take your call just now.")}</Say>
+  ${sayTwiml(language, service.callerMessage ?? copy(language, "phone.not_answering_short"))}
   <Hangup/>
 </Response>`);
   }

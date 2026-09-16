@@ -5,6 +5,8 @@ import { seedIfEmpty } from "@/lib/seed";
 import { newVisitorId } from "@/lib/webchat";
 import { widgetOpenFor } from "@/lib/embed-preview";
 import { findChatVenue, linkPageState } from "@/lib/chat-link";
+import { answersIn, inHouseSpelling } from "@/lib/language";
+import { CHAT_KEYS, copyTable } from "@/lib/customer-copy";
 import Chat from "@/app/embed/[key]/chat/Chat";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +47,14 @@ export default async function ChatLinkPage({ params }: { params: Promise<{ key: 
         freshToken={signVisitorToken(location.id, newVisitorId())}
         venueName={location.name}
         agentName={location.agent.displayName}
+        {...(answersIn(location) === "en"
+          ? {}
+          : {
+              language: answersIn(location),
+              copy: Object.fromEntries(
+                Object.entries<string>(copyTable(answersIn(location), CHAT_KEYS)).map(([k, v]) => [k, inHouseSpelling(location, v)]),
+              ) as Record<(typeof CHAT_KEYS)[number], string>,
+            })}
       />
     </div>
   );

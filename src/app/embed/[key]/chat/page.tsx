@@ -7,6 +7,8 @@ import { listLocations } from "@/lib/store";
 import { originAllowed } from "@/lib/embed";
 import { chatAllowed, chatGate, newVisitorId, voiceAllowed } from "@/lib/webchat";
 import { widgetOpenFor } from "@/lib/embed-preview";
+import { lineFor, answersIn, inHouseSpelling } from "@/lib/language";
+import { CHAT_KEYS, copyTable } from "@/lib/customer-copy";
 import Chat from "./Chat";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +52,7 @@ export default async function ChatPage({
 
   // Before Go live, only the owner, signed in, can open it.
   if (!(await widgetOpenFor(location))) {
-    return <Refused reason={`${location.name} has not switched this on yet.`} />;
+    return <Refused reason={lineFor(location, "embed.not_switched_on", { name: location.name })} />;
   }
 
   // The venue may have the bell on and the chat off. Not a 404: the key is
@@ -58,18 +60,18 @@ export default async function ChatPage({
   // widget that is not switched on for it. A readable refusal is how they find
   // that out, rather than an empty frame.
   if (!chatAllowed(location.embed)) {
-    return <Refused reason="Chat isn't switched on for this website yet." />;
+    return <Refused reason={lineFor(location, "embed.chat_off")} />;
   }
 
   const head = await headers();
   const framedBy = head.get("origin") ?? refererOrigin(head.get("referer"));
   if (!originAllowed(location.embed, framedBy)) {
-    return <Refused reason="This page can only be opened from the website it belongs to." />;
+    return <Refused reason={lineFor(location, "embed.wrong_site")} />;
   }
 
   const gate = chatGate(location);
   if (!gate.allowed) {
-    return <Refused reason={gate.message ?? "Not available just now."} />;
+    return <Refused reason={gate.message ?? lineFor(location, "embed.unavailable")} />;
   }
 
   return (
@@ -83,7 +85,12 @@ export default async function ChatPage({
       venueName={location.name}
       agentName={location.agent.displayName}
       /** The 2-in-1: offered only where the venue has the bell on as well. */
-      voiceHref={voiceAllowed(location.embed) ? voiceUrl(key, o) : undefined}    />
+      voiceHref={voiceAllowed(location.embed) ? voiceUrl(key, o) : undefined}
+      // Only for a German venue; English keeps the lines written in Chat.tsx.
+      {...(answersIn(location) === "en"
+        ? {}
+        : { language: answersIn(location), copy: spelledTable(location, copyTable(answersIn(location), CHAT_KEYS)) })}
+    />
   );
 }
 
@@ -97,6 +104,11 @@ export default async function ChatPage({
 function voiceUrl(key: string, o: string | undefined): string {
   const base = `/embed/${encodeURIComponent(key)}`;
   return o ? `${base}?o=${encodeURIComponent(o)}` : base;
+}
+
+/** A chat table with Swiss spelling applied where the venue is Swiss. */
+function spelledTable<K extends string>(location: Parameters<typeof inHouseSpelling>[0], table: Record<K, string>): Record<K, string> {
+  return Object.fromEntries(Object.entries<string>(table).map(([k, v]) => [k, inHouseSpelling(location, v)])) as Record<K, string>;
 }
 
 function refererOrigin(referer: string | null): string | null {

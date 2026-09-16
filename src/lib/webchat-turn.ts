@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyVisitorToken } from "./auth";
 import { seedIfEmpty } from "./seed";
+import { lineFor } from "./language";
 import type { Location } from "./types";
 import { migrateReception } from "./reception/migrate";
 import { isActivated } from "./onboarding/journey";
@@ -152,7 +153,7 @@ export async function visitorTurn(visitor: Visitor, input: TurnInput): Promise<N
         return NextResponse.json({
           ok: true,
           messages: [
-            { id: -1, sender: "ai", body: gate.message ?? "Not available just now.", createdAt: now() },
+            { id: -1, sender: "ai", body: gate.message ?? lineFor(location, "embed.unavailable"), createdAt: now() },
           ],
           status: "AI_ACTIVE" as const,
           ceiling: true,

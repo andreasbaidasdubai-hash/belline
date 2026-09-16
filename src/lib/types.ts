@@ -26,6 +26,9 @@ import type { Market } from "./markets";
  */
 export type Vertical = "restaurant" | "salon" | "clinic";
 
+/** A language Belline can answer a venue's customers in. See language.ts. */
+export type VenueLanguage = "en" | "de";
+
 /** Minutes from local midnight, e.g. 19 * 60 + 30 === 1170 for 19:30. */
 export type Minutes = number;
 
@@ -155,6 +158,14 @@ export interface Location {
   bellineNumber?: BellineNumber;
   address: string;
   currency: string;
+  /**
+   * The language customers are answered in: calls, the website button, web
+   * chat, WhatsApp and every system message they see. "en" unless the owner
+   * chose otherwise, and German only counts while the `language.de` flag is
+   * on — read it through language.ts `answersIn`, never directly. Absent on
+   * venues saved before it existed; seed.ts `ensureLanguage` fills "en".
+   */
+  language?: VenueLanguage;
   hours: WeeklyHours;
   /** Dates the venue is fully closed (holidays, private hire). */
   closures: DateStr[];

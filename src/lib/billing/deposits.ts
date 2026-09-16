@@ -3,6 +3,7 @@ import type { Booking, Location } from "../types";
 import { getBooking, getLocation, listLocations, saveBooking, upsertLocation } from "../store";
 import { sendSms, smsEnabled } from "../providers/sms";
 import { stripe, stripeConfigured } from "./stripe";
+import { lineFor } from "../language";
 
 /**
  * Deposits, taken by card, paid to the venue.
@@ -74,8 +75,8 @@ export async function requestDeposit(location: Location, bookingId: string): Pro
               // Minor units. AED and every currency a venue here would use has two.
               unit_amount: Math.round(deposit.amount * 100),
               product_data: {
-                name: `Deposit — ${location.name}`,
-                description: `Booking ${booking.ref}`,
+                name: lineFor(location, "booking.deposit_item", { name: location.name }),
+                description: lineFor(location, "booking.deposit_item_detail", { ref: booking.ref }),
               },
             },
           },
@@ -107,7 +108,13 @@ export async function requestDeposit(location: Location, bookingId: string): Pro
     if (!smsEnabled()) return { link, texted: false, detail: "Texts are not configured." };
     const sms = await sendSms(
       booking.guestPhone,
-      `${location.name}: to hold booking ${booking.ref}, please pay the ${deposit.currency} ${deposit.amount} deposit here: ${link}`,
+      lineFor(location, "booking.deposit_text", {
+        name: location.name,
+        ref: booking.ref,
+        currency: deposit.currency,
+        amount: deposit.amount,
+        link,
+      }),
     );
     return { link, texted: sms.sent, detail: sms.reason };
   } catch (err) {

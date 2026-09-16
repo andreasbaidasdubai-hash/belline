@@ -8,6 +8,8 @@ import { guestBriefing, recallGuest } from "../guests";
 import { usesStaffDiary } from "../verticals";
 import { minutesToSpoken, parseClock, todayIn } from "../time";
 import { costChannelOf, meterModel } from "../billing/cost";
+import { answersIn, lineFor } from "../language";
+import { copy } from "../customer-copy";
 
 /**
  * The turn engine.
@@ -166,7 +168,22 @@ export function greetingFor(location: Location, callerNumber?: string): string {
   // On a public demo line the disclosure belongs in the first breath, not
   // somewhere the caller has to ask for it.
   const disclosure = location.demo?.enabled ? location.demo.disclosure.trim() : "";
-  return disclosure ? `${disclosure} ${base}` : base;
+  return disclosure ? `${disclosure} ${localGreeting(location, base)}` : localGreeting(location, base);
+}
+
+/**
+ * A German venue still on the English opening line every venue starts with.
+ *
+ * The owner who switches the language and never touches the greeting would
+ * otherwise have German callers welcomed in English, then answered in German.
+ * Only that exact line is swapped; a greeting the owner wrote is theirs, in
+ * whatever language they wrote it.
+ */
+function localGreeting(location: Location, greeting: string): string {
+  if (answersIn(location) !== "de") return greeting;
+  return greeting === copy("en", "greeting.default", { name: location.name.trim() })
+    ? lineFor(location, "greeting.default", { name: location.name.trim() })
+    : greeting;
 }
 
 /**
@@ -765,7 +782,7 @@ ${
         if (message.stop_reason === "refusal") {
           yield {
             type: "sentence",
-            text: "I'm sorry, I can't help with that one. Let me take a message for the team.",
+            text: lineFor(this.location, "agent.refusal"),
           };
           break;
         }
@@ -805,7 +822,7 @@ ${
       yield { type: "error", message };
       yield {
         type: "sentence",
-        text: "I'm sorry, our system just dropped out. Let me take your number and the team will ring you back.",
+        text: lineFor(this.location, "agent.dropped"),
       };
     }
 

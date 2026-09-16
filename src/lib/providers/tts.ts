@@ -58,6 +58,39 @@ function takesContext(model: string): boolean {
 }
 
 /**
+ * Models that take `language_code`, which pins the language rather than
+ * leaving the model to guess it from the text.
+ *
+ * Every model on the list speaks German. Pinning matters on the fast ones,
+ * where a short fragment — "Okay.", "Genau.", a name — is otherwise read with
+ * an English accent often enough to hear. `eleven_multilingual_v2` refuses the
+ * field with a 400, which would silence the call, so it is left to guess.
+ * Unknown models are not sent it, for the same reason as `takesContext`.
+ */
+const TAKES_LANGUAGE_CODE = new Set(["eleven_flash_v2_5", "eleven_turbo_v2_5", "eleven_v3_conversational"]);
+
+/**
+ * The voice a German venue speaks in, when it has not chosen one.
+ *
+ * ElevenLabs has no stock voice that is verified as native German, and a voice
+ * library voice only works on an account that has added it — so there is no
+ * id that is safe to hard-code for everyone. `ELEVENLABS_VOICE_ID_DE` names the
+ * German voice added to Belline's account; a German venue still on the house
+ * English voice speaks in that one instead. Unset, it keeps its voice, which
+ * speaks German on every model above with an accent. The owner can always
+ * choose: the agent page lists the voices verified for German first.
+ */
+export function voiceIdFor(agent: { voiceId: string }, language: "en" | "de", env: Record<string, string | undefined> = process.env): string {
+  if (language !== "de") return agent.voiceId;
+  const german = env.ELEVENLABS_VOICE_ID_DE?.trim();
+  const house = new Set([HOUSE_VOICE_ID, env.ELEVENLABS_VOICE_ID?.trim()].filter(Boolean));
+  return german && house.has(agent.voiceId) ? german : agent.voiceId;
+}
+
+/** The English voice every venue starts with (onboarding/index.ts). */
+export const HOUSE_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
+
+/**
  * Measured, not assumed — and re-measured, because it changed.
  *
  * An earlier run at 8 kHz µ-law put the conversational model at 669 ms to
@@ -130,6 +163,54 @@ export interface SpeakOptions {
    * count is the billed figure — `previous_text` is context and not charged.
    */
   onBilled?: (chars: number, model: string) => void;
+  /** The language to pin, for a venue answered in German. Absent is English, sent as nothing. */
+  languageCode?: "de";
+}
+
+/**
+ * The request ElevenLabs is sent, without the key. Exported so check:german can
+ * pin what a German venue asks for without a network call.
+ */
+export function ttsRequest(text: string, opts: SpeakOptions): { url: string; body: Record<string, unknown> } {
+  const model = opts.modelId ?? DEFAULT_VOICE_MODEL;
+
+  const params = new URLSearchParams({ output_format: opts.format });
+  // 0 = none, 3 = every latency optimisation, 4 = the same with the text
+  // normaliser switched off. The normaliser is what turns "7pm" into "seven
+  // p.m." and reads a phone number back in groups, and `toSpoken` already does
+  // most of that work before the text gets here — but not all of it, so 3 is
+  // as far as this goes. Only on the model chosen for speed; on the models
+  // chosen *for* their delivery it defeats the point of choosing them.
+  if (model === "eleven_flash_v2_5") {
+    params.set("optimize_streaming_latency", "3");
+  }
+
+  return {
+    url: `https://api.elevenlabs.io/v1/text-to-speech/${opts.voiceId}/stream?${params}`,
+    body: {
+      text,
+      model_id: model,
+      // Only the tail matters for prosody, and sending the whole turn back
+      // on every fragment would grow quadratically with the length of the
+      // answer.
+      ...(opts.previousText && takesContext(model)
+        ? { previous_text: opts.previousText.slice(-PREVIOUS_TEXT_CHARS) }
+        : {}),
+      ...(opts.languageCode && TAKES_LANGUAGE_CODE.has(model) ? { language_code: opts.languageCode } : {}),
+      voice_settings: {
+        // Below ~0.45 the delivery wanders between fragments, and because we
+        // stream a sentence at a time that wander lands mid-answer. Half is
+        // steady without going robotic.
+        stability: 0.5,
+        similarity_boost: 0.8,
+        // A little, not none: zero reads like a station announcement. Much
+        // more and it starts acting, which is wrong for a receptionist.
+        style: 0.15,
+        use_speaker_boost: true,
+        speed: clampSpeed(opts.speed),
+      },
+    },
+  };
 }
 
 export function ttsEnabled(): boolean {
@@ -148,51 +229,17 @@ export async function* speak(
   if (!key || !text.trim()) return;
 
   const model = opts.modelId ?? DEFAULT_VOICE_MODEL;
+  const request = ttsRequest(text, opts);
 
-  const params = new URLSearchParams({ output_format: opts.format });
-  // 0 = none, 3 = every latency optimisation, 4 = the same with the text
-  // normaliser switched off. The normaliser is what turns "7pm" into "seven
-  // p.m." and reads a phone number back in groups, and `toSpoken` already does
-  // most of that work before the text gets here — but not all of it, so 3 is
-  // as far as this goes. Only on the model chosen for speed; on the models
-  // chosen *for* their delivery it defeats the point of choosing them.
-  if (model === "eleven_flash_v2_5") {
-    params.set("optimize_streaming_latency", "3");
-  }
-
-  const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${opts.voiceId}/stream?${params}`,
-    {
-      method: "POST",
-      headers: {
-        "xi-api-key": key,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        text,
-        model_id: model,
-        // Only the tail matters for prosody, and sending the whole turn back
-        // on every fragment would grow quadratically with the length of the
-        // answer.
-        ...(opts.previousText && takesContext(model)
-          ? { previous_text: opts.previousText.slice(-PREVIOUS_TEXT_CHARS) }
-          : {}),
-        voice_settings: {
-          // Below ~0.45 the delivery wanders between fragments, and because we
-          // stream a sentence at a time that wander lands mid-answer. Half is
-          // steady without going robotic.
-          stability: 0.5,
-          similarity_boost: 0.8,
-          // A little, not none: zero reads like a station announcement. Much
-          // more and it starts acting, which is wrong for a receptionist.
-          style: 0.15,
-          use_speaker_boost: true,
-          speed: clampSpeed(opts.speed),
-        },
-      }),
-      signal: opts.signal,
+  const response = await fetch(request.url, {
+    method: "POST",
+    headers: {
+      "xi-api-key": key,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(request.body),
+    signal: opts.signal,
+  });
 
   if (!response.ok || !response.body) {
     const detail = await response.text().catch(() => "");
@@ -241,6 +288,8 @@ export async function speakClip(text: string, opts: SpeakOptions): Promise<Buffe
     opts.modelId ?? DEFAULT_VOICE_MODEL,
     opts.format,
     clampSpeed(opts.speed),
+    // Only when set, so every English key is what it was.
+    ...(opts.languageCode ? [opts.languageCode] : []),
     text,
   ].join(" ");
 

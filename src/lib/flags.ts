@@ -35,6 +35,7 @@ export const FLAG_NAMES = [
   "vertical.clinic.selfserve",
   "forwarding.autotest",
   "forwarding.carrier.virgin",
+  "language.de",
   "stubs",
 ] as const;
 
@@ -77,6 +78,10 @@ const DEFS: Record<Exclude<StaticFlag, "stubs">, FlagDef> = {
   "forwarding.autotest": { needs: [...TWILIO, "TWILIO_TESTER_NUMBER"], explicit: true },
   // Codes verified by a real test call on the carrier first.
   "forwarding.carrier.virgin": { needs: [], explicit: true },
+  // German for venues in Germany, Austria and Switzerland. The same vendors as
+  // English, so nothing further to hold; on only once somebody has heard a
+  // real German call on staging. See language.ts.
+  "language.de": { needs: [], explicit: true },
 };
 
 function partnerId(name: string): string | null {

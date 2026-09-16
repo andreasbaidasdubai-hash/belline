@@ -18,6 +18,8 @@ interface VoiceOption {
   name: string;
   description: string;
   cloned?: boolean;
+  /** Languages ElevenLabs has verified this voice in (ISO 639-1), for choosing a German voice. */
+  languages?: string[];
 }
 
 const FALLBACK: VoiceOption[] = [
@@ -57,6 +59,7 @@ export async function GET() {
         name: string;
         category?: string;
         labels?: Record<string, string>;
+        verified_languages?: { language?: string }[];
       }[];
     };
 
@@ -68,6 +71,15 @@ export async function GET() {
           .filter(Boolean)
           .join(", ") || (v.category ?? ""),
       cloned: v.category === "cloned" || v.category === "professional",
+      // What the voice is verified to speak natively, where ElevenLabs says;
+      // the agent page puts the German ones first for a German venue.
+      languages: [
+        ...new Set(
+          [...(v.verified_languages ?? []).map((l) => l.language), v.labels?.language]
+            .filter((l): l is string => Boolean(l))
+            .map((l) => l.toLowerCase().slice(0, 2)),
+        ),
+      ],
     }));
 
     // Cloned and professional voices first — if a venue went to the trouble

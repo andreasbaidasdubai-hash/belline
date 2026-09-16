@@ -78,6 +78,11 @@ export interface BrainSnapshot {
     vertical: Vertical;
     hours: Location["hours"];
     closures: string[];
+    /**
+     * Present only for a language other than English, so every English venue's
+     * snapshot — and its digest — is what it was before languages existed.
+     */
+    language?: Location["language"];
   };
   agent: AgentConfig;
   restaurant?: Location["restaurant"];
@@ -100,6 +105,7 @@ export function snapshotOf(location: Location): BrainSnapshot {
       vertical: location.vertical,
       hours: location.hours,
       closures: location.closures,
+      ...(location.language && location.language !== "en" ? { language: location.language } : {}),
     },
     agent: location.agent,
     restaurant: location.restaurant,
@@ -273,6 +279,7 @@ export function revertTo(
     vertical: target.snapshot.company.vertical,
     hours: target.snapshot.company.hours,
     closures: target.snapshot.company.closures,
+    language: target.snapshot.company.language ?? "en",
     agent: target.snapshot.agent,
     restaurant: target.snapshot.restaurant,
     salon: target.snapshot.salon,

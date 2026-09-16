@@ -178,3 +178,31 @@ export function dateToSpoken(date: DateStr, timezone?: string): string {
   if (date === addDays(today, 1)) return `tomorrow, ${label}`;
   return label;
 }
+
+const DAY_NAMES_DE = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+const MONTH_NAMES_DE = [
+  "Januar", "Februar", "März", "April", "Mai", "Juni",
+  "Juli", "August", "September", "Oktober", "November", "Dezember",
+];
+
+/**
+ * "Donnerstag, 17. September" — `dateToSpoken` for a German venue. Written the
+ * way a German confirmation writes it; spoken-de.ts turns "17." into
+ * "siebzehnter" on the way to the voice.
+ */
+export function dateToGerman(date: DateStr, timezone?: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  const label = `${DAY_NAMES_DE[d.getUTCDay()]}, ${d.getUTCDate()}. ${MONTH_NAMES_DE[d.getUTCMonth()]}`;
+  if (!timezone) return label;
+  const today = todayIn(timezone);
+  if (date === today) return `heute, ${label}`;
+  if (date === addDays(today, 1)) return `morgen, ${label}`;
+  return label;
+}
+
+/** 1170 -> "19:30 Uhr", 1140 -> "19 Uhr": `minutesToSpoken` for a German venue. */
+export function minutesToGerman(m: Minutes): string {
+  const h = Math.floor(m / 60) % 24;
+  const min = m % 60;
+  return min === 0 ? `${h} Uhr` : `${h}:${String(min).padStart(2, "0")} Uhr`;
+}

@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ToolTrace } from "@/lib/types";
+import { fill, type CALL_KEYS } from "@/lib/customer-copy";
+
+type CallKey = (typeof CALL_KEYS)[number];
 
 /**
  * The test console.
@@ -53,20 +56,33 @@ interface SlotDay {
 }
 
 /** "Mon" — or "Today" and "Tmrw", which are what people actually look for. */
-function shortDay(date: string): string {
+function shortDay(date: string, de = false): string {
   const d = new Date(`${date}T12:00:00Z`);
   const days = Math.round((d.getTime() - Date.now()) / 86_400_000);
-  if (days <= 0) return "Today";
-  if (days === 1) return "Tmrw";
-  return d.toLocaleDateString("en-GB", { weekday: "short" });
+  if (days <= 0) return de ? "Heute" : "Today";
+  if (days === 1) return de ? "Morgen" : "Tmrw";
+  return d.toLocaleDateString(de ? "de-DE" : "en-GB", { weekday: "short" });
 }
 
 /** "18 Sep". Under the weekday, so the strip is never ambiguous about which week. */
-function shortDate(date: string): string {
-  return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", {
+function shortDate(date: string, de = false): string {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString(de ? "de-DE" : "en-GB", {
     day: "numeric",
     month: "short",
   });
+}
+
+/**
+ * The German day, for a German venue's call button: "heute", "Donnerstag",
+ * "Donnerstag, 18. September". `said` is the lower-case form sent to the agent.
+ */
+function germanDay(date: string, said: boolean): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  const days = Math.round((d.getTime() - Date.now()) / 86_400_000);
+  if (days <= 0) return said ? "heute" : "Heute";
+  if (days === 1) return said ? "morgen" : "Morgen";
+  if (days < 7) return d.toLocaleDateString("de-DE", { weekday: "long" });
+  return d.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
 }
 
 /**
@@ -134,6 +150,8 @@ export default function Console({
   minimal = false,
   logoUrl,
   chatHref,
+  language = "en",
+  copy,
 }: {
   locationId: string;
   locationName: string;
@@ -193,7 +211,14 @@ export default function Console({
    * switched on.
    */
   chatHref?: string;
+  /** The venue's language, on a customer's call button. Set with `copy` for German. */
+  language?: "en" | "de";
+  /** The call button's lines in the visitor's language, from customer-copy.ts. Absent keeps the English below. */
+  copy?: Record<CallKey, string>;
 }) {
+  const de = language === "de";
+  /** A visitor-facing line: the table's where one was handed over, else the English as written. */
+  const tx = (key: CallKey, english: string, vars?: Record<string, string | number>) => (copy ? fill(copy[key], vars) : english);
   const [connected, setConnected] = useState(false);
   const [listening, setListening] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
@@ -273,7 +298,7 @@ export default function Console({
       try {
         await ctx.resume();
       } catch {
-        setError("Your browser blocked audio. Click anywhere on the page, then start the call again.");
+        setError(tx("call.audio_blocked", "Your browser blocked audio. Click anywhere on the page, then start the call again."));
       }
     }
     setAudioState(`${ctx.state} @ ${Math.round(ctx.sampleRate / 1000)}kHz`);
@@ -447,10 +472,10 @@ export default function Console({
     /** What a stranger on belline.ai is told when part of the call fails. */
     function publicCallError(type: string): string {
       if (type === "tts_error") {
-        return "Belline's voice isn't available right now. Please try again later, or write to Belle on the website.";
+        return tx("call.voice_unavailable", "Belline's voice isn't available right now. Please try again later, or write to Belle on the website.");
       }
-      if (type === "stt_error") return "Belline can't hear you right now. Please try again in a moment.";
-      return "Something went wrong on our side. Please try again in a moment.";
+      if (type === "stt_error") return tx("call.cant_hear", "Belline can't hear you right now. Please try again in a moment.");
+      return tx("call.went_wrong", "Something went wrong on our side. Please try again in a moment.");
     }
 
     ws.onclose = () => {
@@ -469,7 +494,7 @@ export default function Console({
      * answers in words.
      */
     ws.onerror = () => {
-      setError("Connection failed.");
+      setError(tx("call.connection_failed", "Connection failed."));
       if (!demoToken) return;
       fetch(`/api/call/status?token=${encodeURIComponent(demoToken)}`)
         .then((r) => r.json())
@@ -478,7 +503,7 @@ export default function Console({
         })
         .catch(() => {
           // The endpoint is unreachable too, so the network is the answer.
-          setError("We could not reach Belline just now. Try again in a moment.");
+          setError(tx("call.unreachable", "We could not reach Belline just now. Try again in a moment."));
         });
     };
   }, [locationId, from, demoToken, enqueueAudio, stopAudio, primeAudio]);
@@ -627,16 +652,16 @@ export default function Console({
     const idle = !auto && !connected;
 
     const state = idle
-      ? "Ask it anything, or book a call with us"
+      ? tx("call.idle", "Ask it anything, or book a call with us")
       : !connected
-        ? "Connecting…"
+        ? tx("call.connecting", "Connecting…")
         : !sound
-          ? "Tap to turn sound on"
+          ? tx("call.tap_for_sound", "Tap to turn sound on")
           : speaking
-            ? "Belline is speaking"
+            ? tx("call.speaking", "Belline is speaking")
             : listening
-              ? "Listening — go ahead"
-              : "Microphone off";
+              ? tx("call.listening", "Listening — go ahead")
+              : tx("call.mic_off", "Microphone off");
 
     /**
      * Sound blocked: the whole screen becomes the tap target.
@@ -712,7 +737,7 @@ export default function Console({
                 something free are here, so every one of them is a real answer.
               */}
               {slots.length > 1 && (
-                <div className="callbar-days" role="tablist" aria-label="Choose a day">
+                <div className="callbar-days" role="tablist" aria-label={tx("call.choose_day", "Choose a day")}>
                   {slots.map((d, i) => (
                     <button
                       key={d.date}
@@ -722,16 +747,16 @@ export default function Console({
                       className={`callbar-day${i === slotDay ? " is-on" : ""}`}
                       onClick={() => setSlotDay(i)}
                     >
-                      <span className="callbar-day-name">{shortDay(d.date)}</span>
-                      <span className="callbar-day-date">{shortDate(d.date)}</span>
+                      <span className="callbar-day-name">{shortDay(d.date, de)}</span>
+                      <span className="callbar-day-date">{shortDate(d.date, de)}</span>
                     </button>
                   ))}
                 </div>
               )}
 
               <div className="callbar-slots-day">
-                {niceDay((slots[slotDay] ?? slots[0]).date)}
-                <em>{(slots[slotDay] ?? slots[0]).options.length} free</em>
+                {de ? germanDay((slots[slotDay] ?? slots[0]).date, false) : niceDay((slots[slotDay] ?? slots[0]).date)}
+                <em>{tx("call.free", `${(slots[slotDay] ?? slots[0]).options.length} free`, { n: (slots[slotDay] ?? slots[0]).options.length })}</em>
               </div>
 
               {/*
@@ -764,14 +789,28 @@ export default function Console({
                             // showing more than one. "Half four, please" against
                             // five days on screen is the one sentence the agent
                             // cannot resolve — and it would resolve it silently.
-                            text:
-                              [
-                                o.spoken,
-                                who ? `with ${who}` : "",
-                                slots.length > 1 ? `on ${spokenDay(day.date)}` : "",
-                              ]
-                                .filter(Boolean)
-                                .join(" ") + ", please.",
+                            text: de
+                              ? fill(copy?.["call.slot_please"] ?? "{choice}, bitte.", {
+                                  choice: [
+                                    o.spoken,
+                                    who && copy ? fill(copy["call.slot_with"], { who }) : "",
+                                    // "heute" and "morgen" stand alone; a weekday takes "am".
+                                    slots.length > 1
+                                      ? /^(heute|morgen)$/.test(germanDay(day.date, true))
+                                        ? germanDay(day.date, true)
+                                        : fill(copy?.["call.slot_on"] ?? "am {day}", { day: germanDay(day.date, true) })
+                                      : "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" "),
+                                })
+                              : [
+                                  o.spoken,
+                                  who ? `with ${who}` : "",
+                                  slots.length > 1 ? `on ${spokenDay(day.date)}` : "",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ") + ", please.",
                           }),
                         );
                         setSlots(null);
@@ -795,20 +834,20 @@ export default function Console({
         */}
         {idle ? (
           <button className="callbar-go" onClick={answerAndListen}>
-            Talk to Belline
+            {tx("call.start", "Talk to Belline")}
           </button>
         ) : connected && !sound ? (
           <button className="callbar-go" onClick={() => void primeAudio()}>
-            Turn on sound
+            {tx("call.sound_on", "Turn on sound")}
           </button>
         ) : (
           <button
             className="callbar-end"
             onClick={hangup}
             disabled={!connected}
-            aria-label="End the call"
+            aria-label={tx("call.end_label", "End the call")}
           >
-            End
+            {tx("call.end", "End")}
           </button>
         )}
 
@@ -819,7 +858,7 @@ export default function Console({
         */}
         {chatHref && (
           <a className="callbar-swap" href={chatHref}>
-            Rather type? Send a message
+            {tx("call.rather_type", "Rather type? Send a message")}
           </a>
         )}
       </div>

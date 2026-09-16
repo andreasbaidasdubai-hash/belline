@@ -4,9 +4,11 @@ import type {
   DepositRule,
   Location,
   Minutes,
+  VenueLanguage,
 } from "../types";
 import { addDays, daysBetween, minutesToSpoken, nowMinutesIn, todayIn, weekdayOf } from "../time";
 import { normalisePhone } from "../guests";
+import { copy } from "../customer-copy";
 
 /**
  * The house rules, as opposed to the floor plan.
@@ -261,13 +263,13 @@ export function isLateCancel(
  * Anything stronger is a machine making a commercial decision on a call it
  * cannot see the context of.
  */
-export function lateCancelNotice(location: Location): string | null {
+export function lateCancelNotice(location: Location, language: VenueLanguage = "en"): string | null {
   const policy = location.policy;
   if (!policy?.cancellationWindowHours) return null;
   const fee = policy.lateCancelFee;
   return fee
-    ? `That is inside our ${policy.cancellationWindowHours}-hour cancellation window, so a ${location.currency} ${fee} charge may apply. I have cancelled it and noted the time you called.`
-    : `That is inside our ${policy.cancellationWindowHours}-hour cancellation window. I have cancelled it and let the team know.`;
+    ? copy(language, "booking.late_cancel_fee", { hours: policy.cancellationWindowHours, currency: location.currency, fee })
+    : copy(language, "booking.late_cancel", { hours: policy.cancellationWindowHours });
 }
 
 // ---------------------------------------------------------------------------

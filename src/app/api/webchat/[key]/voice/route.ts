@@ -5,6 +5,8 @@ import { speechKeyterms } from "@/lib/verticals";
 import { transcribeClip } from "@/lib/providers/stt";
 import { meterClip } from "@/lib/billing/cost";
 import { widgetOpenFor } from "@/lib/embed-preview";
+import { answersIn } from "@/lib/language";
+import { sttLanguageOf } from "@/lib/voice/session";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +49,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
   const heard = await voiceNoteToText({ bytes, mime }, (audio, type) =>
     // The venue's own words — its name, its dishes, its treatments — so a
     // voice note about "the terrace" is not written down as something else.
-    transcribeClip(audio, type, { keyterms: speechKeyterms(visitor.location) }),
+    transcribeClip(audio, type, {
+      keyterms: speechKeyterms(visitor.location),
+      // A German venue's visitors speak German, Swiss venues' Swiss German.
+      ...(answersIn(visitor.location) === "en" ? {} : { language: sttLanguageOf(visitor.location) }),
+    }),
   );
 
   // Deepgram charges for the audio it received, words or not. A note refused
