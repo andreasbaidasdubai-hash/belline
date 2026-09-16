@@ -1,5 +1,7 @@
 import { query, tx } from "../db/client";
 import { resolveAgentConfig } from "../config/agents";
+import { SERVICES, vocabularyFor } from "../config/defaults";
+import { flagEnabled, type Flag } from "../../flags";
 import { log } from "../db/repo/activity";
 import { isSuppressed } from "../compliance/suppression";
 import { personalise } from "./personalise";
@@ -18,12 +20,21 @@ import { assemble, resolveFrame, resolvePublicOrigin } from "./templates";
  * the prompt has drifted.
  */
 
-const CUSTOMER_WORD: Record<string, { word: string; forbidden: string[] }> = {
-  dentists: { word: "patient", forbidden: ["guest", "client", "customer"] },
-  clinics: { word: "patient", forbidden: ["guest", "client", "customer"] },
-  salons: { word: "client", forbidden: ["patient", "guest"] },
-  restaurants: { word: "guest", forbidden: ["patient", "client"] },
-};
+/**
+ * The claims this run may cite.
+ *
+ * The catalogue is the only place a draft may take a capability claim from, so
+ * a service whose flag is off must not reach the personaliser at all. Handing
+ * the model "booking into their calendar" and relying on the guard to catch it
+ * afterwards is the wrong way round: it spends a model call to produce a draft
+ * that is refused, and teaches nothing.
+ */
+function sellableServices(slugs: string[]): string[] {
+  return slugs.filter((slug) => {
+    const service = SERVICES.find((s) => s.slug === slug);
+    return !service?.flag || flagEnabled(service.flag);
+  });
+}
 
 export interface DraftRunResult {
   drafted: number;
@@ -145,10 +156,10 @@ export async function draftOutreach(options: {
       continue;
     }
 
-    const vocab = CUSTOMER_WORD[candidate.vertical_slug ?? ""] ?? {
-      word: "customer",
-      forbidden: [],
-    };
+    // From the vertical registry. The map this replaces covered four slugs and
+    // fell back to an empty forbidden list, so for every other trade the
+    // wrong-word guard ran against nothing while appearing to work.
+    const vocab = vocabularyFor(candidate.vertical_slug);
 
     try {
       const grounding = [
@@ -173,7 +184,8 @@ export async function draftOutreach(options: {
         forbiddenCustomerWords: vocab.forbidden,
         grounding,
         demoScenario: candidate.demo_scenario,
-        allowedServices: config.belline_services,
+        allowedServices: sellableServices(config.belline_services),
+        flagOn: (flag) => flagEnabled(flag as Flag),
         tone: config.outreach_strategy.tone,
         maxWords: config.outreach_strategy.max_words_first_touch,
         recentBodies,

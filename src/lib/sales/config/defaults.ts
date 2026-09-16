@@ -1,3 +1,4 @@
+import type { Flag } from "../../flags";
 import type { Channel, Compliance, PartialAgentConfig, SendWindow } from "./schema";
 
 /**
@@ -238,7 +239,62 @@ export const VERTICALS: VerticalSeed[] = [
       exclude: { chains_above: 60 },
     },
   },
+  {
+    /**
+     * Everything else.
+     *
+     * The four above are where the pilot is, not the limit of who this sells
+     * to: answering the phone and taking a booking request is the same job at
+     * a garage, a physiotherapist, a tutor or a letting agent. Without a row
+     * here, an agent pointed at any other trade got no vocabulary at all, and
+     * the wrong-word guard ran against an empty list and checked nothing.
+     */
+    slug: "businesses",
+    name: "Other businesses",
+    searchTerms: ["appointments", "bookings", "services"],
+    terms: {
+      customer: "customer",
+      customers: "customers",
+      staff: "the team",
+      booking: "appointment",
+      venue: "business",
+    },
+    default_icp: {
+      must: { has_phone: true },
+      prefer: { review_count_min: 40, rating_min: 3.8 },
+      exclude: {},
+    },
+  },
 ];
+
+/** The row any business outside the named trades falls back to. */
+export const GENERIC_VERTICAL = "businesses";
+
+/**
+ * What a trade calls its customers, and what it must never call them.
+ *
+ * This was a hardcoded map of four slugs with `forbidden: []` as its fallback,
+ * so for any other trade the vocabulary guard — the one that stops a clinic
+ * being told about its "guests" — ran and checked nothing while looking like
+ * it worked. An inert guard is worse than an absent one.
+ *
+ * Derived from the registry instead, which keeps the list non-empty for every
+ * business type including the generic one: "customer" is right for a garage
+ * and wrong for a dentist, and both of those directions matter.
+ */
+export function vocabularyFor(slug: string | null | undefined): {
+  word: string;
+  forbidden: string[];
+} {
+  const row =
+    VERTICALS.find((v) => v.slug === slug) ??
+    VERTICALS.find((v) => v.slug === GENERIC_VERTICAL)!;
+  const word = row.terms.customer;
+  const forbidden = [...new Set(VERTICALS.map((v) => v.terms.customer))]
+    .filter((other) => other !== word)
+    .sort();
+  return { word, forbidden };
+}
 
 // ---------------------------------------------------------------------------
 // What Belline sells
@@ -250,8 +306,31 @@ export const VERTICALS: VerticalSeed[] = [
  * pre-send guard checks this. Sources are internal references for now; replace
  * them with customer-verifiable evidence as it exists, and delete any claim
  * that cannot be backed.
+ *
+ * What this used to sell was Belline's own diary: checking real availability,
+ * booking, moving and cancelling, respecting table combinations and kitchen
+ * pacing. That is not the product any more. Belline works with whatever the
+ * business already books with — it answers, captures the request, hands over
+ * their booking link, takes a message and escalates — so those are the claims,
+ * and booking into a calendar is a claim that unlocks with its flag and not
+ * before.
  */
-export const SERVICES = [
+export interface ServiceSeed {
+  slug: string;
+  name: string;
+  description: string;
+  verticals: string[];
+  /**
+   * Citable only while this flag is on.
+   *
+   * Absent means always citable. A flagged service is still listed, seeded and
+   * visible — it simply may not be sold until the thing it describes exists.
+   */
+  flag?: Flag;
+  proof: { claim: string; source: string }[];
+}
+
+export const SERVICES: ServiceSeed[] = [
   {
     slug: "missed_call_recovery",
     name: "Missed call recovery",
@@ -272,27 +351,59 @@ export const SERVICES = [
     proof: [{ claim: "Available 24/7, including outside opening hours.", source: "product" }],
   },
   {
-    slug: "appointment_booking",
-    name: "Appointment booking",
+    slug: "booking_requests",
+    name: "Booking requests",
     description:
-      "Checks real availability and books, moves or cancels — not a message-taking service.",
-    verticals: ["dentists", "clinics", "salons"],
+      "Takes the request — who, what, when, and a number to call back — and hands it to the team.",
+    verticals: [],
     proof: [
       {
-        claim: "Checks real availability against a booking engine before offering a time.",
-        source: "src/lib/booking/index.ts",
+        claim: "Takes a booking request and passes it to the team to confirm.",
+        source: "product",
       },
     ],
   },
   {
-    slug: "reservation_management",
-    name: "Reservation management",
-    description: "Takes, changes and cancels table reservations with real table and pacing logic.",
-    verticals: ["restaurants"],
+    slug: "booking_link",
+    name: "Their own booking link",
+    description:
+      "Sends the business's own booking link to the caller, where that is how they take bookings.",
+    verticals: [],
+    proof: [{ claim: "Hands over the business's own booking link.", source: "product" }],
+  },
+  {
+    slug: "message_taking",
+    name: "Message taking",
+    description: "Takes a message and makes sure the team sees it.",
+    verticals: [],
+    proof: [{ claim: "Takes a message for the team.", source: "product" }],
+  },
+  {
+    slug: "escalation",
+    name: "Escalation",
+    description:
+      "Puts the urgent ones through to a person, or flags them for someone to pick up.",
+    verticals: [],
     proof: [
       {
-        claim: "Respects table combinations, turn times and kitchen pacing.",
-        source: "src/lib/booking/restaurant.ts",
+        claim: "Transfers the caller to the team's own number when it matters.",
+        source: "src/lib/agent/tools.ts transfer_call",
+      },
+    ],
+  },
+  {
+    slug: "calendar_booking",
+    name: "Booking into their calendar",
+    description: "Reads the business's own calendar and books into it.",
+    verticals: [],
+    // Not sellable until the integration is verified. See src/lib/flags.ts:
+    // Google issues credentials for scopes it has not approved you for, so
+    // nothing in the environment can turn this on by itself.
+    flag: "booking.google",
+    proof: [
+      {
+        claim: "Checks the business's own calendar for free time before offering it.",
+        source: "pending Google verification",
       },
     ],
   },
@@ -409,10 +520,15 @@ export const FIRST_AGENT_CONFIG: PartialAgentConfig = {
   belline_services: [
     "missed_call_recovery",
     "after_hours_answering",
-    "appointment_booking",
+    "booking_requests",
+    "booking_link",
+    "message_taking",
+    "escalation",
     "faq_handling",
     // Not multilingual_support: offered to the model as a service, it became
     // "answers in English or Arabic" in a real draft. Belline is English-only.
+    // Not calendar_booking: flag-gated, and the flag is off — citing it would
+    // be selling an integration nobody has verified.
   ],
   qualification_rules: {
     min_score_to_contact: 55,

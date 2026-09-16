@@ -1,5 +1,6 @@
 import { query, tx } from "../db/client";
 import { resolveAgentConfig } from "../config/agents";
+import { vocabularyFor } from "../config/defaults";
 import { log } from "../db/repo/activity";
 import { record } from "../cost/meter";
 import { slugify } from "../../prospect";
@@ -26,14 +27,6 @@ const DEMO_TTL_DAYS = 14;
 
 /** A demo runs about forty seconds. Longer is a broken player or a forged number. */
 const MAX_PLAY_SECONDS = 120;
-
-/** How the vertical refers to its customers, for the script's vocabulary. */
-const CUSTOMER_WORD: Record<string, string> = {
-  dentists: "patient",
-  clinics: "patient",
-  salons: "client",
-  restaurants: "guest",
-};
 
 export interface DemoRunResult {
   built: number;
@@ -122,7 +115,7 @@ export async function buildDemos(options: {
         city: candidate.city,
         vertical: candidate.vertical_slug,
         grounding,
-        customerWord: CUSTOMER_WORD[candidate.vertical_slug ?? ""] ?? "customer",
+        customerWord: vocabularyFor(candidate.vertical_slug).word,
       });
       result.llmCostUsd += written.costUsd;
 
