@@ -12,7 +12,7 @@ import {
   meterWords,
   type Meter,
 } from "@/lib/billing/usage";
-import { extendTrialIfPaymentsClosed } from "@/lib/billing/trial-end";
+import { extendTrialIfPaymentsClosed, raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
 import { ALERT_THRESHOLDS, CHANNELS, isPooled, money, nextPlanUp, productById } from "@/lib/billing/plans";
 import { packsSentence } from "@/lib/billing/speak";
 import { canManageUsers } from "@/lib/auth";
@@ -136,6 +136,9 @@ export default async function BillingPage({
   // The sweep does this for every venue; doing it here too means the owner
   // never sees an ended trial on the day payments could not be taken.
   const venue = extendTrialIfPaymentsClosed(location, today).location;
+  // The trial note says the team has been told when a cap stops a channel with
+  // payments closed; this is what tells them.
+  raiseTrialCapIfPaymentsClosed(venue, today);
   const account = accountFor(venue, today);
 
   if (!account) {

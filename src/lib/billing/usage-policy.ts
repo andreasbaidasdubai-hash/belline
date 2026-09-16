@@ -32,9 +32,9 @@ import { stripe, stripeEnabled } from "./stripe";
  * No choice yet behaves as `cap`, adds nothing, and the dashboard asks for
  * a choice at the top of every note.
  *
- * Stopping is enforced by entitlement.ts under the same guard as every other
- * stop: only while card payments are switched on. A customer who cannot pay
- * us must not lose their phone because of it.
+ * Stopping is enforced by entitlement.ts whether or not card payments are
+ * switched on: an allowance is cost protection, not billing. (With payments
+ * off a `packs` policy still records packs as pending and uncharged.)
  *
  * Applies to catalogue 2026-10 plans only. Older products were sold on other
  * terms and keep them; trials have their own caps.

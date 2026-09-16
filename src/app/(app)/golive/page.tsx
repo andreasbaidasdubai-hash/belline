@@ -5,7 +5,8 @@ import { listCalls } from "@/lib/store";
 import { readiness } from "@/lib/onboarding";
 import { raiseException } from "@/lib/errors/customer";
 import { openException } from "@/lib/exceptions";
-import { lapseSentence, serviceState } from "@/lib/billing/entitlement";
+import { ownerNotice } from "@/lib/billing/entitlement";
+import { raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
 import { todayIn } from "@/lib/time";
 import { flag } from "@/lib/flags";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
@@ -58,7 +59,9 @@ export default async function GoLivePage({
   const number = location.phone.trim();
   const dial = number.replace(/[^\d+]/g, "");
   const abroad = Boolean(dial) && !/^\+?971/.test(dial);
-  const service = serviceState(location, todayIn(location.timezone));
+  const today = todayIn(location.timezone);
+  raiseTrialCapIfPaymentsClosed(location, today);
+  const notice = ownerNotice(location, today);
   const phoneCalls = listCalls(location.id).filter((c) => c.channel === "phone" && !c.isDemo);
   const lastCall = phoneCalls.reduce<string | null>((a, c) => (!a || c.startedAt > a ? c.startedAt : a), null);
   const poolOn = flag("numbers.pool");
@@ -90,10 +93,10 @@ export default async function GoLivePage({
       />
       <LocationTabs base="/golive" active={location.id} />
 
-      {service.lapsed && (
+      {notice && (
         <div className="panel" style={{ padding: "15px 18px", marginBottom: 14, borderColor: "var(--bad)", background: "var(--bad-soft)" }}>
-          <strong style={{ color: "var(--bad)", fontSize: 13.5 }}>{lapseSentence(service.lapsed, !service.answering)}</strong>{" "}
-          <Link href="/checkout" style={{ fontSize: 13 }}>Choose a plan</Link>
+          <strong style={{ color: "var(--bad)", fontSize: 13.5 }}>{notice.sentence}</strong>{" "}
+          {notice.choosePlan && <Link href="/checkout" style={{ fontSize: 13 }}>Choose a plan</Link>}
         </div>
       )}
 

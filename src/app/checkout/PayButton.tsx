@@ -47,8 +47,8 @@ export default function PayButton({
           Payments open soon
         </button>
         <p className="muted" style={{ fontSize: 12, margin: "12px 0 0", lineHeight: 1.6 }}>
-          {coveredNote ?? "Payments open soon — Belline keeps answering until then."} {venueName} keeps answering, and
-          nothing is charged.
+          {coveredNote ?? "Payments open soon — Belline keeps answering until then."} {venueName} keeps answering
+          within the trial&apos;s voice minutes and text conversations, and nothing is charged.
         </p>
       </div>
     );
