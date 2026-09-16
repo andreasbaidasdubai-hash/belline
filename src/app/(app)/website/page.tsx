@@ -5,6 +5,7 @@ import { dateIn, todayIn } from "@/lib/time";
 import { chatAllowed, voiceAllowed, WEBCHAT_DEFAULTS } from "@/lib/webchat";
 import { EMBED_DEFAULTS, embedSnippet, suggestedOrigins } from "@/lib/embed";
 import { BUILDER_TABS } from "@/lib/onboarding/platform";
+import { appOrigin } from "@/lib/origin";
 import { venueWhatsApp } from "@/lib/whatsapp";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import WidgetEditor from "./WidgetEditor";
@@ -51,7 +52,10 @@ export default async function WebsitePage({
     chat: calls.filter((c) => c.channel === "webchat").length,
   };
 
-  const origin = process.env.PUBLIC_APP_ORIGIN || "https://app.belline.ai";
+  // PUBLIC_APP_ORIGIN was a third spelling that nothing ever set, so the
+  // fallback always won and a staging owner was handed a snippet pointing at
+  // production. The app has one answer to "where do I live", and this is it.
+  const origin = appOrigin();
   const whatsapp = await venueWhatsApp(location).catch(() => null);
 
   return (

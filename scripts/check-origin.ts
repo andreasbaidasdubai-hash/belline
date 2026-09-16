@@ -139,6 +139,43 @@ await test("nothing under src/app takes the origin from req.url", () => {
   assert.deepEqual(offenders, [], `built from the request: ${offenders.join(", ")}`);
 });
 
+await test("nothing invents its own name for the public origin", () => {
+  // The widget snippet was built from PUBLIC_APP_ORIGIN — a third spelling
+  // that .env.example, Railway and origin.ts had never heard of. It could not
+  // be set, so its fallback always won, and every owner on staging was handed
+  // a line of HTML pointing at production. Only the two names origin.ts reads
+  // are allowed to appear anywhere.
+  // PUBLIC_WS_ORIGIN is not a third spelling of this one: it carries a wss://
+  // scheme for the voice socket, which is a different address answering a
+  // different question, and Railway sets it deliberately alongside the others.
+  const allowed = new Set(["PUBLIC_APP_URL", "PUBLIC_ORIGIN", "PUBLIC_WS_ORIGIN"]);
+  const offenders: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(entry.name)) {
+        fs.readFileSync(full, "utf8")
+          .split("\n")
+          .forEach((line, i) => {
+            for (const [, name] of line.matchAll(/process\.env\.(PUBLIC_[A-Z_]*(?:ORIGIN|URL))/g)) {
+              if (!allowed.has(name)) offenders.push(`${path.relative(process.cwd(), full)}:${i + 1} ${name}`);
+            }
+          });
+      }
+    }
+  };
+  walk(path.join(process.cwd(), "src"));
+  assert.deepEqual(offenders, [], `unknown origin variable: ${offenders.join(", ")}`);
+
+  // Non-vacuous: the line that shipped must be caught, the fix must not be.
+  const shipped = 'const origin = process.env.PUBLIC_APP_ORIGIN || "https://app.belline.ai";';
+  const fixed = "const origin = appOrigin();";
+  const bad = /process\.env\.(PUBLIC_[A-Z_]*(?:ORIGIN|URL))/g;
+  assert.ok([...shipped.matchAll(bad)].some(([, n]) => !allowed.has(n)), "the sweep would miss the line that shipped");
+  assert.equal([...fixed.matchAll(bad)].length, 0, "the sweep flags the corrected line");
+});
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 console.log(`\n${failed ? "\x1b[31m" : "\x1b[32m"}✓ ${passed} passed, ${failed} failed\x1b[0m\n`);
