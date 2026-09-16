@@ -516,7 +516,7 @@ export default async function SetupStepPage({
   const whatsapp = requested === "channels" ? whatsappCard(venue, await whatsappStatus(venue)) : ({ state: "soon" } as WhatsAppCardState);
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+    <div className="has-belle-fab" style={{ minHeight: "100vh", background: "var(--bg)" }}>
       <header
         style={{
           borderBottom: "1px solid var(--border)",
@@ -531,15 +531,12 @@ export default async function SetupStepPage({
         <span className="muted" style={{ fontSize: 12.5, marginLeft: "auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {venue.name}
         </span>
-        {/* From 1024px up Belle docks beside the step instead; this is the way
-            in on anything narrower, and the deep link everything else uses. */}
-        <Link href={`/setup/assistant?step=${step.id}`} className="setup-ask-narrow" style={{ fontSize: 12.5, flex: "none" }}>
-          Ask Belle
-        </Link>
+        {/* No "Ask Belle" here: the floating bell (BelleDock) is the one way
+            in, docked from 1024px up and /setup/assistant?step= below. */}
       </header>
 
       <BelleDock locationId={venue.id} step={step.id} greeting={setupGreeting(venue, step.id)}>
-        <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 90px" }}>
+        <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 112px" }}>
           <Rail j={j} active={step} />
           <main style={{ minWidth: 0, maxWidth: 720 }}>
             <Body step={step} j={j} venue={venue} facts={facts} google={google} whatsapp={whatsapp} />

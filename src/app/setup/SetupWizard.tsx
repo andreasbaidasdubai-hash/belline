@@ -609,6 +609,8 @@ export default function SetupWizard({
             screens long, and the one button that moves setup on should not be
             at the bottom of it. */}
         <div
+          // fab-clear: the floating bell sits at the bottom right; the buttons stay clear of it.
+          className="fab-clear"
           style={{
             display: "flex",
             gap: 12,
@@ -617,7 +619,8 @@ export default function SetupWizard({
             flexWrap: "wrap",
             position: "sticky",
             bottom: 0,
-            padding: "12px 0",
+            paddingTop: 12,
+            paddingBottom: 12,
             background: "var(--bg)",
             borderTop: "1px solid var(--border-soft)",
           }}

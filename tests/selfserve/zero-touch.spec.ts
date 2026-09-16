@@ -354,8 +354,11 @@ test("salon-requests: signup to live, then billing and a password reset, with no
       expect(venueNamed(name).onboarding?.activatedAt).toBeTruthy();
 
       await page.goto("/");
-      await expect(page.locator("nav.nav")).toContainText("Needs you");
-      await expect(page.locator("nav.nav")).toContainText("Calendar");
+      // The dashboard's own destinations, which the collapsed setup menu does not have
+      // (nav.ts since ed55df0: "Needs you" is now "Today"; a request-only venue works
+      // from "Requests", and the calendar sits under "Everything else").
+      await expect(page.locator("nav.nav")).toContainText("Today");
+      await expect(page.locator("nav.nav")).toContainText("Requests");
 
       // Now the widget is public: a stranger sees it.
       const visitor = await anonymousVisit(browser, site.origin);

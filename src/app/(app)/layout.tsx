@@ -5,8 +5,10 @@ import BackToSetup from "@/components/BackToSetup";
 import { navCollapsed } from "@/lib/onboarding/journey";
 import { navFor } from "@/lib/nav";
 import { requireUser } from "@/lib/auth-server";
-import { canManageUsers, canSeeLocation, isBellineStaff } from "@/lib/auth";
-import { listLocations } from "@/lib/store";
+import { canEditAgent, canManageUsers, canSeeLocation, isBellineStaff } from "@/lib/auth";
+import { listLocations, listLocationsFor } from "@/lib/store";
+import { setupGreeting } from "@/lib/onboarding/assistant";
+import BelleDock from "@/app/setup/BelleDock";
 import { attentionFor } from "@/lib/attention";
 import { recallSummary } from "@/lib/booking/recall";
 import SignOutButton from "@/components/SignOutButton";
@@ -55,18 +57,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // product grew was retired on 2026-09-16.
   const shape = navFor(user, visible, { outstanding, dueBack });
 
+  // Belle is not a place in the menu: she is the floating bell on every page.
   const nav = collapsed
-    ? [
-        { href: "/setup", label: "Setup" },
-        { href: "/setup/assistant", label: "Belle" },
-        ...(canManageUsers(user) ? [{ href: "/billing", label: "Account" }] : []),
-      ]
+    ? [{ href: "/setup", label: "Setup" }, ...(canManageUsers(user) ? [{ href: "/billing", label: "Account" }] : [])]
     : shape.items;
+
+  // The venue Belle works on, as /setup/assistant chooses it: this account's
+  // own, and only one this person may change. Nobody else gets the bell.
+  const belleVenue = listLocationsFor(user.tenantId).find((l) => canEditAgent(user, l.id));
 
   const advanced = collapsed ? null : shape.advanced;
 
+  const content = (
+    <main className="content">
+      <Suspense fallback={null}>
+        <BackToSetup />
+      </Suspense>
+      {children}
+    </main>
+  );
+
   return (
-    <div className="shell">
+    <div className={belleVenue ? "shell has-belle-fab" : "shell"}>
       <aside className="sidebar">
         <div className="brand">
           <Brand size={24} />
@@ -189,12 +201,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main className="content">
-        <Suspense fallback={null}>
-          <BackToSetup />
-        </Suspense>
-        {children}
-      </main>
+      {belleVenue ? (
+        <BelleDock locationId={belleVenue.id} greeting={setupGreeting(belleVenue)} storageKey="belline.app.belle-dock">
+          {content}
+        </BelleDock>
+      ) : (
+        content
+      )}
       <LiveRefresh />
     </div>
   );

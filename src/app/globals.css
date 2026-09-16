@@ -2260,11 +2260,85 @@ body:has(.callbar) {
   border-bottom: 1px solid var(--border);
 }
 .setup-dock-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* The toggle is out of the flow so opening the panel is the only thing that
-   narrows the step. */
-.setup-dock-tab { position: fixed; top: 68px; right: 16px; z-index: 30; }
-/* The header's link is the way in on a phone or a laptop too narrow to dock. */
-@media (min-width: 1024px) { .setup-ask-narrow { display: none; } }
+/* In the dashboard shell the dock wraps the content column beside the sidebar. */
+.shell > .setup-dock { flex: 1 1 auto; min-width: 0; }
+
+/* --- Belle, the floating bell -----------------------------------------------
+   Belline's signature button, as the website's "Speak to Belline" bell
+   (public/site.css .bell-fab): the brand blue with white, a pill, the bell
+   mark, a ring of page colour round it. It rings once when the page opens,
+   not forever: this is a page people work in, not one they land on. Out of
+   the flow, so opening Belle is the only thing that narrows the page. */
+.belle-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 0 24px 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bl-blue);
+  color: var(--bl-white);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  isolation: isolate;
+  box-shadow: 0 0 0 4px var(--bg), 0 14px 34px -14px rgba(27, 39, 53, 0.5);
+  transition: transform 0.16s ease, background-color 0.16s ease;
+}
+.belle-fab svg { width: 24px; height: 24px; display: block; flex: none; animation: belle-bell 1.5s ease-in-out 0.8s 1; }
+.belle-fab::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid var(--bl-blue);
+  pointer-events: none;
+  opacity: 0;
+  z-index: -1;
+  animation: belle-ring 1.5s ease-out 0.8s 1;
+}
+.belle-fab:hover { background: var(--bl-blue-hover); transform: translateY(-2px); }
+.belle-fab:focus-visible { outline: 3px solid var(--bl-ink-900); outline-offset: 5px; }
+@keyframes belle-bell {
+  0%, 27%, 100% { transform: rotate(0deg); }
+  3% { transform: rotate(-20deg); }
+  7% { transform: rotate(18deg); }
+  11% { transform: rotate(-12deg); }
+  15% { transform: rotate(8deg); }
+  19% { transform: rotate(-4deg); }
+}
+@keyframes belle-ring {
+  0% { transform: scale(1); opacity: 0.55; }
+  55%, 100% { transform: scale(1.28); opacity: 0; }
+}
+/* A phone or a laptop too narrow to dock: the round bell alone, named for
+   screen readers by the same words. */
+@media (max-width: 1023px) {
+  .belle-fab { right: 16px; bottom: 16px; width: 56px; padding: 0; justify-content: center; }
+  .belle-fab-say { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .belle-fab, .belle-fab svg, .belle-fab::after { animation: none; transition: none; }
+  .belle-fab:hover { transform: none; }
+}
+/* Room for the bell, so it never sits on a page's own buttons: space below
+   the last thing on the page, and a clear right-hand end on the bars that
+   stick to the bottom of the screen. The live notice moves up above it. */
+.has-belle-fab .content { padding-bottom: 112px; }
+.has-belle-fab .save-bar,
+.fab-clear { padding-right: 190px; }
+.has-belle-fab .live-notice { bottom: 96px; }
+@media (max-width: 1023px) {
+  .has-belle-fab .save-bar,
+  .fab-clear { padding-right: 80px; }
+  .has-belle-fab .live-notice { bottom: 88px; }
+}
 
 @media (max-width: 760px) {
   .table-wrap > table:not(.booking-table):not(.forward-table) { min-width: 640px; }
