@@ -262,6 +262,77 @@ test("an honest reply is returned untouched", () => {
   assert.equal(repairReply(reply, checkTimes(reply, [], HOURS)), reply);
 });
 
+console.log("\n\x1b[1mGerman is not a way round it\x1b[0m\n");
+
+const { checkSlotOffers, checkRequestReply, repairRequestReply, repairSlotOffers } = await import("../src/lib/agent/honesty");
+
+test("German times are read, including a bare hour with Uhr", () => {
+  assert.deepEqual(timesIn("Ich hätte 14:30 Uhr oder 17 Uhr.", "de").sort((a, b) => a - b), [870, 1020]);
+  assert.deepEqual(timesIn("um 9.15 Uhr", "de"), [555]);
+  // English venues do not read "Uhr": their guard is exactly what it was.
+  assert.deepEqual(timesIn("17 Uhr", "en"), []);
+});
+
+test("an invented time in German is caught", () => {
+  const v = checkTimes("Morgen hätte ich 14:00 Uhr oder 16:30 Uhr frei.", [AVAILABILITY], undefined, undefined, "de");
+  assert.equal(v.ok, false);
+  assert.deepEqual(v.invented.sort((a, b) => a - b), [840, 990]);
+});
+
+test("a time the tool returned passes in German", () => {
+  assert.equal(checkTimes("Ich hätte 09:00 Uhr bei Marie frei.", [AVAILABILITY], undefined, undefined, "de").ok, true);
+});
+
+test("German opening hours are facts, not offers", () => {
+  assert.equal(checkTimes("Wir haben täglich von 8:00 bis 21:00 Uhr geöffnet.", [], HOURS, undefined, "de").ok, true);
+  assert.equal(checkTimes("Samstags schließen wir um 21 Uhr.", [], HOURS, undefined, "de").ok, true);
+});
+
+test("a German opening time offered as a slot is still an invention", () => {
+  assert.equal(checkTimes("Ich hätte morgen um 8:00 Uhr noch etwas frei.", [], HOURS, undefined, "de").ok, false);
+});
+
+test("a German 'no' in one half does not excuse an offer in the other", () => {
+  const v = checkTimes("Um 21:00 Uhr haben wir nicht mehr offen, aber ich hätte 8:00 Uhr frei.", [], HOURS, undefined, "de");
+  assert.equal(v.ok, false);
+  assert.deepEqual(v.invented, [480]);
+});
+
+test("the German repair speaks German and quotes the real times", () => {
+  const reply = "Gern. Ich hätte 14:00 Uhr am Mittwoch.";
+  const said = repairReply(reply, checkTimes(reply, [AVAILABILITY], undefined, undefined, "de"), { language: "de" });
+  assert.ok(said.startsWith("Gern."), said);
+  assert.match(said, /09:00 Uhr/);
+  assert.match(said, /Passt Ihnen davon etwas\?/);
+});
+
+test("a German slot offer at a request-only venue is caught, and a refusal is not", () => {
+  assert.equal(checkSlotOffers("Wie wäre es mit 17:30 Uhr?", "de").ok, false);
+  assert.equal(checkSlotOffers("Ich kann Sie um 18 Uhr eintragen.", "de").ok, false);
+  assert.equal(checkSlotOffers("Um 18 Uhr kann ich Sie leider nicht eintragen, das bestätigt das Team.", "de").ok, true);
+  assert.equal(checkSlotOffers("Wir haben montags bis 18 Uhr geöffnet.", "de").ok, true);
+});
+
+test("a German confirmation claim is caught, and a hedged one is not", () => {
+  assert.equal(checkRequestReply("Sie sind für Freitag um 19 Uhr gebucht.", "de").ok, false);
+  assert.equal(checkRequestReply("Perfekt, bis dann!", "de").ok, false);
+  assert.equal(checkRequestReply("Wir freuen uns auf Ihren Besuch.", "de").ok, false);
+  assert.equal(checkRequestReply("Das Team meldet sich, sobald der Termin bestätigt ist.", "de").ok, true);
+  assert.equal(checkRequestReply("Noch ist nichts gebucht.", "de").ok, true);
+});
+
+test("the German repairs end on German honest lines", () => {
+  const claim = "Sie sind gebucht.";
+  assert.match(repairRequestReply(claim, checkRequestReply(claim, "de"), "de"), /Ihre Anfrage liegt beim Team/);
+  const offer = "Wie wäre es mit 17:30 Uhr?";
+  assert.match(repairSlotOffers(offer, checkSlotOffers(offer, "de"), "de"), /Eine Uhrzeit kann ich hier nicht fest zusagen/);
+});
+
+test("an English venue's guard is unchanged by any of this", () => {
+  assert.equal(checkRequestReply("Sie sind gebucht.").ok, true);
+  assert.equal(repairReply("I have 4:30 free.", checkTimes("I have 4:30 free.", [])), honestAlternative(checkTimes("I have 4:30 free.", [])));
+});
+
 console.log(
   failed === 0
     ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n`

@@ -112,6 +112,51 @@ for (const location of [CLINIC, SALON]) {
   }
 }
 
+console.log("\nGerman — the same boundary, in the caller's language\n");
+
+// German only counts with the flag on, which is what a German venue has.
+process.env.FLAG_LANGUAGE_DE = "on";
+const german = (vertical: Vertical) => ({ vertical, language: "de" }) as Location;
+const KLINIK = german("clinic");
+const SALON_DE = german("salon");
+
+test("chest pain now, in German, is an emergency with 112", () => {
+  escalates(KLINIK, "Ich habe gerade starke Brustschmerzen und kriege keine Luft.", "medical-emergency");
+  const said = assessAuthority(KLINIK, "Ich habe gerade starke Brustschmerzen.")!.rule.say;
+  assert.match(said, /112/);
+  assert.doesNotMatch(said, /998|ambulance/);
+});
+test("umlauts or none, the recogniser's spelling does not matter", () => {
+  escalates(KLINIK, "Mein Mann ist plötzlich ohnmächtig geworden!", "medical-emergency");
+  escalates(KLINIK, "Mein Mann ist ploetzlich ohnmaechtig geworden!", "medical-emergency");
+});
+test("bleeding that will not stop", () =>
+  escalates(KLINIK, "Die Wunde blutet stark und hört nicht auf zu bluten.", "medical-emergency"));
+test("is this normal, about swelling", () =>
+  escalates(KLINIK, "Nach der Füllung ist alles geschwollen. Ist das normal?", "clinical-advice"));
+test("asking about medication", () =>
+  escalates(KLINIK, "Darf ich Ibuprofen zusammen mit dem Antibiotikum nehmen? Kann ich nehmen was ich will?", "clinical-advice"));
+test("a German refusal is said in German", () => {
+  const said = assessAuthority(KLINIK, "Die Wunde ist geschwollen, ist das normal?")!.rule.say;
+  assert.match(said, /Praxisteam/);
+});
+test("booking a check-up in German reaches the model", () =>
+  allows(KLINIK, "Ich hätte gern einen Termin zur Kontrolle nächste Woche."));
+test("opening hours in German reach the model", () => allows(KLINIK, "Wann haben Sie am Samstag geöffnet?"));
+test("a colour reaction in German goes to a person, in German", () => {
+  escalates(SALON_DE, "Nach der Blondierung ist meine Kopfhaut verbrannt.", "adverse-reaction");
+  assert.match(assessAuthority(SALON_DE, "Nach der Blondierung ist meine Kopfhaut verbrannt.")!.rule.say, /Team/);
+});
+test("booking a colour in German does not", () => allows(SALON_DE, "Kann ich bei Marta am Donnerstag Farbe buchen?"));
+test("English words still escalate at a German venue", () =>
+  escalates(KLINIK, "My chest is really tight and I'm short of breath right now.", "medical-emergency"));
+test("an English venue does not read German", () => allows(CLINIC, "Ich habe gerade starke Brustschmerzen."));
+test("with the flag off, a German venue is an English one", () => {
+  delete process.env.FLAG_LANGUAGE_DE;
+  allows(KLINIK, "Ich habe gerade starke Brustschmerzen.");
+  assert.match(assessAuthority(KLINIK, "My chest is tight and I can't breathe right now.")!.rule.say, /998/);
+});
+
 console.log(
   failed === 0
     ? `\n[32m✓ ${passed} passed, 0 failed[0m\n`

@@ -127,6 +127,21 @@ await test("word soup does not slip through", () => {
   assert.ok(!isBackchannel("   "));
 });
 
+await test("German listening noises are not interruptions either", () => {
+  for (const phrase of ["ähm", "Ja, genau.", "mhm", "alles klar", "ach so", "okay", "Genau genau", "ja ja"]) {
+    assert.ok(isBackchannel(phrase, "de"), `"${phrase}" should read as a German backchannel`);
+  }
+});
+
+await test("a German sentence that starts like one is a turn", () => {
+  for (const phrase of ["ja aber können wir das auf sieben verschieben", "genau, und haben Sie Parkplätze", "nein, lieber Freitag"]) {
+    assert.ok(!isBackchannel(phrase, "de"), `"${phrase}" was ignored as a backchannel`);
+  }
+  // And an English call does not start ignoring German.
+  assert.ok(!isBackchannel("genau", "en"));
+  assert.ok(!isBackchannel("ja genau", "en"));
+});
+
 await test("after a question, a short answer is an answer", () => {
   assert.ok(invitesAnswer("Shall I put that down for you?"));
   assert.ok(!invitesAnswer("That's Thursday at half past seven."));
