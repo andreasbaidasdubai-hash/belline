@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
 import { ensureStubProspect } from "@/lib/sales/video-demo/fixture";
+import { requestDemoOrigin } from "@/app/(internal)/sales/leads/demo-origin";
 import {
   createVideoDemo,
-  demoOrigin,
   draftForLink,
   linkView,
   previewVideoDemo,
@@ -36,8 +36,21 @@ async function staff() {
   return { user: auth.user };
 }
 
-function originOf(req: Request): string {
-  return demoOrigin(new URL(req.url).origin);
+/**
+ * The origin every demo link in a draft is built on.
+ *
+ * Never the request's own address: behind Railway's proxy the handler is
+ * addressed to the container, so the links staff copied into an outreach
+ * email would have pointed the prospect at `localhost:3000` (check:origin,
+ * src/lib/origin.ts). `requestDemoOrigin` is the one answer to this question
+ * the console already uses — `PUBLIC_ORIGIN` where it is set, the forwarded
+ * host for a local run — and it says it cannot rather than guess: a link to
+ * the wrong site is worse than no link at all.
+ */
+async function originOf(): Promise<{ origin: string; response?: undefined } | { origin?: undefined; response: NextResponse }> {
+  const out = await requestDemoOrigin();
+  if (!out.ok) return { response: NextResponse.json({ error: out.error }, { status: 500 }) };
+  return { origin: out.origin };
 }
 
 export async function GET(req: Request) {
@@ -46,7 +59,9 @@ export async function GET(req: Request) {
   await ensureStubProspect();
   const leadId = Number(new URL(req.url).searchParams.get("leadId"));
   const links = await demoStore().list(Number.isFinite(leadId) && leadId > 0 ? { leadId } : {});
-  const origin = originOf(req);
+  const where = await originOf();
+  if (where.response) return where.response;
+  const origin = where.origin;
   return NextResponse.json({ links: links.map((l) => linkView(l, origin)) }, { headers: { "cache-control": "no-store" } });
 }
 
@@ -62,7 +77,9 @@ export async function POST(req: Request) {
     id?: unknown;
   };
   const actor = `user:${who.user.id}`;
-  const origin = originOf(req);
+  const where = await originOf();
+  if (where.response) return where.response;
+  const origin = where.origin;
   const leadId = Number(body.leadId);
   const opening = typeof body.opening === "string" ? body.opening.slice(0, 2000) : undefined;
   const id = typeof body.id === "string" ? body.id : "";
