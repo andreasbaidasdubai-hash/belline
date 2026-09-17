@@ -10,6 +10,7 @@ import {
   getTimeline,
 } from "@/lib/sales/kpi/leads";
 import { ActivityFeed, statusTone } from "../../ui";
+import { demoStatus, demoStore, isHot } from "@/lib/sales/video-demo/store";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +36,16 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const lead = await getLead(id);
   if (!lead) notFound();
 
-  const [research, locations, timeline] = await Promise.all([
+  const [research, locations, timeline, videoDemos] = await Promise.all([
     getResearch(lead.company_id),
     getLocations(lead.company_id),
     getTimeline(id),
+    demoStore()
+      .list({ leadId: id, limit: 20 })
+      .catch(() => []),
   ]);
+  const hotDemo = videoDemos.some((d) => isHot(d.stats));
+  const activeDemos = videoDemos.filter((d) => demoStatus(d) === "active").length;
 
   const signals = (research?.signals ?? {}) as Record<string, unknown>;
   const entries = Object.entries(signals);
@@ -56,6 +62,11 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         subtitle={[lead.city, lead.vertical_slug, lead.agent_name].filter(Boolean).join(" · ")}
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {hotDemo && (
+              <span className="pill" style={{ color: "var(--ok)", fontWeight: 700 }} title="Watched the video demo for over a minute, or asked Belle a question">
+                Hot · video demo
+              </span>
+            )}
             {lead.current_score !== null && (
               <span
                 className="pill mono"
@@ -170,6 +181,20 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div>
+          <div className="panel" style={{ marginBottom: 18 }}>
+            <div className="panel-head">Video demo</div>
+            <div style={{ padding: "14px 16px", display: "grid", gap: 10, fontSize: 13 }}>
+              <span className="muted" style={{ fontSize: 12.5 }}>
+                {videoDemos.length === 0
+                  ? "A personal video pitch by Belle, from this lead's research, with an email draft that links to it."
+                  : `${videoDemos.length} link${videoDemos.length === 1 ? "" : "s"}, ${activeDemos} active · ${videoDemos.reduce((n, d) => n + d.stats.opens, 0)} opens · ${videoDemos.reduce((n, d) => n + d.stats.videoSeconds, 0)}s watched`}
+              </span>
+              <Link href={`/sales/leads/${id}/video-demo`} className="btn btn-accent" style={{ justifySelf: "start" }}>
+                {videoDemos.length === 0 ? "Create video demo" : "Video demos"}
+              </Link>
+            </div>
+          </div>
+
           <div className="panel" style={{ marginBottom: 18 }}>
             <div className="panel-head">Company</div>
             <div style={{ padding: "14px 16px", display: "grid", gap: 11, fontSize: 13 }}>

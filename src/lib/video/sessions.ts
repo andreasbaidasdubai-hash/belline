@@ -84,6 +84,23 @@ export interface VideoSession {
   agent?: unknown;
   /** The model turn in flight, so a newer request can cut it off. */
   turn?: { abort: AbortController; done: Promise<void> };
+  /**
+   * A personalised video demo (sales/video-demo): the link it was opened from,
+   * and the server-written prospect briefing the receptionist is given. Set
+   * only by the demo's own session route, from the link's stored snapshot.
+   */
+  demo?: { linkId: string; briefing: string };
+  /** Told once, after the call record is closed. Never sent anywhere. */
+  onEnded?: (info: { session: VideoSession; call: Call | undefined; seconds: number }) => void | Promise<void>;
+}
+
+/** What a demo session adds to a start. */
+export interface VideoDemoStart {
+  linkId: string;
+  briefing: string;
+  /** The personalised opening, spoken by the provider before the model is asked anything. */
+  greeting: string;
+  onEnded?: VideoSession["onEnded"];
 }
 
 /** What the panel receives. The room, a short-lived token, and the limits — nothing else. */
@@ -160,7 +177,7 @@ export function videoGreeting(location: Location): string {
 export async function startVideoSession(
   location: Location,
   visitorId: string,
-  opts: { env?: Env; preview?: boolean; provider?: VideoAvatarProvider } = {},
+  opts: { env?: Env; preview?: boolean; provider?: VideoAvatarProvider; demo?: VideoDemoStart } = {},
 ): Promise<StartResult> {
   const env = opts.env ?? process.env;
   const available = videoAvailability(location, { env, skipLive: opts.preview });
@@ -172,7 +189,9 @@ export async function startVideoSession(
   if (!provider) return { ok: false, reason: "no_provider", retryable: false, status: 503 };
 
   const reg = registry();
-  const visitorKey = `${location.id}:${visitorId}`;
+  // A demo visitor is keyed by the link as well: the same browser on two
+  // prospects' links is two conversations with two different briefings.
+  const visitorKey = opts.demo ? `${location.id}:demo:${opts.demo.linkId}:${visitorId}` : `${location.id}:${visitorId}`;
 
   // The double click, and the retry after a slow network: the same visitor
   // gets the session already being made, or the one already live.
@@ -195,7 +214,7 @@ export async function startVideoSession(
   if (limit === null) return { ok: false, reason: "not_entitled", retryable: false, status: 403 };
   const config = limit === available.config.maxCallSeconds ? available.config : { ...available.config, maxCallSeconds: limit, warnBeforeSeconds: Math.min(available.config.warnBeforeSeconds, Math.floor(limit / 2)) };
 
-  const creation = create(location, visitorKey, config, provider, env);
+  const creation = create(location, visitorKey, config, provider, env, opts.demo);
   reg.pending.set(visitorKey, creation);
   try {
     return await creation;
@@ -232,6 +251,7 @@ async function create(
   config: VideoConfig,
   provider: VideoAvatarProvider,
   env: Env,
+  demo?: VideoDemoStart,
 ): Promise<StartResult> {
   const reg = registry();
   const sessionId = `vs_${crypto.randomBytes(9).toString("base64url")}`;
@@ -257,13 +277,14 @@ async function create(
     createdAt: startedAt,
     llmToken: signVideoToken("llm", sessionId, location.id, tokenTtl, env),
     clientToken: signVideoToken("client", sessionId, location.id, tokenTtl, env),
-    greeting: videoGreeting(location),
+    greeting: demo?.greeting.trim() || videoGreeting(location),
     maxCallSeconds: config.maxCallSeconds,
     warnBeforeSeconds: config.warnBeforeSeconds,
     timers: [],
     faceId: look.faceId,
     greenscreen: look.greenscreen,
     backgroundId: look.background.id,
+    ...(demo ? { demo: { linkId: demo.linkId, briefing: demo.briefing }, onEnded: demo.onEnded } : {}),
   };
   reg.sessions.set(sessionId, session);
   recordVideoMetric(location, { name: "session_create_started", sessionId });
@@ -401,8 +422,24 @@ export async function endVideoSession(
   }
 
   if (call && location) finishCall(call, location, session);
+  notifyEnded(session);
   forgetLater(sessionId);
   return true;
+}
+
+function notifyEnded(session: VideoSession): void {
+  const listener = session.onEnded;
+  if (!listener) return;
+  session.onEnded = undefined;
+  const call = getCall(session.callId);
+  const seconds = call?.video?.seconds ?? Math.max(0, Math.round(((session.endedAt ?? Date.now()) - session.createdAt) / 1000));
+  try {
+    void Promise.resolve(listener({ session, call, seconds })).catch((err) =>
+      console.warn(`[video] ${session.id} end listener failed: ${err instanceof Error ? err.message : String(err)}`),
+    );
+  } catch (err) {
+    console.warn(`[video] ${session.id} end listener failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 function finishCall(call: Call, location: Location, session: VideoSession): void {

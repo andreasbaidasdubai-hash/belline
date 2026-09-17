@@ -259,6 +259,9 @@ function agentFor(session: VideoSession, location: Location): VideoAgent {
           liveTransfer: false,
           // Small talk on the fast model; any tool turn on the venue's (model-policy.ts).
           fastModel: videoFastModel(location),
+          // A personalised demo's prospect context, written server-side from
+          // the link's stored research when the session was created.
+          briefing: session.demo?.briefing,
         });
   session.agent = agent;
   return agent;
