@@ -66,7 +66,35 @@ export function pageWithFlags(relPath: string, bytes: Buffer, env: Record<string
   if ((source === "landing.html" || source === "landing.de.html") && out.includes("<!-- integrations:start") && out.includes("<!-- integrations:end -->")) {
     out = applyIntegrations(out, env, source === "landing.de.html" ? "de" : "en");
   }
+  out = pointAtThisApp(out, env);
   return out === html ? bytes : Buffer.from(out, "utf8");
+}
+
+const PRODUCTION_APP = "https://app.belline.ai";
+
+/**
+ * Links to the product point at the product this server is.
+ *
+ * The pages are built with `https://app.belline.ai` in every "Get started",
+ * "Sign in" and chat link. Served by staging, they sent people — and the
+ * site's own chat and video, which read their app origin from those links —
+ * to production, so a staging test signed up on production and a feature
+ * switched on for staging never appeared. Only a server whose own origin is
+ * not a belline.ai host rewrites them; production pages are left as built.
+ */
+export function pointAtThisApp(html: string, env: Record<string, string | undefined> = process.env): string {
+  const own = (env.PUBLIC_APP_URL || env.PUBLIC_ORIGIN || "").replace(/\/+$/, "");
+  if (!own) return html;
+  let host: string;
+  try {
+    const url = new URL(own);
+    if (url.protocol !== "https:" && url.hostname !== "localhost") return html;
+    host = url.hostname.toLowerCase();
+  } catch {
+    return html;
+  }
+  if (host === "belline.ai" || host.endsWith(".belline.ai")) return html;
+  return html.split(PRODUCTION_APP).join(own);
 }
 
 /**

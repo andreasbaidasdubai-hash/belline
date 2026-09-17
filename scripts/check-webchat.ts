@@ -1031,6 +1031,18 @@ await test("the app's server re-applies the strip and the Google lines from its 
   assert.match(heroOf(pageWithFlags("index.html", off, { FLAG_STUBS: "on", FLAG_BOOKING_GOOGLE: "on" }).toString("utf8")), /Coming soon: books into your calendar/);
 });
 
+await test("staging serves the site with links into staging's app; production and belline.ai hosts keep app.belline.ai", async () => {
+  const { pageWithFlags, pointAtThisApp } = await import("../src/lib/marketing");
+  const page = Buffer.from(built("off"));
+  assert.match(page.toString("utf8"), /https:\/\/app\.belline\.ai\//, "the built page no longer links to the app at all");
+  const staging = pageWithFlags("index.html", page, { PUBLIC_ORIGIN: "https://belline-staging.up.railway.app" }).toString("utf8");
+  assert.doesNotMatch(staging, /https:\/\/app\.belline\.ai/, "staging still sends visitors to production");
+  assert.match(staging, /data-chat="https:\/\/belline-staging\.up\.railway\.app\/embed\/[^"]+\/chat"/);
+  for (const env of [{}, { PUBLIC_ORIGIN: "https://app.belline.ai" }, { PUBLIC_APP_URL: "https://belline.ai" }, { PUBLIC_ORIGIN: "http://evil.example" }, { PUBLIC_ORIGIN: "not a url" }]) {
+    assert.equal(pointAtThisApp("<a href=\"https://app.belline.ai/checkout\">", env), "<a href=\"https://app.belline.ai/checkout\">", JSON.stringify(env));
+  }
+});
+
 await test("Outlook and each booking platform follow their own flags, and stubs never make one Available", () => {
   const byName = (name: string) => INTEGRATIONS.find((i) => i.name === name)!;
   assert.equal(byName("Outlook").flag, "booking.outlook");
