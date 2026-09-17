@@ -17,6 +17,7 @@ import { flag } from "@/lib/flags";
 import { CODES_EXPLAINED, DIAGNOSIS, PBX_NOTE, PHONE_OPTIONAL, UNVERIFIED_NOTE, forwardingCodes, uaeCarriers } from "@/lib/telephony/forwarding";
 import { verificationState } from "@/lib/telephony/verify";
 import { chatLinkUrl } from "@/lib/chat-link";
+import { logoUrlFor } from "@/lib/logo";
 import WidgetEditor from "../website/WidgetEditor";
 import PhoneSetup from "../golive/PhoneSetup";
 import WhatsAppCard from "../integrations/WhatsAppCard";
@@ -65,6 +66,7 @@ export async function WebsiteSection({ location }: { location: Location }) {
       appearance={embed?.appearance ?? {}}
       whatsappNumber={whatsapp?.phoneE164 ?? null}
       detectedAt={location.onboarding?.channels.web?.detectedAt ?? null}
+      logoUrl={logoUrlFor(location)}
     />
   );
 }

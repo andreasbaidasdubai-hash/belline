@@ -23,6 +23,8 @@ import { addDays, dateToSpoken, todayIn } from "@/lib/time";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
 import ManageBilling from "./ManageBilling";
+import SectionTabs from "@/components/SectionTabs";
+import { SETTINGS_TABS } from "@/lib/nav";
 
 export const dynamic = "force-dynamic";
 
@@ -145,8 +147,9 @@ export default async function BillingPage({
   if (!account) {
     return (
       <>
-        <PageHeader title="Plan and usage" subtitle={location.name} />
+        <PageHeader title="Settings" subtitle={location.name} />
         <LocationTabs base="/billing" active={location.id} />
+        <SectionTabs tabs={SETTINGS_TABS} label="Settings" />
         <div className="panel" style={{ padding: "26px 24px" }}>
           <p style={{ margin: 0, fontSize: 14.5 }}>This venue is not on a plan yet.</p>
           <p className="muted" style={{ fontSize: 13, marginTop: 10, lineHeight: 1.6, maxWidth: "60ch" }}>
@@ -198,10 +201,11 @@ export default async function BillingPage({
   return (
     <>
       <PageHeader
-        title="Plan and usage"
+        title="Settings"
         subtitle={`${location.name} · ${name}${subscription.cycle === "annual" && !trialing ? ", annual" : ""}`}
       />
       <LocationTabs base="/billing" active={location.id} />
+      <SectionTabs tabs={SETTINGS_TABS} label="Settings" />
 
       {/* What it will cost. The question this page is opened to answer. */}
       <div className="panel" style={{ padding: "22px 24px", marginBottom: 14 }}>

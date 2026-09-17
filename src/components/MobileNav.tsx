@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { navItemOn, type NavGroup, type NavItem } from "@/lib/nav-shape";
 
 /**
  * The navigation, on a phone.
@@ -16,16 +17,13 @@ import { usePathname } from "next/navigation";
  *
  * This is a button that says Menu and a panel that lists everything at a
  * height a thumb can hit. The one thing that is ever urgent — the attention
- * count — rides on the button, so it is visible without opening anything.
+ * count — rides on the button, so it is visible without opening anything. It
+ * lists exactly what the desktop sidebar lists, groups included, from the same
+ * `navFor` answer.
  */
-export interface NavItem {
-  href: string;
-  label: string;
-  badge?: number;
-  quiet?: boolean;
-}
+export type { NavItem };
 
-export default function MobileNav({ items }: { items: NavItem[] }) {
+export default function MobileNav({ items, groups = [] }: { items: NavItem[]; groups?: NavGroup[] }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -50,6 +48,16 @@ export default function MobileNav({ items }: { items: NavItem[] }) {
 
   const urgent = items.find((i) => i.badge && !i.quiet)?.badge ?? 0;
 
+  const link = (item: NavItem) => {
+    const on = navItemOn(item, pathname);
+    return (
+      <Link key={item.href} href={item.href} className={`mobile-nav-link${on ? " is-on" : ""}`} aria-current={on ? "page" : undefined}>
+        {item.label}
+        {item.badge ? <span className={`mobile-nav-count${item.quiet ? " is-quiet" : ""}`}>{item.badge}</span> : null}
+      </Link>
+    );
+  };
+
   return (
     <div className="mobile-nav">
       <button
@@ -69,22 +77,15 @@ export default function MobileNav({ items }: { items: NavItem[] }) {
       </button>
 
       <div id="mobile-nav-panel" className="mobile-nav-panel" hidden={!open}>
-        {items.map((item) => {
-          const on = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`mobile-nav-link${on ? " is-on" : ""}`}
-              aria-current={on ? "page" : undefined}
-            >
-              {item.label}
-              {item.badge ? (
-                <span className={`mobile-nav-count${item.quiet ? " is-quiet" : ""}`}>{item.badge}</span>
-              ) : null}
-            </Link>
-          );
-        })}
+        {items.map(link)}
+        {groups.map((group) => (
+          <div key={group.title} role="group" aria-label={group.title}>
+            <div className="mobile-nav-group" aria-hidden="true">
+              {group.title}
+            </div>
+            {group.items.map(link)}
+          </div>
+        ))}
       </div>
     </div>
   );

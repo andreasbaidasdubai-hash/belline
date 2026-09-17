@@ -22,7 +22,7 @@ import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
 import { copy } from "../customer-copy";
 import { MENU_QUESTION, menuFromAnswer, type Confirmed, type CurrentVenue } from "./review";
-import { serviceLengthsRequired, takesRequestsOnly } from "../booking/destination";
+import { onBellineDiary, serviceLengthsRequired, takesRequestsOnly } from "../booking/destination";
 
 /**
  * Getting a business live without a person in the loop.
@@ -703,7 +703,7 @@ export function readiness(location: Location): {
 } {
   const missing: { label: string; where: string }[] = [];
 
-  if (!location.address.trim()) missing.push({ label: "An address", where: "/agents" });
+  if (!location.address.trim()) missing.push({ label: "An address", where: "/venue" });
   // Tables, sittings and a team are the diary's machinery, asked for only
   // where Belline fits bookings into a day itself: its own diary, or a Google
   // or Outlook calendar it books into with the same engine, which offers no
@@ -726,9 +726,11 @@ export function readiness(location: Location): {
     if (!location.salon?.services.length) {
       missing.push({ label: "What you offer", where: "/venue" });
     }
-    // On the business details page, which lists the team wherever it is needed.
+    // A diary venue lists its team with its business details. A venue booking
+    // into its own calendar names the people on the Calendars page, beside
+    // which calendar each of them uses.
     if (fitsIntoADay && !location.salon?.staff.length) {
-      missing.push({ label: "Who works there", where: "/venue" });
+      missing.push(onBellineDiary(location) ? { label: "Who works there", where: "/venue" } : { label: "Who uses which calendar", where: "/calendars" });
     }
     // Set up before the diary was chosen, when lengths were not asked for.
     if (serviceLengthsRequired(location) && location.salon?.services.some((s) => !(s.durationMin > 0))) {
@@ -736,7 +738,7 @@ export function readiness(location: Location): {
     }
   }
   if (!location.agent.faqs.length) {
-    missing.push({ label: "A few common questions", where: "/agents" });
+    missing.push({ label: "A few common questions", where: "/venue" });
   }
 
   return { ready: missing.length === 0, missing };

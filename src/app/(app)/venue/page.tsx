@@ -9,6 +9,10 @@ import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import { historyFor } from "@/lib/brain";
 import SetupWizard from "@/app/setup/SetupWizard";
 import VersionHistory from "./VersionHistory";
+import SectionTabs from "@/components/SectionTabs";
+import { businessTabs } from "@/lib/nav";
+import LogoUpload from "@/components/LogoUpload";
+import { logoUrlFor } from "@/lib/logo";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +49,20 @@ export default async function VenuePage({
         subtitle="What Belline tells your customers. Every change is live on the next call — nothing to deploy."
       />
       <LocationTabs base="/venue" active={location.id} />
+      <SectionTabs tabs={businessTabs(location)} label="Your business" />
+
+      {/* The logo belongs to the business, so it is set here first. The website
+          chat's header shows it, and the website button can too. */}
+      <section className="panel" style={{ padding: "16px 18px", marginBottom: 22 }} aria-labelledby="business-logo">
+        <h2 id="business-logo" style={{ fontSize: 14.5, fontWeight: 600, margin: "0 0 4px" }}>
+          Your logo
+        </h2>
+        <p className="muted" style={{ fontSize: 13, lineHeight: 1.55, margin: "0 0 10px", maxWidth: "64ch" }}>
+          Shown at the top of your website chat and your chat link. You can also put it on the website button, under Channels,
+          Website chat.
+        </p>
+        <LogoUpload key={location.id} locationId={location.id} logoUrl={logoUrlFor(location)} />
+      </section>
 
       <SetupWizard
         // A fresh form per location: switching tabs must not carry one

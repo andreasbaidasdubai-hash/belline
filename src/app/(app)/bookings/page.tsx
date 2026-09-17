@@ -77,7 +77,7 @@ export default async function BookingsPage({
         <div className="panel">
           <p className="muted" style={{ padding: "30px 18px", margin: 0, fontSize: 13 }}>
             Nothing upcoming. Take a booking in the{" "}
-            <Link href="/test" style={{ color: "var(--accent)" }}>test console</Link>.
+            <Link href="/channels" style={{ color: "var(--accent)" }}>Try it, under Channels</Link>.
           </p>
         </div>
       ) : (

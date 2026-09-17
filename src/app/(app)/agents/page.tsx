@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { canEditAgent } from "@/lib/auth";
+import { canEditAgent, isBellineStaff } from "@/lib/auth";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { staticPrompt } from "@/lib/agent/prompt";
 import { toolsFor } from "@/lib/agent/tools";
@@ -8,6 +8,8 @@ import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import AgentEditor from "./AgentEditor";
 import { venueMarket } from "@/lib/onboarding/rules";
 import { languageChoiceOpen } from "@/lib/language";
+import SectionTabs from "@/components/SectionTabs";
+import { businessTabs } from "@/lib/nav";
 
 export const dynamic = "force-dynamic";
 
@@ -31,10 +33,11 @@ export default async function AgentsPage({
   return (
     <>
       <PageHeader
-        title="Agent"
-        subtitle="Change how it sounds and what it is allowed to say. Takes effect on the next call — no deploy."
+        title="Your business"
+        subtitle="How Belline introduces itself, how it sounds and the language it answers in. Takes effect on the next call — no deploy."
       />
       <LocationTabs base="/agents" active={location.id} />
+      <SectionTabs tabs={businessTabs(location)} label="Your business" />
 
       <AgentEditor
         locationId={location.id}
@@ -44,6 +47,10 @@ export default async function AgentsPage({
         languageOpen={languageChoiceOpen()}
       />
 
+      {/* The tool list and the compiled prompt are how Belline debugs an agent,
+          not settings an owner can act on. Staff only. */}
+      {isBellineStaff(user) && (
+      <>
       <div className="panel" style={{ marginTop: 16 }}>
         <div className="panel-head">
           Tools available to this agent
@@ -80,6 +87,8 @@ export default async function AgentsPage({
           {prompt}
         </pre>
       </details>
+      </>
+      )}
     </>
   );
 }

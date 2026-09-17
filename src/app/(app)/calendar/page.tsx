@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { dayView, resourceView, weekView, weekStart } from "@/lib/calendar";
 import { addDays, dateToSpoken, minutesToClock, todayIn } from "@/lib/time";
 import { isRestaurant } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
+import { notOnDiaryHome, usesDiary } from "@/lib/nav";
 import Grid from "./Grid";
 import WeekGrid from "./WeekGrid";
 import CalendarControls from "./CalendarControls";
@@ -26,6 +28,8 @@ export default async function CalendarPage({
   const { loc, date, axis, view: mode, staff, open } = await searchParams;
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
+  // A diary page, for the venues on the diary. Everybody else goes where their bookings are.
+  if (!usesDiary(location)) redirect(notOnDiaryHome(location));
 
   const today = todayIn(location.timezone);
   const on = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : today;

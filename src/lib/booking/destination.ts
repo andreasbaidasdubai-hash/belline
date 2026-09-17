@@ -90,6 +90,20 @@ export function serviceLengthsRequired(location: Venue): boolean {
   return !takesRequestsOnly(location);
 }
 
+/**
+ * Does this venue have diary settings to edit (Your business → Diary settings)?
+ *
+ * The rota, rooms, turnaround and recall are the diary's, so a venue on
+ * Belline's own diary has them. A restaurant that books into its own Google or
+ * Outlook calendar is booked by the same engine, which cannot offer a table
+ * without its tables and sittings, so it keeps that page too. A salon, clinic
+ * or trade booking into its calendar needs only who uses which calendar, and
+ * sets that on the Calendars page.
+ */
+export function diarySettingsApply(location: Venue & Pick<Location, "vertical">): boolean {
+  return onBellineDiary(location) || (location.vertical === "restaurant" && serviceLengthsRequired(location));
+}
+
 /** The owner's own booking link, when they gave one. */
 export function bookingLinkOf(location: Pick<Location, "onboarding">): string | undefined {
   return takesRequestsOnly(location) ? location.onboarding?.destination?.bookingLink : undefined;

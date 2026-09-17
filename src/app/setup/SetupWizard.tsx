@@ -162,7 +162,9 @@ export default function SetupWizard({
   /** "Saved." after a dashboard save, until the next change. */
   const [saved, setSaved] = useState(false);
   const isRestaurant = vertical === "restaurant";
-  const showStaff = !isRestaurant && (diary || lengthsRequired);
+  // The team is the diary's. A venue booking into its own calendar names its
+  // people on the Calendars page, beside the calendar each of them uses.
+  const showStaff = !isRestaurant && diary;
 
   function addFiles(event: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(event.target.files ?? []);

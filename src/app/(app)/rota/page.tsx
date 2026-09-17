@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { weekRota } from "@/lib/rota";
 import { weekStart } from "@/lib/calendar";
 import { addDays, todayIn } from "@/lib/time";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
+import { notOnDiaryHome, usesDiary } from "@/lib/nav";
 import RotaEditor from "./RotaEditor";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,8 @@ export default async function RotaPage({ searchParams }: { searchParams: Promise
   const { loc, week } = await searchParams;
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
+  // A diary page, for the venues on the diary. Everybody else goes where their bookings are.
+  if (!usesDiary(location)) redirect(notOnDiaryHome(location));
 
   if (!location.salon) {
     return (

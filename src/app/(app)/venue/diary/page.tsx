@@ -4,11 +4,13 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { terms } from "@/lib/verticals";
 import { validateVenue } from "@/lib/booking/config";
-import { serviceLengthsRequired } from "@/lib/booking/destination";
+import { diarySettingsApply } from "@/lib/booking/destination";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import VenueEditor from "../VenueEditor";
 import VersionHistory from "../VersionHistory";
 import { historyFor } from "@/lib/brain";
+import SectionTabs from "@/components/SectionTabs";
+import { businessTabs } from "@/lib/nav";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +21,10 @@ export const dynamic = "force-dynamic";
  * the room, the price list, the team, the rules — and until it existed, every
  * one of those was a value in a seed file that only a developer could reach.
  *
- * Only for a venue Belline fits bookings into a day for: its own diary, or a
- * Google or Outlook calendar it books into with the same engine. A business
- * taking requests has no rota, rooms or turnaround to set, and its services
- * are the plain list on /venue, where anybody else arriving here is sent.
+ * Only for a venue on Belline's own diary, or a restaurant whose tables and
+ * sittings the engine books into its own calendar. A business taking requests
+ * has no rota, rooms or turnaround to set, its services are the plain list on
+ * /venue, and a calendar venue names its people on /calendars.
  *
  * Hidden from floor staff for the same reason the Agent page is: these are the
  * settings a caller experiences as the venue's own word, and changing them is
@@ -39,16 +41,17 @@ export default async function VenueDiaryPage({
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
   if (!canEditAgent(user, location.id)) notFound();
-  // `serviceLengthsRequired` is true exactly where Belline fits a booking into
-  // a day (booking/destination.ts): Belline's diary included, requests not.
-  if (!serviceLengthsRequired(location)) redirect(`/venue?loc=${location.id}`);
+  // Belline's own diary, or a restaurant booked into its calendar by the same
+  // engine (booking/destination.ts `diarySettingsApply`). Anybody else is sent
+  // to their business details, which have everything they can set.
+  if (!diarySettingsApply(location)) redirect(`/venue?loc=${location.id}`);
 
   const t = terms(location);
 
   return (
     <>
       <PageHeader
-        title="How this venue works"
+        title="Your business"
         subtitle={
           location.restaurant
             ? "The room, the sittings and the house rules. Every change is live on the next call — nothing to deploy."
@@ -56,6 +59,7 @@ export default async function VenueDiaryPage({
         }
       />
       <LocationTabs base="/venue/diary" active={location.id} />
+      <SectionTabs tabs={businessTabs(location)} label="Your business" />
 
       <VenueEditor
         locationId={location.id}

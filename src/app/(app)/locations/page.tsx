@@ -7,6 +7,8 @@ import { COMMON_TIMEZONES, addAllowance, removalOf } from "@/lib/locations";
 import { seedIfEmpty } from "@/lib/seed";
 import { PageHeader } from "@/components/LocationTabs";
 import LocationsManager from "./LocationsManager";
+import SectionTabs from "@/components/SectionTabs";
+import { SETTINGS_TABS } from "@/lib/nav";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +50,8 @@ export default async function LocationsPage() {
 
   return (
     <>
-      <PageHeader title="Locations" subtitle="Every branch of the business. Each location has its own diary, number, team and receptionist." />
+      <PageHeader title="Settings" subtitle="Every branch of the business. Each location has its own diary, number, team and receptionist." />
+      <SectionTabs tabs={SETTINGS_TABS} label="Settings" />
       <LocationsManager
         venues={venues}
         canManage={canManageUsers(user)}

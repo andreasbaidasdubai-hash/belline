@@ -21,7 +21,7 @@ import {
 import { venueMarket } from "@/lib/onboarding/rules";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import { requestRulesOf } from "@/lib/booking/requests";
-import { destinationOf, googleUsable, outlookUsable, serviceLengthsRequired, takesRequestsOnly } from "@/lib/booking/destination";
+import { destinationOf, googleUsable, onBellineDiary, outlookUsable, serviceLengthsRequired, takesRequestsOnly } from "@/lib/booking/destination";
 import { OUTLOOK_NO_CALENDAR_TEXT } from "@/lib/integrations/outlook";
 import { integrationErrorText } from "@/lib/errors/customer";
 import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
@@ -308,6 +308,7 @@ function Body({
           currency={venue.currency}
           current={currentVenue(venue)}
           start={step.id === "review" ? "review" : "ask"}
+          diary={onBellineDiary(venue)}
           lengthsRequired={serviceLengthsRequired(venue)}
           country={venueMarket(venue)}
         />

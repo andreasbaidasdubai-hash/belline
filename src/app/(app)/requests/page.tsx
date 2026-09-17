@@ -5,6 +5,8 @@ import { listCalls, getBooking } from "@/lib/store";
 import { describeRequest } from "@/lib/booking/requests";
 import { googleUsable, outlookUsable, takesRequestsOnly } from "@/lib/booking/destination";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
+import SectionTabs from "@/components/SectionTabs";
+import { INBOX_TABS } from "@/lib/nav";
 
 export const dynamic = "force-dynamic";
 
@@ -66,10 +68,11 @@ export default async function RequestsPage({
   return (
     <>
       <PageHeader
-        title="Requests"
+        title="Inbox"
         subtitle={`Every booking Belline was asked for, and what happened to it. ${where}`}
       />
       <LocationTabs base="/requests" active={location.id} />
+      <SectionTabs tabs={INBOX_TABS} label="Inbox" />
 
       <div className="panel">
         {rows.length === 0 ? (

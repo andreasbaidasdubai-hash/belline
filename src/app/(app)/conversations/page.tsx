@@ -5,6 +5,8 @@ import { listCalls } from "@/lib/store";
 import { loadInbox } from "@/lib/reception/inbox-view";
 import { callDurationSeconds } from "@/lib/calls";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
+import SectionTabs from "@/components/SectionTabs";
+import { INBOX_TABS } from "@/lib/nav";
 
 export const dynamic = "force-dynamic";
 
@@ -127,10 +129,11 @@ export default async function ConversationsPage({
   return (
     <>
       <PageHeader
-        title="Conversations"
+        title="Inbox"
         subtitle="Every call, website chat and WhatsApp message in one list, newest first. Open any of them for the full transcript of what was said."
       />
       <LocationTabs base="/conversations" active={location.id} />
+      <SectionTabs tabs={INBOX_TABS} label="Inbox" />
 
       {inbox.state !== "ok" && (
         <div className="panel" role="status" style={{ padding: "12px 16px", marginBottom: 14, fontSize: 13, lineHeight: 1.6 }}>
@@ -165,9 +168,9 @@ export default async function ConversationsPage({
           <p className="muted" style={{ padding: "30px 18px", margin: 0, fontSize: 13 }}>
             {all.length === 0 ? (
               <>
-                Nothing yet. Try it yourself in the{" "}
-                <Link href="/test" style={{ color: "var(--accent)" }}>
-                  test console
+                Nothing yet. Try it yourself under{" "}
+                <Link href="/channels" style={{ color: "var(--accent)" }}>
+                  Channels, Try it
                 </Link>
                 .
               </>

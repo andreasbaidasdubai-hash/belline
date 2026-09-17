@@ -201,7 +201,7 @@ export function overviewFor(location: Location): Overview {
         ? `Last call ${new Date(lastCall.startedAt).toLocaleString()}`
         : location.bellineNumber?.number.trim()
           ? "No calls yet. Check the number is forwarded."
-          : "No phone number yet. Add one under How it works.",
+          : "No phone number yet. Add one under Your business.",
     },
     {
       label: "Calls completing",
@@ -265,6 +265,45 @@ export function overviewFor(location: Location): Overview {
     // Already sorted most urgent first by attentionFor.
     needsYou: { total: outstanding.length, top: outstanding[0] ?? null },
     recent: calls.slice(0, 6),
+  };
+}
+
+/**
+ * What Belline handled over the last `days` days, for Home.
+ *
+ * The reports page said how many calls "ended in a booking", which for an
+ * account that takes requests is always nought and reads as failure. What an
+ * owner wants to know is how much Belline dealt with for them, so this counts
+ * handled conversations: real ones (not a demo, not a forwarding test, not the
+ * owner in the test console) that finished without the caller ringing off.
+ *
+ * Calls are the phone and the website's voice button; chats are the website
+ * chat and the chat link. WhatsApp threads live in the messages database and
+ * are not counted here, and Home says so rather than folding them in.
+ */
+export interface Handled {
+  days: number;
+  calls: number;
+  chats: number;
+  /** Booking requests taken in the same conversations. */
+  requests: number;
+  /** Put through to a person, or sent on to someone else. */
+  toPerson: number;
+  /** Real conversations where the caller rang off part-way. Said, not hidden. */
+  rangOff: number;
+}
+
+export function handledOver(location: Location, days: number, now: Date = new Date()): Handled {
+  const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+  const real = listCalls(location.id).filter((c) => !c.isDemo && !c.isTest && c.channel !== "browser" && c.startedAt >= since && c.status === "completed");
+  const handled = real.filter((c) => c.outcome !== "abandoned");
+  return {
+    days,
+    calls: handled.filter((c) => c.channel === "phone" || c.channel === "embed").length,
+    chats: handled.filter((c) => c.channel === "webchat").length,
+    requests: handled.reduce((n, c) => n + (c.bookingRequests?.length ?? 0), 0),
+    toPerson: handled.filter((c) => c.outcome === "transferred" || c.outcome === "escalated").length,
+    rangOff: real.length - handled.length,
   };
 }
 
