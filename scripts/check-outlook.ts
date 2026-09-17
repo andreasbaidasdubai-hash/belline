@@ -1234,7 +1234,9 @@ await test("every Outlook sentence the flag swaps is in its page, as written or 
   assert.ok((SITE_FLAG_COPY["booking.outlook"] ?? []).length >= 6);
   assert.deepEqual(strandedSiteCopy(publicPage), []);
   // And a stranded one is caught.
-  assert.deepEqual(strandedSiteCopy((f) => publicPage(f).replace("Soon, it will also book straight into the calendar you already use.", "Reworded.")).length > 0, true);
+  assert.deepEqual(strandedSiteCopy((f) => publicPage(f).replace('<li class="can-cal">Takes booking requests</li>', "Reworded.")).length > 0, true);
+  // And a line meant to appear three times (Belle's last line on each channel) is caught when one copy is reworded.
+  assert.deepEqual(strandedSiteCopy((f) => publicPage(f).replace("I’ll pass that to the team, and they’ll confirm a time with you.", "Reworded.")).length > 0, true);
 });
 
 await test("flag off, the website is exactly the page as written; on, it says Outlook works, alone or with Google, and back again", () => {
@@ -1243,30 +1245,33 @@ await test("flag off, the website is exactly the page as written; on, it says Ou
   assert.equal(applySiteFlags("landing.html", landing, {}), landing);
   // Outlook alone.
   const alone = visible(applySiteFlags("landing.html", landing, OUTLOOK_ON));
-  assert.match(alone, /It can also book straight into your Outlook calendar, after checking it for times already taken\./);
+  assert.match(alone, /<li class="can-cal">Books into Outlook<\/li>/);
   assert.match(alone, /<span class="state state-available cal-soon">Books into Outlook<\/span>/);
-  assert.match(alone, /<dd>Connect Outlook and Belline checks it for times already taken, then books straight into it\. Booking straight into Google Calendar is coming soon\.<\/dd>/);
-  assert.doesNotMatch(alone, /Coming soon: books into your calendar|Soon, it will also book/);
+  assert.match(alone, /<dd>Connect Outlook and Belline checks it for times already taken, then books straight into it\.<\/dd>/);
+  assert.match(alone, /<dd>Belline takes booking requests today\. Booking straight into Google Calendar is coming soon\.<\/dd>/);
+  assert.doesNotMatch(alone, /Coming soon: books into your calendar|Waiting for your team/);
+  assert.equal(alone.split("Saturday at 10:00 is free, so I’ve booked you in.").length, 4, "each channel's example books the free time");
   // FLAG_STUBS alone never makes the public site say so.
   assert.equal(applySiteFlags("landing.html", landing, { FLAG_STUBS: "on", FLAG_BOOKING_OUTLOOK: "on" }), landing);
   // Both: nothing about a calendar coming soon.
   const both = applySiteFlags("landing.html", landing, BOTH_ON);
   assert.doesNotMatch(words(visible(both)), SOON_CALENDAR, "the landing page still says a calendar is coming");
   assert.match(both, /Books into Google Calendar or Outlook<\/span>/);
-  assert.match(both, /<dd>Connect Google Calendar or Outlook and Belline checks it for times already taken, then books straight into it\.<\/dd>/);
+  assert.match(both, /<li class="can-cal">Books into Google Calendar or Outlook<\/li>/);
+  assert.match(both, /<dd>Connect Google Calendar and Belline checks it for times already taken, then books straight into it\.<\/dd>/);
+  assert.match(both, /<dd>Connect Outlook and Belline checks it for times already taken, then books straight into it\.<\/dd>/);
   // Google alone is exactly what check:google holds it to.
   const googleOnly = applySiteFlags("landing.html", landing, GOOGLE_ON);
-  assert.match(googleOnly, /books straight into it\. Outlook isn’t connected yet/);
+  assert.match(googleOnly, /Booking straight into Outlook is coming soon\./);
   // Any page, whatever it was built with, comes out as the flags say now.
   for (const built of [applySiteFlags("landing.html", landing, OUTLOOK_ON), both, googleOnly]) {
     assert.equal(applySiteFlags("landing.html", built, {}), landing, "switching the flags off does not restore the page");
     assert.equal(applySiteFlags("landing.html", built, BOTH_ON), both);
     assert.equal(applySiteFlags("landing.html", built, GOOGLE_ON), googleOnly);
   }
-  // The hero still books and confirms nothing.
-  const start = both.indexOf('<section class="hero">');
-  const hero = both.slice(start, both.indexOf("</section>", start)).replace(/<[^>]+>/g, " ");
-  assert.doesNotMatch(hero, /\b(?:booked|confirmed)\b/i);
+  // With a calendar on, the example's entry is confirmed and nothing waits for the team; never both.
+  assert.match(both, /<span class="cal-new-state">Confirmed<\/span>/);
+  assert.doesNotMatch(visible(both), /Waiting for your team/);
 });
 
 await test("the server swaps the copy and the strip's Outlook tag as it serves the built site, by the flag it has now", async () => {

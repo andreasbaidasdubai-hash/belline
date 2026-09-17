@@ -262,17 +262,9 @@ footer .brand span { font-size: 1.55rem; }
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-.btn:not(.line):not(:has(svg)) { padding-left: 6px; }
-.btn:not(.line):not(:has(svg))::before {
-  content: "";
-  flex: none;
-  width: 38px;
-  height: 38px;
-  margin-block: -9px;
-  background: var(--btn-primary-mark) center / contain no-repeat;
-}
+/* No bell mark inside the primary button any more (site review, 2026-09-17):
+   the words are the call to action. */
 .btn:hover { background: var(--btn-primary-hover-bg); border-color: var(--btn-primary-hover-bg); color: var(--btn-primary-hover-text); }
-.btn:not(.line):not(:has(svg)):hover::before { background-image: var(--btn-primary-hover-mark); }
 .btn.line { background: transparent; color: var(--ink); border-color: var(--ink); }
 .btn.line:hover { background: var(--ink); color: var(--paper); }
 .btn svg { width: 17px; height: 17px; }
@@ -663,12 +655,13 @@ section { padding: 110px 0; }
 .plans {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: auto auto auto auto 1fr auto;
+  /* tag, name, who it suits, price, allowances, what differs, button */
+  grid-template-rows: auto auto auto auto auto 1fr auto;
   gap: 0;
   margin-top: 46px;
   border-top: 1px solid var(--rule);
 }
-.plan { grid-row: span 6; }
+.plan { grid-row: span 7; }
 @supports (grid-template-rows: subgrid) {
   .plan { display: grid; grid-template-rows: subgrid; }
 }
@@ -1212,15 +1205,21 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
  * under Belle's face, and the bell has none, because voice is the face. A call
  * happens in the same circle; there is no dock and no panel. Its size comes
  * from embed-video.js (the call circle), not from here. */
-.video-bubble {
-  right: 26px;
-  bottom: calc(26px + env(safe-area-inset-bottom, 0px));
-}
 body.has-video-bubble .wa-fab,
 body.has-video-bubble .chat-fab,
 body.has-video-bubble .bell-fab { display: none; }
+/* site.js: the bubble rests in the hero; it floats in the corner only for a
+   call started while the hero is out of view, and is parked (a phone) until
+   a call starts. See "Belle's launcher" at the end of this file. */
+.video-bubble.vb-parked { display: none; }
+.video-bubble.vb-float:not(.is-pip) {
+  position: fixed;
+  z-index: 41;
+  right: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
 @media (max-width: 900px) {
-  .video-bubble {
+  .video-bubble.vb-float:not(.is-pip) {
     right: 20px;
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   }
@@ -2318,8 +2317,6 @@ h2.display {
   border-color: var(--bl-blue);
   color: #FFFFFF;
 }
-.btn:not(.line):not(:has(svg)) { padding-left: 6px; }
-.btn:not(.line):not(:has(svg))::before { width: 34px; height: 34px; margin-block: -8px; }
 .btn:hover { background: var(--bl-blue-hover); border-color: var(--bl-blue-hover); color: #FFFFFF; }
 .btn:active { background: var(--bl-blue-pressed); border-color: var(--bl-blue-pressed); }
 .btn.line { background: #FFFFFF; color: var(--bl-ink-900); border-color: var(--bl-rule-strong); }
@@ -2701,26 +2698,14 @@ h2.display {
   .stage-tab { transition: none; }
 }
 
-/* --- Room for Belle ---------------------------------------------------------
-   Belle's bubble (or, with video off, the three floating buttons) sits in the
-   bottom right corner from the first paint, at the call's own size: 320 px of
-   face and a row of buttons under it, 26 px from the edge. On a wide screen
-   the card stops short of that column instead of disappearing under it: the
-   margin is the bubble's width, its edge offset and 28 px of air, less
-   whatever margin the page already has at that width (none left by 1920). */
+/* The hero's demonstration sits in its own column now (Belle on video), so
+   nothing has to leave room for a floating bubble at rest. */
 @media (min-width: 1101px) {
-  .hero-demo { gap: 44px; }
-  .stage { width: 350px; margin-right: max(0px, calc(374px - max(32px, (100vw - 1136px) / 2))); }
-  /* The headline column is narrower beside the card and the room for Belle:
-     a size that keeps "Hier geht immer jemand ran." to three lines at 1280. */
+  .hero-demo { gap: 56px; }
   .hero-demo h1.display { font-size: clamp(2.55rem, 1rem + 4vw, 4.6rem); }
 }
-@media (min-width: 1440px) {
-  .stage { width: 400px; }
-}
-@media (max-width: 1100px) {
-  .hero-demo { grid-template-columns: minmax(0, 1fr); gap: 48px; }
-  .stage { width: 100%; max-width: 460px; justify-self: start; }
+@media (max-width: 900px) {
+  .hero-demo { grid-template-columns: minmax(0, 1fr); gap: 40px; }
 }
 
 /* Three plain facts as a light strip, no numbers. */
@@ -3432,4 +3417,398 @@ footer a { color: var(--bl-ink-900); }
 }
 @media (max-width: 760px) {
   .waitlist .f-row { grid-template-columns: minmax(0, 1fr); }
+}
+/* ===========================================================================
+   Site review, 2026-09-17
+   =========================================================================== */
+
+/* --- Hero: the copy, a capability row, and Belle on video beside it ------- */
+.hero-can {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin: 24px 0 0;
+  padding: 0;
+}
+.hero-can li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 10px;
+  border: 1px solid var(--card-line);
+  border-radius: var(--bl-radius-pill);
+  background: #FFFFFF;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--bl-ink-900);
+}
+.hero-can li::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bl-blue);
+}
+.hero-note { display: grid; gap: 4px; margin-top: 18px; }
+.hero-note .gen { color: var(--bl-ink-900); font-weight: 500; }
+.hero-note-more { color: var(--bl-muted); }
+
+.hero-video {
+  margin: 0;
+  width: 340px;
+  max-width: 100%;
+  justify-self: end;
+  display: grid;
+  gap: 22px;
+  justify-items: center;
+  text-align: center;
+}
+/* The slot holds either the still face or, with video on, Belle's real bubble
+   (320 px of face and her row of buttons). Its height is kept while she floats
+   during a call, so the hero does not jump. */
+.hv-slot {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  width: 100%;
+  padding-top: 56px;
+}
+.hero-video.has-bubble .hv-slot { min-height: 438px; }
+.hv-face {
+  display: grid;
+  place-items: center;
+  width: min(300px, 76vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, var(--bl-navy-card), var(--bl-navy) 72%);
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 4px var(--card-line), 0 24px 48px -28px rgba(29, 29, 31, 0.45);
+}
+.hv-face svg { width: 44%; height: 44%; }
+.hv-mark { fill: var(--bl-blue-lit); }
+.hero-video.has-poster .hv-face svg { display: none; }
+.hero-video.has-bubble .hv-face { display: none; }
+.hero-video.has-bubble .hv-cta { display: none; }
+.hv-cap { display: grid; gap: 10px; justify-items: center; }
+.hv-head { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin: 0; }
+.hv-title {
+  font-family: var(--bl-font-display);
+  font-weight: var(--bl-weight-heading);
+  font-size: 1.15rem;
+  letter-spacing: -0.015em;
+  color: var(--bl-ink-900);
+}
+.hv-text { margin: 0; max-width: 34ch; font-size: 0.92rem; color: var(--bl-text-2); }
+.hv-early { margin: 0; font-size: 0.84rem; color: var(--bl-muted); }
+@media (max-width: 900px) {
+  .hero-video { justify-self: center; width: 100%; }
+  .hv-slot { padding-top: 0; }
+  .hero-video.has-bubble .hv-slot { min-height: 0; }
+}
+
+/* --- What Belline does: four entries, video first ------------------------- */
+#channels .channels-4 > li:first-child { border-color: var(--bl-blue); box-shadow: inset 0 0 0 1px var(--bl-blue); }
+
+/* --- Who it is for: three use cases, then the rest ------------------------- */
+#for .uses {
+  list-style: none;
+  margin: 44px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+#for .uses li {
+  padding: 26px 24px 28px;
+  background: #FFFFFF;
+  border: 1px solid var(--card-line);
+  border-radius: var(--card-radius);
+}
+#for .uses h3 {
+  margin: 0 0 8px;
+  font-family: var(--bl-font-display);
+  font-weight: var(--bl-weight-heading);
+  font-size: 1.15rem;
+  letter-spacing: -0.015em;
+  color: var(--bl-ink-900);
+}
+#for .uses p { margin: 0; font-size: 0.95rem; color: var(--bl-text-2); }
+#for .kinds-lead { margin: 32px 0 0; font-weight: 600; color: var(--bl-ink-900); }
+#for .kinds { margin-top: 14px; }
+@media (max-width: 900px) {
+  #for .uses { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+}
+
+/* --- What your team gets: the rows beside the example ---------------------- */
+.receive {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
+  gap: 48px;
+  align-items: start;
+  margin-top: 48px;
+}
+#stop .receive .stop-rows { grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 0; }
+#stop .receive .stop-rows > div { padding: 22px 22px 24px; }
+#stop .receive .stop-small { margin: 6px 0 0; }
+.example { display: grid; gap: 14px; min-width: 0; }
+.example .stage { width: auto; }
+.stage-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.stage-result .call-sent { margin: 0; background: #FFFFFF; border: 1px solid var(--card-line); border-radius: var(--card-radius); padding: 14px; }
+.stage-result .call-sent dl div { grid-template-columns: 5.4em minmax(0, 1fr); }
+.stage-result .cal {
+  margin: 0;
+  min-width: 0;
+  background: #FFFFFF;
+  border: 1px solid var(--card-line);
+  border-radius: var(--card-radius);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--bl-ink-900);
+}
+.stage-result .cal-head { padding: 10px 12px; }
+.stage-result .cal-body { padding: 12px 10px 10px 6px; }
+.stage-result .cal-ev-new { grid-row: 3 / 9; }
+.cal-ev-new.is-booked { background: var(--bl-lagoon-tint); border: 1.5px solid var(--bl-lagoon); }
+.cal-ev-new.is-booked .cal-new-k { color: var(--bl-lagoon); }
+.cal-ev-new.is-booked .cal-new-state { background: #FFFFFF; color: var(--bl-lagoon); }
+#stop .stage-result p,
+#stop .stage p { color: inherit; }
+#stop .stage-result .call-sent-head { color: var(--bl-lagoon); }
+#stop .stage-result dt { color: var(--bl-muted); }
+#stop .stage-result dd { color: var(--bl-ink-900); }
+@media (max-width: 1100px) {
+  .receive { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .example { max-width: 560px; }
+}
+@media (max-width: 520px) {
+  .stage-result { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* --- Integrations: connects today, coming soon, and the roadmap, quieter --- */
+.connects { padding: 8px 0 72px; background: #FFFFFF; }
+.connects-groups { display: grid; gap: 28px; }
+.connects-group-h {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bl-text-2);
+}
+.connects-groups .connects-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  border: 0;
+}
+.connects-groups .connect,
+.connects-groups .connect:first-child,
+.connects-groups .connect:nth-child(n) {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border: 1px solid var(--card-line);
+  border-radius: var(--card-radius);
+  background: #FFFFFF;
+}
+.connects-groups .connect-name { color: var(--bl-ink-900); }
+.connects-roadmap .connect,
+.connects-roadmap .connect:first-child,
+.connects-roadmap .connect:nth-child(n) {
+  gap: 8px;
+  padding: 8px 12px;
+  border-color: var(--bl-rule-soft);
+  background: transparent;
+}
+.connects-roadmap .connect-logo { width: 24px; height: 24px; border-radius: 6px; opacity: 0.75; }
+.connects-roadmap .connect-name { font-size: 0.92rem; color: var(--bl-muted); }
+.connects-roadmap .state { height: 20px; padding: 0 8px; font-size: 0.72rem; }
+.connects-roadmap .connects-group-h { color: var(--bl-muted); font-weight: 500; }
+@media (max-width: 600px) {
+  .connects-groups .connect,
+  .connects-groups .connect:first-child,
+  .connects-groups .connect:nth-child(n) { width: 100%; }
+  .connects-roadmap .connect,
+  .connects-roadmap .connect:first-child,
+  .connects-roadmap .connect:nth-child(n) { width: auto; }
+}
+
+/* --- Pricing: trial and cycle on one bar, equal cards, shared features ---- */
+.price-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+  margin-top: 36px;
+}
+.price-bar .cycle { margin: 0; }
+.price-trial {
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: var(--bl-radius-pill);
+  background: var(--bl-blue-tint);
+  color: var(--bl-ink-900);
+  font-size: 0.95rem;
+}
+#price .plan-allow { gap: 8px; margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--card-line); }
+#price .plan-allow li { color: var(--bl-ink-900); font-weight: 500; }
+#price .plan-allow li.allow-video::before { background: var(--bl-lagoon); }
+#price .plan-diff li { font-size: 0.88rem; }
+#price .plan .btn { justify-self: start; }
+.plan-shared {
+  margin-top: 20px;
+  padding: 22px 28px 24px;
+  border: 1px solid var(--card-line);
+  border-radius: var(--card-radius);
+  background: var(--bl-surface);
+}
+.plan-shared-h {
+  margin: 0 0 12px;
+  font-family: var(--bl-font-display);
+  font-weight: var(--bl-weight-heading);
+  font-size: 1rem;
+  color: var(--bl-ink-900);
+}
+.plan-shared ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  columns: 2 260px;
+  column-gap: 32px;
+}
+.plan-shared li { break-inside: avoid; padding: 4px 0 4px 16px; position: relative; font-size: 0.9rem; color: var(--bl-text-2); }
+.plan-shared li::before { content: ""; position: absolute; left: 0; top: 0.9em; width: 6px; height: 6px; border-radius: 999px; background: var(--bl-blue); }
+.price-tax { margin: 14px 0 0; font-size: 0.86rem; color: var(--bl-muted); }
+
+/* --- The calculator's label ------------------------------------------------ */
+.roi-label {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bl-text-2);
+}
+
+/* --- Country and language: a compact globe on a wide screen --------------- */
+@media (min-width: 901px) {
+  .top nav .locale-btn { width: 38px; padding: 0; justify-content: center; gap: 0; }
+  .top nav .locale-btn .locale-now {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .top nav .locale-btn .locale-chev { display: none; }
+  .top nav .locale-btn { border-color: transparent; color: var(--bl-muted); }
+  .top nav .locale-btn:hover { border-color: var(--bl-rule-strong); }
+}
+
+/* --- The floating buttons ring a few times, then stop ---------------------- */
+.bell-fab,
+.bell-fab svg,
+.bell-fab::after,
+.chat-fab,
+.chat-fab svg,
+.chat-fab::after,
+.wa-fab,
+.wa-fab svg,
+.wa-fab::after { animation-iteration-count: 3; }
+.wa-fab[hidden] { display: none !important; }
+
+/* --- Belle's launcher -------------------------------------------------------
+   With video on, the corner holds this and nothing bigger at rest: a 40 px
+   face and "Talk to Belle · video", about 56 px tall, 24 px from the edges,
+   with the chat (and WhatsApp, only when a number is connected) beside it.
+   site.js shows it once the hero's face is out of view (at once on a phone),
+   and moves it out of the way wherever it would cover a price, a plan or a
+   button. */
+.video-launcher {
+  position: fixed;
+  z-index: 40;
+  right: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+.video-launcher[hidden] { display: none; }
+.video-launcher.is-away { transform: translateY(calc(100% + 32px)); opacity: 0; pointer-events: none; }
+.vl-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 18px 0 8px;
+  border: 0;
+  border-radius: var(--bl-radius-pill);
+  background: var(--bl-blue);
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px #FFFFFF, 0 12px 32px -16px rgba(0, 0, 0, 0.35);
+}
+.vl-main:hover { background: var(--bl-blue-hover); }
+.vl-face {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 38%, var(--bl-navy-card), var(--bl-navy) 72%);
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 0 0 2px #FFFFFF;
+}
+.vl-face svg { width: 20px; height: 20px; }
+.vl-face.has-poster svg { display: none; }
+.vl-act {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--bl-rule-strong);
+  border-radius: 50%;
+  background: #FFFFFF;
+  color: var(--bl-blue);
+  cursor: pointer;
+  box-shadow: 0 0 0 3px #FFFFFF, 0 12px 32px -16px rgba(0, 0, 0, 0.3);
+}
+.vl-act svg { width: 22px; height: 22px; }
+.vl-act::after { content: ""; position: absolute; inset: 0; border-radius: inherit; border: 2px solid var(--bl-blue); opacity: 0; pointer-events: none; z-index: -1; }
+.vl-act.is-ringing { animation: bell-nudge 1.5s ease-in-out 3; }
+.vl-act.is-ringing::after { animation: bell-ring 1.5s ease-out 3; }
+.vl-act.is-ringing + .vl-act.is-ringing,
+.vl-act.is-ringing + .vl-act.is-ringing::after { animation-delay: 0.5s; }
+.vl-main:focus-visible,
+.vl-act:focus-visible { outline: 2px solid var(--bl-blue); outline-offset: 3px; }
+@media (max-width: 900px) {
+  .video-launcher { right: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+  .vl-main { font-size: 0.9rem; padding-right: 14px; }
+  .vl-act { width: 44px; height: 44px; }
+}
+@media (max-width: 360px) {
+  .vl-say { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .vl-main { padding: 0 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .video-launcher { transition: none; }
+  .vl-act.is-ringing,
+  .vl-act.is-ringing::after { animation: none; }
 }

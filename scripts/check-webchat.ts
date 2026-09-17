@@ -407,8 +407,10 @@ await test("the floating buttons are visible from the first paint, and the hero 
     /IntersectionObserver[\s\S]{0,400}?\.hero\b|\.hero\b[\s\S]{0,400}?IntersectionObserver/,
     "the floating buttons are watching the hero again",
   );
-  // The room they are kept clear by (Belle's bubble at its call size, or the buttons). Without it they sit on the hero card.
-  assert.match(css, /\.stage\s*\{[^}]*margin-right: max\(0px, calc\(374px - max\(32px, \(100vw - 1136px\) \/ 2\)\)\)/, "the hero card no longer leaves room for Belle's bubble");
+  // Belle rests in the hero's own column (site review, 2026-09-17), and floats only for a call: nothing big covers the page at rest.
+  assert.match(css, /\.hero-video \{/, "the hero has lost Belle's column");
+  assert.match(css, /\.video-bubble\.vb-float:not\(\.is-pip\) \{\s*position: fixed;/, "Belle no longer floats for a call away from the hero");
+  assert.match(css, /\.video-bubble\.vb-parked \{ display: none; \}/, "a phone shows the big bubble at rest again");
   // And the footer fix, which the buttons would otherwise cover at the end.
   assert.match(css, /@media \(max-width: 1100px\) \{ footer \{ padding-bottom/, "the footer no longer leaves room for the buttons");
 });
@@ -643,6 +645,12 @@ const heroHtml = () => {
   const start = html.indexOf('<section class="hero">');
   return html.slice(start, html.indexOf("</section>", start));
 };
+/** The example conversations and calendar, in "What your team gets" (they left the hero on 2026-09-17). */
+const exampleHtml = () => {
+  const html = visibleHtml("landing.html");
+  const start = html.indexOf('<section id="stop"');
+  return html.slice(start, html.indexOf("</section>", start));
+};
 
 await test("the pattern for a live-calendar claim catches today-tense lines and spares 'soon'", () => {
   for (const bad of [
@@ -656,32 +664,41 @@ await test("the pattern for a live-calendar claim catches today-tense lines and 
   ]) assert.deepEqual(unsoonedCalendarClaims(good), [], good);
 });
 
-await test("the hero's calendar is marked coming soon, and no hero text says calendar booking works today", () => {
+await test("flag off, the example calendar is marked coming soon, its entry waits for the team, and no text says calendar booking works today", () => {
   const hero = heroHtml();
   assert.ok(hero.length > 0, "no hero section");
-  const plain = hero.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-  assert.match(hero, /<span class="state state-soon[^"]*">Coming soon: books into your calendar<\/span>/, "the hero calendar has lost its Coming soon badge");
-  assert.deepEqual(unsoonedCalendarClaims(plain), [], "the hero says calendar booking works today");
-  assert.match(plain, /\bsoon\b[^.]*calendar/i, "the hero lead no longer says the calendar is coming soon");
-  // The new entry is a request for the team, and nothing in the hero is booked or confirmed.
-  const entry = hero.slice(hero.indexOf('class="cal-ev cal-ev-new"'), hero.indexOf("</li>", hero.indexOf('class="cal-ev cal-ev-new"')));
-  assert.ok(entry.length > 0, "the hero calendar has no new request");
+  const heroPlain = hero.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.deepEqual(unsoonedCalendarClaims(heroPlain), [], "the hero says calendar booking works today");
+  assert.match(hero, /<li class="can-cal">Takes booking requests<\/li>/, "the hero's capability row does not say booking requests");
+  assert.doesNotMatch(heroPlain, /\b(?:booked|confirmed)\b/i, "something in the hero reads as booked or confirmed");
+  // The one demonstration in the hero is Belle; the example conversations live in "What your team gets".
+  assert.match(hero, /<figure class="hero-video[^"]*"[^>]*data-hero-video/, "the hero has lost Belle's demonstration");
+  assert.doesNotMatch(hero, /class="stage"|class="demo-card /, "the example card is back in the hero beside Belle");
+
+  const example = exampleHtml();
+  const plain = example.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.match(example, /<span class="state state-soon[^"]*">Coming soon: books into your calendar<\/span>/, "the example calendar has lost its Coming soon badge");
+  assert.deepEqual(unsoonedCalendarClaims(plain), [], "the example says calendar booking works today");
+  // The new entry is a request for the team, and nothing in the example is booked or confirmed.
+  const entry = example.slice(example.indexOf('class="cal-ev cal-ev-new"'), example.indexOf("</li>", example.indexOf('class="cal-ev cal-ev-new"')));
+  assert.ok(entry.length > 0, "the example calendar has no new request");
   assert.match(entry, /Waiting for your team/);
-  assert.doesNotMatch(plain, /\b(?:booked|confirmed)\b/i, "something in the hero reads as booked or confirmed");
-  assert.doesNotMatch(hero, /state-available/, "something in the hero is marked Available");
+  assert.doesNotMatch(plain, /\b(?:booked|confirmed)\b/i, "something in the example reads as booked or confirmed");
+  assert.doesNotMatch(example, /state-available/, "something in the example is marked Available");
   // Examples are labelled: three conversations and one calendar, each saying so.
-  assert.equal((hero.match(/<span class="demo-example">Example conversation<\/span>/g) ?? []).length, 3, "the hero should show three labelled example conversations");
-  assert.equal((hero.match(/<figure class="demo-card /g) ?? []).length, 3, "every hero conversation card should be labelled as an example");
-  assert.equal((hero.match(/<span class="cal-sub">Example calendar<\/span>/g) ?? []).length, 1, "the hero should show one labelled example calendar");
-  assert.equal((hero.match(/<figure class="cal"[ >]/g) ?? []).length, 1);
-  assert.doesNotMatch(hero, /class="scene"|class="snip"/, "the single call snippet is back beside the full call card");
-  // One card with a tab per piece (site.js builds the tabs from data-tab), in this order.
-  assert.match(hero, /<div class="stage"[^>]*\sdata-tabs="Where Belline answers"/, "the hero card lost its tabs");
-  assert.deepEqual([...hero.matchAll(/<figure [^>]*\bdata-tab="([^"]+)"/g)].map((m) => m[1]), ["Chat", "Phone", "Calendar", "WhatsApp"]);
+  assert.equal((example.match(/<span class="demo-example">Example conversation<\/span>/g) ?? []).length, 3, "three labelled example conversations");
+  assert.equal((example.match(/<figure class="demo-card /g) ?? []).length, 3, "every conversation card should be labelled as an example");
+  assert.equal((example.match(/<span class="cal-sub">Example calendar<\/span>/g) ?? []).length, 1, "one labelled example calendar");
+  assert.equal((example.match(/<figure class="cal"[ >]/g) ?? []).length, 1);
+  // One card with a tab per channel (site.js builds the tabs from data-tab). The calendar is a destination, not a tab.
+  assert.match(example, /<div class="stage"[^>]*\sdata-tabs="Example conversations"/, "the example card lost its tabs");
+  assert.deepEqual([...example.matchAll(/<figure [^>]*\bdata-tab="([^"]+)"/g)].map((m) => m[1]), ["Chat", "Phone", "WhatsApp"]);
+  // One salon customer across the three channels.
+  assert.equal((plain.match(/\bLayla\b/g) ?? []).length >= 4, true, "the example is not one customer across the channels");
 });
 
-await test("the hero's WhatsApp card is a live example conversation, not a not-live card", () => {
-  const hero = heroHtml();
+await test("the example WhatsApp card is a live example conversation, not a not-live card", () => {
+  const hero = exampleHtml();
   const at = hero.indexOf('class="demo-card demo-wa"');
   assert.ok(at > 0, "the hero WhatsApp card is gone");
   const card = hero.slice(at, hero.indexOf("</figure>", at));
@@ -692,14 +709,16 @@ await test("the hero's WhatsApp card is a live example conversation, not a not-l
   assert.doesNotMatch(card, /(?:booked|confirmed) (?:you )?for|see you (?:on|at)/i);
 });
 
-await test("the channels section still shows all four channels as Available, so the hero loses nothing", () => {
+await test("What Belline does: video first, then chat and voice, WhatsApp and the phone, each marked in words", () => {
   const html = visibleHtml("landing.html");
   const start = html.indexOf('<section id="channels"');
   const section = html.slice(start, html.indexOf("</section>", start));
-  for (const channel of ["Your phone", "A voice button on your website", "Chat on your website", "WhatsApp for your business"]) {
-    assert.ok(section.includes(`<h3>${channel}</h3>`), `the channels section has lost "${channel}"`);
-  }
-  assert.equal((section.match(/state-available">Available</g) ?? []).length, 4, "not every channel is marked Available");
+  const names = [...section.matchAll(/<h3>([^<]+)<\/h3>/g)].map((m) => m[1]);
+  assert.deepEqual(names, ["Video receptionist on your website", "Chat and voice on your website", "WhatsApp for your business", "Your phone"]);
+  // Video is in every plan (founder, 2026-09-17); the other three are available today.
+  assert.equal((section.match(/state-available">Included in every plan</g) ?? []).length, 1, "video is not marked included");
+  assert.equal((section.match(/state-available">Available</g) ?? []).length, 3, "not every channel is marked Available");
+  assert.doesNotMatch(section, /early access/i);
 });
 
 await test("trade pages link only to homepage sections that exist, and their footer speaks to any business", () => {
@@ -721,7 +740,10 @@ await test("the homepage speaks to any business, promotes no trade page, and kee
   const section = html.slice(start, html.indexOf("</section>", start));
   const list = section.slice(section.indexOf('<ul class="kinds"'), section.indexOf("</ul>", section.indexOf('<ul class="kinds"')));
   const kinds = [...list.matchAll(/<li>([^<]+)<\/li>/g)].map((m) => m[1]);
-  assert.ok(kinds.length >= 10, `only ${kinds.length} example kinds of business`);
+  // Three use cases lead (salons, clinics, restaurants), then "And many more".
+  const uses = [...section.matchAll(/<ul class="uses">[\s\S]*?<\/ul>/g)].flatMap((m) => [...m[0].matchAll(/<h3>([^<]+)<\/h3>/g)].map((h) => h[1]));
+  assert.deepEqual(uses, ["Salons &amp; spas", "Clinics", "Restaurants &amp; cafés"]);
+  assert.ok(uses.length + kinds.length >= 12, `only ${uses.length + kinds.length} example kinds of business`);
   assert.doesNotMatch(list, /<a\b/, "the example kinds of business are links");
   // Clinics and dental stay toned down until the health-data question is settled.
   const plain = section.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
@@ -910,11 +932,16 @@ const built = (which: "off" | "on") => {
   return builds.get(which)!;
 };
 
-await test("the strip sits directly under the hero, with its heading and all nine names, each tagged in words", () => {
+await test("the strip opens the booking part of the page, with its heading and all nine names, each tagged in words", () => {
   const html = visibleHtml("landing.html");
-  const heroEnd = html.indexOf("</section>", html.indexOf('<section class="hero">'));
-  const next = html.indexOf("<section", heroEnd);
-  assert.equal(html.indexOf('<section id="connects"'), next, "the integrations strip is not the section after the hero");
+  // Page order (site review, 2026-09-17): what the team gets, then booking and integrations.
+  const stopEnd = html.indexOf("</section>", html.indexOf('<section id="stop"'));
+  const next = html.indexOf("<section", stopEnd);
+  assert.equal(html.indexOf('<section id="connects"'), next, "the integrations strip is not the section after what the team gets");
+  assert.ok(html.indexOf('<section id="connects"') < html.indexOf('<section id="works"'), "the strip is not before 'Whatever you book with'");
+  // Grouped: coming soon, then the roadmap, quieter. "Connects today" only when a flag is on.
+  assert.doesNotMatch(stripOf(html), /Connects today/);
+  assert.match(stripOf(html), /connects-group connects-soon[\s\S]*connects-group connects-roadmap/);
   const strip = stripOf(html);
   assert.match(strip, new RegExp(`<h2 class="connects-h" id="connects-h">${INTEGRATIONS_HEADING}</h2>`));
   assert.equal(INTEGRATIONS_HEADING, "Connecting to the tools you already use");
@@ -968,6 +995,7 @@ await test("built with booking.google on, Google Calendar reads Available and no
     ["Calendly", "On our roadmap"],
   ]);
   assert.match(stripOf(built("on")), /<span class="state state-available">Available<\/span>/);
+  assert.match(stripOf(built("on")), /<h3 class="connects-group-h">Connects today<\/h3>\s*<ul class="connects-list">\s*<li class="connect" data-integration="booking\.google"/);
 });
 
 /**
@@ -979,38 +1007,52 @@ const heroOf = (html: string) => {
   const start = html.indexOf('<section class="hero">');
   return html.slice(start, html.indexOf("</section>", start));
 };
-const bookWithOf = (html: string) => {
-  const at = html.indexOf("<dt>Google Calendar or Outlook</dt>");
+/** "What your team gets", where the example conversations and calendar are. */
+const exampleOf = (html: string) => {
+  const start = html.indexOf('<section id="stop"');
+  return html.slice(start, html.indexOf("</section>", start));
+};
+/** One entry of "Whatever you book with": Google Calendar and Outlook have their own. */
+const bookWithOf = (html: string, name = "Google Calendar") => {
+  const at = html.indexOf(`<dt>${name}</dt>`);
   return html.slice(at, html.indexOf("</div>", at));
 };
 
-await test("built with booking.google off, the hero, 'Whatever you book with' and the privacy page say Google Calendar is coming", () => {
+await test("built with booking.google off, the hero, the example, 'Whatever you book with' and the privacy page say Google Calendar is coming", () => {
   const html = built("off");
   const hero = heroOf(html);
-  assert.match(hero, /<span class="state state-soon cal-soon">Coming soon: books into your calendar<\/span>/);
-  assert.match(plainText(hero), /Soon, it will also book straight into the calendar you already use\./);
-  assert.doesNotMatch(hero, /state-available|Books into Google Calendar/);
+  assert.match(hero, /<li class="can-cal">Takes booking requests<\/li>/);
+  assert.doesNotMatch(hero, /state-available cal-soon|Books into Google Calendar/);
+  const example = exampleOf(html);
+  assert.match(example, /<span class="state state-soon cal-soon">Coming soon: books into your calendar<\/span>/);
+  assert.match(example, /<span class="cal-new-state">Waiting for your team<\/span>/);
+  assert.doesNotMatch(example, /Books into Google Calendar|Confirmed|booked you in/);
   assert.match(bookWithOf(html), /Booking straight into Google Calendar is coming soon\./);
   const privacy = builtPrivacy.get("off")!;
   assert.match(privacy, /No calendar can be connected yet/);
   assert.match(privacy, /Connecting a Google Calendar is not available yet/);
 });
 
-await test("built with booking.google on, each of those lines says it works, with no 'soon' left beside a calendar", () => {
+await test("built with booking.google on, each of those lines says it works, the example books, and nothing waits beside it", () => {
   const html = built("on");
   const hero = heroOf(html);
-  assert.match(hero, /<span class="state state-available cal-soon">Books into Google Calendar<\/span>/);
-  assert.doesNotMatch(hero, /Coming soon: books into your calendar/);
-  assert.match(plainText(hero), /It can also book straight into your Google Calendar, after checking it for times already taken\./);
+  assert.match(hero, /<li class="can-cal">Books into Google Calendar<\/li>/);
   assert.deepEqual(
     [...plainText(hero).matchAll(/[^.?!]*\bcalendar\b[^.?!]*/gi)].map((m) => m[0]).filter((s) => /\bsoon\b/i.test(s)),
     [],
     "a hero sentence about the calendar still says soon",
   );
+  const example = exampleOf(html);
+  assert.match(example, /<span class="state state-available cal-soon">Books into Google Calendar<\/span>/);
+  assert.doesNotMatch(example, /Coming soon: books into your calendar/);
+  // Never "Books into Google Calendar" and "Waiting for your team" together.
+  assert.match(example, /<span class="cal-new-state">Confirmed<\/span>/);
+  assert.doesNotMatch(plainText(example), /Waiting for your team|pass that to the team/);
+  assert.equal(plainText(example).split("Saturday at 10:00 is free, so I’ve booked you in.").length, 4);
   const bookWith = plainText(bookWithOf(html));
   assert.match(bookWith, /Connect Google Calendar and Belline checks it for times already taken, then books straight into it\./);
-  assert.match(bookWith, /Outlook isn’t connected yet, so for Outlook Belline takes booking requests\./, "Outlook is not kept honest");
   assert.doesNotMatch(bookWith, /soon/i);
+  assert.match(plainText(bookWithOf(html, "Outlook")), /Booking straight into Outlook is coming soon\./, "Outlook is not kept honest");
   const privacy = builtPrivacy.get("on")!;
   assert.doesNotMatch(privacy, /No calendar can be connected yet|Connecting a Google Calendar is not available yet/);
   assert.match(privacy, /Connecting a Google Calendar is optional\./);
@@ -1030,11 +1072,12 @@ await test("the app's server re-applies the strip and the Google lines from its 
   // And back: a page built with it on, served with it off.
   const back = pageWithFlags("index.html", Buffer.from(built("on")), {}).toString("utf8");
   assert.deepEqual(tagsIn(stripOf(back))[0], ["Google Calendar", "Coming soon"]);
-  assert.match(heroOf(back), /Coming soon: books into your calendar/);
+  assert.match(exampleOf(back), /Coming soon: books into your calendar/);
+  assert.match(heroOf(back), /<li class="can-cal">Takes booking requests<\/li>/);
   assert.match(bookWithOf(back), /coming soon/);
   assert.match(pageWithFlags("privacy.html", Buffer.from(builtPrivacy.get("off")!), GOOGLE_ON).toString("utf8"), /Connecting a Google Calendar is optional\./);
   // Stubs are a test harness: never a reason to tell the public it is on.
-  assert.match(heroOf(pageWithFlags("index.html", off, { FLAG_STUBS: "on", FLAG_BOOKING_GOOGLE: "on" }).toString("utf8")), /Coming soon: books into your calendar/);
+  assert.match(exampleOf(pageWithFlags("index.html", off, { FLAG_STUBS: "on", FLAG_BOOKING_GOOGLE: "on" }).toString("utf8")), /Coming soon: books into your calendar/);
 });
 
 await test("staging serves the site with links into staging's app; production and belline.ai hosts keep app.belline.ai", async () => {
@@ -1212,21 +1255,25 @@ await test("the German strip follows the flags in German: Demnächst and Geplant
   }
 });
 
-await test("the German hero keeps the calendar 'Demnächst', the request waiting, and the examples labelled as translated", () => {
+await test("the German example keeps the calendar 'Demnächst', the request waiting, and the examples labelled as translated", () => {
   for (const { file, html } of germanPages().filter((p) => !p.file.includes("flag on"))) {
-    const hero = heroOf(html);
-    const plain = hero.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-    assert.match(hero, /<span class="state state-soon cal-soon">Demnächst: bucht in Ihren Kalender<\/span>/, `${file}: no Demnächst badge`);
-    assert.deepEqual(unsoonedCalendarClaimsDe(plain), [], `${file}: the hero says calendar booking works today`);
-    assert.match(hero, /Wartet auf Ihr Team/);
-    assert.doesNotMatch(plain, /\b(?:gebucht|fest gebucht|reserviert|ist bestätigt)\b/i, `${file}: something in the hero reads as booked`);
-    assert.doesNotMatch(hero, /state-available/);
-    assert.equal((hero.match(/<span class="demo-example">Beispiel, übersetzt<\/span>/g) ?? []).length, 3, `${file}: examples not labelled as translated`);
+    const heroPlain = heroOf(html).replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    assert.deepEqual(unsoonedCalendarClaimsDe(heroPlain), [], `${file}: the hero says calendar booking works today`);
+    assert.match(heroOf(html), /<li class="can-cal">Nimmt Buchungsanfragen auf<\/li>/, `${file}: the capability row`);
+    const example = exampleOf(html);
+    const plain = example.replace(/<!--[\s\S]*?-->/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    assert.match(example, /<span class="state state-soon cal-soon">Demnächst: bucht in Ihren Kalender<\/span>/, `${file}: no Demnächst badge`);
+    assert.deepEqual(unsoonedCalendarClaimsDe(plain), [], `${file}: the example says calendar booking works today`);
+    assert.match(example, /Wartet auf Ihr Team/);
+    assert.doesNotMatch(plain, /\b(?:gebucht|fest gebucht|reserviert|ist bestätigt|Bestätigt|eingetragen)\b/i, `${file}: something in the example reads as booked`);
+    assert.doesNotMatch(example, /state-available/);
+    assert.equal((example.match(/<span class="demo-example">Beispiel, übersetzt<\/span>/g) ?? []).length, 3, `${file}: examples not labelled as translated`);
   }
   for (const slug of ["de-de", "de-ch"]) {
-    const hero = heroOf(builtGerman.get(`on ${slug}`)!);
-    assert.match(hero, /Bucht in Google Calendar/, `${slug}: the flag-on badge is missing`);
-    assert.doesNotMatch(hero, /Demnächst: bucht/, `${slug}: flag on still says Demnächst`);
+    const html = builtGerman.get(`on ${slug}`)!;
+    assert.match(heroOf(html), /Bucht in Google Calendar/, `${slug}: the flag-on capability is missing`);
+    assert.match(exampleOf(html), /Bucht in Google Calendar/, `${slug}: the flag-on badge is missing`);
+    assert.doesNotMatch(exampleOf(html), /Demnächst: bucht|Wartet auf Ihr Team/, `${slug}: flag on still says Demnächst or waiting`);
   }
 });
 
@@ -1274,7 +1321,7 @@ await test("the app's server re-applies the German strip and calendar lines, Swi
     assert.match(heroOf(served), /Bucht in Google Calendar/, slug);
     assert.match(served, /Verbinden Sie Google Calendar, und Belline prüft dort/, slug);
     const back = pageWithFlags(`${slug}/index.html`, Buffer.from(builtGerman.get(`on ${slug}`)!), {}).toString("utf8");
-    assert.match(heroOf(back), /Demnächst: bucht in Ihren Kalender/, slug);
+    assert.match(exampleOf(back), /Demnächst: bucht in Ihren Kalender/, slug);
     const privacy = pageWithFlags(`${slug}/datenschutz.html`, Buffer.from(builtGerman.get(`off ${slug} privacy`)!), GOOGLE_ON).toString("utf8");
     assert.match(privacy, /Die Verbindung eines Google Kalenders ist optional\./, `${slug} privacy`);
   }

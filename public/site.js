@@ -648,20 +648,31 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
 })();
 
 /* --- the video receptionist ------------------------------------------------
-   Belline's video receptionist, on our own site — and only once it is switched
-   on for our own venue. Nothing is in the markup: when the venue's widget
-   config says `video: true`, this loads embed-video.js from the app, which
-   puts Belle's round bubble in the corner (a muted clip or a poster; no
-   session, no microphone) and, on a tap, grows it into the call itself.
+   Belline's video receptionist, on our own site, once it is switched on for
+   our own venue. When the venue's widget config says `video: true`, this loads
+   embed-video.js from the app, which makes Belle's round bubble (a muted clip
+   or a poster; no session, no microphone) and, on a tap, grows it into the
+   call itself.
 
-   With the bubble on screen the three floating buttons (WhatsApp, chat, the
-   bell) step aside. Under Belle's face, beside "Talk to Belle", two round
-   icons, "Chat with Belle" and "WhatsApp Belle", do exactly what their buttons
-   did and ring on the same beat. The bell has no icon: on the web, voice is the
-   face, so every "Talk to Belle" on the page starts the video call. With the
-   feature off, as in production until approved, or if embed-video.js never
-   arrives, the page is the page it was, and those buttons ring Belline's voice
-   call as before. */
+   Where she sits (site review, 2026-09-17). Nothing floats over the page at
+   rest:
+   - On a wide screen her bubble is the hero's demonstration: it goes into the
+     hero's face slot, in the flow of the page, with "Try Belle on video" and
+     the round chat (and WhatsApp) icons under it.
+   - Once that face is out of view, and on a phone from the start, the corner
+     holds only a compact launcher: a 40 px face, "Talk to Belle · video", and
+     the same icons. It steps out of the way wherever it would cover the
+     pricing or a button.
+   - A call always happens in the big circle. Started while the hero is out of
+     view (or on a phone), the circle floats in the corner for the call, and
+     picture in picture stays as embed-video.js builds it. When the call ends
+     she goes back to the hero, or out of sight on a phone.
+
+   WhatsApp is offered only while the config names a connected number
+   (`whatsappLink`): otherwise the floating WhatsApp button goes too.
+
+   With video off, or if embed-video.js never arrives, the three floating
+   buttons stay and every "Talk to Belle" rings Belline's voice call. */
 (function () {
   var chatFab = document.querySelector("[data-chat]");
   if (!chatFab || typeof window.fetch !== "function") return;
@@ -672,14 +683,191 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   var key = match[2];
 
   var ctl = null;
+  var bubble = null;
+  var launcher = null;
   var waFab = document.querySelector(".wa-fab");
+  /** The config's WhatsApp link, or null while no number is connected. */
+  var waLink = null;
+  var figure = document.querySelector("[data-hero-video]");
+  var slot = figure ? figure.querySelector("[data-video-slot]") : null;
+  var wide = window.matchMedia("(min-width: 901px)");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var docked = false;
+  var inCall = false;
+  var faceInView = true;
+  var poster = "";
+
+  var WORDS = SITE_DE
+    ? { pill: "Mit Belle sprechen · Video", tryVideo: "Belle per Video ausprobieren", region: "Belle, KI-Empfang" }
+    : { pill: "Talk to Belle · video", tryVideo: "Try Belle on video", region: "Belle, AI receptionist" };
+
+  var MARK =
+    '<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="#2997FF" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>';
+  var ICONS = {
+    chat:
+      '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 11.2C3 6.9 7.03 3.5 12 3.5s9 3.4 9 7.7c0 4.3-4.03 7.7-9 7.7a11 11 0 0 1-2.4-.26L5.4 20.5l.5-3.2A7.7 7.7 0 0 1 3 11.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="8.2" cy="11.2" r="1.15" fill="currentColor"/><circle cx="12" cy="11.2" r="1.15" fill="currentColor"/><circle cx="15.8" cy="11.2" r="1.15" fill="currentColor"/></svg>',
+    whatsapp:
+      '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z" fill="currentColor"/></svg>',
+  };
+
+  // Until the config says a number is connected, there is no WhatsApp to offer.
+  if (waFab) waFab.hidden = true;
 
   function actions() {
     var list = [];
     // Chat first: the quiet way in for somebody who cannot talk out loud now.
     list.push({ kind: "chat", label: SITE_DE ? "Mit Belle chatten" : "Chat with Belle", run: function () { chatFab.click(); } });
-    if (waFab) list.push({ kind: "whatsapp", label: SITE_DE ? "Belle auf WhatsApp" : "WhatsApp Belle", run: function () { waFab.click(); } });
+    // WhatsApp only while the config names a connected number.
+    if (waFab && waLink) list.push({ kind: "whatsapp", label: SITE_DE ? "Belle auf WhatsApp" : "WhatsApp Belle", run: function () { waFab.click(); } });
     return list;
+  }
+
+  function cssUrl(url) {
+    return 'url("' + String(url).replace(/["\\\n\r]/g, encodeURIComponent) + '")';
+  }
+
+  function inHero() {
+    return Boolean(figure && figure.classList.contains("has-bubble"));
+  }
+
+  /** Is the whole resting bubble on screen, so a call can grow where it is? */
+  function bubbleOnScreen() {
+    if (!bubble) return false;
+    var r = bubble.getBoundingClientRect();
+    return r.height > 0 && r.top >= 0 && r.bottom <= window.innerHeight;
+  }
+
+  function place(root) {
+    bubble = root;
+    root.classList.add("video-bubble");
+    document.body.classList.add("has-video-bubble");
+    if (slot && wide.matches) {
+      slot.appendChild(root);
+      figure.classList.add("has-bubble");
+    } else {
+      // A phone never shows the big bubble at rest: it waits, out of sight, for a call.
+      root.classList.add("vb-parked");
+      document.body.appendChild(root);
+    }
+  }
+
+  // --- the launcher ----------------------------------------------------------
+
+  function buildLauncher() {
+    launcher = document.createElement("div");
+    launcher.className = "video-launcher";
+    launcher.setAttribute("role", "region");
+    launcher.setAttribute("aria-label", WORDS.region);
+    launcher.hidden = true;
+
+    var main = document.createElement("button");
+    main.type = "button";
+    main.className = "vl-main";
+    var face = document.createElement("span");
+    face.className = "vl-face";
+    face.setAttribute("aria-hidden", "true");
+    face.innerHTML = MARK;
+    if (poster) {
+      face.style.backgroundImage = cssUrl(poster);
+      face.classList.add("has-poster");
+    }
+    var say = document.createElement("span");
+    say.className = "vl-say";
+    say.textContent = WORDS.pill;
+    main.appendChild(face);
+    main.appendChild(say);
+    main.addEventListener("click", startCall);
+    launcher.appendChild(main);
+
+    actions().forEach(function (o) {
+      var act = document.createElement("button");
+      act.type = "button";
+      act.className = "vl-act";
+      act.setAttribute("data-kind", o.kind);
+      act.setAttribute("aria-label", o.label);
+      act.title = o.label;
+      act.innerHTML = ICONS[o.kind] || ICONS.chat;
+      act.addEventListener("click", function () {
+        stopRing();
+        o.run();
+      });
+      launcher.appendChild(act);
+    });
+    document.body.appendChild(launcher);
+  }
+
+  /** A few rings on a phone, where the launcher is there from the start. Never under reduced motion. */
+  function ring() {
+    if (!launcher || reduced.matches) return;
+    [].forEach.call(launcher.querySelectorAll(".vl-act"), function (a) { a.classList.add("is-ringing"); });
+  }
+
+  function stopRing() {
+    if (!launcher) return;
+    [].forEach.call(launcher.querySelectorAll(".vl-act"), function (a) { a.classList.remove("is-ringing"); });
+  }
+
+  // What the launcher must never sit on: the pricing, and any button or form.
+  var AVOID = "#price, .btn, .nav-cta, .roi-result, .cta-row, #warteliste, .chat-dock, .call-dock";
+
+  function overlaps(a, b) {
+    return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  }
+
+  /** Step aside (and back) by where the launcher would be, not where its slide has got to. */
+  function avoid() {
+    var box = {
+      left: launcher.offsetLeft,
+      top: launcher.offsetTop,
+      right: launcher.offsetLeft + launcher.offsetWidth,
+      bottom: launcher.offsetTop + launcher.offsetHeight,
+    };
+    var hit = [].some.call(document.querySelectorAll(AVOID), function (el) {
+      if (launcher.contains(el)) return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && overlaps(box, r);
+    });
+    launcher.classList.toggle("is-away", hit);
+  }
+
+  function update() {
+    if (!launcher) return;
+    var show = Boolean(ctl) && !inCall && !docked && !(inHero() && faceInView);
+    launcher.hidden = !show;
+    if (show) avoid();
+  }
+
+  var queued = false;
+  function soon() {
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(function () {
+      queued = false;
+      update();
+    });
+  }
+
+  // --- the call ---------------------------------------------------------------
+
+  function startCall() {
+    if (!ctl || !bubble) return;
+    stopRing();
+    if (!(inHero() && bubbleOnScreen())) {
+      bubble.classList.remove("vb-parked");
+      bubble.classList.add("vb-float");
+    }
+    inCall = true;
+    update();
+    ctl.openCall();
+  }
+
+  function callClosed() {
+    inCall = false;
+    if (bubble) {
+      bubble.classList.remove("vb-float");
+      if (!inHero()) bubble.classList.add("vb-parked");
+    }
+    update();
   }
 
   function ready(api) {
@@ -689,41 +877,58 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       origin: appOrigin,
       key: key,
       hostOrigin: location.origin,
-      fixed: true,
+      // In the hero's flow; site.css floats it for a call away from the hero.
+      fixed: false,
       ring: true,
-      strings: SITE_DE ? { talk: "Mit Belle sprechen", caption: "Hallo, ich bin Belle — zum Sprechen tippen" } : {},
+      strings: SITE_DE ? { talk: WORDS.tryVideo, caption: "Hallo, ich bin Belle — zum Sprechen tippen" } : { talk: WORDS.tryVideo },
       actions: actions,
-      place: function (bubble) {
-        bubble.classList.add("video-bubble");
-        document.body.appendChild(bubble);
-        // The bubble and its two icons now stand in for the three buttons.
-        document.body.classList.add("has-video-bubble");
+      place: place,
+      onCallOpened: function () {
+        inCall = true;
+        update();
       },
+      onCallClosed: callClosed,
       // "Type instead" during a call: the chat opens where the bubble was.
       onSwitch: function (to) {
         if (to === "chat") chatFab.click();
       },
     });
+    buildLauncher();
+    if (!inHero()) ring();
+    if (slot && "IntersectionObserver" in window) {
+      new IntersectionObserver(
+        function (entries) {
+          faceInView = entries[0].isIntersecting;
+          update();
+        },
+        { threshold: 0.35 },
+      ).observe(slot);
+    }
+    window.addEventListener("scroll", soon, { passive: true });
+    window.addEventListener("resize", soon);
+    update();
   }
 
-  // The chat and the call dock in the same corner: the bubble steps out of
-  // their way while one is open, and comes back when it closes.
+  // The chat and the voice call dock in the corner: Belle and her launcher step
+  // out of their way while one is open, and come back when it closes.
   document.addEventListener("belline:dock", function (e) {
-    if (ctl) ctl.setHidden(Boolean(e.detail && e.detail.open));
+    docked = Boolean(e.detail && e.detail.open);
+    if (ctl) ctl.setHidden(docked);
+    update();
   });
 
-  // Every "Talk to Belle" on the page (the hero's first) starts the video call
-  // in Belle's circle once the bubble is here. Caught before the voice dock's
-  // own listener; until then, and without video, they ring the voice call.
+  // Every "Talk to Belle" on the page starts the video call in Belle's circle
+  // once she is here. Caught before the voice dock's own listener; until then,
+  // and without video, they ring the voice call.
   document.addEventListener(
     "click",
     function (e) {
-      if (!ctl || ctl.state().hidden) return;
+      if (!ctl || docked) return;
       var trigger = e.target && e.target.closest ? e.target.closest("[data-call]") : null;
       if (!trigger) return;
       e.preventDefault();
       e.stopPropagation();
-      ctl.openCall();
+      startCall();
     },
     true
   );
@@ -733,8 +938,22 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       return r.ok ? r.json() : null;
     })
     .then(function (cfg) {
-      if (!cfg || cfg.video !== true) return;
+      if (!cfg) return;
+      waLink = typeof cfg.whatsappLink === "string" && cfg.whatsappLink ? cfg.whatsappLink : null;
+      if (waFab && waLink) waFab.hidden = false;
+      if (cfg.video !== true) return;
       window.__bellineVideoConfig = cfg.videoBubble || {};
+      var still = window.__bellineVideoConfig.posterUrl;
+      if (typeof still === "string" && still) poster = still.charAt(0) === "/" && still.charAt(1) !== "/" ? appOrigin + still : still;
+      if (figure) {
+        var cta = figure.querySelector(".hv-cta");
+        if (cta) cta.textContent = WORDS.tryVideo;
+        var face = figure.querySelector(".hv-face");
+        if (face && poster) {
+          face.style.backgroundImage = cssUrl(poster);
+          figure.classList.add("has-poster");
+        }
+      }
       if (window.BellineVideo) return ready(window.BellineVideo);
       (window.__bellineVideoReady = window.__bellineVideoReady || []).push(ready);
       var s = document.createElement("script");
@@ -749,12 +968,30 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
 /* --- monthly / annual ------------------------------------------------------
    The prices for both cycles are already in the markup as data attributes, so
    the page reads correctly with no JavaScript at all and this only swaps
-   between two sets of numbers that are both already true. */
+   between two sets of numbers that are both already true.
+
+   The choice travels: every link to the checkout on the page (the plan cards,
+   and every "Get started") carries `cycle=annual` while Annual is chosen, and
+   drops it again for Monthly. The checkout reads `?cycle=annual`. */
 (function () {
   var group = document.querySelector(".cycle");
   if (!group) return;
 
   var options = group.querySelectorAll(".cycle-opt");
+
+  function carry(cycle) {
+    document.querySelectorAll('a[href*="/checkout"]').forEach(function (a) {
+      try {
+        var url = new URL(a.getAttribute("href"), location.href);
+        if (!/\/checkout\/?$/.test(url.pathname)) return;
+        if (cycle === "annual") url.searchParams.set("cycle", "annual");
+        else url.searchParams.delete("cycle");
+        a.setAttribute("href", url.toString());
+      } catch (e) {
+        /* a link we cannot parse keeps its own href */
+      }
+    });
+  }
 
   function show(cycle) {
     options.forEach(function (opt) {
@@ -765,6 +1002,7 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     document.querySelectorAll("[data-" + cycle + "]").forEach(function (el) {
       el.textContent = el.getAttribute("data-" + cycle);
     });
+    carry(cycle);
   }
 
   group.addEventListener("click", function (e) {
@@ -1126,52 +1364,6 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
    three ways of reaching Belline at the one moment everybody sees — the first
    paint — so it is gone. They are on screen from the start, and the hero is
    given the room instead (see "Platz für die Knöpfe" in site.css). */
-
-/* --- the integrations strip ------------------------------------------------
-   A slow, continuous line of the systems Belline connects to (or plans to).
-   The page ships a still list; this only adds the movement, and only for
-   visitors who have not asked for reduced motion. A hidden copy of the list
-   follows the first so the loop has no seam, and the Pause button is there
-   because moving content must be stoppable (WCAG 2.2.2), not just on hover. */
-(function () {
-  var section = document.getElementById("connects");
-  if (!section) return;
-  var list = section.querySelector(".connects-list");
-  var pause = section.querySelector(".connects-pause");
-  if (!list || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-  var rail = document.createElement("div");
-  rail.className = "connects-rail";
-  var track = document.createElement("div");
-  track.className = "connects-track";
-  list.parentNode.insertBefore(rail, list);
-  rail.appendChild(track);
-  track.appendChild(list);
-
-  var copy = list.cloneNode(true);
-  copy.setAttribute("aria-hidden", "true");
-  copy.removeAttribute("aria-label");
-  track.appendChild(copy);
-
-  // Lazy icons would wait for the viewport and slide in blank: load them all now (they are tiny).
-  Array.prototype.forEach.call(section.querySelectorAll("img"), function (img) { img.loading = "eager"; });
-  section.classList.add("is-moving");
-  // About 30px a second, whatever the screen: the duration follows the list's width.
-  var speed = function () {
-    track.style.setProperty("--connects-duration", Math.max(20, list.scrollWidth / 30) + "s");
-  };
-  speed();
-  window.addEventListener("resize", speed);
-
-  if (pause) {
-    pause.hidden = false;
-    pause.addEventListener("click", function () {
-      var paused = section.classList.toggle("is-paused");
-      pause.setAttribute("aria-pressed", paused ? "true" : "false");
-      pause.textContent = SITE_DE ? (paused ? "Abspielen" : "Anhalten") : paused ? "Play" : "Pause";
-    });
-  }
-})();
 
 /* --- country and language --------------------------------------------------
    The picker ships as a <details>, which opens and navigates with no

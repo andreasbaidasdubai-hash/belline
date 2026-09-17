@@ -1093,11 +1093,13 @@ await test("flag on, the website says Google Calendar works, and 'soon' is gone 
   const landing = visible(applySiteFlags("landing.html", publicPage("landing.html"), ON));
   assert.doesNotMatch(words(landing), SOON_CALENDAR, "the landing page still says the calendar is coming");
   assert.match(landing, /<span class="state state-available cal-soon">Books into Google Calendar<\/span>/);
-  assert.match(landing, /books straight into it\. Outlook isn’t connected yet/, "Outlook is not kept honest");
-  // What check:webchat holds the hero to, still true: nothing in it is booked or confirmed.
-  const start = landing.indexOf('<section class="hero">');
-  const hero = landing.slice(start, landing.indexOf("</section>", start)).replace(/<[^>]+>/g, " ");
-  assert.doesNotMatch(hero, /\b(?:booked|confirmed)\b/i);
+  // Google and Outlook are separate entries in "Whatever you book with": Outlook still says it is coming.
+  assert.match(landing, /<dd>Connect Google Calendar and Belline checks it for times already taken, then books straight into it\.<\/dd>/);
+  assert.match(landing, /<dd>Belline takes booking requests today\. Booking straight into Outlook is coming soon\.<\/dd>/, "Outlook is not kept honest");
+  // The hero says what books, and the example books the free time: never "Waiting for your team" beside it.
+  assert.match(landing, /<li class="can-cal">Books into Google Calendar<\/li>/);
+  assert.match(landing, /<span class="cal-new-state">Confirmed<\/span>/);
+  assert.doesNotMatch(landing.replace(/<!--[\s\S]*?-->/g, ""), /Waiting for your team/);
   const privacy = visible(applySiteFlags("privacy.html", publicPage("privacy.html"), ON));
   assert.doesNotMatch(words(privacy), SOON_CALENDAR, "the privacy page still says a calendar cannot be connected");
   assert.match(privacy, /Google API Services User Data Policy<\/a>, including the Limited Use requirements/);

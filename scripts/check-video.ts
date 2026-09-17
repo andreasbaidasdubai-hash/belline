@@ -1716,7 +1716,7 @@ await test("the bubble opens on load, greeting, when video is on and it has not 
   assert.equal(video.attrs.src, "https://app.example/video/greeting.mp4");
   // The widget only loads the bubble when the config says so (and the route only says so when video is offered).
   assert.match(read("public/embed.js"), /if \(cfg\.video === true && !fabs\.video\) \{[\s\S]{0,200}mountVideo\(/);
-  assert.match(read("public/site.js"), /if \(!cfg \|\| cfg\.video !== true\) return;/);
+  assert.match(read("public/site.js"), /if \(!cfg\) return;[\s\S]{0,300}if \(cfg\.video !== true\) return;/);
   // The greeting line never covers the page on a narrow screen.
   assert.match(read("public/embed-video.js"), /@media \(max-width:900px\)\{\.bvb-caption\{display:none\}\}/);
 });
@@ -1778,8 +1778,17 @@ await test("under the face: Talk to Belle and two round icons (chat, WhatsApp), 
   const source = read("public/embed-video.js");
   assert.match(source, /@keyframes bvb-bell-shake\{0%,27%,100%\{transform:rotate\(0deg\)\}2%\{transform:rotate\(-22deg\)\}/, "not the bell's shake");
   assert.match(source, /@keyframes bvb-bell-ring\{0%\{transform:scale\(1\);opacity:\.55\}55%\{transform:scale\(1\.28\);opacity:0\}/, "not the bell's ring");
-  assert.match(source, /\.bvb-act\.is-ringing\{animation:bvb-bell-nudge 1\.5s ease-in-out infinite\}/);
+  // Three rings after load, then still (site review, 2026-09-17): never an endless ring.
+  assert.match(source, /\.bvb-act\.is-ringing\{animation:bvb-bell-nudge 1\.5s ease-in-out " \+ RINGS \+ "\}/);
+  assert.match(source, /var RINGS = 3;/);
+  assert.doesNotMatch(source, /is-ringing[^"]*infinite/, "a ring loops forever again");
   assert.match(source, /@media \(prefers-reduced-motion:reduce\)\{[\s\S]*?\.bvb-act,\.bvb-act\.is-ringing,\.bvb-act\.is-ringing svg,\.bvb-act\.is-ringing::after\{animation:none!important/);
+  // Left alone, the ring stops by itself once its three rings are over.
+  const idle = fakePage();
+  const idleCtl = mountBubble(idle, {}, { actions, ring: true }).ctl;
+  assert.equal(idleCtl.state().ringing, true);
+  idle.flush();
+  assert.equal(idleCtl.state().ringing, false, "still ringing after its three rings");
   buttons[2].click();
   assert.deepEqual(ran, ["whatsapp"], "each icon does what its button did");
   assert.ok(buttons.slice(1).every((b) => b.className === "bvb-act"), "still ringing after a tap");
@@ -1798,6 +1807,10 @@ await test("under the face: Talk to Belle and two round icons (chat, WhatsApp), 
   const site = read("public/site.js");
   assert.match(site, /label: SITE_DE \? "Mit Belle chatten" : "Chat with Belle", run: function \(\) \{ chatFab\.click\(\); \}/);
   assert.match(site, /label: SITE_DE \? "Belle auf WhatsApp" : "WhatsApp Belle", run: function \(\) \{ waFab\.click\(\); \}/);
+  // WhatsApp only while the widget config names a connected number, beside Belle and as the floating button.
+  assert.match(site, /if \(waFab && waLink\) list\.push\(\{ kind: "whatsapp"/);
+  assert.match(site, /if \(waFab\) waFab\.hidden = true;/);
+  assert.match(site, /waLink = typeof cfg\.whatsappLink === "string" && cfg\.whatsappLink \? cfg\.whatsappLink : null;/);
   assert.equal(/bellFab/.test(site), false, "the bell is back beside the face");
   assert.match(site, /ring: true,/);
   const embed = read("public/embed.js");
@@ -1810,15 +1823,20 @@ await test("under the face: Talk to Belle and two round icons (chat, WhatsApp), 
 await test("every Talk to Belle on belline.ai starts the video call once the bubble is there, and the hero says so", () => {
   const site = read("public/site.js");
   const video = site.slice(site.indexOf("/* --- the video receptionist"), site.indexOf("/* --- monthly / annual"));
-  assert.match(video, /document\.addEventListener\(\s*"click",[\s\S]{0,300}closest\("\[data-call\]"\)[\s\S]{0,120}e\.preventDefault\(\);\s*e\.stopPropagation\(\);\s*ctl\.openCall\(\);[\s\S]{0,20}true\s*\)/);
+  assert.match(video, /document\.addEventListener\(\s*"click",[\s\S]{0,300}closest\("\[data-call\]"\)[\s\S]{0,120}e\.preventDefault\(\);\s*e\.stopPropagation\(\);\s*startCall\(\);[\s\S]{0,20}true\s*\)/);
+  assert.match(video, /function startCall\(\) \{[\s\S]{0,400}ctl\.openCall\(\);/);
   for (const [file, label] of [["public/landing.html", "Talk to Belle"], ["public/landing.de.html", "Mit Belle sprechen"]]) {
     const html = read(file);
     const hero = html.slice(html.indexOf('<section class="hero">'), html.indexOf("</section>", html.indexOf('<section class="hero">')));
-    assert.match(hero, new RegExp(`<a class="btn line" href="https://app\\.belline\\.ai/call\\?start=1" data-call>${label}</a>`), `${file}: the hero button`);
+    // Without video (or JavaScript) the hero's button is the voice call, and says so; site.js says "Try Belle on video" once video is here.
+    assert.match(hero, new RegExp(`<a class="btn line hv-cta" href="https://app\\.belline\\.ai/call\\?start=1" data-call>${label}</a>`), `${file}: the hero button`);
     assert.equal(/Speak to Belline<\/a>|Mit Belline sprechen<\/a>/.test(html.replace(/<a class="bell-fab"[\s\S]*?<\/a>/, "")), false, `${file}: an old button name is left`);
   }
-  assert.match(read("public/landing.html"), /<p class="eyebrow rise">AI video, voice and chat reception<\/p>/);
-  assert.match(read("public/landing.de.html"), /<p class="eyebrow rise">KI-Empfang für Video, Telefon und Chat<\/p>/);
+  assert.match(video, /tryVideo: "Try Belle on video"/);
+  assert.match(video, /pill: "Talk to Belle · video"/);
+  // The video receptionist leads (founder, 2026-09-17).
+  assert.match(read("public/landing.html"), /<p class="eyebrow rise">AI video receptionist for your website<\/p>/);
+  assert.match(read("public/landing.de.html"), /<p class="eyebrow rise">KI-Video-Empfang für Ihre Website<\/p>/);
 });
 
 await test("close shrinks the bubble to a small face for the session; the face brings it back", () => {
