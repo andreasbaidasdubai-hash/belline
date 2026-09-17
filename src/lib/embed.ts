@@ -211,7 +211,8 @@ export function checkEmbedGate(location: Location): EmbedGate {
   // widget off for the day — while the widget screen reported their calls as
   // visitors'.
   const used = listCalls(location.id).filter(
-    (call) => call.channel === "embed" && dateIn(call.startedAt, location.timezone) === today,
+    // Video calls have their own ceiling (video/availability.ts).
+    (call) => call.channel === "embed" && !call.video && dateIn(call.startedAt, location.timezone) === today,
   ).length;
 
   if (used < config.maxCallsPerDay) {
@@ -325,6 +326,6 @@ export function widgetConfig(
     // Only where there is something to say, so a one-language widget's config is what it was.
     ...(notice ? { notice, lang: language, dir: languageEntry(language).dir } : {}),
     // The widget's own words, where they are not English.
-    ...(language !== "en" ? { strings: { closeChat: copy(language, "embed.close_chat"), closeCall: copy(language, "embed.close_call") } } : {}),
+    ...(language !== "en" ? { strings: { closeChat: copy(language, "embed.close_chat"), closeCall: copy(language, "embed.close_call"), closeVideo: copy(language, "embed.close_video") } } : {}),
   };
 }

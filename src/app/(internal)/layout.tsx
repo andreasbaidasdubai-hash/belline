@@ -70,6 +70,8 @@ export default async function InternalLayout({ children }: { children: React.Rea
     // Signups that look like a second free trial, and emails not confirmed.
     { href: "/sales/abuse", label: "Abuse review" },
     { href: "/sales/activity", label: "Agent activity" },
+    // The video receptionist's kill switch and venue list (docs/video).
+    { href: "/sales/video", label: "Video" },
   ];
 
   return (

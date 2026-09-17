@@ -1396,7 +1396,7 @@ await test("the privacy page: Railway hosts the website, Vercel is gone, and Mic
   for (const page of [html, on, both]) {
     assert.doesNotMatch(visible(page), /\b(?:books?|booking|booked) (?:straight |directly )?(?:into|against|in) (?:your|the|their) (?:real |existing )?(?:diary|calendar)\b/i);
   }
-  assert.match(html, /Last updated 16 September 2026/);
+  assert.match(html, /Last updated 17 September 2026/);
 });
 
 await test("nothing in this run reached a real host", () => {

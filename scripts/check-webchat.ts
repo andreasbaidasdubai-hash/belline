@@ -438,7 +438,8 @@ await test("the public phone menu takes keyboard focus in, and Escape gives it b
 await test("the call and chat docks move focus to their close button when they open", () => {
   const js = fs.readFileSync(path.join(process.cwd(), "public", "site.js"), "utf8");
   const opens = js.split("document.body.appendChild(dock);").slice(1);
-  assert.equal(opens.length, 2, "expected the call dock and the chat dock");
+  // The third is the video dock (docs/video), made only when video is on for our venue.
+  assert.equal(opens.length, 3, "expected the call dock, the chat dock and the video dock");
   for (const after of opens) assert.match(after.slice(0, 200), /shut\.focus\(\)/, "a dock opened without moving focus into it");
 });
 

@@ -17,6 +17,9 @@
  *   data-mode="chat"   a speech bubble. They type.
  *   data-mode="both"   both buttons, chat above the bell.
  *
+ * A third, video (a face to talk to), appears only when the venue's config
+ * says `video: true` — Belline turns it on per venue; nothing on the tag can.
+ *
  * Unset means "voice", which is what every site carrying this script before
  * chat existed already had. A feature shipping must not change somebody's live
  * website on its own.
@@ -60,7 +63,7 @@
   var whatsappLabel = script.getAttribute("data-whatsapp-label") || "WhatsApp us";
   // The widget's own words, replaced by the venue's language from its config
   // (customer-copy.ts `embed.close_*`) once that arrives.
-  var STRINGS = { closeChat: "Close chat", closeCall: "Close call" };
+  var STRINGS = { closeChat: "Close chat", closeCall: "Close call", closeVideo: "Close video call" };
   var attrSide = script.hasAttribute("data-side");
   var attrVoice = script.hasAttribute("data-label");
   var attrChat = script.hasAttribute("data-chat-label");
@@ -96,10 +99,12 @@
     "border:0;border-radius:14px;overflow:hidden;background:#1D1D1F;" +
     "box-shadow:0 24px 60px -20px rgba(0,0,0,.55)}" +
     ".belline-panel.belline-left{right:auto;left:24px}" +
+    // Video needs room for a face: taller and a little wider than the call.
+    ".belline-panel.belline-video{width:420px;height:640px}" +
     ".belline-shut{position:fixed;z-index:2147483002;width:32px;height:32px;border:0;" +
     "border-radius:999px;background:rgba(255,255,255,.14);color:#FFFFFF;cursor:pointer;" +
     "font:16px/1 sans-serif;display:grid;place-items:center}" +
-    "@media (max-width:520px){.belline-panel,.belline-panel.belline-left{inset:0;width:100%;height:100%;" +
+    "@media (max-width:520px){.belline-panel,.belline-panel.belline-left,.belline-panel.belline-video{inset:0;width:100%;height:100%;" +
     "max-width:none;max-height:none;border-radius:0}" +
     ".belline-dock{bottom:18px;right:18px}.belline-dock.belline-left{left:18px}" +
     ".belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
@@ -143,7 +148,10 @@
     "{animation:none!important}}" +
     // "Also speaks Deutsch": a small line under the buttons, in the venue's main language.
     ".belline-notice{font:12px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1D1D1F;" +
-    "background:rgba(255,255,255,.92);padding:3px 9px;border-radius:999px;unicode-bidi:plaintext}";
+    "background:rgba(255,255,255,.92);padding:3px 9px;border-radius:999px;unicode-bidi:plaintext}" +
+    // The video greeting bubble sits at the top of the stack, right edges aligned.
+    ".belline-dock .bvb{--bvb-size:200px}.belline-dock .belline-fab[hidden]{display:none}" +
+    "@media (max-width:520px){.belline-dock .bvb{--bvb-size:128px}.belline-dock .bvb-talk{min-height:40px;font-size:13px}}";
 
   var style = document.createElement("style");
   style.textContent = css;
@@ -176,12 +184,19 @@
     'a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4' +
     '-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z" fill="currentColor"/></svg>';
 
+  // A camera, drawn in the same hand: the video receptionist.
+  var CAMERA =
+    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<rect x="3" y="6.5" width="12.5" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/>' +
+    '<path d="M15.5 10.6 20.4 8v8l-4.9-2.6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+
   var dock = document.createElement("div");
   dock.className = "belline-dock" + (side === "left" ? " belline-left" : "");
 
   var panel = null;
   var shut = null;
   var reopen = null;
+  var panelKind = null;
   var fabs = {};
 
   function fabFor(kind, label, icon, second) {
@@ -297,6 +312,7 @@
     if (cfg.strings && typeof cfg.strings === "object") {
       if (cfg.strings.closeChat) STRINGS.closeChat = String(cfg.strings.closeChat);
       if (cfg.strings.closeCall) STRINGS.closeCall = String(cfg.strings.closeCall);
+      if (cfg.strings.closeVideo) STRINGS.closeVideo = String(cfg.strings.closeVideo);
     }
     if (cfg.notice && !dock.querySelector(".belline-notice")) {
       var notice = document.createElement("div");
@@ -328,6 +344,16 @@
       // Above the others: the quietest of the three, furthest from the bell.
       dock.insertBefore(wa, dock.firstChild);
       fabs.whatsapp = wa;
+    }
+    // Video, only where Belline has switched it on for this venue: a round
+    // greeting bubble at the top of the stack (embed-video.js, loaded now, after
+    // the page has painted), and a quiet Video button that brings it back once
+    // the visitor has closed it. No session exists until they tap. After
+    // WhatsApp, so the bubble is always the topmost thing in the column.
+    if (cfg.video === true && !fabs.video) {
+      var video = fabFor("video", script.getAttribute("data-video-label") || "Video call", CAMERA, true);
+      dock.insertBefore(video, fabs.chat || fabs.voice || null);
+      mountVideo(cfg.videoBubble || {}, video);
     }
   }
 
@@ -440,6 +466,80 @@
     /* an old browser without fetch keeps the defaults */
   }
 
+  var videoCtl = null;
+
+  function mountVideo(bubbleCfg, videoFab) {
+    videoFab.hidden = true;
+    // The Video button reopens the bubble rather than a panel of its own.
+    var reopenVideo = function (e) {
+      e.stopImmediatePropagation();
+      if (videoCtl) videoCtl.reopen();
+    };
+    videoFab.addEventListener("click", reopenVideo, true);
+
+    function ready(api) {
+      videoCtl = api.mount({
+        env: window,
+        config: bubbleCfg,
+        origin: origin,
+        key: key,
+        hostOrigin: location.origin,
+        side: side,
+        place: function (bubble) {
+          dock.insertBefore(bubble, dock.firstChild);
+        },
+        onBubbleShown: function () {
+          videoFab.hidden = true;
+        },
+        onDismissed: function () {
+          videoFab.hidden = false;
+        },
+        frameClass: "belline-panel belline-video" + (side === "left" ? " belline-left" : ""),
+        shutClass: "belline-shut",
+        placeCall: function (frame, closeBtn) {
+          stopRinging();
+          closeBtn.setAttribute("aria-label", STRINGS.closeVideo);
+          frame.style.background = "#FFFFFF";
+          document.body.appendChild(frame);
+          panel = frame;
+          shut = closeBtn;
+          panelKind = "video";
+          position(closeBtn);
+          document.body.appendChild(closeBtn);
+          dock.style.display = "none";
+          window.addEventListener("resize", reposition);
+        },
+        onCallClosed: function () {
+          panel = null;
+          shut = null;
+          panelKind = null;
+          dock.style.display = "";
+          window.removeEventListener("resize", reposition);
+          videoFab.hidden = false;
+          try {
+            videoFab.focus();
+          } catch (e) {
+            /* focus is a nicety */
+          }
+        },
+      });
+      // Dismissed earlier this session: no greeting, so the button is the way in.
+      if (!videoCtl.state().bubble) videoFab.hidden = false;
+    }
+
+    if (window.BellineVideo) return ready(window.BellineVideo);
+    (window.__bellineVideoReady = window.__bellineVideoReady || []).push(ready);
+    var loader = document.createElement("script");
+    loader.src = origin + "/embed-video.js";
+    loader.async = true;
+    loader.onerror = function () {
+      // No bubble; the Video button opens the call directly instead.
+      videoFab.removeEventListener("click", reopenVideo, true);
+      videoFab.hidden = false;
+    };
+    document.head.appendChild(loader);
+  }
+
   function open(kind, label) {
     if (panel) return;
     stopRinging();
@@ -452,26 +552,33 @@
       origin +
       "/embed/" +
       encodeURIComponent(key) +
-      (kind === "chat" ? "/chat" : "") +
+      (kind === "video" ? "/video" : (kind === "chat" ? "/chat" : "")) +
       "?o=" +
       encodeURIComponent(location.origin);
-    panel.className = "belline-panel" + (side === "left" ? " belline-left" : "");
+    panel.className = "belline-panel" + (side === "left" ? " belline-left" : "") + (kind === "video" ? " belline-video" : "");
+    panelKind = kind;
     // The call is ink and the chat is paper, and the frame behind each has to
     // match — otherwise the wrong colour flashes for as long as the iframe
     // takes to paint, which on a slow connection is not a flash.
-    if (kind === "chat") panel.style.background = "#FFFFFF";
+    if (kind === "chat" || kind === "video") panel.style.background = "#FFFFFF";
     panel.title = label;
     // The call needs the microphone from the first second and speakers to
     // answer. The chat needs the microphone too, but only for a voice note,
     // and only when the visitor holds the button — the browser asks then, not
     // on opening. Granting the frame permission to *ask* is not a prompt.
     panel.allow = kind === "voice" ? "microphone; autoplay" : "microphone";
+    // Video, like the call, needs the microphone and the speakers from Start —
+    // and never the camera: nothing on the other end looks at the visitor.
+    if (kind === "video") panel.allow = "microphone; autoplay";
     document.body.appendChild(panel);
 
     shut = document.createElement("button");
     shut.type = "button";
     shut.className = "belline-shut";
-    shut.setAttribute("aria-label", kind === "chat" ? STRINGS.closeChat : STRINGS.closeCall);
+    shut.setAttribute(
+      "aria-label",
+      kind === "chat" ? STRINGS.closeChat : kind === "video" ? STRINGS.closeVideo : STRINGS.closeCall,
+    );
     shut.textContent = "×";
     position(shut);
     shut.addEventListener("click", close);
@@ -491,7 +598,7 @@
   function position(el) {
     var narrow = window.innerWidth <= 520;
     el.style.top = narrow ? "14px" : "auto";
-    el.style.bottom = narrow ? "auto" : "556px";
+    el.style.bottom = narrow ? "auto" : panelKind === "video" ? "676px" : "556px";
     el.style[side] = narrow ? "14px" : "32px";
   }
 
@@ -504,6 +611,7 @@
     if (shut) shut.remove();
     panel = null;
     shut = null;
+    panelKind = null;
     dock.style.display = "";
     document.removeEventListener("keydown", onKey);
     window.removeEventListener("resize", reposition);

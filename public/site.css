@@ -1203,6 +1203,88 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   .chat-fab { transition: none; }
 }
 
+/* --- Video ------------------------------------------------------------------
+ *
+ * Only on screen when the video receptionist is switched on for our own venue
+ * (site.js loads embed-video.js, which makes the bubble). The bubble greets
+ * from the top of the stack, right edge on the buttons' right edge, one
+ * button-gap above WhatsApp. Once closed, a Video button takes its slot, the
+ * same size and outline as Chat and WhatsApp. The call opens in a dock the
+ * height of a face. */
+.video-bubble {
+  right: 26px;
+  bottom: 222px;
+  --bvb-size: 200px;
+}
+.video-fab {
+  position: fixed;
+  right: 26px;
+  bottom: 220px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 22px 13px 19px;
+  border-radius: 999px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.94rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 0 0 4px var(--paper), var(--site-shadow-fab-soft);
+  transition: transform 0.16s ease;
+}
+.video-fab[hidden] { display: none; }
+.video-fab svg { width: 23px; height: 23px; display: block; color: var(--brass); }
+.video-fab:hover,
+.video-fab:focus-visible { transform: translateY(-2px); }
+.video-dock {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  z-index: 50;
+  width: min(420px, calc(100vw - 36px));
+  height: min(660px, calc(100vh - 52px));
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: var(--site-shadow-chat-dock);
+}
+.video-frame { width: 100%; height: 100%; border: 0; display: block; border-radius: 14px; }
+@media (max-width: 900px) {
+  .video-bubble {
+    right: 20px;
+    bottom: calc(232px + env(safe-area-inset-bottom, 0px));
+    --bvb-size: 128px;
+  }
+  .video-bubble .bvb-talk { min-height: 40px; font-size: 13px; }
+  .video-fab {
+    right: 20px;
+    bottom: calc(232px + env(safe-area-inset-bottom, 0px));
+    width: 56px; height: 56px; padding: 0; justify-content: center; gap: 0;
+  }
+  .video-fab-say {
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}
+@media (max-width: 620px) {
+  .video-dock { inset: 0; width: 100%; height: 100%; border-radius: 0; border: 0; }
+  .video-frame { border-radius: 0; }
+  .video-dock .call-shut {
+    top: 12px;
+    right: 12px;
+    border-color: var(--rule);
+    background: var(--paper);
+    color: var(--ink-2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .video-fab { transition: none; }
+}
+
 /* --- Das angedockte Gespräch ------------------------------------------------ */
 
 .call-dock {

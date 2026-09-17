@@ -114,6 +114,7 @@ export const CUSTOMER_COPY = {
   /** The close button on the website widget's panel, for screen readers. */
   "embed.close_chat": { en: "Close chat", de: "Chat schließen" },
   "embed.close_call": { en: "Close call", de: "Anruf schließen" },
+  "embed.close_video": { en: "Close video call", de: "Videoanruf schließen" },
   "embed.whatsapp_label": { en: "WhatsApp us", de: "Per WhatsApp schreiben" },
   "embed.not_switched_on": { en: "{name} has not switched this on yet.", de: "{name} hat das noch nicht eingeschaltet." },
   "embed.chat_off": { en: "Chat isn't switched on for this website yet.", de: "Der Chat ist für diese Website noch nicht eingeschaltet." },

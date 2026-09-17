@@ -6,6 +6,7 @@ import { answersIn, languageNotice } from "@/lib/language";
 import { venueWhatsApp, whatsappLink } from "@/lib/whatsapp";
 import { isActivated } from "@/lib/onboarding/journey";
 import { logoUrlFor } from "@/lib/logo";
+import { videoBubbleConfig, videoOffered } from "@/lib/video/availability";
 
 export const dynamic = "force-dynamic";
 
@@ -42,10 +43,17 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   const account = await venueWhatsApp(location).catch(() => null);
   const link = account?.phoneE164 ? `https://wa.me/${account.phoneE164.slice(1)}` : whatsappLinkFor(location.id);
 
+  // `video` says only whether to show it (lib/video/availability.ts); the bubble's
+  // clip, poster and agent name come with it, and only then.
+  const video = videoOffered(location);
   return NextResponse.json(
-    widgetConfig(location.embed, link, answersIn(location), languageNotice(location), logoUrlFor(location)),
-    {    headers: { ...cors(), "cache-control": "public, max-age=60" },
-  });
+    {
+      ...widgetConfig(location.embed, link, answersIn(location), languageNotice(location), logoUrlFor(location)),
+      video,
+      ...(video ? { videoBubble: videoBubbleConfig(location) } : {}),
+    },
+    { headers: { ...cors(), "cache-control": "public, max-age=60" } },
+  );
 }
 
 /** Belline's own site is the one venue whose number comes from the environment. */
