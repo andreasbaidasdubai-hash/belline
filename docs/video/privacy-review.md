@@ -91,7 +91,7 @@ rules). Timings are stored as numbers with a reason code.
 ## 7. The published privacy pages
 
 `public/privacy.html` and `privacy.de.html` (17 September 2026) name Tavus and
-Daily, say no business can offer video yet, that the camera is never used, the
+Daily, say no business can offer video yet, that the camera is never used, that Belline does not record the
 call is not recorded, and that Tavus holds a transcript Belline can have
 deleted. **Review** the wording once the retention answer in §2 is known, and
 update both pages (then `npm run translations:hash`) before video goes live
