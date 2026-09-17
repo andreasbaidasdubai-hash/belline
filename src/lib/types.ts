@@ -282,6 +282,13 @@ export interface Location {
    */
   logoUrl?: string;
   /**
+   * The logo the owner uploaded, as a record of it: the bytes live beside the
+   * store in DATA_DIR/logos, never in this row — see logo-store.ts for why.
+   * `id` is random per upload and is the public URL (/api/logo/<id>), so a
+   * new logo is a new URL and the old one can be cached forever.
+   */
+  logo?: { id: string; mime: import("./logo").LogoMime; size: number; updatedAt: string };
+  /**
    * Set when an owner archived this location. It keeps every booking, call
    * and version, and leaves every list, switcher and call route until
    * restored — see locations.ts.

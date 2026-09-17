@@ -9,6 +9,7 @@ import { chatAllowed } from "@/lib/webchat";
 import { widgetOpenFor } from "@/lib/embed-preview";
 import { answersIn, lineFor } from "@/lib/language";
 import { CALL_KEYS, copyTable } from "@/lib/customer-copy";
+import { logoUrlFor } from "@/lib/logo";
 import Console from "../../(app)/test/Console";
 
 export const dynamic = "force-dynamic";
@@ -88,7 +89,8 @@ export default async function EmbedPage({
       compact
       minimal
       auto
-      logoUrl={location.logoUrl}
+      // The uploaded logo first; `logoUrl` is the older, hand-set field.
+      logoUrl={logoUrlFor(location) ?? location.logoUrl}
       // The visitor's words, for a German venue. English keeps Console's own.
       {...(answersIn(location) === "de" ? { language: "de" as const, copy: copyTable("de", CALL_KEYS) } : {})}
       // The 2-in-1, offered only where the venue switched both on. The framing

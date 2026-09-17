@@ -7,6 +7,7 @@ import { widgetOpenFor } from "@/lib/embed-preview";
 import { findChatVenue, linkPageState } from "@/lib/chat-link";
 import { answersIn, inHouseSpelling } from "@/lib/language";
 import { CHAT_KEYS, copyTable } from "@/lib/customer-copy";
+import { logoUrlFor } from "@/lib/logo";
 import Chat from "@/app/embed/[key]/chat/Chat";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +48,7 @@ export default async function ChatLinkPage({ params }: { params: Promise<{ key: 
         freshToken={signVisitorToken(location.id, newVisitorId())}
         venueName={location.name}
         agentName={location.agent.displayName}
+        logoUrl={logoUrlFor(location)}
         {...(answersIn(location) === "en"
           ? {}
           : {

@@ -78,12 +78,18 @@ export default function Chat({
   voiceHref,
   language = "en",
   copy,
+  logoUrl = null,
 }: {
   embedKey: string;
   freshToken: string;
   venueName: string;
   agentName: string;
   voiceHref?: string;
+  /**
+   * The venue's uploaded logo (logo.ts `logoUrlFor`), shown in the header in
+   * place of the bell. Absent, or failing to load, keeps the bell.
+   */
+  logoUrl?: string | null;
   /** The venue's language. Set with `copy` for a venue not answered in English. */
   language?: "en" | "de";
   /**
@@ -103,6 +109,8 @@ export default function Chat({
   const [recording, setRecording] = useState<number | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [canRecord, setCanRecord] = useState(false);
+  /** The logo URL that failed to load, if one did: the bell comes back. */
+  const [logoFailed, setLogoFailed] = useState<string | null>(null);
 
   const token = useRef<string>(freshToken);
   const lastId = useRef(0);
@@ -396,6 +404,14 @@ export default function Chat({
       <style>{CSS}</style>
 
       <header>
+        {logoUrl && logoUrl !== logoFailed ? (
+          // The venue's own logo: this window is the business talking, and its
+          // mark says so. White circle and contained, as on the website button.
+          // alt is empty because the venue's name is written right beside it.
+          <span className="bl-mark bl-logo" aria-hidden="true">
+            <img src={logoUrl} alt="" onError={() => setLogoFailed(logoUrl)} />
+          </span>
+        ) : (
         <span className="bl-mark" aria-hidden="true">
           {/* The bell button: white bell on blue, as everywhere Belline answers. */}
           <svg viewBox="0 0 48 48">
@@ -407,6 +423,7 @@ export default function Chat({
             </g>
           </svg>
         </span>
+        )}
         <span className="bl-who">
           <strong>{venueName}</strong>
           <em>
@@ -670,6 +687,9 @@ body { background: #FFFFFF }
 }
 .bl-mark { display: block; width: 36px; height: 36px; flex: none }
 .bl-mark svg { width: 36px; height: 36px; display: block }
+.bl-logo { box-sizing: border-box; padding: 3px; border-radius: 999px; background: #FFFFFF;
+  box-shadow: 0 0 0 1px #DDE3F5; overflow: hidden }
+.bl-logo img { width: 100%; height: 100%; object-fit: contain; border-radius: 999px; display: block }
 .bl-who { display: grid; min-width: 0 }
 .bl-who strong { font-weight: 600; font-size: 14.5px; letter-spacing: -.01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
