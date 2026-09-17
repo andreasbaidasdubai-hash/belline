@@ -588,10 +588,13 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
    session, no microphone) and, on a tap, grows it into the call itself.
 
    With the bubble on screen the three floating buttons (WhatsApp, chat, the
-   bell) step aside: one small "Other ways to reach us" button beside the
-   bubble opens a menu of the same three, and each still does exactly what its
-   button did. With the feature off, as in production until approved, or if
-   embed-video.js never arrives, the page is the page it was. */
+   bell) step aside. Under Belle's face, beside "Talk to Belle", two round
+   icons, "Chat with Belle" and "WhatsApp Belle", do exactly what their buttons
+   did and ring on the same beat. The bell has no icon: on the web, voice is the
+   face, so every "Talk to Belle" on the page starts the video call. With the
+   feature off, as in production until approved, or if embed-video.js never
+   arrives, the page is the page it was, and those buttons ring Belline's voice
+   call as before. */
 (function () {
   var chatFab = document.querySelector("[data-chat]");
   if (!chatFab || typeof window.fetch !== "function") return;
@@ -603,14 +606,12 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
 
   var ctl = null;
   var waFab = document.querySelector(".wa-fab");
-  var bellFab = document.querySelector(".bell-fab");
 
-  function others() {
+  function actions() {
     var list = [];
     // Chat first: the quiet way in for somebody who cannot talk out loud now.
-    list.push({ kind: "chat", label: SITE_DE ? "Chat" : "Chat", run: function () { chatFab.click(); } });
-    if (waFab) list.push({ kind: "whatsapp", label: "WhatsApp", run: function () { waFab.click(); } });
-    if (bellFab) list.push({ kind: "voice", label: SITE_DE ? "Anruf" : "Voice call", run: function () { bellFab.click(); } });
+    list.push({ kind: "chat", label: SITE_DE ? "Mit Belle chatten" : "Chat with Belle", run: function () { chatFab.click(); } });
+    if (waFab) list.push({ kind: "whatsapp", label: SITE_DE ? "Belle auf WhatsApp" : "WhatsApp Belle", run: function () { waFab.click(); } });
     return list;
   }
 
@@ -622,18 +623,18 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       key: key,
       hostOrigin: location.origin,
       fixed: true,
-      strings: SITE_DE ? { otherWays: "Andere Wege zu uns", caption: "Hallo, ich bin Belle — zum Sprechen tippen" } : {},
-      others: others,
+      ring: true,
+      strings: SITE_DE ? { talk: "Mit Belle sprechen", caption: "Hallo, ich bin Belle — zum Sprechen tippen" } : {},
+      actions: actions,
       place: function (bubble) {
         bubble.classList.add("video-bubble");
         document.body.appendChild(bubble);
-        // The bubble and its menu now stand in for the three buttons.
+        // The bubble and its two icons now stand in for the three buttons.
         document.body.classList.add("has-video-bubble");
       },
       // "Type instead" during a call: the chat opens where the bubble was.
       onSwitch: function (to) {
         if (to === "chat") chatFab.click();
-        else if (bellFab) bellFab.click();
       },
     });
   }
@@ -711,6 +712,22 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
 
    So the browser offers a correction, and the server resolves the domain's
    mail records before accepting it. Neither refuses an address outright on
+  // Every "Talk to Belle" on the page (the hero's first) starts the video call
+  // in Belle's circle once the bubble is here. Caught before the voice dock's
+  // own listener; until then, and without video, they ring the voice call.
+  document.addEventListener(
+    "click",
+    function (e) {
+      if (!ctl || ctl.state().hidden) return;
+      var trigger = e.target && e.target.closest ? e.target.closest("[data-call]") : null;
+      if (!trigger) return;
+      e.preventDefault();
+      e.stopPropagation();
+      ctl.openCall();
+    },
+    true
+  );
+
    spelling alone: somebody's real mailbox may genuinely be at an address one
    letter from a famous one, and a form telling a customer they do not exist
    is worse than a bounce. */

@@ -1207,9 +1207,11 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
  *
  * Only on screen when the video receptionist is switched on for our own venue
  * (site.js loads embed-video.js, which makes the bubble). The bubble takes the
- * corner the three floating buttons had, and they step aside: its one small
- * "Other ways to reach us" button opens the same three as a menu. A call grows
- * the same circle in place; there is no dock and no panel. */
+ * corner the three floating buttons had, at the call's own size from the first
+ * load, and they step aside: WhatsApp and the chat become the two round icons
+ * under Belle's face, and the bell has none, because voice is the face. A call
+ * happens in the same circle; there is no dock and no panel. Its size comes
+ * from embed-video.js (the call circle), not from here. */
 .video-bubble {
   right: 26px;
   bottom: calc(26px + env(safe-area-inset-bottom, 0px));
@@ -1222,9 +1224,7 @@ body.has-video-bubble .bell-fab { display: none; }
   .video-bubble {
     right: 20px;
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-    --bvb-size: 136px;
   }
-  .video-bubble .bvb-talk { min-height: 40px; font-size: 13px; }
 }
 /* --- Das angedockte Gespräch ------------------------------------------------ */
 
