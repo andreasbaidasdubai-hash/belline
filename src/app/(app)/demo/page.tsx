@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canManageUsers, visibleLocations } from "@/lib/auth";
+import { isBellineStaff, visibleLocations } from "@/lib/auth";
 import { requireUser } from "@/lib/auth-server";
 import { listCalls } from "@/lib/store";
 import { callsToday, demoLocations, maxCallSeconds } from "@/lib/demo";
 import { callDurationSeconds } from "@/lib/calls";
 import { seedIfEmpty } from "@/lib/seed";
 import { PageHeader } from "@/components/LocationTabs";
+import { venueChip } from "@/lib/verticals";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,10 @@ const COST_PER_MINUTE = 0.09;
 export default async function DemoPage() {
   seedIfEmpty();
   const user = await requireUser();
-  if (!canManageUsers(user)) notFound();
+  // Belline's own tooling: the numbers prospects ring, and what those calls
+  // cost us. It was open to every account owner, who saw "spent on demos"
+  // beside a phone line that is not theirs. Staff only, like the sales console.
+  if (!isBellineStaff(user)) notFound();
 
   // Scoped. This read every tenant's demo venues — names, numbers, greetings
   // — and every tenant's demo calls, to any owner who opened the page.
@@ -96,7 +100,7 @@ export default async function DemoPage() {
                   <tr key={l.id}>
                     <td>
                       <div style={{ fontWeight: 600 }}>{l.name}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>{l.vertical}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{venueChip(l)}</div>
                     </td>
                     <td className="mono" style={{ fontSize: 13 }}>{l.bellineNumber?.number ?? ""}</td>
                     <td>

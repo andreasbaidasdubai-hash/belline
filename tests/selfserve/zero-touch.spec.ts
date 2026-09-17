@@ -198,8 +198,9 @@ async function reviewByHand(page: Page, j: Journey, opts: { name: string; servic
     await page.getByLabel("Service 1 name").fill(opts.service);
     await page.getByLabel("Service 1 minutes").fill("60");
     await page.getByLabel("Service 1 price").fill("150");
-    await page.locator("#review-staff").fill("Layla");
-    await page.getByRole("button", { name: "Add", exact: true }).click();
+    // No "who works there" since 2026-09-17: the team is the diary's, and a new
+    // signup is not on the diary.
+    await expect(page.locator("#review-staff")).toHaveCount(0);
     await page.getByRole("button", { name: "Add a question" }).click();
     await page.getByLabel("Question 1").fill("Is there parking?");
     await page.getByLabel("Answer 1").fill("Yes, free parking behind the building.");
@@ -223,8 +224,11 @@ async function rules(page: Page, j: Journey) {
     // which is part of that number's question, not another one: the pickers are not counted.
     expect(await form.locator('input:visible, select:visible:not([aria-label="Country code"]), textarea:visible').count()).toBeLessThanOrEqual(6);
     await expect(form.getByLabel("Country code")).toHaveCount(2);
-    const confirm = page.getByRole("button", { name: "Confirm these rules" });
+    // The main button at the top, in view on a phone, and again at the bottom beside Skip for now.
+    await expect(page.getByRole("button", { name: "Confirm these rules" })).toHaveCount(2);
+    const confirm = page.getByRole("button", { name: "Confirm these rules" }).first();
     await expect(confirm).toBeInViewport();
+    await expect(page.locator(".setup-footer").getByRole("button", { name: "Confirm these rules" })).toBeVisible();
 
     await page.getByLabel("Number for urgent calls").fill("+44 20 7946 0958");
     await confirm.click();
@@ -232,19 +236,23 @@ async function rules(page: Page, j: Journey) {
 
     await page.getByLabel("Number for urgent calls").fill(TRANSFER);
     await confirm.click();
-    await page.waitForURL("**/setup/channels");
+    await page.waitForURL("**/setup/website");
   });
 }
 
 /** Switch the widget on for the fixture site and wait for the page to see it load. */
 async function website(page: Page, j: Journey, browser: Browser, site: Awaited<ReturnType<typeof fixtureSite>>, baseURL: string) {
   await j.step("website widget", async () => {
-    await page.goto("/website?from=setup");
+    // In the step itself, not a dashboard page and back (2026-09-17).
+    await page.goto("/setup/website");
     await page.getByLabel("Your website addresses").fill(site.origin);
     // A click that lands before the page is live does nothing, so press until it takes.
     const pre = page.locator("pre.widget-snippet");
     await expect(async () => {
-      await page.getByRole("button", { name: "Switch it on" }).click();
+      // Only while it is still off: a click that did land can take longer than
+      // five seconds to show the line, and pressing again would find no button.
+      const switchOn = page.getByRole("button", { name: "Switch it on" });
+      if (await switchOn.count()) await switchOn.click();
       await expect(pre).toBeVisible({ timeout: 5_000 });
     }).toPass({ timeout: 45_000 });
     site.setSnippet((await pre.textContent())!.replace(/src="https?:\/\/[^/]+/, `src="${baseURL}`));
@@ -300,7 +308,7 @@ test("salon-requests: signup to live, then billing and a password reset, with no
       await expect(page.getByText("We'll let you know when Fresha is ready.")).toBeVisible();
       await page.getByRole("radio", { name: /I have a booking link/ }).check();
       await page.getByLabel("Your booking link").fill("https://book.example-salon.test");
-      await page.getByRole("button", { name: "Use this" }).click();
+      await page.getByRole("button", { name: "Use this" }).first().click();
     });
 
     await rules(page, j);
@@ -313,15 +321,28 @@ test("salon-requests: signup to live, then billing and a password reset, with no
       expect(res.status()).toBe(409);
       expect(((await res.json()) as { blockers: unknown[] }).blockers.length).toBeGreaterThan(0);
 
+      // Skip for now on Go live moves forward, to the dashboard, never back to an earlier step.
+      await page.getByTestId("setup-skip").click();
+      await page.waitForURL((u) => u.pathname === "/");
+
+      // The first week says it has not started, rather than "Belline is live".
+      await page.goto("/setup/first-week");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your first week starts when you go live.");
+      await expect(page.locator("main")).not.toContainText("Belline is live");
+
       // Added 2026-09-16: setup never blocks the dashboard. Before going live the full
-      // menu is there, with what is left of setup as a checklist on Today.
+      // menu is there, with what is left of setup as a checklist on Home. The menu
+      // approved on 2026-09-17, and nothing retired in it.
       await page.goto("/");
-      await expect(page.locator("nav.nav")).toContainText("Requests");
-      await expect(page.getByTestId("setup-checklist")).toContainText(/\d of 7 done/);
+      const nav = page.locator("nav.nav");
+      for (const item of ["Home", "Inbox", "Customers", "Your business", "Channels", "Calendars", "Settings"]) await expect(nav).toContainText(item);
+      for (const gone of ["Everything else", "Reports", "Demo line", "Setup journey", "Rota", "Waitlist"]) await expect(nav).not.toContainText(gone);
+      await expect(page.getByTestId("setup-checklist")).toContainText(/\d of 8 done/);
     });
 
     await j.step("phone number and forwarding test", async () => {
-      await page.goto("/golive?from=setup");
+      // The phone step, done in place.
+      await page.goto("/setup/phone");
       await page.getByRole("button", { name: "Get my number" }).click();
       // Two numbers in the stub pool, one per project: whichever this run got, it is real, not a placeholder.
       const number = page.locator("strong.mono");
@@ -375,7 +396,10 @@ test("salon-requests: signup to live, then billing and a password reset, with no
     await website(page, j, browser, site, baseURL!);
 
     await j.step("channels", async () => {
+      // The old address lands on the split step; the chat link is on Phone & WhatsApp.
       await page.goto("/setup/channels");
+      await page.waitForURL("**/setup/website");
+      await page.goto("/setup/phone");
       // WhatsApp is optional and not switched on here; the journey does not wait for it.
       await expect(page.getByText("Going live does not wait for it.")).toBeVisible();
 
@@ -389,7 +413,8 @@ test("salon-requests: signup to live, then billing and a password reset, with no
       await expect(stranger.page.getByTestId("chat-link-refused")).toHaveText("This chat isn't available yet. Please check back soon.");
       await expect(stranger.page.locator("body")).not.toContainText(name);
       await stranger.close();
-      await page.getByRole("link", { name: "Continue" }).click();
+      await expect(page.locator(".setup-footer").getByRole("link", { name: "Continue" })).toBeVisible();
+      await page.getByRole("link", { name: "Continue" }).first().click();
       await page.waitForURL("**/setup/test");
     });
 
@@ -422,11 +447,15 @@ test("salon-requests: signup to live, then billing and a password reset, with no
       expect(live.stripe?.trialSubscriptionId).toBeTruthy();
 
       await page.goto("/");
-      // The dashboard's own destinations, which the collapsed setup menu does not have
-      // (nav.ts since ed55df0: "Needs you" is now "Today"; a request-only venue works
-      // from "Requests", and the calendar sits under "Everything else").
-      await expect(page.locator("nav.nav")).toContainText("Today");
-      await expect(page.locator("nav.nav")).toContainText("Requests");
+      // The dashboard's own destinations (nav.ts, 2026-09-17): a request-only venue works
+      // from Home and Inbox, and has no diary pages at all.
+      await expect(page.locator("nav.nav")).toContainText("Home");
+      await expect(page.locator("nav.nav")).toContainText("Inbox");
+      await expect(page.locator("nav.nav").getByRole("link", { name: "Calendar", exact: true })).toHaveCount(0);
+      // Live: the first week is real now.
+      await page.goto("/setup/first-week");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your first week.");
+      await page.goto("/");
 
       // Now the widget is public: a stranger sees it.
       const visitor = await anonymousVisit(browser, site.origin);
@@ -514,7 +543,7 @@ test("clinic: every step done, the checks pass, and Go live stays shut", async (
     await j.step("destination", async () => {
       // A clinic in preview takes requests only; calendars are not offered.
       await expect(page.getByRole("radio", { name: /Google Calendar/ })).toHaveCount(0);
-      await page.getByRole("button", { name: "Use this" }).click();
+      await page.getByRole("button", { name: "Use this" }).first().click();
     });
 
     await rules(page, j);
@@ -522,7 +551,8 @@ test("clinic: every step done, the checks pass, and Go live stays shut", async (
     // Both salons took the two stub numbers first, so on the second project the pool is empty.
     if (info.project.name === "desktop-1440") {
       await j.step("pool empty", async () => {
-        await page.goto("/golive?from=setup");
+        // Channels, Phone: the dashboard tab the phone step shares its section with.
+        await page.goto("/channels/phone");
         await page.getByRole("button", { name: "Get my number" }).click();
         await expect(page.getByText(/Your number is being prepared/)).toBeVisible();
         await expect(page.getByText(/Ticket B-/)).toBeVisible();

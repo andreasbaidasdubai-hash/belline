@@ -845,7 +845,7 @@ console.log("\nSelf-serve states, with a fake Meta\n");
     assert.match(card, /\/api\/whatsapp\/check/);
     assert.match(card, /Try again/);
     assert.match(card, /Skip — add WhatsApp later/);
-    const screens = card + fsRead("src/app/(app)/integrations/page.tsx") + fsRead("src/app/api/whatsapp/number/route.ts");
+    const screens = card + fsRead("src/app/(app)/channels/whatsapp/page.tsx") + fsRead("src/app/(app)/channels/sections.tsx") + fsRead("src/app/api/whatsapp/number/route.ts");
     assert.ok(!/Reload this page|hello@|Email us/i.test(screens), "a dead end is still on the WhatsApp screens");
     assert.match(fsRead("src/app/api/whatsapp/number/route.ts"), /flag\("channel\.whatsapp\.selfserve"\)/);
     assert.ok(!/Not self-serve/.test(fsRead("src/lib/whatsapp.ts")));

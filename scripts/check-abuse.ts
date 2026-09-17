@@ -299,6 +299,7 @@ await test("a website another account has is refused before anything is read", a
         throw new Error("the model was called");
       },
     },
+    undefined,
     (website) => (website.includes("code-salon-site") ? { status: 409, body: { error: review.DUPLICATE_MESSAGE, fix: review.DUPLICATE_PAGE } } : null),
   );
   assert.equal(out.status, 409);

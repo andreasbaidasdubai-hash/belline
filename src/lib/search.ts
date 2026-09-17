@@ -1,6 +1,6 @@
 import type { User } from "./types";
-import { canManageUsers, isBellineStaff, visibleLocations } from "./auth";
-import { simplifiedFor } from "./nav";
+import { canManageUsers, visibleLocations } from "./auth";
+import { navFor, usesDiary } from "./nav";
 import { listBookings } from "./store";
 import { listGuests, normalisePhone } from "./guests";
 import { minutesToClock } from "./time";
@@ -21,58 +21,48 @@ export interface SearchHit {
 }
 
 /**
- * Every page this person can open, whichever navigation they are on.
+ * Every page this person can open, by the names the menu and its tabs use,
+ * and a few words people type for them ("reports", "test", "go live").
  *
- * Deliberately the union rather than the current shape. Search is how
- * somebody reaches a page that is not in front of them, so a venue on the
- * simplified navigation must still be able to type "rota" and get there —
- * that is the whole promise of moving pages to Advanced rather than removing
- * them. The simplified destinations are added on top when they apply, so the
- * labels somebody has just been reading are the ones that match.
+ * The same rules as the menu (nav.ts): the diary's pages only for accounts on
+ * Belline's own diary, the account's settings only for whoever may change
+ * them, Belline's tools only for Belline staff. A page search offers is a page
+ * that opens; a page the menu would not show is not offered here either.
  */
 function pagesFor(user: User) {
-  const simplified = simplifiedFor(visibleLocations(user));
+  const locations = visibleLocations(user);
+  const shape = navFor(user, locations);
+  const manager = user.role !== "staff";
+  const fromNav = [...shape.items, ...(shape.diary?.items ?? []), ...(shape.staff?.items ?? [])].map((i) => ({ label: i.label, href: i.href }));
   return [
-    ...(simplified
-      ? [
-          { label: "Today", href: "/" },
-          { label: "Conversations", href: "/conversations" },
-          { label: "Requests", href: "/requests" },
-          ...(user.role !== "staff" ? [{ label: "Channels", href: "/channels" }] : []),
-          { label: "Everything else", href: "/advanced" },
-        ]
-      : [
-          { label: "Needs you", href: "/attention" },
-          { label: "Overview", href: "/" },
-        ]),
-    { label: "Calendar", href: "/calendar" },
-    { label: "Floor", href: "/floor" },
-    { label: "Calls", href: "/calls" },
+    ...fromNav,
+    { label: "Requests", href: "/requests" },
+    { label: "Conversations", href: "/conversations" },
+    { label: "Calls", href: "/conversations" },
     { label: "Messages", href: "/inbox" },
-    { label: "Bookings", href: "/bookings" },
-    { label: "Waitlist", href: "/waitlist" },
-    { label: "Customers", href: "/guests" },
-    { label: "Test console", href: "/test" },
-    { label: "Go live", href: "/golive" },
-    ...(user.role !== "staff"
+    { label: "Needs you", href: "/attention" },
+    ...(manager
       ? [
-          { label: "Agent", href: "/agents" },
-          { label: "How it works", href: "/venue" },
-          { label: "Locations", href: "/locations" },
-          { label: "Rota", href: "/rota" },
-          { label: "Reports", href: "/reports" },
-          { label: "Your website", href: "/website" },
-          { label: "Integrations", href: "/integrations" },
+          { label: "Try it (test console)", href: "/channels" },
+          { label: "Website chat", href: "/channels/website" },
+          { label: "Phone and forwarding (go live)", href: "/channels/phone" },
+          { label: "Chat link", href: "/channels/link" },
+          { label: "WhatsApp", href: "/channels/whatsapp" },
+          { label: "Business details, services and questions", href: "/venue" },
+          { label: "Rules and when to fetch a person", href: "/venue/rules" },
+          { label: "Agent, voice and language", href: "/agents" },
+          ...(locations.some(usesDiary) ? [{ label: "Diary settings", href: "/venue/diary" }] : []),
           { label: "Set up with Belle", href: "/setup/assistant" },
         ]
       : []),
     ...(canManageUsers(user)
       ? [
-          { label: "Plan and usage", href: "/billing" },
+          { label: "Locations", href: "/locations" },
           { label: "Team", href: "/team" },
+          { label: "Plan, billing and usage", href: "/billing" },
+          { label: "Reports and downloads", href: "/" },
         ]
       : []),
-    ...(isBellineStaff(user) ? [{ label: "Sales console", href: "/sales" }] : []),
   ];
 }
 
@@ -83,7 +73,10 @@ export function searchEverything(user: User, raw: string, limit = 20): SearchHit
   const ref = q.toUpperCase().replace(/[^A-Z0-9]/g, "");
   const hits: SearchHit[] = [];
 
+  const seen = new Set<string>();
   for (const page of pagesFor(user)) {
+    if (seen.has(`${page.label}|${page.href}`)) continue;
+    seen.add(`${page.label}|${page.href}`);
     if (page.label.toLowerCase().includes(q)) hits.push({ kind: "page", title: page.label, detail: "Page", href: page.href });
   }
 
@@ -91,7 +84,7 @@ export function searchEverything(user: User, raw: string, limit = 20): SearchHit
   const many = venues.length > 1;
   for (const venue of venues) {
     if (venue.name.toLowerCase().includes(q)) {
-      hits.push({ kind: "location", title: venue.name, detail: venue.address || venue.vertical, href: `/calendar?loc=${venue.id}` });
+      hits.push({ kind: "location", title: venue.name, detail: venue.address || "Location", href: usesDiary(venue) ? `/calendar?loc=${venue.id}` : `/?loc=${venue.id}` });
     }
   }
 
@@ -111,7 +104,7 @@ export function searchEverything(user: User, raw: string, limit = 20): SearchHit
         kind: "booking",
         title: `${b.guestName} · ${b.date} ${minutesToClock(b.startMin)}`,
         detail: `${b.ref} · ${b.status}${at}`,
-        href: `/calendar?loc=${venue.id}&date=${b.date}&open=${b.id}`,
+        href: usesDiary(venue) ? `/calendar?loc=${venue.id}&date=${b.date}&open=${b.id}` : `/bookings?loc=${venue.id}`,
       });
     }
 

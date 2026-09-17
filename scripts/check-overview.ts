@@ -18,7 +18,7 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-over-"));
 const { seedIfEmpty } = await import("../src/lib/seed");
 const { listLocations, saveCall, upsertLocation, getLocation } = await import("../src/lib/store");
 const { startCall } = await import("../src/lib/calls");
-const { overviewFor, summarise } = await import("../src/lib/overview");
+const { handledOver, overviewFor, summarise } = await import("../src/lib/overview");
 
 let passed = 0;
 let failed = 0;
@@ -213,6 +213,36 @@ test("the most urgent item comes with something to do about it", () => {
   if (!needsYou.top) return;
   assert.ok(needsYou.top.todo.length > 3, "the top item has no action");
   assert.ok(needsYou.top.who.length > 0, "the top item has nobody attached");
+});
+
+console.log("\nHandled, for Home\n");
+
+test("Home counts what Belline handled, by calls and chats, never demos, tests or the owner's own console", () => {
+  const venue = listLocations().find((l) => l.vertical === "salon" && l.id !== salon.id) ?? salon;
+  const before = handledOver(venue, 7);
+  const at = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const old = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString();
+  const make = (channel: "phone" | "webchat" | "browser" | "embed", extra: Record<string, unknown> = {}) =>
+    saveCall({ ...startCall(venue, channel, "+441234567891"), startedAt: at, endedAt: at, status: "completed", outcome: "answered_question", ...extra } as never);
+  make("phone");
+  make("embed", { outcome: "transferred" });
+  make("webchat", { bookingRequests: [{ id: "r1", key: "k1", at, guestName: "Noor", guestPhone: "+971500000000", preferred: "Friday" }] });
+  make("webchat", { outcome: "abandoned" });
+  make("browser");
+  make("phone", { isDemo: true });
+  make("phone", { isTest: true });
+  make("phone", { startedAt: old });
+  const after = handledOver(venue, 7);
+  assert.equal(after.calls - before.calls, 2, "phone and the voice button are calls");
+  assert.equal(after.chats - before.chats, 1, "a rang-off chat, the console, a demo or a test was counted as handled");
+  assert.equal(after.requests - before.requests, 1);
+  assert.equal(after.toPerson - before.toPerson, 1);
+  assert.equal(after.rangOff - before.rangOff, 1, "a hang-up was hidden rather than said");
+  assert.equal(handledOver(venue, 30).calls - before.calls, 3, "the 30-day view leaves out the older call");
+  // And the page says "handled", never "ended in a booking".
+  const home = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "page.tsx"), "utf8");
+  assert.match(home, /calls handled/);
+  assert.doesNotMatch(home, /ended in a booking/);
 });
 
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });

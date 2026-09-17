@@ -5,6 +5,35 @@ const nextConfig = {
   // handler, so nothing here needs edge runtime.
   serverExternalPackages: ["ws"],
 
+  /**
+   * Addresses the dashboard retired on 2026-09-17, and where each one lives now.
+   *
+   * The menu was rebuilt around what an owner does (Home, Inbox, Your business,
+   * Channels, Calendars, Settings), and several pages became tabs of those. An
+   * old bookmark, an email already sent, a link in a help article or a fix URL
+   * on an old exception must still land somewhere useful, never a 404. The
+   * query string is carried across, so ?loc= and ?from=setup survive.
+   *
+   * Temporary (307), not permanent: a browser caches a 308 for good, and the
+   * next time a page moves the cached answer would win.
+   */
+  async redirects() {
+    return [
+      // "Everything else" held what the menu had not decided about. Every page
+      // in it now has a place, so the page itself is gone.
+      { source: "/advanced", destination: "/", permanent: false },
+      // What the reports said worth saying is on Home now.
+      { source: "/reports", destination: "/", permanent: false },
+      { source: "/test", destination: "/channels", permanent: false },
+      { source: "/website", destination: "/channels/website", permanent: false },
+      { source: "/golive", destination: "/channels/phone", permanent: false },
+      { source: "/integrations", destination: "/calendars", permanent: false },
+      { source: "/settings", destination: "/locations", permanent: false },
+      // The setup step "Phone and website" became two steps.
+      { source: "/setup/channels", destination: "/setup/website", permanent: false },
+    ];
+  },
+
   async headers() {
     return [
       {

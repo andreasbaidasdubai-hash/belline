@@ -12,6 +12,7 @@ import { lineFor, answersIn, inHouseSpelling, languageNotice } from "@/lib/langu
 /** The website chat is its own channel for a business that sets a language per channel. */
 const CHAT = { channel: "web_chat" } as const;
 import { CHAT_KEYS, copyTable } from "@/lib/customer-copy";
+import { logoUrlFor } from "@/lib/logo";
 import Chat from "./Chat";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +88,7 @@ export default async function ChatPage({
       freshToken={signVisitorToken(location.id, newVisitorId())}
       venueName={location.name}
       agentName={location.agent.displayName}
+      logoUrl={logoUrlFor(location)}
       /** The 2-in-1: offered only where the venue has the bell on as well. */
       voiceHref={voiceAllowed(location.embed) ? voiceUrl(key, o) : undefined}
       // Only for a venue not answered in English; English keeps the lines written in Chat.tsx.

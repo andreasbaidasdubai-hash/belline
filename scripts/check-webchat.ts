@@ -185,22 +185,20 @@ await test("saving without naming a mode does not silently change one", () => {
   venue = enableEmbed(edited, ["https://marinahair.ae"], undefined, "both");
 });
 
-await test("the dashboard screen exists and is reachable from Channels", () => {
+await test("the dashboard screen exists and is reachable from Channels", async () => {
   // This feature shipped once without a screen: the endpoint was real and the
   // only way to use it was to POST by hand. A page nobody can navigate to has
   // not shipped.
   //
-  // The old diary navigation linked it directly; that navigation was retired
-  // on 2026-09-16. In the seven destinations the website widget is a channel,
-  // so the way in is the Channels screen.
-  const page = path.join(process.cwd(), "src", "app", "(app)", "website", "page.tsx");
-  assert.ok(fs.existsSync(page), "no /website screen");
+  // Since 2026-09-17 the website widget is a tab of Channels, /channels/website,
+  // and the setup step renders the same section. /website redirects there.
+  const page = path.join(process.cwd(), "src", "app", "(app)", "channels", "website", "page.tsx");
+  assert.ok(fs.existsSync(page), "no /channels/website screen");
+  assert.match(fs.readFileSync(page, "utf8"), /<WebsiteSection location=\{location\} \/>/);
 
-  const channels = fs.readFileSync(
-    path.join(process.cwd(), "src", "app", "(app)", "channels", "page.tsx"),
-    "utf8",
-  );
-  assert.ok(channels.includes('href="/website"'), "the screen cannot be reached from Channels");
+  const { CHANNEL_TABS } = await import("../src/lib/nav");
+  assert.ok(CHANNEL_TABS.some((t) => t.href === "/channels/website"), "the screen cannot be reached from Channels");
+  assert.match(fs.readFileSync(path.join(process.cwd(), "next.config.mjs"), "utf8"), /source: "\/website", destination: "\/channels\/website"/);
 });
 
 // ---------------------------------------------------------------------------
@@ -1367,8 +1365,10 @@ head("The chat link: a channel with no website");
 
   await test("it counts as a channel for going live, and is waiting, not live, until Go live", () => {
     const j = journey(fresh());
-    assert.ok(j.steps.find((s) => s.id === "channels")!.done, "the chat link did not count as a channel");
-    assert.ok(!j.blockers.some((b) => b.step === "channels"));
+    assert.ok(j.steps.find((s) => s.id === "phone")!.done, "the chat link did not count as a channel");
+    // One way in is enough: the website step is optional, and neither blocks Go live.
+    assert.ok(j.steps.find((s) => s.id === "website")!.optional);
+    assert.ok(!j.blockers.some((b) => b.step === "website" || b.step === "phone"));
     assert.equal(channelStatuses(fresh()).find((c) => c.id === "link")!.state, "waiting");
     const o = fresh().onboarding!;
     upsertLocation({ ...fresh(), onboarding: { ...o, activatedAt: "2026-09-16T09:00:00.000Z" } });
@@ -1411,9 +1411,11 @@ head("The chat link: a channel with no website");
 
   await test("the channels step and the Channels screen show it with a copy button, behind a signed-in owner's route", () => {
     const step = src("src", "app", "setup", "[step]", "page.tsx");
-    const screen = src("src", "app", "(app)", "channels", "page.tsx");
+    // Both render the same section, which holds the card.
+    const screen = src("src", "app", "(app)", "channels", "sections.tsx");
     const card = src("src", "app", "(app)", "channels", "ChatLinkCard.tsx");
-    assert.match(step, /<ChatLinkCard locationId=\{venue\.id\} url=\{chatLinkUrl\(venue\)\}/);
+    assert.match(step, /<LinkSection location=\{venue\}/);
+    assert.match(src("src", "app", "(app)", "channels", "link", "page.tsx"), /<LinkSection location=\{location\}/);
     assert.match(screen, /<ChatLinkCard locationId=\{location\.id\} url=\{chatLinkUrl\(location\)\}/);
     assert.match(card, /navigator\.clipboard\.writeText\(url\)/);
     assert.match(card, /Copy link/);

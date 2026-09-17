@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { seedIfEmpty } from "@/lib/seed";
 import { floorState } from "@/lib/floor";
 import { nowMinutesIn, todayIn } from "@/lib/time";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
+import { notOnDiaryHome, usesDiary } from "@/lib/nav";
 import FloorPlan from "./FloorPlan";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +18,8 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
   const { loc } = await searchParams;
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
+  // A diary page, for the venues on the diary. Everybody else goes where their bookings are.
+  if (!usesDiary(location)) redirect(notOnDiaryHome(location));
 
   if (!location.restaurant) {
     return (
@@ -44,7 +48,7 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
       {tables.length === 0 ? (
         <div className="panel">
           <p className="muted" style={{ padding: "26px 18px", margin: 0, fontSize: 13.5 }}>
-            No tables yet. <Link href={`/venue?loc=${location.id}`}>Add them under How it works</Link>.
+            No tables yet. <Link href={`/venue/diary?loc=${location.id}`}>Add them under How it works</Link>.
           </p>
         </div>
       ) : (

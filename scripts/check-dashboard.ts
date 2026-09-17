@@ -50,6 +50,8 @@ const hours = Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map((d) => [d, [{ start: 
 const { upsertLocation } = await import("../src/lib/store");
 upsertLocation({
   ...base,
+  // Booked at the desk below, so on the diary, as a pilot account is.
+  onboarding: { ...base.onboarding!, destination: { kind: "belline", setAt: new Date().toISOString() } },
   hours,
   salon: {
     ...base.salon!,
@@ -104,107 +106,207 @@ await test("never finds another business's bookings or customers", async () => {
   assert.equal(hits.filter((h) => h.kind !== "page").length, 0);
 });
 
-console.log("\n\x1b[1mThe seven destinations\x1b[0m\n");
+console.log("\n\x1b[1mThe owner's menu\x1b[0m\n");
 
 /**
- * The navigation after the pivot.
+ * The navigation the founder approved on 2026-09-17.
  *
  * Two things have to stay true at once, and they pull in opposite
- * directions: an owner who never touches a diary should not be shown one,
- * and a venue that runs on the diary must not lose a single page it used
- * yesterday. So every assertion here comes in that pair.
+ * directions: an owner who never touches a diary is never shown one, and a
+ * venue that runs on the diary keeps every page it used yesterday. So the
+ * assertions come in that pair, and every page that left the menu is checked
+ * for a new home (a tab, a group, or a redirect), never a 404.
  */
-const { advancedGroups, navFor, simplifiedFor, usesDiary } = await import("../src/lib/nav");
+const { businessTabs, CHANNEL_TABS, INBOX_TABS, navFor, navItemOn, notOnDiaryHome, SETTINGS_TABS, usesDiary } = await import("../src/lib/nav");
 
+const at = new Date().toISOString();
 /** A venue that took the pivot's default: requests, no Belline diary. */
-const requestVenue = () => ({
-  ...venue(),
-  onboarding: { ...venue().onboarding!, destination: { kind: "requests" as const, setAt: new Date().toISOString() } },
-});
+const requestVenue = () => ({ ...venue(), onboarding: { ...venue().onboarding!, destination: { kind: "requests" as const, setAt: at } } });
+/** The same venue, on Belline's own diary, as the pilots and fixtures are. */
+const diaryVenue = () => ({ ...venue(), onboarding: { ...venue().onboarding!, destination: { kind: "belline" as const, setAt: at } } });
 const hrefs = (items: { href: string }[]) => items.map((i) => i.href);
-const advancedHrefs = (user: typeof owner, locations: ReturnType<typeof venue>[]) =>
-  advancedGroups(user, locations).flatMap((g) => g.items.map((i) => i.href));
+const OWNER_MENU = ["/", "/requests", "/guests", "/venue", "/channels", "/calendars", "/locations"];
 
-await test("every account gets the seven and nothing else, with no flag to set", () => {
+await test("an owner's menu is Home, Inbox, Customers, Your business, Channels, Calendars, Settings", () => {
   const shape = navFor(owner, [requestVenue()], {});
-  assert.deepEqual(hrefs(shape.items), ["/", "/conversations", "/requests", "/venue", "/channels", "/billing", "/team"]);
-  assert.equal(shape.advanced?.href, "/advanced", "there is no way into the rest of the product");
+  assert.deepEqual(hrefs(shape.items), OWNER_MENU);
+  assert.deepEqual(
+    shape.items.map((i) => i.label),
+    ["Home", "Inbox", "Customers", "Your business", "Channels", "Calendars", "Settings"],
+  );
+  assert.equal(shape.diary, null, "a request venue was shown the diary");
+  assert.equal(shape.staff, null, "a customer was shown Belline's staff tools");
 });
 
-await test("a venue on Belline's own diary gets the seven too, with its diary one click away", () => {
-  // The old navigation was retired on 2026-09-16. A diary venue is no longer
-  // held on it: it gets the same seven, and every diary page it uses sits
-  // under Everything else, where search still finds it.
-  assert.equal(usesDiary(venue()), true, "a venue with no destination is not being read as a diary venue");
-  assert.equal(simplifiedFor([venue()]), true);
-  assert.equal(simplifiedFor([requestVenue(), venue()]), true, "a mixed account fell back to the old navigation");
-  const shape = navFor(owner, [venue()], { dueBack: 3 });
-  assert.deepEqual(hrefs(shape.items), ["/", "/conversations", "/requests", "/venue", "/channels", "/billing", "/team"]);
-  const reachable = advancedHrefs(owner, [venue()]);
-  for (const href of ["/calendar", "/bookings", "/waitlist", "/guests", "/recall"]) {
-    assert.ok(reachable.includes(href), `${href} is no longer reachable for a venue that runs on the diary`);
+await test("a new signup that has not chosen where bookings go is not on the diary", () => {
+  const signup = { ...venue(), onboarding: { version: 1 as const, channels: {} } };
+  assert.equal(usesDiary(signup), false);
+  assert.equal(navFor(owner, [signup], {}).diary, null);
+  // A venue from before the journey (no record at all) is, as the backfill says.
+  assert.equal(usesDiary({ onboarding: undefined }), true);
+});
+
+await test("a venue on Belline's own diary keeps Calendar, Bookings, Waitlist, Recall and Rota", () => {
+  const shape = navFor(owner, [diaryVenue()], { dueBack: 3 });
+  assert.deepEqual(hrefs(shape.items), OWNER_MENU);
+  const diary = hrefs(shape.diary?.items ?? []);
+  for (const href of ["/calendar", "/bookings", "/waitlist", "/recall", "/rota"]) {
+    assert.ok(diary.includes(href), `${href} is no longer reachable for a venue that runs on the diary`);
+  }
+  assert.ok(!diary.includes("/floor"), "a salon was offered the restaurant floor plan");
+  assert.equal(shape.diary?.items.find((i) => i.href === "/recall")?.badge, 3);
+});
+
+await test("the diary fixtures keep their diary", () => {
+  for (const id of ["loc_belline", "loc_azure", "loc_lumiere", "loc_meridian"]) {
+    const l = getLocation(id);
+    if (!l) continue;
+    assert.ok(usesDiary(l), `${id} lost its diary`);
   }
 });
 
-await test("every page that left the navigation is still reachable from Advanced", () => {
-  const moved = ["/calendar", "/bookings", "/waitlist", "/recall", "/guests", "/agents", "/locations", "/reports", "/golive", "/test"];
-  const reachable = advancedHrefs(owner, [requestVenue()]);
-  for (const href of moved) {
-    assert.ok(reachable.includes(href), `${href} is in neither the navigation nor Advanced — it has been orphaned`);
+await test("Bookings is in the menu only when Belline books into a connected calendar", () => {
+  assert.ok(!hrefs(navFor(owner, [requestVenue()], {}).items).includes("/bookings"));
+  const google = {
+    ...venue(),
+    onboarding: { ...venue().onboarding!, destination: { kind: "google" as const, setAt: at } },
+    google: { sealedToken: "sealed", calendarId: "primary", connectedAt: at } as never,
+  };
+  const saved = { flag: process.env.FLAG_BOOKING_GOOGLE, id: process.env.GOOGLE_CLIENT_ID, secret: process.env.GOOGLE_CLIENT_SECRET, key: process.env.CREDENTIALS_KEY };
+  Object.assign(process.env, { FLAG_BOOKING_GOOGLE: "on", GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret", CREDENTIALS_KEY: "k".repeat(64) });
+  try {
+    const items = hrefs(navFor(owner, [google], {}).items);
+    assert.ok(items.includes("/bookings"), "a venue booking into Google has no Bookings");
+    assert.equal(navFor(owner, [google], {}).diary, null);
+    assert.equal(notOnDiaryHome(google), `/bookings?loc=${google.id}`);
+  } finally {
+    for (const [k, v] of [["FLAG_BOOKING_GOOGLE", saved.flag], ["GOOGLE_CLIENT_ID", saved.id], ["GOOGLE_CLIENT_SECRET", saved.secret], ["CREDENTIALS_KEY", saved.key]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
   }
+  assert.equal(notOnDiaryHome(requestVenue()), `/requests?loc=${venueId}`);
 });
 
-await test("the diary pages a venue cannot use are not offered to it", () => {
-  // The old nav already did this for Floor and Rota; Advanced must not undo it.
-  const salonOnly = advancedHrefs(owner, [requestVenue()]);
-  assert.ok(!salonOnly.includes("/floor"), "a salon was offered the restaurant floor plan");
-  assert.ok(salonOnly.includes("/rota"), "a salon was not offered the rota");
-});
-
-await test("no internal or staff page is in the simplified navigation", () => {
-  const items = hrefs(navFor(owner, [requestVenue()], {}).items);
-  for (const href of ["/prospects", "/demo", "/test"]) {
-    assert.ok(!items.includes(href), `${href} is in an owner's simplified navigation`);
-  }
-  // Still reachable, and still guarded by their own pages.
-  const reachable = advancedHrefs(owner, [requestVenue()]);
-  assert.ok(reachable.includes("/demo"), "the demo line is now unreachable");
-  assert.ok(reachable.includes("/test"), "the test console is now unreachable");
-  assert.ok(!reachable.includes("/prospects"), "Advanced offers a staff-only page to a customer");
-});
-
-await test("the old twenty-two-link navigation is gone for everyone", () => {
-  // Retired on 2026-09-16 at the founder's request. No account, diary or not,
-  // opens to it — and none of its links sits in the primary navigation.
-  for (const locations of [[venue()], [requestVenue()], [requestVenue(), venue()]]) {
-    const items = hrefs(navFor(owner, locations, { dueBack: 3 }).items);
-    for (const href of ["/attention", "/calendar", "/calls", "/inbox", "/bookings", "/waitlist", "/guests", "/agents", "/locations", "/reports", "/demo"]) {
-      assert.ok(!items.includes(href), `${href} is back in the primary navigation`);
+await test("the retired pages are nowhere in the menu, for anybody", () => {
+  for (const locations of [[venue()], [requestVenue()], [diaryVenue()], [requestVenue(), diaryVenue()]]) {
+    const shape = navFor(owner, locations, { dueBack: 3 });
+    const all = hrefs([...shape.items, ...(shape.diary?.items ?? []), ...(shape.staff?.items ?? [])]);
+    for (const href of ["/advanced", "/reports", "/setup", "/demo", "/test", "/golive", "/website", "/integrations", "/prospects"]) {
+      assert.ok(!all.includes(href), `${href} is in an owner's menu`);
     }
   }
 });
 
-await test("floor staff are not offered the manager's destinations", () => {
+await test("the demo line and Belline's tools are for Belline staff only", async () => {
+  const demo = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "demo", "page.tsx"), "utf8");
+  assert.match(demo, /if \(!isBellineStaff\(user\)\) notFound\(\);/, "the demo line opens for customers");
+  assert.doesNotMatch(demo, /canManageUsers\(user\)\) notFound/);
+  const { getTenant, saveTenant } = await import("../src/lib/store");
+  const staffOwner = await signUp({ businessName: "Belline Staff Desk", email: "staff@bellinedesk.test", password: "Correct-Horse-Battery-9", vertical: "salon", timezone: "Asia/Dubai" });
+  assert.ok(staffOwner.ok);
+  if (!staffOwner.ok) return;
+  saveTenant({ ...getTenant(staffOwner.user.tenantId)!, internal: true });
+  const staff = navFor(staffOwner.user, [staffOwner.location], {}).staff;
+  assert.deepEqual(hrefs(staff?.items ?? []), ["/sales", "/demo", "/prospects"]);
+  assert.ok(!searchEverything(owner, "demo").some((h) => h.href === "/demo"), "search offers a customer the demo line");
+});
+
+await test("floor staff get Home, Inbox and Customers, and the diary where there is one", () => {
   const floor = createUser({ email: "nav@glowstudio.test", name: "Nav", password: "Correct-Horse-Battery-9", role: "staff", tenantId: owner.tenantId });
   assert.ok(floor.ok);
-  const items = hrefs(navFor(floor.ok ? floor.user : null!, [requestVenue()], {}).items);
-  assert.deepEqual(items, ["/", "/conversations", "/requests"]);
+  const user = floor.ok ? floor.user : null!;
+  assert.deepEqual(hrefs(navFor(user, [requestVenue()], {}).items), ["/", "/requests", "/guests"]);
+  const diary = hrefs(navFor(user, [diaryVenue()], {}).diary?.items ?? []);
+  assert.ok(diary.includes("/calendar") && !diary.includes("/rota"), "floor staff were offered the rota, or no calendar");
 });
 
-await test("search reaches the moved pages, whichever navigation you are on", () => {
-  // The whole promise of Advanced. Somebody who has always typed "rota" must
-  // still land on it.
-  assert.ok(searchEverything(owner, "rota").some((h) => h.href === "/rota"));
-  assert.ok(searchEverything(owner, "calend").some((h) => h.href === "/calendar"));
+await test("each destination is marked current from any of its tabs", () => {
+  const items = navFor(owner, [requestVenue()], {}).items;
+  const on = (path: string) => items.filter((i) => navItemOn(i, path)).map((i) => i.label);
+  assert.deepEqual(on("/"), ["Home"]);
+  assert.deepEqual(on("/conversations"), ["Inbox"]);
+  assert.deepEqual(on("/calls/call_1"), ["Inbox"]);
+  assert.deepEqual(on("/agents"), ["Your business"]);
+  assert.deepEqual(on("/venue/rules"), ["Your business"]);
+  assert.deepEqual(on("/channels/phone"), ["Channels"]);
+  assert.deepEqual(on("/billing"), ["Settings"]);
+  assert.deepEqual(on("/team"), ["Settings"]);
 });
 
-await test("the seven destinations all exist as routes", () => {
-  for (const route of ["conversations", "requests", "channels", "advanced"]) {
-    assert.ok(
-      fs.existsSync(path.join(process.cwd(), "src", "app", "(app)", route, "page.tsx")),
-      `/${route} is in the navigation but has no page`,
-    );
+await test("the tabs inside each destination are the approved ones", () => {
+  assert.deepEqual(hrefs(INBOX_TABS), ["/requests", "/conversations"]);
+  assert.deepEqual(hrefs(CHANNEL_TABS), ["/channels", "/channels/website", "/channels/phone", "/channels/link", "/channels/whatsapp"]);
+  assert.equal(CHANNEL_TABS[0].label, "Try it");
+  assert.deepEqual(hrefs(SETTINGS_TABS), ["/locations", "/team", "/billing"]);
+  assert.deepEqual(hrefs(businessTabs(requestVenue())), ["/venue", "/venue/rules", "/agents"]);
+  assert.deepEqual(hrefs(businessTabs(diaryVenue())), ["/venue", "/venue/rules", "/agents", "/venue/diary"]);
+});
+
+await test("the language settings stay mounted inside the agent editor, which Your business renders", () => {
+  const agents = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "agents", "page.tsx"), "utf8");
+  assert.match(agents, /<AgentEditor\b/);
+  assert.match(agents, /<SectionTabs tabs=\{businessTabs\(location\)\}/);
+});
+
+await test("rules are edited in place on the dashboard, never by a link into setup", () => {
+  const rules = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "venue", "rules", "page.tsx"), "utf8");
+  assert.match(rules, /<RulesForm\s+stay/);
+  const actions = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "StepActions.tsx"), "utf8");
+  assert.match(actions, /if \(stay\) \{[\s\S]*setSaved\(true\);[\s\S]*return;[\s\S]*\}\s*go\(out\.next\);/);
+  for (const file of ["nav.ts", "search.ts"]) {
+    assert.doesNotMatch(fs.readFileSync(path.join(process.cwd(), "src", "lib", file), "utf8"), /"\/setup\/rules"|"\/setup"[,}]/, `${file} still links into setup`);
   }
+});
+
+await test("every retired address redirects to its new home", () => {
+  const config = fs.readFileSync(path.join(process.cwd(), "next.config.mjs"), "utf8");
+  const routes: [string, string][] = [
+    ["/advanced", "/"],
+    ["/reports", "/"],
+    ["/test", "/channels"],
+    ["/website", "/channels/website"],
+    ["/golive", "/channels/phone"],
+    ["/integrations", "/calendars"],
+    ["/settings", "/locations"],
+    ["/setup/channels", "/setup/website"],
+  ];
+  for (const [from, to] of routes) {
+    assert.match(config, new RegExp(`source: "${from.replace(/\//g, "\\/")}", destination: "${to.replace(/\//g, "\\/")}"`), `${from} does not redirect to ${to}`);
+    // A page left at the old address would never be reached, and would rot.
+    const page = path.join(process.cwd(), "src", "app", "(app)", from.slice(1), "page.tsx");
+    if (!from.startsWith("/setup")) assert.ok(!fs.existsSync(page), `${from}/page.tsx is still there behind its redirect`);
+  }
+});
+
+await test("every menu destination and tab is a real route", () => {
+  const shape = navFor(owner, [diaryVenue()], {});
+  const all = [...shape.items, ...(shape.diary?.items ?? []), ...INBOX_TABS, ...CHANNEL_TABS, ...SETTINGS_TABS, ...businessTabs(diaryVenue())].map((i) => i.href);
+  for (const href of new Set(all)) {
+    const page = path.join(process.cwd(), "src", "app", "(app)", ...href.split("/").filter(Boolean), "page.tsx");
+    assert.ok(fs.existsSync(page), `${href} is in the menu but has no page`);
+  }
+});
+
+await test("search reaches the diary pages only for a diary account, and the new homes for everybody", async () => {
+  assert.ok(searchEverything(owner, "phone").some((h) => h.href === "/channels/phone"));
+  assert.ok(searchEverything(owner, "rules").some((h) => h.href === "/venue/rules"));
+  // The fixture venue is on the diary, so the rota is found; a request account is never offered it.
+  assert.ok(searchEverything(owner, "rota").some((h) => h.href === "/rota"));
+  const requests = await signUp({ businessName: "Requests Only Studio", email: "owner@requestsonly.test", password: "Correct-Horse-Battery-9", vertical: "salon", timezone: "Asia/Dubai" });
+  assert.ok(requests.ok);
+  if (!requests.ok) return;
+  upsertLocation({ ...requests.location, onboarding: { ...requests.location.onboarding!, destination: { kind: "requests", setAt: at } } });
+  assert.ok(!searchEverything(requests.user, "rota").some((h) => h.href === "/rota"), "a request venue was offered the rota");
+  assert.ok(!searchEverything(requests.user, "calend").some((h) => h.href === "/calendar"), "a request venue was offered the calendar");
+});
+
+await test("the phone menu lists the same groups as the sidebar", () => {
+  const shell = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "layout.tsx"), "utf8");
+  assert.match(shell, /<MobileNav items=\{shape\.items\} groups=\{groups\} \/>/);
+  assert.match(shell, /<SidebarNav items=\{shape\.items\} groups=\{groups\} \/>/);
+  const mobile = fs.readFileSync(path.join(process.cwd(), "src", "components", "MobileNav.tsx"), "utf8");
+  assert.match(mobile, /groups\.map/);
 });
 
 console.log("\n\x1b[1mCustomer profiles\x1b[0m\n");

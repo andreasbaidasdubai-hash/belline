@@ -162,11 +162,21 @@ const SCHEMA = {
     },
     services: {
       type: "array",
-      description: "Up to eight real services or menu sections found on the page.",
+      description:
+        "Up to eight real services or menu sections found on the page. A service is something a customer " +
+        "books or asks the business to do for them, which may have a length and a price: a haircut, a " +
+        "check-up, a table, a valuation, a consultation. Never a service: project or development names, " +
+        "property listings, communities, branches, sales centres or other locations, team members, brands, " +
+        "or products from a catalogue. A business whose site lists only those has no services here; leave " +
+        "the list empty rather than filling it with them.",
       items: {
         type: "object",
         properties: {
           name: { type: "string" },
+          section: {
+            type: "string",
+            description: "The heading the item is listed under on the page, e.g. 'Treatments' or 'Our projects'. Empty string if none.",
+          },
           durationMin: { type: "number", description: "Length in minutes when the source states one; 0 when it does not. Never estimate." },
           price: { type: "number", description: "0 if the page does not state one." },
         },
@@ -209,6 +219,12 @@ export interface SourceFile {
 export interface Sources {
   site?: { text: string; url: URL };
   files?: SourceFile[];
+  /**
+   * What the owner said the business is at signup, as its label ("Real estate
+   * or property"). Told to the model so a developer's list of projects is read
+   * as projects; absent for a sales demo, where nobody has said.
+   */
+  business?: string;
 }
 
 /**
@@ -225,6 +241,19 @@ const TAKE_ONLY_WHAT_IT_SAYS =
   `Where it is silent, leave the field empty or zero — an invented price or a stylist who does ` +
   `not work there is worse than a gap, because this is played back to the owner of the business.`;
 
+/**
+ * The owner's own answer to "what do you do", when there is one. Before this,
+ * the reader was told nothing, and a property developer's projects came back
+ * as services to book.
+ */
+function businessLine(business?: string): string {
+  const kind = business?.trim();
+  return kind
+    ? `\n\nThe owner says this business is: ${kind}. Only list as services what a customer of that kind of ` +
+        `business books or asks to have done — never its projects, listings, branches, team members or products.`
+    : "";
+}
+
 /** The request, built apart from the call so what is sent can be checked. */
 export function extractionRequest(sources: Sources): Anthropic.MessageCreateParamsNonStreaming {
   const { site } = sources;
@@ -233,10 +262,11 @@ export function extractionRequest(sources: Sources): Anthropic.MessageCreatePara
   let content: Anthropic.MessageCreateParamsNonStreaming["messages"][number]["content"];
   if (!files.length) {
     if (!site) throw new CustomerError("Nothing to read.");
-    // Exactly the prompt the website reader has always sent.
+    // The prompt the website reader has always sent, plus the owner's own
+    // answer about the business when setup has one.
     content =
       `This is the readable text of ${site.url.href}. Read the business off it and call the tool.\n\n` +
-      `Take only what the page actually says. ${TAKE_ONLY_WHAT_IT_SAYS}\n\n` +
+      `Take only what the page actually says. ${TAKE_ONLY_WHAT_IT_SAYS}${businessLine(sources.business)}\n\n` +
       site.text;
   } else {
     const blocks: Anthropic.ContentBlockParam[] = files.map((file) =>
@@ -259,7 +289,7 @@ export function extractionRequest(sources: Sources): Anthropic.MessageCreatePara
           ? `Below is the readable text of its website, ${site.url.href}. Read the business off all of them ` +
             `together and call the tool once. Where they disagree, prefer the documents for prices and services.\n\n`
           : `Read the business off them and call the tool.\n\n`) +
-        `Take only what they actually say. ${TAKE_ONLY_WHAT_IT_SAYS}` +
+        `Take only what they actually say. ${TAKE_ONLY_WHAT_IT_SAYS}${businessLine(sources.business)}` +
         (site ? `\n\n${site.text}` : ""),
     });
     content = blocks;

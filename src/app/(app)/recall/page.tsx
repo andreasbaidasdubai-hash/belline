@@ -6,6 +6,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import { recallDue, recallSummary } from "@/lib/booking/recall";
 import { terms } from "@/lib/verticals";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
+import { notOnDiaryHome, usesDiary } from "@/lib/nav";
 import RecallList from "./RecallList";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,8 @@ export default async function RecallPage({
   const { loc, show } = await searchParams;
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
+  // A diary page, for the venues on the diary. Everybody else goes where their bookings are.
+  if (!usesDiary(location)) redirect(notOnDiaryHome(location));
 
   // The link appears in the sidebar because *some* venue this person can see
   // has people due back. If the venue that resolved is a restaurant, go to
@@ -93,7 +96,7 @@ export default async function RecallPage({
             weeks for a root touch-up, nothing at all for a filling. Set them and this list fills
             itself from the bookings you already have.
           </p>
-          <Link className="btn" href={`/venue?loc=${location.id}`}>
+          <Link className="btn" href={`/venue/diary?loc=${location.id}`}>
             Set recall intervals
           </Link>
         </div>

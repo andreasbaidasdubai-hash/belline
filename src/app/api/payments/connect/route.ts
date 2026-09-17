@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 /**
  * Send an owner to Stripe to set up deposits.
  *
- * A link from the Integrations page. Stripe runs the identity checks and the
+ * A link from the Calendars page, under "After a booking". Stripe runs the identity checks and the
  * bank details on its own pages and sends them back to the same page, which
  * then asks Stripe whether cards can be taken yet.
  */
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   }
 
   const origin = (process.env.PUBLIC_ORIGIN || url.origin).replace(/\/$/, "");
-  const back = `${origin}/integrations?loc=${encodeURIComponent(location.id)}&payments=1`;
+  const back = `${origin}/calendars?loc=${encodeURIComponent(location.id)}&payments=1`;
 
   if (!stripeConfigured()) {
     return NextResponse.redirect(`${back}&error=payments_off`);

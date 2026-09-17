@@ -314,8 +314,10 @@ export function widgetConfig(
   language: VenueLanguage = "en",
   /** "Also speaks Deutsch", in the main language, where the business answers in more than one. */
   notice: string | null = null,
+  /** The venue's uploaded logo, from logo.ts `logoUrlFor`. A path on this app; embed.js adds the origin. */
+  logoUrl: string | null = null,
 ) {
-  const look = resolveAppearance(config.appearance, language);
+  const look = resolveAppearance(config.appearance, language, logoUrl);
   return {
     mode: modeOf(config) ?? "voice",
     ...look,

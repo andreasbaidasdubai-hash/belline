@@ -6,6 +6,7 @@ import { listCalls, listLocationsFor } from "@/lib/store";
 import { currentVenue } from "@/lib/onboarding";
 import {
   INTEGRATIONS,
+  RENAMED_STEPS,
   bellineDiaryOffered,
   channelStatuses,
   checklistOf,
@@ -20,16 +21,15 @@ import {
 import { venueMarket } from "@/lib/onboarding/rules";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import { requestRulesOf } from "@/lib/booking/requests";
-import { destinationOf, googleUsable, outlookUsable, serviceLengthsRequired, takesRequestsOnly } from "@/lib/booking/destination";
+import { destinationOf, googleUsable, onBellineDiary, outlookUsable, serviceLengthsRequired, takesRequestsOnly } from "@/lib/booking/destination";
 import { OUTLOOK_NO_CALENDAR_TEXT } from "@/lib/integrations/outlook";
 import { integrationErrorText } from "@/lib/errors/customer";
 import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
 import { MARKETS } from "@/lib/markets";
-import { PHONE_OPTIONAL } from "@/lib/telephony/forwarding";
 import { flag } from "@/lib/flags";
-import { listExceptions, ownerTickets } from "@/lib/exceptions";
+import { ownerTickets } from "@/lib/exceptions";
 import { whatsappStatus } from "@/lib/whatsapp";
-import { whatsappCard, type WhatsAppCard as WhatsAppCardState } from "@/lib/whatsapp-selfserve";
+import { whatsappCard } from "@/lib/whatsapp-selfserve";
 import { seedIfEmpty } from "@/lib/seed";
 import type { Location } from "@/lib/types";
 import { SCENARIO_ORDER, scenarioTitle } from "@/lib/onboarding/selftest";
@@ -37,11 +37,8 @@ import { selftestAvailable, testsPassed, testsStale } from "@/lib/onboarding/sel
 import BelleDock from "../BelleDock";
 import SetupWizard from "../SetupWizard";
 import SelftestPanel from "../SelftestPanel";
-import WhatsAppAssisted from "@/app/(app)/integrations/WhatsAppAssisted";
-import { bellineNumberOf } from "@/lib/telephony/number";
-import ChatLinkCard from "@/app/(app)/channels/ChatLinkCard";
-import { chatLinkUrl } from "@/lib/chat-link";
-import { ActionButton, DestinationPicker, RulesForm, type DestinationOption } from "../StepActions";
+import { LinkSection, PhoneSection, WebsiteSection, WhatsAppSection } from "@/app/(app)/channels/sections";
+import { ActionButton, DestinationPicker, RulesForm, SkipLink, type DestinationOption } from "../StepActions";
 
 export const dynamic = "force-dynamic";
 
@@ -53,12 +50,15 @@ export const metadata = { title: "Set up Belline" };
  * Outside the `(app)` group so a step has the whole screen, and never a wall:
  * every step opens whatever was done before it, every step can be skipped, and
  * the dashboard is one press away in the header. What is left shows as a
- * checklist on Today. Answering real customers is gated separately, per
+ * checklist on Home. Answering real customers is gated separately, per
  * channel, by Go live (onboarding/journey.ts).
  *
  * Every step has one primary button, placed before any detail so it is on
- * screen on a phone without scrolling. Steps that need an editor that already
- * exists link out to it with ?from=setup, and that page shows the way back.
+ * screen on a phone without scrolling, and again at the bottom beside "Skip
+ * for now", so an owner who reads to the end is not left with only a way to
+ * skip. Each step is done in place: the website chat and the phone render the
+ * same sections as the Channels screens, rather than sending the owner out to
+ * the dashboard and back.
  *
  * The step is in the URL and everything on it is read from what is saved, so
  * a refresh, or signing in again next week, shows the same step.
@@ -77,22 +77,6 @@ function Heading({ step, title }: { step: Step; title: string }) {
       </p>
       <h1 style={{ ...serif, fontSize: 30, letterSpacing: "-0.02em", lineHeight: 1.12, margin: "0 0 12px" }}>{title}</h1>
     </>
-  );
-}
-
-function Card({ title, status, children }: { title: string; status: string; children: React.ReactNode }) {
-  return (
-    <div className="panel" style={{ padding: "14px 16px", marginTop: 12 }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-        <strong style={{ fontSize: 14.5 }}>{title}</strong>
-        <span className="pill" style={{ marginLeft: "auto" }}>
-          {status}
-        </span>
-      </div>
-      <div className="muted" style={{ fontSize: 13, lineHeight: 1.55, marginTop: 6 }}>
-        {children}
-      </div>
-    </div>
   );
 }
 
@@ -120,8 +104,7 @@ function ChannelList({ statuses }: { statuses: ChannelStatus[] }) {
 }
 
 function Rail({ j, active }: { j: Journey; active: Step }) {
-  // Every step opens, in any order. Nothing here is a gate.
-  const reachable = (_s: Step) => true;
+  const checklist = checklistOf(j);
   return (
     <>
       <style>{`
@@ -134,42 +117,40 @@ function Rail({ j, active }: { j: Journey; active: Step }) {
         }
       `}</style>
       <nav aria-label="Setup steps" className="setup-rail">
+        {/* Every step opens, in any order. Nothing here is a gate. */}
         <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 4 }}>
-          {j.steps.map((s) => {
-            const label = (
-              <>
+          {j.steps.map((s) => (
+            <li key={s.id}>
+              <Link
+                href={s.url}
+                aria-current={s.id === active.id ? "step" : undefined}
+                style={{
+                  display: "block",
+                  padding: "7px 10px",
+                  borderRadius: 8,
+                  fontSize: 13.5,
+                  background: s.id === active.id ? "var(--panel-2)" : "transparent",
+                  fontWeight: s.id === active.id ? 600 : 400,
+                  color: "var(--text)",
+                }}
+              >
                 <span aria-hidden="true" style={{ width: 20, display: "inline-block", color: s.done ? "var(--ok)" : "var(--text-2)" }}>
                   {s.done ? "✓" : s.n}
                 </span>
                 {s.title}
-                {s.done && <span className="sr-only"> (done)</span>}
-              </>
-            );
-            const style = {
-              display: "block",
-              padding: "7px 10px",
-              borderRadius: 8,
-              fontSize: 13.5,
-              background: s.id === active.id ? "var(--panel-2)" : "transparent",
-              fontWeight: s.id === active.id ? 600 : 400,
-              color: reachable(s) ? "var(--text)" : "var(--text-2)",
-            } as const;
-            return (
-              <li key={s.id}>
-                {reachable(s) ? (
-                  <Link href={s.url} aria-current={s.id === active.id ? "step" : undefined} style={style}>
-                    {label}
-                  </Link>
-                ) : (
-                  <span style={style}>{label}</span>
+                {s.optional && (
+                  <span className="muted" style={{ fontSize: 11.5, marginLeft: 6 }}>
+                    optional
+                  </span>
                 )}
-              </li>
-            );
-          })}
+                {s.done && <span className="sr-only"> (done)</span>}
+              </Link>
+            </li>
+          ))}
         </ol>
       </nav>
       <p className="setup-rail-compact muted" style={{ fontSize: 12.5, margin: "0 0 18px" }}>
-        Step {active.n} of {j.steps.length} · {checklistOf(j).done} of {checklistOf(j).total} done
+        Step {active.n} of {j.steps.length} · {checklist.done} of {checklist.total} done
       </p>
     </>
   );
@@ -262,16 +243,21 @@ function destinationOptions(venue: Location): DestinationOption[] {
           } satisfies DestinationOption,
         ]
       : []),
-    ...(clinicPreview
-      ? []
-      : [
-          googleCard(venue),
-          outlookCard(venue),
-        ]),
+    ...(clinicPreview ? [] : [googleCard(venue), outlookCard(venue)]),
   ];
 }
 
 const PARTNERS = ["fresha", "sevenrooms", "opentable", "treatwell", "other"].map((id) => ({ id, name: INTEGRATIONS[id] }));
+
+/** The bottom of a step whose main button is a link: that link again, and Skip for now. */
+function Footer({ step, skip, children }: { step: Step; skip: string; children?: React.ReactNode }) {
+  return (
+    <div className="setup-footer">
+      {children}
+      {!step.done && step.id !== "first-week" && <SkipLink href={skip} />}
+    </div>
+  );
+}
 
 function Body({
   step,
@@ -280,22 +266,24 @@ function Body({
   facts,
   google,
   outlook,
-  whatsapp,
+  whatsappLive,
 }: {
+  whatsappLive: boolean;
   step: Step;
   j: Journey;
   venue: Location;
   facts: ReturnType<typeof factsFrom>;
   google?: string;
   outlook?: string;
-  whatsapp: WhatsAppCardState;
 }) {
   // Onward from this step, to the next one not done, or the dashboard. No
   // step refuses to open because an earlier one is unfinished: a step that
   // needs an earlier answer says so where it matters.
   const onward = stepAfter(j, step.id);
+  const next = onward?.url ?? "/";
+  const skip = step.done ? undefined : next;
   const cont = (
-    <Link href={onward?.url ?? "/"} className="btn btn-accent" style={primary}>
+    <Link href={next} className="btn btn-accent" style={primary}>
       Continue
     </Link>
   );
@@ -320,6 +308,7 @@ function Body({
           currency={venue.currency}
           current={currentVenue(venue)}
           start={step.id === "review" ? "review" : "ask"}
+          diary={onBellineDiary(venue)}
           lengthsRequired={serviceLengthsRequired(venue)}
           country={venueMarket(venue)}
         />
@@ -341,6 +330,7 @@ function Body({
             currentLink={venue.onboarding?.destination?.bookingLink}
             requested={venue.onboarding?.integrationRequests ?? []}
             partners={PARTNERS}
+            skipHref={skip}
           />
         </>
       );
@@ -350,21 +340,12 @@ function Body({
       const requests = takesRequestsOnly(venue);
       const rules = requestRulesOf(venue);
       const o = venue.onboarding;
-      const clinicRule = venue.vertical === "clinic" && (
-        <div className="panel" style={{ padding: "14px 16px", marginTop: 22 }}>
-          <strong style={{ fontSize: 14 }}>Always on for clinics</strong>
-          <p className="muted" style={{ margin: "6px 0 0", fontSize: 13.5, lineHeight: 1.55 }}>
-            {CLINIC_MEDICAL_RULE}
-          </p>
-        </div>
-      );
       return (
         <>
           <Heading step={step} title={requests ? "How Belline takes a request." : "Check the rules Belline follows."} />
           {!o?.destination && (
             <p className="panel" role="status" style={{ padding: "12px 14px", fontSize: 13.5, margin: "0 0 16px" }}>
-              These rules follow from where bookings go, so choose that first.{" "}
-              <Link href="/setup/bookings">Choose where bookings go</Link>
+              These rules follow from where bookings go, so choose that first. <Link href="/setup/bookings">Choose where bookings go</Link>
             </p>
           )}
           <p style={lede}>
@@ -384,130 +365,80 @@ function Body({
               afterHours: rules.afterHours,
               neverSay: rules.neverSay.join("\n"),
             }}
-          />
-          {clinicRule}
-          {requests ? null : (
-          <div className="panel" style={{ padding: "14px 16px", marginTop: 22 }}>
-            {policies.length ? (
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: 1.6 }}>
-                {policies.map((p) => (
-                  <li key={p}>{p}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
-                No rules yet. Belline will book within your hours and say it does not know anything it has not been told.
-              </p>
+            skipHref={skip}
+          >
+            {venue.vertical === "clinic" && (
+              <div className="panel" style={{ padding: "14px 16px", margin: "22px 0 0" }}>
+                <strong style={{ fontSize: 14 }}>Always on for clinics</strong>
+                <p className="muted" style={{ margin: "6px 0 0", fontSize: 13.5, lineHeight: 1.55 }}>
+                  {CLINIC_MEDICAL_RULE}
+                </p>
+              </div>
             )}
-            <p style={{ margin: "12px 0 0", fontSize: 13 }}>
-              <Link href="/agents?from=setup">Change the rules</Link>
-            </p>
-          </div>
-          )}
+            {!requests && (
+              <div className="panel" style={{ padding: "14px 16px", margin: "22px 0 0" }}>
+                {policies.length ? (
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: 1.6 }}>
+                    {policies.map((p) => (
+                      <li key={p}>{p}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
+                    No rules yet. Belline will book within your hours and say it does not know anything it has not been told.
+                  </p>
+                )}
+                <p className="muted" style={{ margin: "12px 0 0", fontSize: 13 }}>
+                  You can change these later under Your business, in Agent.
+                </p>
+              </div>
+            )}
+          </RulesForm>
         </>
       );
     }
 
-    case "channels": {
-      const phone = venue.onboarding?.channels.phone;
-      const web = venue.onboarding?.channels.web;
-      const phoneWorks = Boolean(phone?.forwardingVerifiedAt) || facts.phoneCalls > 0;
-      const webWorks = Boolean(web?.detectedAt) || facts.webConversations > 0;
-      // One answer for "is it answering", shared with Today and Channels.
-      const status = Object.fromEntries(
-        channelStatuses(venue, facts, { whatsappConnected: whatsapp.state === "live" }).map((c) => [c.id, c]),
-      ) as Record<ChannelStatus["id"], ChannelStatus>;
-      const pill = (c: ChannelStatus) => `${STATE_WORD[c.state]}${c.state === "waiting" && c.detail.startsWith("Connected") ? " — connected" : ""}`;
-      // Belline's number, and only that: `bellineNumber`, never the business's
-      // own phone from the review step, which was once shown here as the number
-      // to forward calls to.
-      const belline = bellineNumberOf(venue);
-      const action = { padding: "8px 14px", fontSize: 13.5, display: "inline-block" } as const;
+    case "website":
       return (
         <>
-          <Heading step={step} title="Let calls and chats reach Belline." />
+          <Heading step={step} title="Put Belline on your website." />
           <p style={lede}>
-            One is enough to go live: the chat on your website, your chat link, or your phone. Nothing answers customers until
-            you go live, and you can add the others later. The website counts once the widget loads on your site, the chat
-            link once you make it, and the phone once a test call arrives.
+            A chat and voice button in the corner of your site. Choose what it offers and how it looks, name your website, and
+            paste one line. This step is done once the button has loaded on your site. No website? Skip this and make a chat
+            link on the next step instead.
           </p>
-          {step.done ? (
-            cont
-          ) : (
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <Link href="/website?from=setup" className="btn btn-accent" style={primary}>
-                Add the chat to my website
-              </Link>
-              <Link href="/golive?from=setup" className="btn" style={{ padding: "12px 18px", display: "inline-block" }}>
-                Forward my phone calls
-              </Link>
-            </div>
-          )}
-          <Card title="Your phone line (optional)" status={pill(status.phone)}>
-            <span data-testid="phone-card-text">
-              {phoneWorks
-                ? "Forwarded calls are reaching Belline."
-                : belline
-                  ? `To use it, you dial a short code on your own phone that forwards the calls you miss to your Belline number, ${belline}. Nothing is forwarded until you do.`
-                  : flag("numbers.pool")
-                    ? "To use it, get your Belline number on the forwarding page. It takes a second, and nothing is forwarded until you dial a code yourself."
-                    : "Your Belline number is being prepared. It appears on the forwarding page as soon as it is ready."}
-            </span>
-            {!phoneWorks && (
-              <>
-                {!webWorks && <span style={{ display: "block", marginTop: 6 }}>{PHONE_OPTIONAL}</span>}
-                <span style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-                  {(belline || flag("numbers.pool")) && (
-                    <Link href="/golive?from=setup" className="btn" style={action}>
-                      {belline ? "Forward my calls" : "Get my Belline number"}
-                    </Link>
-                  )}
-                  <Link href={onward?.url ?? "/"} className="btn" style={action} data-testid="skip-phone">
-                    Skip the phone for now
-                  </Link>
-                </span>
-              </>
-            )}
-          </Card>
-          <Card title="Your website" status={pill(status.web)}>
-            {webWorks ? (
-              "The widget is on your website."
-            ) : (
-              <>
-                Add the chat to your site with one line of code.
-                <span style={{ display: "block", marginTop: 10 }}>
-                  <Link href="/website?from=setup" className="btn btn-accent" style={action} data-testid="add-to-website">
-                    Add it to my website
-                  </Link>
-                </span>
-              </>
-            )}
-          </Card>
-          <Card title="Your chat link (no website needed)" status={pill(status.link)}>
-            A link that opens a chat with Belline, for your Instagram bio, your Google Business Profile or your WhatsApp status.
-            <ChatLinkCard locationId={venue.id} url={chatLinkUrl(venue)} live={status.link.state === "live"} />
-          </Card>
-          <Card title="WhatsApp (optional)" status={whatsapp.state === "soon" ? "Available — set up with us" : pill(status.whatsapp)}>
-            {whatsapp.state === "soon" ? (
-              <>
-                WhatsApp works today on a second number for your business, which Belline sets up with you, so your own
-                WhatsApp stays as it is. Doing it yourself opens once Meta&apos;s verification is ready. Going live does not wait for it.
-                <WhatsAppAssisted locationId={venue.id} ticket={listExceptions({ locationId: venue.id, kind: "whatsapp_assisted_setup" }).find((e) => e.status !== "resolved")?.ticket} />
-              </>
-            ) : whatsapp.state === "live" ? (
-              "Belline answers your WhatsApp number."
-            ) : (
-              <>
-                Going live does not wait for it. <Link href="/integrations?from=setup">Set up WhatsApp</Link>
-                {onward && (
-                  <>
-                    {" · "}
-                    <Link href={onward.url}>Skip — add WhatsApp later</Link>
-                  </>
-                )}
-              </>
-            )}
-          </Card>
+          {cont}
+          <div style={{ marginTop: 22 }}>
+            <WebsiteSection location={venue} />
+          </div>
+          <Footer step={step} skip={next}>
+            {cont}
+          </Footer>
+        </>
+      );
+
+    case "phone": {
+      const statuses = Object.fromEntries(channelStatuses(venue, facts, { whatsappConnected: whatsappLive }).map((c) => [c.id, c])) as Record<ChannelStatus["id"], ChannelStatus>;
+      return (
+        <>
+          <Heading step={step} title="Let customers call and message Belline." />
+          <p style={lede}>
+            Any one of these is enough to go live, and so is the website chat. Your phone counts once a test call arrives, your
+            chat link once you make it, and WhatsApp once it is connected. Nothing answers customers until you go live.
+          </p>
+          {cont}
+          <h2 style={{ fontSize: 17, fontWeight: 600, margin: "26px 0 10px" }}>Your phone line (optional)</h2>
+          <PhoneSection location={venue} skipHref={next} />
+          <h2 style={{ fontSize: 17, fontWeight: 600, margin: "26px 0 10px" }}>A chat link, no website needed</h2>
+          <LinkSection location={venue} live={statuses.link.state === "live"} />
+          <h2 style={{ fontSize: 17, fontWeight: 600, margin: "26px 0 10px" }}>WhatsApp</h2>
+          <p className="muted" style={{ fontSize: 13.5, margin: "0 0 10px" }}>
+            Optional. Going live does not wait for it.
+          </p>
+          <WhatsAppSection location={venue} skipHref={onward?.url} />
+          <Footer step={step} skip={next}>
+            {cont}
+          </Footer>
         </>
       );
     }
@@ -518,8 +449,8 @@ function Body({
         <>
           <Heading step={step} title="Check it before your customers do." />
           <p style={lede}>
-            Belline has eight conversations your customers really have, from a booking to a question it cannot answer,
-            and checks every reply. It takes about a minute.
+            Belline has eight conversations your customers really have, from a booking to a question it cannot answer, and
+            checks every reply. It takes about a minute.
           </p>
           <SelftestPanel
             checks={SCENARIO_ORDER.map((id) => ({ id, title: scenarioTitle(id) }))}
@@ -528,16 +459,17 @@ function Body({
             available={selftestAvailable()}
             done={testsPassed(venue)}
             next={onward?.url ?? (j.activated ? "/" : null)}
+            skipHref={skip}
           />
           <p className="muted" style={{ fontSize: 13, margin: "18px 0 0" }}>
-            You can also <Link href="/test?from=setup">talk to it yourself</Link>.
+            You can also <Link href="/channels">talk to it yourself</Link> under Channels, Try it.
           </p>
         </>
       );
     }
 
     case "golive": {
-      const statuses = channelStatuses(venue, facts, { whatsappConnected: whatsapp.state === "live" });
+      const statuses = channelStatuses(venue, facts, { whatsappConnected: whatsappLive });
       if (j.activated) {
         return (
           <>
@@ -545,49 +477,83 @@ function Body({
             <p style={lede}>Each channel answers once it is connected. One you connect later starts answering on its own.</p>
             {cont}
             <ChannelList statuses={statuses} />
+            <Footer step={step} skip={next}>
+              {cont}
+            </Footer>
           </>
         );
       }
       const blocker = j.blockers[0];
+      // Skip for now moves forward: to the dashboard, never back to an earlier step.
+      const main = j.canGoLive ? (
+        <ActionButton action="activate" label="Go live" />
+      ) : (
+        blocker && (
+          <Link href={blocker.fix} className="btn btn-accent" style={primary}>
+            Fix this
+          </Link>
+        )
+      );
       return (
         <>
           <Heading step={step} title={j.canGoLive ? "Everything is ready." : "One thing before you go live."} />
           {j.canGoLive ? (
-            <>
-              <p style={lede}>
-                Belline starts answering real customers for {venue.name} on the channels below that are connected. A channel you
-                connect later starts answering on its own, without going live again.
-              </p>
-              <ActionButton action="activate" label="Go live" />
-            </>
+            <p style={lede}>
+              Belline starts answering real customers for {venue.name} on the channels below that are connected. A channel you
+              connect later starts answering on its own, without going live again.
+            </p>
           ) : (
-            blocker && (
-              <>
-                <p style={lede}>{blocker.label}.</p>
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                  <Link href={blocker.fix} className="btn btn-accent" style={primary}>
-                    Fix this
-                  </Link>
-                  <Link href={`/setup/assistant?step=${blocker.step}`} className="btn" style={{ padding: "12px 18px" }}>
-                    Ask Belle
-                  </Link>
-                </div>
-              </>
-            )
+            blocker && <p style={lede}>{blocker.label}.</p>
+          )}
+          {j.canGoLive || !blocker ? (
+            main
+          ) : (
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {main}
+              <Link href={`/setup/assistant?step=${blocker.step}`} className="btn" style={{ padding: "12px 18px" }}>
+                Ask Belle
+              </Link>
+            </div>
           )}
           <ChannelList statuses={statuses} />
+          {/* The button again at the bottom, only when it is a link: two Go live
+              buttons on one screen would be one too many to trust. */}
+          <Footer step={step} skip={next}>
+            {!j.canGoLive && main}
+          </Footer>
         </>
       );
     }
 
     case "first-week":
+      // Only true things. This step used to say "Belline is live" to a venue
+      // that had never gone live, because it could be opened from the rail.
+      if (!j.activated) {
+        return (
+          <>
+            <Heading step={step} title="Your first week starts when you go live." />
+            <p style={lede}>
+              Belline is not live for {venue.name} yet, so no real customer has reached it. Once you go live, this step shows your
+              first real enquiries.
+            </p>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <Link href="/setup/golive" className="btn btn-accent" style={primary}>
+                Go to Go live
+              </Link>
+              <Link href="/" className="btn" style={{ padding: "12px 18px" }}>
+                Open the dashboard
+              </Link>
+            </div>
+          </>
+        );
+      }
       return (
         <>
           <Heading step={step} title="Your first week." />
           <p style={lede}>
             {facts.enquiriesSinceLive > 0
-              ? `${facts.enquiriesSinceLive === 1 ? "One real enquiry has" : `${facts.enquiriesSinceLive} real enquiries have`} come in so far.`
-              : "Belline is live. Your first real enquiry will appear on the dashboard."}
+              ? `${facts.enquiriesSinceLive === 1 ? "One real enquiry has" : `${facts.enquiriesSinceLive} real enquiries have`} come in since you went live.`
+              : "Belline is live. Your first real enquiry will appear in your Inbox."}
           </p>
           <Link href="/" className="btn btn-accent" style={primary}>
             Open the dashboard
@@ -611,14 +577,19 @@ export default async function SetupStepPage({
 
   const venue = listLocationsFor(user.tenantId)[0];
   if (!venue) redirect("/");
+  if (RENAMED_STEPS[requested]) redirect(`/setup/${RENAMED_STEPS[requested]}`);
   if (!isStepId(requested)) redirect("/setup");
 
+  // Only the steps that list channels pay for the WhatsApp lookup.
+  const whatsappLive = requested === "phone" || requested === "golive" ? whatsappCard(venue, await whatsappStatus(venue)).state === "live" : false;
   const facts = factsFrom(venue, listCalls(venue.id));
   const j = journey(venue, facts);
   const step = j.steps.find((s) => s.id === requested)!;
   const tickets = ownerTickets(venue.id);
-  // Only the channels step shows it, and only that step pays for the lookup.
-  const whatsapp = requested === "channels" || requested === "golive" ? whatsappCard(venue, await whatsappStatus(venue)) : ({ state: "soon" } as WhatsAppCardState);
+  // Steps whose main button belongs to a client component render their own
+  // bottom row, with Skip for now in it. The import and review form keeps its
+  // own sticky bar, so Skip for now sits under it here.
+  const ownFooter = ["bookings", "rules", "website", "phone", "test", "golive", "first-week"].includes(step.id);
 
   return (
     <div className="has-belle-fab" style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -640,25 +611,23 @@ export default async function SetupStepPage({
         <Link href="/" className="btn" style={{ padding: "6px 12px", fontSize: 13, flexShrink: 0 }} data-testid="setup-dashboard">
           Dashboard
         </Link>
-        {/* No "Ask Belle" here: the floating bell (BelleDock) is the one way
-            in, docked from 1024px up and /setup/assistant?step= below. */}
+        {/* No "Ask Belle" here: the floating bell (BelleDock) is the one way in. */}
       </header>
 
       <BelleDock locationId={venue.id} step={step.id} greeting={setupGreeting(venue, step.id)}>
         <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 112px" }}>
           <Rail j={j} active={step} />
           <main style={{ minWidth: 0, maxWidth: 720 }}>
-            <Body step={step} j={j} venue={venue} facts={facts} google={google} outlook={outlook} whatsapp={whatsapp} />
+            <Body step={step} j={j} venue={venue} facts={facts} google={google} outlook={outlook} whatsappLive={whatsappLive} />
             {/* Every unfinished step can be left for later. */}
-            {!step.done && step.id !== "first-week" && (
-              <p style={{ margin: "26px 0 0", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                <Link href={stepAfter(j, step.id)?.url ?? "/"} className="btn" style={{ padding: "8px 14px", fontSize: 13.5 }} data-testid="setup-skip">
-                  Skip for now
-                </Link>
-                <span className="muted" style={{ fontSize: 12.5 }}>
-                  It stays on your checklist on Today.
-                </span>
-              </p>
+            {!ownFooter && (
+              <Footer step={step} skip={stepAfter(j, step.id)?.url ?? "/"}>
+                {step.id === "business" && (
+                  <Link href={stepAfter(j, step.id)?.url ?? "/"} className="btn btn-accent" style={primary}>
+                    Continue
+                  </Link>
+                )}
+              </Footer>
             )}
             {/* A ticket the team is working on, so the owner is not left guessing. */}
             {tickets.map((t) => (

@@ -1,33 +1,44 @@
 import type { Location, User } from "./types";
 import { canManageUsers, isBellineStaff } from "./auth";
-import { destinationOf } from "./booking/destination";
+import { destinationOf, googleUsable, onBellineDiary, outlookUsable } from "./booking/destination";
 
 /**
  * What an owner sees down the left-hand side.
  *
  * This used to be a forty-line array inline in the app shell, which is why it
  * grew to twenty-two entries without anybody deciding that it should. It is
- * here now so that the shell, the command palette and the checks all read one
+ * here so that the shell, the phone menu, search and the checks all read one
  * answer, and so the decision below is written down somewhere it can be
  * argued with.
  *
  * Belline no longer runs the customer's diary. It answers the phone, the
  * website and WhatsApp, answers from the business's own information, takes
- * booking requests and escalates what it should not decide. A navigation
- * built around a diary puts a dozen pages in front of that, and none of them
- * is the reason the owner opened the tab.
+ * booking requests or books into the owner's own calendar, and escalates what
+ * it should not decide. So the menu is the owner's day and the owner's setup,
+ * in the words an owner uses (approved by the founder on 2026-09-17):
  *
- * So there are two shapes. The old one, unchanged. And a simplified one with
- * seven destinations, where everything else moves behind Advanced — still
- * routed, still linked, still tested, one click away instead of zero.
+ *   Home            what needs you, what was handled, the setup checklist
+ *   Inbox           requests and conversations
+ *   Bookings        only when Belline books into a connected calendar
+ *   Customers
+ *   Your business   details, services, questions, rules, the agent
+ *   Channels        try it, website chat, phone, chat link, WhatsApp
+ *   Calendars       Google, Outlook, booking systems, who uses which
+ *   Settings        locations, team, billing and usage
+ *
+ * The diary pages (calendar, rota, waitlist, recall) are the owner's daily
+ * work on the accounts that still run on Belline's own diary, so those
+ * accounts get them as a group of their own. Nobody else sees them at all.
+ *
+ * "Everything else" is gone. It was the promise that nothing had been taken
+ * away, and it became the place the product kept what it had not decided
+ * about: the reports nobody read, a demo line only Belline uses, a link back
+ * into setup. Every page a customer needs now has a place, and every old
+ * address redirects to it (next.config.mjs).
  */
 
-export interface NavItem {
-  href: string;
-  label: string;
-  badge?: number;
-  quiet?: boolean;
-}
+import type { NavGroup, NavItem } from "./nav-shape";
+export { navItemOn, type NavGroup, type NavItem } from "./nav-shape";
 
 export interface NavCounts {
   /** Items on the attention list, across every venue this person can see. */
@@ -38,143 +49,98 @@ export interface NavCounts {
 
 export interface NavShape {
   items: NavItem[];
-  /** The Advanced entry, set only when there is an Advanced area to enter. */
-  advanced: NavItem | null;
+  /** Belline's own diary, for the accounts that run on it. Null for everybody else. */
+  diary: NavGroup | null;
+  /** Belline's own tools, for Belline staff only. Null for every customer. */
+  staff: NavGroup | null;
 }
 
 /**
  * Is this venue running on Belline's own diary?
  *
- * The one question that decides whether the diary pages are furniture or the
- * owner's daily work. A venue with no destination recorded predates the
- * journey and is on the diary — `destinationOf` says so, and the backfill in
- * seed.ts guarantees it.
+ * The one question that decides whether the diary pages exist for this owner.
+ * See `onBellineDiary`: a venue from before the journey is on it, a new signup
+ * that has not chosen where bookings go is not.
  */
 export function usesDiary(location: Pick<Location, "onboarding">): boolean {
-  return destinationOf(location) === "belline";
+  return onBellineDiary(location);
+}
+
+/** Does Belline book into a calendar it can see for this venue? Then Bookings is a list worth having. */
+export function booksIntoCalendar(location: Location): boolean {
+  const kind = destinationOf(location);
+  return (kind === "google" && googleUsable(location)) || (kind === "outlook" && outlookUsable(location));
 }
 
 /**
- * Does this person get the simplified navigation? Always, now.
+ * Where a diary page sends a venue that is not on the diary.
  *
- * Until 2026-09-16 this was a flag plus a promise: a venue booking through
- * Belline's own diary kept the old twenty-two-link menu, so a pilot would not
- * lose its floor plan on the morning of the pivot. There were no such pilots —
- * only Belline's own demo lines — and the exception meant the founder, signed
- * in to the account holding those demo lines, kept seeing the old dashboard.
- * So the old navigation was retired. Every diary page is still one click away
- * under "Everything else", and search still reaches all of them.
- *
- * Kept as a function because search.ts asks the same question.
+ * The calendar, rota, waitlist, recall and floor are routes still, for the
+ * accounts that use them, and an old bookmark on any other account should land
+ * on where its bookings actually are: the bookings Belline made in its
+ * calendar, or the requests its team confirms.
  */
-export function simplifiedFor(_locations: Pick<Location, "onboarding">[]): boolean {
-  return true;
+export function notOnDiaryHome(location: Location): string {
+  return `${booksIntoCalendar(location) ? "/bookings" : "/requests"}?loc=${encodeURIComponent(location.id)}`;
 }
 
-/**
- * The seven destinations.
- *
- * Today first, because it is the only one that is ever urgent. Then the two
- * that answer "what happened" — every conversation on every channel, and
- * every booking request and what became of it. Then the three that answer
- * "how is it set up". Money and people last, and only for whoever is allowed
- * to see them.
- */
-function simplifiedNav(user: User, counts: NavCounts): NavItem[] {
+export const INBOX_MATCH = ["/requests", "/conversations", "/inbox", "/calls", "/attention"];
+export const BUSINESS_MATCH = ["/venue", "/agents"];
+export const SETTINGS_MATCH = ["/locations", "/team", "/billing", "/settings"];
+
+function mainNav(user: User, locations: Location[], counts: NavCounts): NavItem[] {
   const { outstanding = 0 } = counts;
+  const manager = user.role !== "staff";
   return [
-    { href: "/", label: "Today", badge: outstanding || undefined },
-    { href: "/conversations", label: "Conversations" },
-    { href: "/requests", label: "Requests" },
-    ...(user.role !== "staff"
+    { href: "/", label: "Home", badge: outstanding || undefined },
+    { href: "/requests", label: "Inbox", match: INBOX_MATCH },
+    ...(locations.some(booksIntoCalendar) && !locations.some(usesDiary) ? [{ href: "/bookings", label: "Bookings" }] : []),
+    { href: "/guests", label: "Customers" },
+    ...(manager
       ? [
-          { href: "/venue", label: "Setup" },
+          { href: "/venue", label: "Your business", match: BUSINESS_MATCH },
           { href: "/channels", label: "Channels" },
+          { href: "/calendars", label: "Calendars" },
         ]
       : []),
-    ...(canManageUsers(user)
-      ? [
-          { href: "/billing", label: "Billing and usage" },
-          { href: "/team", label: "Team" },
-        ]
-      : []),
+    ...(canManageUsers(user) ? [{ href: "/locations", label: "Settings", match: SETTINGS_MATCH }] : []),
   ];
 }
 
-export interface AdvancedGroup {
-  title: string;
-  note: string;
-  items: { href: string; label: string; note: string }[];
+function diaryNav(user: User, locations: Location[], counts: NavCounts): NavGroup | null {
+  const diary = locations.filter(usesDiary);
+  if (diary.length === 0) return null;
+  const { dueBack = 0 } = counts;
+  const hasTables = diary.some((l) => l.restaurant);
+  const hasPeople = diary.some((l) => l.salon);
+  return {
+    title: "Diary",
+    items: [
+      { href: "/calendar", label: "Calendar" },
+      ...(hasTables ? [{ href: "/floor", label: "Floor" }] : []),
+      { href: "/bookings", label: "Bookings" },
+      { href: "/waitlist", label: "Waitlist" },
+      ...(hasPeople ? [{ href: "/recall", label: "Recall", badge: dueBack || undefined, quiet: true }] : []),
+      ...(hasPeople && user.role !== "staff" ? [{ href: "/rota", label: "Rota" }] : []),
+    ],
+  };
 }
 
 /**
- * Everything that is not one of the seven, grouped and explained.
- *
- * Not a dumping ground and not a deprecation notice. Each group says what it
- * is for, because the reason a page is here rather than in the navigation is
- * worth one sentence to the person looking for it.
+ * Belline's own tools. Never in a customer's navigation: the pages guard
+ * themselves with notFound() as well, and this keeps the links out of the one
+ * place a screen share would show them.
  */
-export function advancedGroups(user: User, locations: Location[]): AdvancedGroup[] {
-  const hasTables = locations.some((l) => l.restaurant);
-  const hasPeople = locations.some((l) => l.salon);
-  const manager = user.role !== "staff";
-
-  const groups: AdvancedGroup[] = [
-    {
-      title: "The diary",
-      note:
-        "Belline works with the calendar you already use, so most businesses never open these. They are the full booking diary, and they keep working for the venues that run on it.",
-      items: [
-        { href: "/calendar", label: "Calendar", note: "The day, by person or by room." },
-        ...(hasTables ? [{ href: "/floor", label: "Floor", note: "The room as it stands right now." }] : []),
-        { href: "/bookings", label: "Bookings", note: "Everything booked, by hand or by Belline." },
-        { href: "/waitlist", label: "Waitlist", note: "People who wanted a time that was gone." },
-        { href: "/recall", label: "Recall", note: "Who is due back, and what it is worth." },
-        { href: "/guests", label: "Customers", note: "Everyone who has booked or called." },
-        ...(hasPeople && manager ? [{ href: "/rota", label: "Rota", note: "Who is working, and when." }] : []),
-      ],
-    },
-  ];
-
-  if (manager) {
-    groups.push({
-      title: "How it answers",
-      note: "The agent's own settings, and a line to try them on before your customers do.",
-      items: [
-        { href: "/agents", label: "Agent", note: "How it sounds and what it may say." },
-        { href: "/setup/rules", label: "Booking and escalation rules", note: "What it asks for, and when it fetches a person." },
-        { href: "/test", label: "Test console", note: "A real call against the real engine." },
-        { href: "/setup", label: "Setup journey", note: "The guided setup, from the top." },
-      ],
-    });
-  }
-
-  if (canManageUsers(user)) {
-    groups.push({
-      title: "The account",
-      note: "Branches, numbers and what the month looked like.",
-      items: [
-        { href: "/locations", label: "Locations", note: "Every branch, each with its own receptionist." },
-        { href: "/reports", label: "Reports", note: "Calls, bookings and value over a period." },
-        { href: "/golive", label: "Phone and going live", note: "Forwarding, the test call, and the switch." },
-        { href: "/demo", label: "Demo line", note: "The numbers a prospect can ring." },
-      ],
-    });
-  }
-
-  // Belline's own tools. Never in a customer's navigation and never in a
-  // customer's Advanced list — the pages guard themselves with notFound(),
-  // and this keeps the link out of the one place a screen share would show
-  // it. The sales console proper is still linked from the shell.
-  if (isBellineStaff(user)) {
-    groups.push({
-      title: "Belline staff",
-      note: "Ours, not the customer's. These are hidden from every other account.",
-      items: [{ href: "/prospects", label: "Personalised demos", note: "Build a demo that answers as a prospect's business." }],
-    });
-  }
-
-  return groups.filter((g) => g.items.length > 0);
+function staffNav(user: User): NavGroup | null {
+  if (!isBellineStaff(user)) return null;
+  return {
+    title: "Belline staff",
+    items: [
+      { href: "/sales", label: "Sales console" },
+      { href: "/demo", label: "Demo line" },
+      { href: "/prospects", label: "Personalised demos" },
+    ],
+  };
 }
 
 /**
@@ -182,9 +148,44 @@ export function advancedGroups(user: User, locations: Location[]): AdvancedGroup
  *
  * `locations` is already filtered to what they may see; this never widens it.
  */
-export function navFor(user: User, _locations: Location[], counts: NavCounts = {}): NavShape {
-  return {
-    items: simplifiedNav(user, counts),
-    advanced: { href: "/advanced", label: "Everything else" },
-  };
+export function navFor(user: User, locations: Location[], counts: NavCounts = {}): NavShape {
+  return { items: mainNav(user, locations, counts), diary: diaryNav(user, locations, counts), staff: staffNav(user) };
 }
+
+// ---------------------------------------------------------------------------
+// The tabs inside each destination
+// ---------------------------------------------------------------------------
+
+export interface Tab {
+  href: string;
+  label: string;
+}
+
+export const INBOX_TABS: Tab[] = [
+  { href: "/requests", label: "Requests" },
+  { href: "/conversations", label: "Conversations" },
+];
+
+export const CHANNEL_TABS: Tab[] = [
+  { href: "/channels", label: "Try it" },
+  { href: "/channels/website", label: "Website chat" },
+  { href: "/channels/phone", label: "Phone" },
+  { href: "/channels/link", label: "Chat link" },
+  { href: "/channels/whatsapp", label: "WhatsApp" },
+];
+
+/** Your business. The diary's own settings only where the venue runs on it. */
+export function businessTabs(location: Pick<Location, "onboarding">): Tab[] {
+  return [
+    { href: "/venue", label: "Details" },
+    { href: "/venue/rules", label: "Rules" },
+    { href: "/agents", label: "Agent" },
+    ...(usesDiary(location) ? [{ href: "/venue/diary", label: "Diary settings" }] : []),
+  ];
+}
+
+export const SETTINGS_TABS: Tab[] = [
+  { href: "/locations", label: "Locations" },
+  { href: "/team", label: "Team" },
+  { href: "/billing", label: "Billing and usage" },
+];

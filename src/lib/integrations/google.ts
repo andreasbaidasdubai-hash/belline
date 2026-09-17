@@ -223,8 +223,8 @@ export type Outcome = "connected" | "declined" | "google_unavailable" | "google_
 export function returnPath(returnTo: ReturnTo, locationId: string | undefined, outcome: Outcome): string {
   if (returnTo === "setup") return `/setup/bookings?google=${outcome}`;
   const loc = locationId ? `loc=${encodeURIComponent(locationId)}&` : "";
-  if (outcome === "connected") return `/integrations?${loc}connected=1`;
-  return `/integrations?${loc}error=${outcome === "declined" ? "google_declined" : outcome}`;
+  if (outcome === "connected") return `/calendars?${loc}connected=1`;
+  return `/calendars?${loc}error=${outcome === "declined" ? "google_declined" : outcome}`;
 }
 
 // ---------------------------------------------------------------------------

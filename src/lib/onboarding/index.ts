@@ -17,15 +17,16 @@ import { checkShape } from "../leads/email";
 import { extractFromSources, readSite, type Extracted, type ModelCall, type SourceFile } from "../prospect";
 import { TRIAL, checkSelection } from "../billing/plans";
 import { MARKETS, isMarket, marketDefaults, marketOf, type Market } from "../markets";
-import { passwordProblem, tradeFromParam, tradeLabel, verticalForTrade } from "../signup-rules";
+import { passwordProblem, tradeByKey, tradeFromParam, tradeLabel, verticalForTrade } from "../signup-rules";
+import { droppedNote, filterServices, type Dropped } from "./offerings";
 import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
 import { copy } from "../customer-copy";
 import { defaultLanguageFor } from "../language";
 import { isDisposableEmail } from "../abuse/business-key";
 import { DISPOSABLE_MESSAGE, emailAllowed, recordAbuse } from "../abuse/review";
-import { MENU_QUESTION, type Confirmed, type CurrentVenue } from "./review";
-import { serviceLengthsRequired, takesRequestsOnly } from "../booking/destination";
+import { MENU_QUESTION, menuFromAnswer, type Confirmed, type CurrentVenue } from "./review";
+import { onBellineDiary, serviceLengthsRequired, takesRequestsOnly } from "../booking/destination";
 
 /**
  * Getting a business live without a person in the loop.
@@ -426,6 +427,12 @@ export interface Draft {
   documents?: number;
   /** Fields the page did not answer, in the order worth asking about. */
   gaps: Gap[];
+  /**
+   * What the reader offered as services and the filter left out
+   * (offerings.ts): projects, branches, listings, people. Said on the review
+   * screen through the services gap, never dropped silently.
+   */
+  dropped?: Dropped[];
 }
 
 export interface Gap {
@@ -439,6 +446,12 @@ export interface Gap {
 export interface SetupSources {
   website?: string;
   files?: SourceFile[];
+  /**
+   * The venue being set up: what the owner said it is (`tradeKey`) and the
+   * engine it runs on. Tells the reader the kind of business, and decides how
+   * hard the service filter looks at what comes back.
+   */
+  venue?: Pick<Location, "vertical" | "tradeKey">;
 }
 
 /** Injectable for the checks, so no test fetches a page or calls a model. */
@@ -464,7 +477,17 @@ export async function draftFromSources(sources: SetupSources, deps: DraftDeps = 
   }
 
   const site = website ? await (deps.readSite ?? readSite)(website) : undefined;
-  const found = await extractFromSources({ site, files }, deps.model);
+  const trade = tradeByKey(sources.venue?.tradeKey);
+  const read = await extractFromSources({ site, files, business: trade?.label }, deps.model);
+  // Whatever the model was told, a project is not a service: filtered in code
+  // (offerings.ts), and what was left out is said under the services below.
+  const { kept, dropped } = filterServices(read.services ?? [], {
+    trade: trade?.key,
+    vertical: sources.venue?.vertical ?? read.vertical,
+    staff: read.staff,
+  });
+  const found: Extracted = { ...read, services: kept };
+  const leftOut = droppedNote(dropped);
   const where = site
     ? files.length
       ? "your site or documents"
@@ -489,20 +512,24 @@ export async function draftFromSources(sources: SetupSources, deps: DraftDeps = 
         found.vertical === "restaurant"
           ? "How long does a table usually turn, by party size?"
           : "What do you offer?",
-      why: "A name is enough. Add how long each takes and what it costs if you like; with no price, Belline says your team will confirm it.",
+      why: [leftOut, "A name is enough. Add how long each takes and what it costs if you like; with no price, Belline says your team will confirm it."]
+        .filter(Boolean)
+        .join(" "),
     });
   } else if (found.services.some((s) => !s.price)) {
     gaps.push({
       field: "services",
       question: `A few of these have no price on ${where}. Add one, or leave it empty.`,
-      why: "With no price, Belline tells the customer your team will confirm it. It never invents one.",
+      why: [leftOut, "With no price, Belline tells the customer your team will confirm it. It never invents one."].filter(Boolean).join(" "),
     });
+  } else if (leftOut) {
+    gaps.push({ field: "services", question: "Is anything missing from this list?", why: leftOut });
   }
   if (found.vertical !== "restaurant" && !found.staff.length) {
     gaps.push({
       field: "staff",
       question: "Who works there, and who does what?",
-      why: "So it only offers somebody who can actually do the treatment asked for.",
+      why: "So it only offers somebody who can actually do what the customer asks for.",
     });
   }
   gaps.push({
@@ -516,7 +543,7 @@ export async function draftFromSources(sources: SetupSources, deps: DraftDeps = 
     why: "Deposits, cancellation, lateness — the rules your team already follow.",
   });
 
-  return { found, sourceUrl: site?.url.href ?? "", documents: files.length, gaps };
+  return { found, sourceUrl: site?.url.href ?? "", documents: files.length, gaps, ...(dropped.length ? { dropped } : {}) };
 }
 
 /**
@@ -564,6 +591,10 @@ export function applyDraft(location: Location, confirmed: Confirmed): Location {
   };
 
   if (location.vertical === "restaurant") {
+    // The review never shows the menu as a question, so confirmed questions
+    // arrive without it. Kept unless a new menu came with them.
+    const menu = location.agent.faqs.find((f) => f.q === MENU_QUESTION);
+    if (confirmed.faqs && !confirmed.services && menu && !faqs.some((f) => f.q === MENU_QUESTION)) faqs = [...faqs, menu];
     // A menu is something to answer questions about, never something to book:
     // a table is booked, the lamb shoulder is not. So it is filed as one FAQ
     // the agent reads, replacing the last menu it was given.
@@ -608,6 +639,11 @@ export function applyDraft(location: Location, confirmed: Confirmed): Location {
             // minutes is the number every salon uses when asked, and it is editable.
             bufferMin: was?.bufferMin ?? 15,
             price: Math.max(0, Math.round(s.price || 0)),
+            // Everything the plain form does not show — turnaround above, and
+            // rooms, phases, recall and the rest through `was` — is kept as it
+            // was. The description is the form's: sent empty clears it, not
+            // sent at all (Belle, an older page) keeps it.
+            ...descriptionOf(s.description, was?.description),
           };
         })
       : salon.services;
@@ -658,6 +694,13 @@ export function applyDraft(location: Location, confirmed: Confirmed): Location {
   return upsertLocation(next);
 }
 
+/** A service description as saved: one sent replaces the old one ("" removes it); none sent keeps it. */
+function descriptionOf(sent: string | undefined, was: string | undefined): { description?: string } {
+  if (sent === undefined) return was ? { description: was } : {};
+  // An explicit undefined, so a cleared description is not brought back by `...was`.
+  return { description: sent.trim() || undefined };
+}
+
 /** The venue as the review form starts from it (review.ts `CurrentVenue`). */
 export function currentVenue(location: Location): CurrentVenue {
   return {
@@ -667,10 +710,17 @@ export function currentVenue(location: Location): CurrentVenue {
     address: location.address,
     phone: location.businessPhone,
     hours: location.hours,
+    // A restaurant's menu is saved as one answer; it is read back into rows,
+    // so saving the form again keeps it rather than filing an empty menu.
     services:
       location.vertical === "restaurant"
-        ? []
-        : (location.salon?.services ?? []).map((s) => ({ name: s.name, durationMin: s.durationMin, price: s.price ?? 0 })),
+        ? menuFromAnswer(location.agent.faqs.find((f) => f.q === MENU_QUESTION)?.a ?? "", location.currency)
+        : (location.salon?.services ?? []).map((s) => ({
+            name: s.name,
+            durationMin: s.durationMin,
+            price: s.price ?? 0,
+            ...(s.description ? { description: s.description } : {}),
+          })),
     staff: location.vertical === "restaurant" ? [] : (location.salon?.staff ?? []).map((s) => s.name),
     faqs: location.agent.faqs,
     policies: location.agent.policies,
@@ -684,24 +734,34 @@ export function readiness(location: Location): {
 } {
   const missing: { label: string; where: string }[] = [];
 
-  if (!location.address.trim()) missing.push({ label: "An address", where: "/agents" });
+  if (!location.address.trim()) missing.push({ label: "An address", where: "/venue" });
+  // Tables, sittings and a team are the diary's machinery, asked for only
+  // where Belline fits bookings into a day itself: its own diary, or a Google
+  // or Outlook calendar it books into with the same engine, which offers no
+  // time without somebody to do it. Since the pivot a new account takes
+  // requests or books into its own calendar, and one that has not chosen yet
+  // was told it needed a rota it had nowhere to enter.
+  const fitsIntoADay = serviceLengthsRequired(location);
   // A business that confirms its own bookings needs no tables, sittings,
   // services or rota in Belline: nothing is booked against them.
   if (takesRequestsOnly(location)) {
     // Only what every business needs, below.
   } else if (location.vertical === "restaurant") {
-    if (!location.restaurant?.tables.length) {
-      missing.push({ label: "Your tables", where: "/venue" });
+    if (fitsIntoADay && !location.restaurant?.tables.length) {
+      missing.push({ label: "Your tables", where: "/venue/diary" });
     }
-    if (!location.restaurant?.services.length) {
-      missing.push({ label: "Service times", where: "/venue" });
+    if (fitsIntoADay && !location.restaurant?.services.length) {
+      missing.push({ label: "Service times", where: "/venue/diary" });
     }
   } else {
     if (!location.salon?.services.length) {
       missing.push({ label: "What you offer", where: "/venue" });
     }
-    if (!location.salon?.staff.length) {
-      missing.push({ label: "Who works there", where: "/venue" });
+    // A diary venue lists its team with its business details. A venue booking
+    // into its own calendar names the people on the Calendars page, beside
+    // which calendar each of them uses.
+    if (fitsIntoADay && !location.salon?.staff.length) {
+      missing.push(onBellineDiary(location) ? { label: "Who works there", where: "/venue" } : { label: "Who uses which calendar", where: "/calendars" });
     }
     // Set up before the diary was chosen, when lengths were not asked for.
     if (serviceLengthsRequired(location) && location.salon?.services.some((s) => !(s.durationMin > 0))) {
@@ -709,7 +769,7 @@ export function readiness(location: Location): {
     }
   }
   if (!location.agent.faqs.length) {
-    missing.push({ label: "A few common questions", where: "/agents" });
+    missing.push({ label: "A few common questions", where: "/venue" });
   }
 
   return { ready: missing.length === 0, missing };

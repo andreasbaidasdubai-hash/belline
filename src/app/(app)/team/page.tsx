@@ -4,6 +4,8 @@ import { requireUser } from "@/lib/auth-server";
 import { listLocationsFor } from "@/lib/store";
 import { teamFor } from "@/lib/team";
 import { PageHeader } from "@/components/LocationTabs";
+import SectionTabs from "@/components/SectionTabs";
+import { SETTINGS_TABS } from "@/lib/nav";
 import TeamManager from "./TeamManager";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +23,10 @@ export default async function TeamPage() {
   return (
     <>
       <PageHeader
-        title="Team"
-        subtitle="Who can open this dashboard, and which venues they see. Managers change how the agent behaves; staff read the book and the calls."
+        title="Settings"
+        subtitle="Who can open this dashboard, and which locations they see. Managers change how Belline answers; staff read the Inbox and the calls."
       />
+      <SectionTabs tabs={SETTINGS_TABS} label="Settings" />
       <TeamManager people={people} venues={venues} currentUserId={user.id} />
     </>
   );

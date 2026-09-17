@@ -31,7 +31,7 @@ export default async function CallsPage({
       <div className="panel">
         {calls.length === 0 ? (
           <p className="muted" style={{ padding: "30px 18px", margin: 0, fontSize: 13 }}>
-            No calls yet. Make one in the <Link href="/test" style={{ color: "var(--accent)" }}>test console</Link>.
+            No calls yet. Make one in the <Link href="/channels" style={{ color: "var(--accent)" }}>Try it, under Channels</Link>.
           </p>
         ) : (
           <div className="table-wrap">

@@ -10,6 +10,7 @@ import { answersIn, inHouseSpelling, languageNotice } from "@/lib/language";
 /** The chat link is website chat, for a business that sets a language per channel. */
 const CHAT = { channel: "web_chat" } as const;
 import { CHAT_KEYS, copyTable } from "@/lib/customer-copy";
+import { logoUrlFor } from "@/lib/logo";
 import Chat from "@/app/embed/[key]/chat/Chat";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,7 @@ export default async function ChatLinkPage({ params }: { params: Promise<{ key: 
         freshToken={signVisitorToken(location.id, newVisitorId())}
         venueName={location.name}
         agentName={location.agent.displayName}
+        logoUrl={logoUrlFor(location)}
         {...(answersIn(location, CHAT) === "en"
           ? {}
           : {

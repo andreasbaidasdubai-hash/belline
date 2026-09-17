@@ -159,8 +159,8 @@ await test("the auth URL goes to Microsoft's common authorize endpoint with thos
 });
 
 await test("a state verifies once, for the same user and browser; forged, expired, other user's and cookieless ones are refused", () => {
-  const a = outlook.signOutlookState({ locationId: salonBase.id, userId: "user_owner", returnTo: "integrations" });
-  assert.deepEqual(outlook.verifyOutlookState(a.state, { userId: "user_owner", cookieNonce: a.nonce }), { ok: true, locationId: salonBase.id, returnTo: "integrations" });
+  const a = outlook.signOutlookState({ locationId: salonBase.id, userId: "user_owner", returnTo: "calendars" });
+  assert.deepEqual(outlook.verifyOutlookState(a.state, { userId: "user_owner", cookieNonce: a.nonce }), { ok: true, locationId: salonBase.id, returnTo: "calendars" });
   const again = outlook.verifyOutlookState(a.state, { userId: "user_owner", cookieNonce: a.nonce });
   assert.ok(!again.ok && again.reason === "used");
 
@@ -204,7 +204,7 @@ await test("a restart between 'Connect' and Microsoft's answer does not make the
 
 await test("a decline lands where the owner started with 'No problem — requests for now', never on Microsoft", () => {
   assert.equal(outlook.outlookReturnPath("setup", salonBase.id, "declined"), "/setup/bookings?outlook=declined");
-  assert.equal(outlook.outlookReturnPath("integrations", salonBase.id, "declined"), `/integrations?loc=${salonBase.id}&error=outlook_declined`);
+  assert.equal(outlook.outlookReturnPath("calendars", salonBase.id, "declined"), `/calendars?loc=${salonBase.id}&error=outlook_declined`);
   assert.match(integrationErrorText("outlook_declined")!, /^No problem — requests for now\./);
   const route = source("src/app/api/integrations/microsoft/route.ts");
   assert.match(route, /if \(said\.kind === "declined"\) return land\(checked\.returnTo, location\.id, "declined"\)/);
@@ -877,7 +877,7 @@ await test("a connection that never came back is raised once, after ten minutes,
   const venue = spareVenue();
   const started = Date.now();
   outlook.signOutlookState({ locationId: venue.id, userId: "user_owner", returnTo: "setup" }, started);
-  const other = outlook.signOutlookState({ locationId: restaurantBase.id, userId: "user_owner", returnTo: "integrations" }, started);
+  const other = outlook.signOutlookState({ locationId: restaurantBase.id, userId: "user_owner", returnTo: "calendars" }, started);
   assert.ok(outlook.verifyOutlookState(other.state, { userId: "user_owner", cookieNonce: other.nonce, now: started }).ok);
   // A Google connection pending at the same time is Google's sweep's, not this one's.
   google.signState({ locationId: venue.id, userId: "user_owner", returnTo: "setup" }, started);
@@ -1182,15 +1182,17 @@ await test("the bookings step, integrations, channels and requests pages read th
   assert.match(setup, /outlookCard\(venue\)/);
   assert.doesNotMatch(setup, /id: "outlook", title: "Outlook calendar", \.\.\.calendar\(/, "the old never-choosable card is back");
   assert.match(setup, /notice=\{googleNotice\(google\) \?\? outlookNotice\(outlook\)\}/);
-  const integrations = source("src/app/(app)/integrations/page.tsx");
+  const integrations = source("src/app/(app)/calendars/page.tsx");
   assert.match(integrations, /const outlookOn = flag\("booking\.outlook"\)/);
   assert.match(integrations, /\{outlookOn \? \(/);
   assert.match(integrations, /OUTLOOK_ADMIN_APPROVAL_TEXT/);
   assert.match(integrations, /endpoint="\/api\/integrations\/microsoft"/);
+  // The calendar left Channels on 2026-09-17: it is where bookings go, not a way in.
   const channels = source("src/app/(app)/channels/page.tsx");
-  assert.match(channels, /const outlookOn = flag\("booking\.outlook"\);[\s\S]{0,200}!outlookOn \? "soon"/);
+  // The calendar left Channels on 2026-09-17: it is where bookings go, not a way in.
+  assert.doesNotMatch(channels, /Outlook/);
   assert.match(source("src/app/(app)/requests/page.tsx"), /outlookUsable\(location\)/);
-  for (const file of ["src/app/setup/[step]/page.tsx", "src/app/(app)/channels/page.tsx", "src/app/(app)/integrations/page.tsx"]) {
+  for (const file of ["src/app/setup/[step]/page.tsx", "src/app/(app)/channels/page.tsx", "src/app/(app)/calendars/page.tsx"]) {
     const text = source(file);
     for (const m of text.matchAll(/Outlook[^"\n]{0,80}(?:coming soon|isn.t available|not available|isn.t connected yet)/gi)) {
       const before = text.slice(Math.max(0, m.index! - 700), m.index);

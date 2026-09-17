@@ -22,6 +22,7 @@ const { signUp } = await import("../src/lib/onboarding");
 const { getLocation, listLocations, upsertLocation, saveCall } = await import("../src/lib/store");
 const {
   STEP_IDS,
+  RENAMED_STEPS,
   NO_FACTS,
   backfillOnboarding,
   factsFrom,
@@ -101,7 +102,7 @@ const table: { name: string; venue: Loc; facts?: typeof NO_FACTS; next: string |
   {
     name: "rules confirmed",
     venue: withState(reviewed, { destination: { kind: "belline", setAt: at }, rulesConfirmedAt: at }),
-    next: "channels",
+    next: "website",
     canGoLive: false,
   },
   {
@@ -181,7 +182,8 @@ await test("for any state short of finished, next is exactly one step with a URL
     assert.equal(j.steps.filter((s) => s === j.next).length, 1);
     assert.equal(j.steps.length, STEP_IDS.length);
     // Everything before the next step is done: there is never a skipped hole.
-    assert.ok(j.steps.slice(0, j.next!.n - 1).every((s) => s.done), row.name);
+    // An optional step (the other way in is done) is not a hole either.
+    assert.ok(j.steps.slice(0, j.next!.n - 1).every((s) => s.done || s.optional), row.name);
   }
 });
 
@@ -286,25 +288,35 @@ await test("Go live is accepted when the journey allows it, and not twice", () =
 
 console.log("\n\x1b[1mThe dashboard is never behind setup\x1b[0m\n");
 
-await test("the menu is the full seven destinations from signup: nothing collapses it until go-live", () => {
+await test("the menu is the full menu from signup: nothing collapses it until go-live", () => {
   const shell = source("src/app/(app)/layout.tsx");
   assert.doesNotMatch(shell, /navCollapsed|collapsed \?/, "the shell still collapses the menu");
-  assert.match(shell, /const nav = shape\.items;/);
+  assert.match(shell, /<SidebarNav items=\{shape\.items\}/);
+  assert.match(shell, /<MobileNav items=\{shape\.items\}/);
   assert.doesNotMatch(source("src/lib/onboarding/journey.ts"), /export function navCollapsed/);
   // Signing in, or back in after a reset, lands on the dashboard, whose checklist leads into setup.
   assert.match(source("src/app/api/auth/login/route.ts"), /const next = "\/";/);
   assert.match(source("src/app/api/auth/reset/route.ts"), /const next = "\/";/);
 });
 
-await test("Today shows what is left as a checklist, n of 7, each item linking to its step", () => {
+await test("Home shows what is left as a checklist, n of 8, each item linking to its step", () => {
   const list = checklistOf(journey(fresh, NO_FACTS, now));
-  assert.equal(list.total, 7);
-  assert.deepEqual(list.items.map((s) => s.id), ["business", "import", "review", "bookings", "rules", "channels", "test"]);
+  assert.equal(list.total, 8);
+  assert.deepEqual(list.items.map((s) => s.id), ["business", "import", "review", "bookings", "rules", "website", "phone", "test"]);
   assert.equal(list.done, 1, "only the business is done at signup");
   assert.equal(list.next?.id, "import");
   const later = checklistOf(journey(withState(complete(fresh), { reviewedAt: at, destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }), NO_FACTS, now));
   assert.equal(later.done, 5);
+  assert.equal(later.next?.id, "website");
   assert.ok(later.items.every((s) => s.url === `/setup/${s.id}`));
+  // One way in settles both ways-in steps: the other is optional, never "done".
+  const linked = checklistOf(journey({ ...withState(complete(fresh), { reviewedAt: at, destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }), chatLink: { token: "bc_x", createdAt: at } as never }, NO_FACTS, now));
+  const website = linked.items.find((s) => s.id === "website")!;
+  assert.equal(website.done, false);
+  assert.equal(website.optional, true);
+  assert.equal(linked.items.find((s) => s.id === "phone")!.done, true);
+  assert.equal(linked.done, 7);
+  assert.equal(linked.next?.id, "test");
   const home = source("src/app/(app)/page.tsx");
   assert.match(home, /checklistOf\(path\)/);
   assert.match(home, /data-testid="setup-checklist"/);
@@ -315,20 +327,66 @@ await test("Today shows what is left as a checklist, n of 7, each item linking t
 await test("every step opens in any order, has Skip for now, and the dashboard is in the header", () => {
   const page = source("src/app/setup/[step]/page.tsx");
   assert.doesNotMatch(page, /Finish "\$\{next\.title\}" first/, "a later step still refuses to open");
-  assert.match(page, /const reachable = \(_s: Step\) => true;/);
-  assert.match(page, /Skip for now/);
+  assert.match(page, /Every step opens, in any order\. Nothing here is a gate\./);
+  assert.doesNotMatch(page, /<span style=\{style\}>\{label\}<\/span>/, "a rail step is rendered without a link");
+  assert.match(page, /<SkipLink href=\{skip\} \/>/);
+  assert.match(source("src/app/setup/StepActions.tsx"), /Skip for now/);
   assert.match(page, /data-testid="setup-dashboard"/);
+});
+
+await test("every step has its main action at the bottom too, beside Skip for now", () => {
+  const actions = source("src/app/setup/StepActions.tsx");
+  // The destination picker and the rules form each render their button twice: top and footer.
+  const picker = actions.slice(actions.indexOf("export function DestinationPicker"), actions.indexOf("export interface RulesInitial"));
+  assert.equal(picker.match(/"Use this"/g)?.length, 2);
+  assert.match(picker, /className="setup-footer"[\s\S]*<SkipLink href=\{skipHref\} \/>/);
+  const rules = actions.slice(actions.indexOf("export function RulesForm"));
+  assert.match(rules, /className="setup-footer"[\s\S]*\{label\}[\s\S]*<SkipLink href=\{skipHref\} \/>/);
+  const checks = source("src/app/setup/SelftestPanel.tsx");
+  assert.match(checks, /className="setup-footer"[\s\S]*Run the checks[\s\S]*<SkipLink href=\{skipHref\} \/>/);
+  // The link-driven steps get the page's footer with their Continue in it.
+  const page = source("src/app/setup/[step]/page.tsx");
+  for (const id of ["website", "phone"]) {
+    const body = page.slice(page.indexOf(`case "${id}"`), page.indexOf("case ", page.indexOf(`case "${id}"`) + 10));
+    assert.match(body, /<Footer step=\{step\} skip=\{next\}>\s*\{cont\}\s*<\/Footer>/, `the ${id} step has no bottom Continue`);
+  }
+});
+
+await test("step 9 tells the truth: the first week before going live says it is not live", () => {
+  const page = source("src/app/setup/[step]/page.tsx");
+  const firstWeek = page.slice(page.indexOf('case "first-week"'));
+  assert.match(firstWeek, /if \(!j\.activated\)[\s\S]*Belline is not live for/);
+  assert.ok(firstWeek.indexOf("Belline is live.") > firstWeek.indexOf("if (!j.activated)"), "'Belline is live' is said before checking");
+});
+
+await test("the old channels step address lands on the website chat step", () => {
+  assert.equal(RENAMED_STEPS.channels, "website");
+  assert.match(source("src/app/setup/[step]/page.tsx"), /if \(RENAMED_STEPS\[requested\]\) redirect/);
+  assert.match(source("next.config.mjs"), /source: "\/setup\/channels", destination: "\/setup\/website"/);
 });
 
 await test("Continue and Skip go onward from the step, never back to an earlier skipped one", () => {
   // Reading skipped, review and destination done: onward from bookings is rules, not import.
   const j = journey(withState(complete(fresh), { reviewedAt: at, destination: { kind: "requests", setAt: at } }), NO_FACTS, now);
   assert.equal(stepAfter(j, "bookings")?.id, "rules");
-  // Skipping the channels step from a venue with nothing done goes to the checks.
+  // Skipping the website step from a venue with nothing done goes to the phone, then the checks.
   const bare = journey(fresh, NO_FACTS, now);
-  assert.equal(stepAfter(bare, "channels")?.id, "test");
-  // From the last unfinished step, back round to the first one left.
-  assert.equal(stepAfter(bare, "golive")?.id, "import");
+  assert.equal(stepAfter(bare, "website")?.id, "phone");
+  assert.equal(stepAfter(bare, "phone")?.id, "test");
+  // From the checks, the step after it, and otherwise back round to the first one left.
+  assert.equal(stepAfter(bare, "test")?.id, "golive");
+  // Before Go live, from a later step, back round to the first one left.
+  assert.equal(stepAfter(journey(withState(fresh, { importedAt: at }), NO_FACTS, now), "bookings")?.id, "rules");
+  // Go live only moves forward. "Skip for now" there used to wrap back to an
+  // earlier step (the founder landed on step seven): now it is the dashboard
+  // until live, and the first week once live.
+  assert.equal(stepAfter(bare, "golive"), null);
+  const live = journey(withState(reviewed, { activatedAt: at }), NO_FACTS, now);
+  assert.equal(stepAfter(live, "golive")?.id, "first-week");
+  assert.equal(stepAfter(live, "first-week"), null);
+  // A way in done makes the other optional, and onward skips it.
+  const phoneDone = journey(withState(reviewed, { destination: { kind: "requests", setAt: at }, rulesConfirmedAt: at }), { ...NO_FACTS, phoneCalls: 1 }, now);
+  assert.equal(stepAfter(phoneDone, "rules")?.id, "test");
   // The saves use it.
   assert.match(source("src/app/api/setup/journey/route.ts"), /stepAfter\(journey\(saved, facts\), from\)/);
   assert.match(source("src/app/api/setup/route.ts"), /stepAfter\(journeyFor\(updated\), "import"\)/);

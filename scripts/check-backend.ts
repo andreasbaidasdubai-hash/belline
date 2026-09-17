@@ -19,7 +19,7 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-backend-")
 
 const { seedIfEmpty } = await import("../src/lib/seed");
 const { signUp } = await import("../src/lib/onboarding");
-const { getLocation, getUser, listLocations, listLocationsFor, saveBooking } = await import("../src/lib/store");
+const { getLocation, getUser, listLocations, listLocationsFor, saveBooking, upsertLocation } = await import("../src/lib/store");
 const { visibleLocations, createUser } = await import("../src/lib/auth");
 const { archiveLocation, createLocation, deleteLocation, restoreLocation, updateLocationBasics } = await import("../src/lib/locations");
 const { createFromDesk, updateFromDesk } = await import("../src/lib/booking/desk");
@@ -53,6 +53,10 @@ assert.ok(made.ok);
 const owner = made.ok ? made.user : null!;
 const first = made.ok ? made.location : null!;
 const me = () => getUser(owner.id)!;
+// A trial covers one location (lib/locations.ts `addAllowance`); this business
+// has chosen a plan for its first, so it may add branches. The trial case has
+// its own checks in check-locations.ts.
+upsertLocation({ ...getLocation(first.id)!, subscription: { ...getLocation(first.id)!.subscription!, status: "active" } });
 
 console.log("\n\x1b[1mLocations\x1b[0m\n");
 
@@ -137,15 +141,22 @@ await test("a location with history can only be archived, never deleted", () => 
   assert.ok(getLocation(id), "a location with bookings was deleted");
 });
 
-await test("an empty, archived location is deleted once its name is typed", () => {
+// Deliberately changed (founder feedback, 2026-09): an empty location made by
+// mistake no longer has to be archived before it can be deleted.
+await test("an empty location is deleted once its name is typed, archived or not", () => {
   const mistake = createLocation(me(), { name: "Typo Branch", vertical: "clinic" });
   assert.ok(mistake.ok);
   const id = mistake.ok ? mistake.location.id : "";
-  assert.equal(deleteLocation(me(), id, "Typo Branch").ok, false, "deleted without archiving first");
-  assert.ok(archiveLocation(me(), id).ok);
   assert.equal(deleteLocation(me(), id, "typo").ok, false, "deleted with the wrong name");
   assert.ok(deleteLocation(me(), id, "Typo Branch").ok);
   assert.equal(getLocation(id), undefined);
+
+  const archived = createLocation(me(), { name: "Typo Branch Two", vertical: "clinic" });
+  assert.ok(archived.ok);
+  const second = archived.ok ? archived.location.id : "";
+  assert.ok(archiveLocation(me(), second).ok);
+  assert.ok(deleteLocation(me(), second, "Typo Branch Two").ok);
+  assert.equal(getLocation(second), undefined);
 });
 
 await test("nobody reaches a location in another business", async () => {

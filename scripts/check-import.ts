@@ -7,6 +7,10 @@
  * facts in front of a person — and a missed match sends the same clinic two
  * emails from two agents.
  *
+ * Also the other import: a business's own website read into a setup draft,
+ * where a project, a branch or a listing must never become a bookable service,
+ * and the venue's label is its own trade rather than the engine it runs on.
+ *
  *   npm run check:import
  */
 
@@ -336,6 +340,201 @@ test("planning writes nothing — it is a plan", () => {
   // shown before anything is committed.
   const again = planImport(rows, suggestMapping(rows[0]), { countryCode: "AE" });
   assert.strictEqual(again.companies.length, plan.companies.length);
+});
+
+// ---------------------------------------------------------------------------
+// Setup import: what a business's own website is read into
+// ---------------------------------------------------------------------------
+
+// A property developer signed up as "Real estate or property" had every one of
+// its projects offered back as a bookable service, and a "salon" chip on every
+// page. The model is a stub here, so what is checked is the part that must
+// hold whatever the model returns: the code-side filter, the note that says
+// what was left out, and the label.
+
+async function testAsync(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
+    passed++;
+    console.log(`  ✓ ${name}`);
+  } catch (err) {
+    failed++;
+    console.log(`  ✗ ${name}`);
+    console.log(`      ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+const fsMod = await import("node:fs");
+const osMod = await import("node:os");
+const pathMod = await import("node:path");
+process.env.DATA_DIR = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), "belline-import-"));
+delete process.env.DATABASE_URL;
+delete process.env.ANTHROPIC_API_KEY;
+
+const { draftFromSources } = await import("../src/lib/onboarding");
+const { filterServices } = await import("../src/lib/onboarding/offerings");
+const { terms, venueChip } = await import("../src/lib/verticals");
+
+type Sent = { messages: { content: unknown }[]; tools: { input_schema: unknown }[] };
+
+/** A model that returns `found` whatever it is asked, and records what it was sent. */
+function stub(found: Record<string, unknown>) {
+  const calls: Sent[] = [];
+  const model = async (params: unknown) => {
+    calls.push(params as Sent);
+    return { content: [{ type: "tool_use", id: "t1", name: "describe_business", input: found }] };
+  };
+  return { calls, model };
+}
+
+const siteOf = (text: string) => async (raw: string) => ({ url: new URL(`https://${raw}`), text });
+
+// What a model that ignored its instructions would make of a developer's site:
+// the projects and the sales centres, each as a "service".
+const EMAAR = {
+  name: "Emaar Properties",
+  vertical: "salon",
+  address: "Emaar Square, Downtown Dubai",
+  timezone: "Asia/Dubai",
+  greeting: "Good morning, Emaar, how can I help?",
+  services: [
+    { name: "Burj Khalifa Residences", durationMin: 0, price: 0, section: "Our projects" },
+    { name: "Dubai Hills Estate", durationMin: 0, price: 0 },
+    { name: "Emaar Beachfront", durationMin: 0, price: 0 },
+    { name: "Arabian Ranches III", durationMin: 0, price: 1_450_000 },
+    { name: "Downtown Sales Centre", durationMin: 0, price: 0 },
+    { name: "Creek Harbour", durationMin: 0, price: 0 },
+  ],
+  staff: [],
+  faqs: [{ q: "Where is the sales centre?", a: "Emaar Square, Downtown Dubai." }],
+};
+
+const SALON = {
+  name: "Glow Beauty Lounge",
+  vertical: "salon",
+  address: "Jumeirah Beach Road, Dubai",
+  timezone: "Asia/Dubai",
+  greeting: "Good afternoon, Glow, how can I help?",
+  services: [
+    { name: "Cut and blow dry", durationMin: 60, price: 180, section: "Hair" },
+    { name: "Gel manicure", durationMin: 45, price: 120, section: "Nails" },
+    { name: "Balayage", durationMin: 150, price: 650 },
+    { name: "Brow shaping", durationMin: 0, price: 0 },
+  ],
+  staff: ["Layla"],
+  faqs: [],
+};
+
+console.log("\n  Setup import: services are things a customer books\n");
+
+await testAsync("a property developer's projects and sales centres become zero services", async () => {
+  const { calls, model } = stub(EMAAR);
+  const draft = await draftFromSources(
+    { website: "emaar.test", venue: { vertical: "salon", tradeKey: "property" } },
+    { model, readSite: siteOf("Emaar. Burj Khalifa Residences. Dubai Hills Estate. Emaar Beachfront. ".repeat(4)) },
+  );
+  assert.deepStrictEqual(draft.found.services, [], JSON.stringify(draft.found.services));
+  assert.strictEqual(draft.dropped?.length, EMAAR.services.length);
+  // Said, not silent: the review screen shows the services gap's `why`.
+  const note = draft.gaps.find((g) => g.field === "services")?.why ?? "";
+  assert.ok(/Left out 6 items/.test(note) && note.includes("Burj Khalifa Residences"), note);
+  // The FAQs the page genuinely answers are kept.
+  assert.strictEqual(draft.found.faqs.length, 1);
+  // The model was told what the business is, and what a service is.
+  const sent = JSON.stringify(calls[0]);
+  assert.ok(sent.includes("Real estate or property"), "the trade was not passed to the model");
+  assert.ok(/project or development names/.test(sent), "the schema does not say what is not a service");
+});
+
+await testAsync("a salon's own services still come through, untouched", async () => {
+  const { calls, model } = stub(SALON);
+  const draft = await draftFromSources(
+    { website: "glow.test", venue: { vertical: "salon", tradeKey: "salon" } },
+    { model, readSite: siteOf("Glow Beauty Lounge. Cut and blow dry AED 180. Gel manicure AED 120. ".repeat(4)) },
+  );
+  assert.deepStrictEqual(
+    draft.found.services,
+    SALON.services.map(({ name, durationMin, price }) => ({ name, durationMin, price })),
+  );
+  assert.strictEqual(draft.dropped, undefined);
+  assert.ok(!(draft.gaps.find((g) => g.field === "services")?.why ?? "").includes("Left out"));
+  assert.ok(JSON.stringify(calls[0]).includes("Salon, spa or beauty"));
+});
+
+await testAsync("the setup request passes the venue's trade through to the reader", async () => {
+  const { draftFromRequest } = await import("../src/lib/onboarding/uploads");
+  const { calls, model } = stub(EMAAR);
+  const req = new Request("http://localhost/api/setup", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ website: "emaar.test" }),
+  });
+  const out = await draftFromRequest(req, { model, readSite: siteOf("Emaar Properties. ".repeat(20)) }, { vertical: "salon", tradeKey: "property" });
+  assert.strictEqual(out.status, 200, JSON.stringify(out.body));
+  assert.deepStrictEqual(out.body.draft!.found.services, []);
+  assert.ok(JSON.stringify(calls[0]).includes("Real estate or property"));
+});
+
+test("a venue with no trade keeps legitimate services, and still loses a branch", () => {
+  const { kept, dropped } = filterServices(
+    [
+      { name: "Hygiene clean", durationMin: 45, price: 350 },
+      { name: "Dubai Mall branch", durationMin: 0, price: 0 },
+    ],
+    { vertical: "clinic" },
+  );
+  assert.deepStrictEqual(kept.map((s) => s.name), ["Hygiene clean"]);
+  assert.deepStrictEqual(dropped, [{ name: "Dubai Mall branch", why: "project" }]);
+});
+
+test("words that are real services in other trades are not caught", () => {
+  const cases: [string, string, string][] = [
+    ["home_services", "salon", "Villa deep clean"],
+    ["home_services", "salon", "2-bedroom apartment move"],
+    ["trades", "salon", "Renovation projects"],
+    ["professional", "salon", "Estate planning"],
+    ["restaurant", "restaurant", "Seafood tower"],
+  ];
+  for (const [trade, vertical, name] of cases) {
+    const { kept } = filterServices([{ name, durationMin: 0, price: 0 }], { trade, vertical: vertical as "salon" | "restaurant" });
+    assert.strictEqual(kept.length, 1, `${name} (${trade}) was dropped`);
+  }
+});
+
+test("a team member offered as a service is left out", () => {
+  const { kept, dropped } = filterServices([{ name: "Layla", durationMin: 0, price: 0 }], { trade: "salon", staff: ["Layla"] });
+  assert.strictEqual(kept.length, 0);
+  assert.strictEqual(dropped[0].why, "staff");
+});
+
+console.log("\n  The business's own type, not the engine's\n");
+
+const venue = (over: Record<string, unknown>) =>
+  ({ id: "loc_x", name: "Emaar Properties", vertical: "salon", ...over }) as unknown as Parameters<typeof terms>[0];
+
+test("a property venue's chip says real estate, never salon", () => {
+  const emaar = venue({ tradeKey: "property" });
+  assert.strictEqual(venueChip(emaar), "Real estate");
+  assert.ok(!/salon/i.test(terms(emaar).label));
+});
+
+test("a property venue is spoken of in neutral words, not stylists and appointments", () => {
+  const t = terms(venue({ tradeKey: "property" }));
+  assert.deepStrictEqual([t.staffPlural, t.services, t.booking, t.venue], ["the team", "services", "booking", "business"]);
+});
+
+test("a venue with no trade gets no misleading salon chip", () => {
+  assert.strictEqual(venueChip(venue({})), null);
+  assert.strictEqual(terms(venue({})).label, "");
+});
+
+test("salon, restaurant and clinic keep their words and chips", () => {
+  assert.strictEqual(terms(venue({ tradeKey: "salon" })).staffPlural, "stylists");
+  assert.strictEqual(venueChip(venue({ tradeKey: "salon" })), "Salon or spa");
+  assert.strictEqual(terms(venue({ vertical: "restaurant" })).booking, "reservation");
+  assert.strictEqual(venueChip(venue({ vertical: "restaurant" })), "Restaurant");
+  assert.strictEqual(terms(venue({ vertical: "clinic", tradeKey: "vet" })).guests, "patients");
+  assert.strictEqual(venueChip(venue({ vertical: "clinic" })), "Clinic");
 });
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

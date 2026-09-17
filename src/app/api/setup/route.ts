@@ -40,7 +40,12 @@ export async function POST(req: Request) {
 
   // Reading is a model call: never for an unconfirmed email or a paused trial,
   // and never for a website another account's trial or plan already has.
-  const venue = listLocationsFor(user.tenantId)[0];
+  // The venue is the one PUT will save to: `?locationId=`, or their only one.
+  const asked = new URL(req.url).searchParams.get("locationId") || listLocationsFor(user.tenantId)[0]?.id || "";
+  const found = getLocation(asked);
+  const editable = found && canEditAgent(user, found.id) ? found : undefined;
+  // A venue this person may not edit is not used at all; the gates then fall back to their own first one.
+  const venue = editable ?? listLocationsFor(user.tenantId)[0];
   const held = paidWorkRefusal(user, venue);
   if (held) return NextResponse.json({ error: held.error, fix: held.fix, code: held.code }, { status: held.status });
   const screen = (website: string) => {
@@ -51,7 +56,16 @@ export async function POST(req: Request) {
   // JSON { website } or multipart website + up to three files. Validation,
   // reading and refusals all live in the library so they can be checked
   // without a request scope; the files are read once there and dropped.
-  const out = await draftFromRequest(req, {}, screen);
+  //
+  // The venue is the one PUT will save to — `?locationId=`, or their only one —
+  // so the reader is told what the owner said the business is. Only its type is
+  // passed on; a venue this person may not edit is not used at all.
+  const out = await draftFromRequest(
+    req,
+    {},
+    editable ? { vertical: editable.vertical, tradeKey: editable.tradeKey } : undefined,
+    screen,
+  );
   return NextResponse.json(out.body, { status: out.status });
 }
 
@@ -80,7 +94,12 @@ export async function PUT(req: Request) {
   // Every field is checked, hours included: the old handler cast whatever
   // arrived to WeeklyHours and saved it.
   // A length for each service only where Belline books it into a day itself.
-  const checked = cleanConfirmed(body, { lengthsRequired: serviceLengthsRequired(location), country: venueMarket(location) });
+  // Never for a restaurant: its "services" on this form are the menu, which
+  // has no minutes and is never booked; tables and sittings are.
+  const checked = cleanConfirmed(body, {
+    lengthsRequired: location.vertical !== "restaurant" && serviceLengthsRequired(location),
+    country: venueMarket(location),
+  });
   // With the field it is about, so the page can show it under that input.
   if (!checked.ok) return NextResponse.json({ error: checked.error, field: checked.field, service: checked.service }, { status: 422 });
 
@@ -112,8 +131,13 @@ export async function PUT(req: Request) {
   // Recorded as a published version, like every other change to a venue's
   // configuration — so "who set this up, and what did it say on the call I am
   // complaining about" has an answer from the first day rather than the
-  // second.
-  publish(updated.id, user, setupNote(String(body.website ?? ""), Number(body.documents) || 0));
+  // second. Saved from the dashboard's business page it was an edit, not a
+  // setup, and the history says so rather than "Set up by hand".
+  publish(
+    updated.id,
+    user,
+    body.from === "dashboard" ? "Business details changed" : setupNote(String(body.website ?? ""), Number(body.documents) || 0),
+  );
 
   // The page moves on to whatever the journey says is next, read from the venue
   // as it was just saved.

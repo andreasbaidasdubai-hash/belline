@@ -32,10 +32,11 @@ const {
   sourceLabel,
   confidenceOf,
   MENU_QUESTION,
+  DESCRIPTION_MAX,
 } = await import("../src/lib/onboarding/review");
 const { staticPrompt } = await import("../src/lib/agent/prompt");
 const { getLocation, upsertLocation } = await import("../src/lib/store");
-const { serviceLengthsRequired } = await import("../src/lib/booking/destination");
+const { onBellineDiary, serviceLengthsRequired } = await import("../src/lib/booking/destination");
 const { isBlocking, validateVenue } = await import("../src/lib/booking/config");
 const { checkSalonSlot } = await import("../src/lib/booking/salon");
 const { scenariosFor } = await import("../src/lib/onboarding/selftest");
@@ -403,7 +404,9 @@ await test("setting up by hand starts from the venue as it is, and saves as it s
 await test("nothing just saved is listed as missing afterwards", async () => {
   const shop = await venue("Ready Salon", "salon");
   const before = readiness(getLocation(shop.id)!).missing.map((m) => m.label);
-  assert.ok(before.includes("What you offer") && before.includes("Who works there"));
+  // A new signup has not chosen where bookings go and is not on the diary, so
+  // it is not asked for a team it has nowhere to enter (2026-09-17).
+  assert.ok(before.includes("What you offer") && !before.includes("Who works there"), JSON.stringify(before));
   const out = cleanConfirmed({ address: "Shop 2, Al Wasl Road, Dubai", services: [{ name: "Cut", durationMin: 45, price: 90 }], staff: ["Nadia"], faqs: [{ q: "Parking?", a: "Free, behind us." }] });
   assert.ok(out.ok);
   if (!out.ok) return;
@@ -526,6 +529,157 @@ await test("hours sent as anything but hours are refused, not cast and saved", (
   assert.equal(cleanConfirmed({ hours: "Fri-Sat 10-10" }).ok, true);
 });
 
+console.log("\n\x1b[1mPlain services, and the business page in the dashboard\x1b[0m\n");
+
+await test("a request venue saves a service with a description and no length or price, and is ready with no team", async () => {
+  const dev = await venue("Plain Services Developments", "salon");
+  bookInto(dev.id, "requests");
+  const opts = { lengthsRequired: serviceLengthsRequired(getLocation(dev.id)!), staffShown: false };
+  const form = formFromDraft(null, "typed", currentVenue(getLocation(dev.id)!));
+  form.address = { value: "Plot 7, Saadiyat Island, Abu Dhabi", source: "typed" };
+  form.services = [{ name: "Site visit", durationMin: 0, price: 0, description: "A walk round the plot\nwith the architect.", source: "typed" }];
+  form.faqs = [{ q: "Do you sell off-plan?", a: "Yes.", source: "typed" }];
+  const check = payloadFromForm(form, opts);
+  assert.ok(check.ok, check.ok ? "" : check.error);
+  if (!check.ok) return;
+  // One line: a newline in a description cannot start a section of the prompt.
+  assert.equal(check.body.services[0].description, "A walk round the plot with the architect.");
+  assert.ok(!("staff" in check.body), "the body carries a team the form never showed");
+  const clean = cleanConfirmed(JSON.parse(JSON.stringify(check.body)), opts);
+  assert.ok(clean.ok, clean.ok ? "" : clean.error);
+  if (!clean.ok) return;
+  const saved = applyDraft(getLocation(dev.id)!, clean.confirmed);
+  const visit = saved.salon!.services.find((s) => s.name === "Site visit")!;
+  assert.equal(visit.description, "A walk round the plot with the architect.");
+  assert.equal(visit.durationMin, 0);
+  assert.equal(visit.price, 0);
+  assert.equal(saved.salon!.staff.length, 0);
+  assert.deepEqual(readiness(saved).missing, [], JSON.stringify(readiness(saved).missing));
+  // The description reaches what the agent is told, on the service's own line.
+  assert.match(staticPrompt(saved), /- Site visit, price not listed \(the team will confirm it\) — A walk round the plot with the architect\./);
+  // And it comes back into the form, so saving again does not drop it.
+  assert.equal(formFromDraft(null, "typed", currentVenue(saved)).services[0].description, "A walk round the plot with the architect.");
+});
+
+await test("a description that is too long is marked under its input, and the server cuts it to the same length", () => {
+  const form = formFromDraft(null, "typed", currentVenue(fresh()));
+  form.services = [{ name: "Consultation", durationMin: 30, price: 0, description: "x".repeat(DESCRIPTION_MAX + 1), source: "typed" }];
+  const errors = reviewErrors(form, { lengthsRequired: false });
+  assert.deepEqual(errors.map((e) => e.id), [REVIEW_IDS.serviceDescription(0)]);
+  assert.match(errors[0].message, new RegExp(`Keep it to ${DESCRIPTION_MAX}`));
+  const cut = cleanConfirmed({ services: [{ name: "Consultation", durationMin: 30, description: `  ${"y".repeat(500)}\n\nmore ` }] }, { lengthsRequired: false });
+  assert.ok(cut.ok);
+  if (cut.ok) {
+    assert.equal(cut.confirmed.services![0].description!.length, DESCRIPTION_MAX);
+    assert.doesNotMatch(cut.confirmed.services![0].description!, /\n/);
+  }
+  // Not sent is not the same as empty: Belle and older pages keep what was written.
+  const absent = cleanConfirmed({ services: [{ name: "Consultation", durationMin: 30 }] }, { lengthsRequired: false });
+  assert.ok(absent.ok && !("description" in absent.confirmed.services![0]));
+});
+
+await test("a diary venue still needs its team, its tables and the length of each service", async () => {
+  const shop = await venue("Diary Still Salon", "salon");
+  const diary = bookInto(shop.id, "belline");
+  const labels = readiness(diary).missing.map((m) => m.label);
+  assert.ok(labels.includes("What you offer") && labels.includes("Who works there"), JSON.stringify(labels));
+  const grill = await venue("Diary Still Grill", "restaurant");
+  const room = readiness(bookInto(grill.id, "belline")).missing;
+  assert.ok(room.some((m) => m.label === "Your tables" && m.where === "/venue/diary"), JSON.stringify(room));
+  assert.ok(room.some((m) => m.label === "Service times" && m.where === "/venue/diary"));
+  // The same venues taking requests are asked for none of it.
+  assert.ok(!readiness(bookInto(grill.id, "requests")).missing.some((m) => /tables|Service times/.test(m.label)));
+  assert.ok(!readiness(bookInto(shop.id, "requests")).missing.some((m) => m.label === "Who works there"));
+});
+
+await test("saving the plain form keeps a diary venue's team, their services, turnaround, rooms and recall", () => {
+  const before = getLocation("loc_lumiere")!;
+  const salonVenue = before;
+  assert.ok(salonVenue.salon?.staff.length, "the diary fixture has no team to keep");
+  assert.equal(onBellineDiary(salonVenue), true, "the diary fixture is not read as a diary venue");
+  const withExtras = upsertLocation({
+    ...salonVenue,
+    salon: {
+      ...salonVenue.salon!,
+      services: salonVenue.salon!.services.map((s, i) => (i === 0 ? { ...s, bufferMin: 25, recallDays: 42, resourceTypes: ["basin"] } : s)),
+    },
+  });
+  const staffBefore = JSON.stringify(withExtras.salon!.staff);
+  // A save that leaves the team off the body entirely, as the form does
+  // wherever it does not show it: nothing about the team may change.
+  const form = formFromDraft(null, "typed", currentVenue(withExtras));
+  form.services[0].description = "The one everybody asks for.";
+  const check = payloadFromForm(form, { lengthsRequired: serviceLengthsRequired(withExtras), country: "AE", staffShown: false });
+  assert.ok(check.ok, check.ok ? "" : check.error);
+  if (!check.ok) return;
+  const clean = cleanConfirmed(JSON.parse(JSON.stringify(check.body)), { lengthsRequired: serviceLengthsRequired(withExtras) });
+  assert.ok(clean.ok, clean.ok ? "" : clean.error);
+  if (!clean.ok) return;
+  const saved = applyDraft(withExtras, clean.confirmed);
+  assert.equal(JSON.stringify(saved.salon!.staff), staffBefore, "the team or who does what changed");
+  const first = saved.salon!.services[0];
+  assert.equal(first.id, withExtras.salon!.services[0].id);
+  assert.equal(first.bufferMin, 25);
+  assert.equal(first.recallDays, 42);
+  assert.deepEqual(first.resourceTypes, ["basin"]);
+  assert.equal(first.description, "The one everybody asks for.");
+  assert.deepEqual(saved.salon!.resources, withExtras.salon!.resources);
+  // With the team on screen, the same save sends it, and it is still kept by name.
+  const shown = payloadFromForm(formFromDraft(null, "typed", currentVenue(saved)), { lengthsRequired: true, country: "AE" });
+  assert.ok(shown.ok && shown.body.staff?.length === saved.salon!.staff.length);
+  if (shown.ok) assert.equal(JSON.stringify(applyDraft(saved, shown.body).salon!.staff.map((s) => s.serviceIds)), JSON.stringify(saved.salon!.staff.map((s) => s.serviceIds)));
+  upsertLocation(before);
+});
+
+await test("a restaurant's saved menu comes back into the form, and saving the details keeps it", async () => {
+  const grill = await venue("Kept Menu Grill", "restaurant");
+  const out = cleanConfirmed({ services: [{ name: "Grilled hammour", durationMin: 0, price: 95 }, { name: "Fish (of the day)", durationMin: 0, price: 0 }], faqs: [{ q: "Parking?", a: "Valet." }] }, { lengthsRequired: false });
+  assert.ok(out.ok);
+  if (!out.ok) return;
+  const first = applyDraft(getLocation(grill.id)!, out.confirmed);
+  const menuBefore = first.agent.faqs.find((f) => f.q === MENU_QUESTION)!.a;
+  const rows = currentVenue(first).services;
+  assert.deepEqual(rows.map((r) => [r.name, r.price]), [["Grilled hammour", 95], ["Fish (of the day)", 0]]);
+  // The whole form, saved again as it opened.
+  const check = payloadFromForm(formFromDraft(null, "typed", currentVenue(first)), { lengthsRequired: false, staffShown: false });
+  assert.ok(check.ok, check.ok ? "" : check.error);
+  if (!check.ok) return;
+  const again = applyDraft(first, check.body);
+  assert.equal(again.agent.faqs.find((f) => f.q === MENU_QUESTION)?.a, menuBefore);
+  // Questions confirmed on their own keep the menu too.
+  const questionsOnly = applyDraft(again, { faqs: [{ q: "Parking?", a: "Valet, from 6pm." }] });
+  assert.equal(questionsOnly.agent.faqs.find((f) => f.q === MENU_QUESTION)?.a, menuBefore);
+});
+
+await test("the business page is the review form in dashboard mode: it saves in place and says so", () => {
+  const wizard = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "SetupWizard.tsx"), "utf8");
+  const page = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "venue", "page.tsx"), "utf8");
+  const diaryPage = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "venue", "diary", "page.tsx"), "utf8");
+  // A dashboard save returns before the setup navigation, refreshes and says "Saved.".
+  const branch = wizard.match(/if \(dashboard\) \{([\s\S]*?)\n      \}/);
+  assert.ok(branch, "no dashboard branch after saving");
+  assert.doesNotMatch(branch![1], /window\.location/);
+  assert.match(branch![1], /router\.refresh\(\)/);
+  assert.match(branch![1], /return;/);
+  assert.ok(wizard.indexOf("if (dashboard) {") < wizard.indexOf("window.location.href"), "the dashboard branch comes after the navigation");
+  assert.match(wizard, /role="status"[\s\S]{0,120}"Saved\."/);
+  assert.match(wizard, /"Save changes"/);
+  assert.match(wizard, /That's right — save it/);
+  assert.match(wizard, /href="\/setup\/import"[\s\S]{0,80}Read your website again/);
+  // The location it was rendered for goes with the save.
+  assert.match(wizard, /locationId \? \{ locationId \} : \{\}/);
+  // The description has its label; the team only where it is needed.
+  assert.match(wizard, /aria-label=\{`Service \$\{i \+ 1\} description`\}/);
+  assert.match(wizard, /showStaff && \(\s*<Section label="Who works there"/);
+  assert.match(page, /mode="dashboard"/);
+  assert.match(page, /locationId=\{location\.id\}/);
+  assert.match(page, /title="Your business"/);
+  assert.match(page, /notFound\(\)/);
+  assert.match(page, /<VersionHistory/);
+  assert.match(diaryPage, /<VenueEditor/);
+  assert.match(diaryPage, /redirect\(`\/venue\?loc=\$\{location\.id\}`\)/);
+});
+
 console.log("\n\x1b[1mForwarding a UAE line\x1b[0m\n");
 
 await test("du and e& mobiles get the conditional codes with the venue's own number", () => {
@@ -548,26 +702,27 @@ await test("every code says in plain words what dialling it does, and that the o
   assert.deepEqual(forwardingCodes(""), []);
 });
 
-await test("the phone is plainly optional, with a way to skip it on the channels step and the forwarding page", () => {
+await test("the phone is plainly optional, with a way to skip it on the phone step and the Phone tab", () => {
   const read = (...p: string[]) => fs.readFileSync(path.join(process.cwd(), ...p), "utf8");
   const phone = read("src", "app", "(app)", "golive", "PhoneSetup.tsx");
-  const golive = read("src", "app", "(app)", "golive", "page.tsx");
+  // The phone section both the setup step and Channels → Phone render (2026-09-17).
+  const section = read("src", "app", "(app)", "channels", "sections.tsx");
+  const tab = read("src", "app", "(app)", "channels", "phone", "page.tsx");
   const step = read("src", "app", "setup", "[step]", "page.tsx");
   assert.match(PHONE_OPTIONAL, /optional/);
-  // The forwarding page explains the codes where they appear, and each row says what it does.
+  // The forwarding section explains the codes where they appear, and each row says what it does.
   assert.match(phone, /\{codesExplained\}/);
   assert.match(phone, /\{code\.meaning\}/);
-  assert.match(golive, /codesExplained=\{CODES_EXPLAINED\}/);
+  assert.match(section, /codesExplained=\{CODES_EXPLAINED\}/);
   // A visible skip, with and without a number yet.
   assert.match(phone, /Skip the phone for now/);
   assert.equal(phone.split("{skip}").length - 1, 2, "the skip is not shown in both the no-number and the number states");
-  assert.match(golive, /skipHref=\{from === "setup" \? "\/website\?from=setup"/);
-  assert.match(golive, /optional \? "optional" : "to do"/);
-  // The channels step leads with either way in, never with forwarding as the one thing to do.
+  assert.match(step, /<PhoneSection location=\{venue\} skipHref=\{next\} \/>/);
+  assert.match(tab, /<PhoneSection location=\{location\} skipHref=\{`\/channels\/website\?loc=\$\{location\.id\}`\} \/>/);
+  // The phone step leads with any way in, never with forwarding as the one thing to do.
   assert.doesNotMatch(step, /Set up call forwarding/);
-  assert.match(step, /One is enough to go live/);
+  assert.match(step, /Any one of these is enough to go live, and so is the website chat/);
   assert.match(step, /Your phone line \(optional\)/);
-  assert.match(step, /Skip the phone for now/);
   assert.doesNotMatch(step, /Waiting for the test call/);
   // Belle says the same.
   // A Belline number assigned: its own field, never the business's phone.
@@ -593,12 +748,14 @@ await test("the owner's own number on the rules step is not Belline's: Belle giv
 
 console.log("\n\x1b[1mSetup copy the founder read\x1b[0m\n");
 
-await test("Skip the phone for now and Add it to my website are real buttons, not links inside a sentence", () => {
+await test("Skip the phone for now is a real button, and the website chat is set up in the step itself", () => {
   const step = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "[step]", "page.tsx"), "utf8");
-  assert.match(step, /className="btn" style=\{action\} data-testid="skip-phone">\s*Skip the phone for now/);
-  assert.match(step, /className="btn btn-accent" style=\{action\} data-testid="add-to-website">\s*Add it to my website/);
+  const phone = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "golive", "PhoneSetup.tsx"), "utf8");
+  assert.match(phone, /<Link href=\{skipHref\} className="btn"[^>]*>\s*Skip the phone for now/);
+  // No link out to the dashboard and back: the widget editor is on the step.
+  assert.match(step, /<WebsiteSection location=\{venue\} \/>/);
+  assert.doesNotMatch(step, /\/website\?from=setup|\/golive\?from=setup|\/integrations\?from=setup/);
   assert.doesNotMatch(step, /one line of code\. <Link href="\/website\?from=setup">Add it to my website<\/Link>/);
-  assert.doesNotMatch(step, /\{PHONE_OPTIONAL\}\{" "\}\s*<Link href="\/website\?from=setup">Skip the phone for now<\/Link>/);
 });
 
 await test("the booking option says what it means: the team confirms each booking, with no walk-ins", () => {
@@ -621,8 +778,10 @@ await test("WhatsApp is offered as it is today: set up with us on a second numbe
   const card = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "integrations", "WhatsAppCard.tsx"), "utf8");
   const assisted = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "integrations", "WhatsAppAssisted.tsx"), "utf8");
   assert.doesNotMatch(step, /whatsapp\.state === "soon" \? "Coming soon"/);
-  assert.match(step, /WhatsApp works today on a second number/);
-  assert.match(step, /<WhatsAppAssisted /);
+  // The step renders the WhatsApp card itself, which says it works today and offers setting it up with us.
+  assert.match(step, /<WhatsAppSection location=\{venue\}/);
+  assert.match(step, /Going live does not wait for it\./);
+  assert.match(card, /WhatsApp works today: Belline answers a second WhatsApp number/);
   assert.match(card, /soon: \["Available — set up with us"/);
   assert.match(card, /<WhatsAppAssisted /);
   assert.match(assisted, /Set it up with us/);

@@ -333,6 +333,71 @@ label {
   margin-bottom: 7px;
 }
 
+/* Radios and checkboxes are not text fields.
+   The `input` rule above is written for boxes you type into: full width,
+   padding, a panel background and a focus ring drawn with box-shadow. On a
+   radio that turned into a blue square sitting inside a stretched control
+   (billing's "When an allowance runs out"). Undo all of it and let the
+   browser draw the real control in the accent colour. `input:focus` removes
+   the outline for text fields, so keyboard focus is given back here with a
+   selector specific enough to win. Inline sizes (22px toggles) still apply. */
+input[type="radio"],
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+input[type="radio"]:focus,
+input[type="checkbox"]:focus {
+  box-shadow: none;
+}
+input[type="radio"]:focus-visible,
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+input[type="radio"]:disabled,
+input[type="checkbox"]:disabled {
+  cursor: default;
+}
+
+/* A label that is a sentence, not a field caption: a choice beside its radio,
+   or a question. The small capitals above suit "NAME" over a box; a whole
+   option in capitals reads as shouting and is harder to scan. */
+label.label-plain,
+label.choice {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+  margin-bottom: 0;
+}
+label.choice {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+label.choice:has(input:checked) {
+  border-color: var(--text);
+}
+label.choice input {
+  margin-top: 2px;
+}
+
 /* --- tables -------------------------------------------------------------- */
 
 table {
@@ -904,6 +969,25 @@ tbody tr:hover {
 }
 @keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
+
+/* A confirmation that has to be answered: archiving or deleting a location.
+   A native <dialog> opened modally, so the browser traps focus, makes the page
+   inert and closes it on Escape; this only gives it the panel's look. */
+.confirm-dialog {
+  width: min(440px, calc(100% - 32px));
+  /* The global reset takes the user-agent auto margin that centres a modal dialog. */
+  margin: auto;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 24px 60px -30px rgba(27, 39, 53, 0.55);
+}
+.confirm-dialog::backdrop {
+  background: rgba(27, 39, 53, 0.32);
+}
+
 .drawer-head {
   display: flex;
   justify-content: space-between;
@@ -1459,6 +1543,58 @@ body:has(.callbar) {
 .widget-mode strong { font-size: 14px; font-weight: 600; }
 .widget-mode span { font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
 .widget-mode em { font-style: normal; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+
+/* --- Logo upload and the widget's logo + ring (LogoUpload.tsx, WidgetEditor.tsx) ---
+ *
+ * The preview circle is white whatever the theme, as it is on the button:
+ * the logo is shown the way visitors will see it, not the way the dashboard
+ * would like it. The ring keyframes are embed.js's (and site.css's) values,
+ * and stay off under reduced motion here as they do on the venue's site. */
+.logo-upload-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.logo-upload-preview {
+  width: 64px; height: 64px; flex: none; display: grid; place-items: center;
+  border-radius: 999px; background: #FFFFFF; box-shadow: 0 0 0 1px var(--border);
+  padding: 7px; box-sizing: border-box; overflow: hidden; text-align: center;
+}
+.logo-upload-preview img { width: 100%; height: 100%; object-fit: contain; border-radius: 999px; display: block; }
+.logo-upload-preview .muted { font-size: 10.5px; line-height: 1.2; }
+.logo-upload-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.logo-upload-actions input[type="file"] { max-width: 100%; }
+
+.widget-preview-ring { position: relative; isolation: isolate; }
+.widget-preview-ring::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  border: 2px solid var(--ring-colour, #2667FF); pointer-events: none; opacity: 0; z-index: -1;
+  animation: widget-ring 1.5s ease-out infinite;
+}
+.widget-preview-ring { animation: widget-nudge 1.5s ease-in-out infinite; }
+.widget-preview-ring .widget-preview-mark { animation: widget-shake 1.5s ease-in-out infinite; }
+@keyframes widget-shake {
+  0%, 27%, 100% { transform: rotate(0deg); }
+  2% { transform: rotate(-22deg); } 4% { transform: rotate(22deg); }
+  6% { transform: rotate(-19deg); } 8% { transform: rotate(19deg); }
+  10% { transform: rotate(-15deg); } 12% { transform: rotate(15deg); }
+  14% { transform: rotate(-11deg); } 16% { transform: rotate(11deg); }
+  18% { transform: rotate(-8deg); } 20% { transform: rotate(8deg); }
+  22% { transform: rotate(-4deg); } 24% { transform: rotate(4deg); }
+}
+@keyframes widget-nudge {
+  0%, 14%, 100% { transform: translateY(0) rotate(0deg); }
+  3% { transform: translateY(-2px) rotate(-1.6deg); }
+  7% { transform: translateY(-2px) rotate(1.6deg); }
+  11% { transform: translateY(-1px) rotate(-0.8deg); }
+}
+@keyframes widget-ring {
+  0% { transform: scale(1); opacity: 0.55; }
+  55% { transform: scale(1.28); opacity: 0; }
+  100% { transform: scale(1.28); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .widget-preview-ring,
+  .widget-preview-ring::after,
+  .widget-preview-ring .widget-preview-mark { animation: none; }
+}
+/* --- end logo upload and widget ring --- */
 
 /* What it has done today, beside the switch rather than buried in billing. */
 .widget-used {
@@ -2231,46 +2367,86 @@ body:has(.callbar) {
   .setup-assistant > aside { order: -1; }
 }
 
-/* Belle docked beside the setup step. Closed, the dock costs the step nothing:
-   the toggle sits in the right margin and the step keeps the whole width. Open,
-   the panel takes its own column and the step column narrows — the fields are
-   capped at 520px, so they keep their width rather than reflowing. Which side
-   of 1024px the owner is on is decided in BelleDock.tsx; below it nothing here
-   renders at all. */
-.setup-dock { display: flex; align-items: flex-start; }
-.setup-dock-main { flex: 1; min-width: 0; }
-.setup-dock-panel {
-  flex: none;
-  width: 340px;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+/* --- Belle, the chat window over the page ----------------------------------
+   Opened by the bell (BelleDock.tsx), anchored just above it bottom right like
+   a support chat. Fixed, so it overlays the page and never takes width from
+   it: the step or dashboard underneath renders exactly as it does with Belle
+   closed. It replaced a docked column that squeezed the page from 1024px up.
+   Closed it is `hidden`, not unmounted, so the conversation survives. */
+.belle-host { min-width: 0; }
+/* In the dashboard shell the host wraps the content column beside the sidebar. */
+.shell > .belle-host { flex: 1 1 auto; }
+.belle-pop {
+  position: fixed;
+  right: 24px;
+  bottom: 96px; /* the bell's 24px + 56px, and a 16px gap */
+  z-index: 41;
+  width: 380px;
+  height: min(640px, calc(100vh - 120px));
   display: flex;
   flex-direction: column;
   background: var(--panel);
-  border-left: 1px solid var(--border);
-  animation: belle-dock-in 160ms ease-out;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -20px rgba(27, 39, 53, 0.45);
+  overflow: hidden;
+  transform-origin: bottom right;
+  animation: belle-pop-in 160ms ease-out;
 }
-@keyframes belle-dock-in { from { transform: translateX(18px); opacity: 0; } to { transform: none; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .setup-dock-panel { animation: none; } }
-.setup-dock-head {
+.belle-pop[hidden] { display: none; }
+.belle-pop:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@keyframes belle-pop-in { from { transform: scale(0.96) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+.belle-pop-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 14px 12px 14px 16px;
   border-bottom: 1px solid var(--border);
 }
-.setup-dock-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* In the dashboard shell the dock wraps the content column beside the sidebar. */
-.shell > .setup-dock { flex: 1 1 auto; min-width: 0; }
+.belle-pop-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.belle-pop-close svg { width: 18px; height: 18px; }
+.belle-pop-close:hover { background: var(--panel-2); }
+.belle-pop-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The round bell sits at 16px from 600px to 1023px, so the window follows it
+   and never runs off a narrow laptop or tablet. */
+@media (max-width: 1023px) {
+  .belle-pop { right: 16px; bottom: 84px; width: min(380px, calc(100vw - 32px)); height: min(640px, calc(100vh - 100px)); }
+}
+/* A phone: the whole screen, over the bell, inside the notch and home bar,
+   with its own close button in the header. Modal here (see BelleDock.tsx). */
+@media (max-width: 599px) {
+  .belle-pop {
+    inset: 0;
+    width: auto;
+    height: auto;
+    z-index: 60;
+    border: 0;
+    border-radius: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    transform-origin: bottom center;
+  }
+}
+@media (prefers-reduced-motion: reduce) { .belle-pop { animation: none; } }
 
 /* --- Belle, the floating bell -----------------------------------------------
    Belline's signature button, as the website's "Speak to Belline" bell
    (public/site.css .bell-fab): the brand blue with white, a pill, the bell
    mark, a ring of page colour round it. It rings once when the page opens,
    not forever: this is a page people work in, not one they land on. Out of
-   the flow, so opening Belle is the only thing that narrows the page. */
+   the flow, and so is the window it opens, so nothing ever narrows the page. */
 .belle-fab {
   position: fixed;
   right: 24px;
@@ -2319,8 +2495,8 @@ body:has(.callbar) {
   0% { transform: scale(1); opacity: 0.55; }
   55%, 100% { transform: scale(1.28); opacity: 0; }
 }
-/* A phone or a laptop too narrow to dock: the round bell alone, named for
-   screen readers by the same words. */
+/* A phone, tablet or narrow laptop: the round bell alone, named for screen
+   readers by the same words. */
 @media (max-width: 1023px) {
   .belle-fab { right: 16px; bottom: 16px; width: 56px; padding: 0; justify-content: center; }
   .belle-fab-say { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
@@ -2382,3 +2558,59 @@ body:has(.callbar) {
   border-radius: 12px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.09);
 }
+
+/* --- Tabs inside a menu destination (SectionTabs) and the nav groups ---------
+   Inbox, Your business, Channels and Settings each hold a few pages. A row of
+   plain links, underlined when current, that scrolls sideways on a phone
+   rather than wrapping into a second row of buttons. */
+
+.section-tabs {
+  display: flex;
+  gap: 4px;
+  margin: -6px 0 18px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.section-tabs::-webkit-scrollbar { display: none; }
+.section-tabs a {
+  flex: none;
+  padding: 9px 12px 10px;
+  font-size: 13.5px;
+  color: var(--text-2);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.section-tabs a:hover { color: var(--text); }
+.section-tabs a.is-on { color: var(--accent-hover); border-bottom-color: var(--accent); font-weight: 600; }
+.section-tabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
+
+.nav-group-title {
+  margin: 14px 10px 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.mobile-nav-group { margin: 10px 0 2px; padding: 0 12px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); }
+
+/* The setup steps: the main action again at the bottom, beside "Skip for now". */
+.setup-footer {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 28px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* Home's period choice: two small links in one row beside the panel title,
+   never wrapping into a second line that makes the header twice as tall. */
+.period-switch { display: inline-flex; gap: 2px; margin-left: auto; padding: 2px; border-radius: 8px; background: var(--panel-2); }
+.period-switch a { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; line-height: 1.4; white-space: nowrap; color: var(--text-2); text-decoration: none; }
+.period-switch a:hover { color: var(--text); }
+.period-switch a.is-on { background: var(--panel); color: var(--accent-hover); box-shadow: 0 1px 2px rgba(27, 39, 53, 0.08); }
+.period-switch a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

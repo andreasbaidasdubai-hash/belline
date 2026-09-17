@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { visibleLocations } from "@/lib/auth";
 import { requireUser } from "@/lib/auth-server";
+import { venueChip } from "@/lib/verticals";
 
 export async function LocationTabs({ base, active }: { base: string; active: string }) {
+  // Beside each name, the business's own type (verticals.ts `venueChip`), never
+  // the engine it runs on: a property developer runs on the diary engine called
+  // "salon" and used to be labelled one on every page. No chip when unknown.
+
   // Only the venues this person is allowed to open — a manager at one salon
   // should not even see that the other exists.
   const locations = visibleLocations(await requireUser());
@@ -14,9 +19,11 @@ export async function LocationTabs({ base, active }: { base: string; active: str
       <div className="loc-tabs">
         <span className="pill">
           {locations[0].name}
-          <span style={{ fontWeight: 400 }}>
-            {locations[0].vertical}
-          </span>
+          {venueChip(locations[0]) && (
+            <span style={{ fontWeight: 400 }}>
+              {venueChip(locations[0])}
+            </span>
+          )}
         </span>
       </div>
     );
@@ -42,9 +49,11 @@ export async function LocationTabs({ base, active }: { base: string; active: str
             {l.name}
             {/* Not faded on the active blue tab: white on #0071E3 is 4.70:1,
                 so any opacity drops it under 4.5:1 (0.9 measured 4.11). */}
-            <span style={{ fontWeight: 500 }}>
-              {l.vertical}
-            </span>
+            {venueChip(l) && (
+              <span style={{ fontWeight: 500 }}>
+                {venueChip(l)}
+              </span>
+            )}
           </Link>
         );
       })}

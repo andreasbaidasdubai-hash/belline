@@ -367,6 +367,13 @@ export interface Location {
    */
   logoUrl?: string;
   /**
+   * The logo the owner uploaded, as a record of it: the bytes live beside the
+   * store in DATA_DIR/logos, never in this row — see logo-store.ts for why.
+   * `id` is random per upload and is the public URL (/api/logo/<id>), so a
+   * new logo is a new URL and the old one can be cached forever.
+   */
+  logo?: { id: string; mime: import("./logo").LogoMime; size: number; updatedAt: string };
+  /**
    * Set when an owner archived this location. It keeps every booking, call
    * and version, and leaves every list, switcher and call route until
    * restored — see locations.ts.
@@ -693,9 +700,10 @@ export interface DemoConfig {
  * within the guidelines.
  *
  * What may change: the words on the buttons, the colour of the filled one,
- * pill or circle, which corner. What may not: the mark. The bell in the
- * button is what makes a Belline widget recognisable as one from across the
- * room, on any site, and it stays.
+ * pill or circle, which corner, whether it rings, and whether the main button
+ * shows the bell or the venue's own uploaded logo. What may not: any other
+ * mark. No drawing comes from the settings — the only picture the button can
+ * carry instead of the bell is a logo Belline itself checked and serves.
  */
 export interface EmbedAppearance {
   voiceLabel?: string;
@@ -707,6 +715,14 @@ export interface EmbedAppearance {
   corner?: "right" | "left";
   /** Show the WhatsApp button when the venue has a number. Default on. */
   whatsapp?: boolean;
+  /**
+   * What the main button shows: Belline's bell (the default) or the venue's
+   * own uploaded logo. "logo" with no logo uploaded draws the bell — see
+   * resolveAppearance.
+   */
+  buttonMark?: "bell" | "logo";
+  /** Ring the main button now and then to draw the eye, as belline.ai's does. Default off. */
+  ring?: boolean;
 }
 
 /**
@@ -998,6 +1014,12 @@ export interface SalonService {
   /** Cleanup/reset time held after the appointment but not shown to guests. */
   bufferMin: number;
   price: number;
+  /**
+   * What it is, in the owner's words, one line: "Two-hour site visit with an
+   * architect". A service called "Consultation" means nothing to a caller who
+   * asks what they would get, and the agent may only say what it was told.
+   */
+  description?: string;
   /** Optional shared equipment this service needs (colour room, basin...). */
   resourceType?: string;
   /**

@@ -201,8 +201,8 @@ export type OutlookOutcome =
 export function outlookReturnPath(returnTo: ReturnTo, locationId: string | undefined, outcome: OutlookOutcome): string {
   if (returnTo === "setup") return `/setup/bookings?outlook=${outcome}`;
   const loc = locationId ? `loc=${encodeURIComponent(locationId)}&` : "";
-  if (outcome === "connected") return `/integrations?${loc}connected=1`;
-  return `/integrations?${loc}error=${outcome === "declined" ? "outlook_declined" : outcome}`;
+  if (outcome === "connected") return `/calendars?${loc}connected=1`;
+  return `/calendars?${loc}error=${outcome === "declined" ? "outlook_declined" : outcome}`;
 }
 
 /**

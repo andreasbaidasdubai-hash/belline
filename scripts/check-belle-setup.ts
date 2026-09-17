@@ -101,7 +101,7 @@ await test("the system prompt carries the journey: current step and what blocks 
   const model = fakeModel([text("Hello")]);
   await quiet(() => runSetupTurn(salon.id, salon.by, [{ role: "user", content: "Where am I?" }], { model: model.call }));
   const system = String((model.calls[0] as { system?: unknown }).system);
-  assert.match(system, /Current step: \d+ of 9/);
+  assert.match(system, /Current step: \d+ of 10/);
   assert.match(system, /Blocking Go live:/);
 });
 
@@ -196,10 +196,10 @@ await test("the fallback gives the next step, its button and its article, with n
 });
 
 await test("with a step given, the card is for that step", () => {
-  const card = helpCard(getLocation(salon.id)!, undefined, "channels");
-  assert.match(card.title, /Phone and website/);
+  const card = helpCard(getLocation(salon.id)!, undefined, "website");
+  assert.match(card.title, /Website chat/);
   assert.ok(card.article && /forward|chat|number/i.test(card.article.body));
-  assert.match(setupGreeting(getLocation(salon.id)!, "channels"), /Phone and website/);
+  assert.match(setupGreeting(getLocation(salon.id)!, "phone"), /Phone & WhatsApp/);
 });
 
 await test("without a model, asking for a person once says to ask again; twice opens the ticket", async () => {
@@ -307,9 +307,9 @@ console.log("\n\x1b[1mOn the setup pages\x1b[0m\n");
 
 await test("every setup step opens Belle on that step, and the chat sends it", () => {
   const step = source("src/app/setup/[step]/page.tsx");
-  // The bell is given the step, and below 1024px opens Belle's page on it.
+  // The bell is given the step, and hands it to the chat in its window.
   assert.match(step, /<BelleDock[^>]*step=\{step\.id\}/);
-  assert.match(source("src/app/setup/BelleDock.tsx"), /`\/setup\/assistant\?step=\$\{step\}`/);
+  assert.match(source("src/app/setup/BelleDock.tsx"), /<BelleChat fill locationId=\{locationId\} step=\{step\} greeting=\{greeting\}/);
   assert.match(step, /\/setup\/assistant\?step=\$\{blocker\.step\}/);
   const chat = source("src/app/setup/assistant/SetupAssistant.tsx");
   assert.match(chat, /JSON\.stringify\(\{ locationId, step,/);
@@ -318,50 +318,84 @@ await test("every setup step opens Belle on that step, and the chat sends it", (
   assert.match(source("src/app/api/setup/assistant/route.ts"), /isStepId\(body\.step\)/);
 });
 
-await test("Belle docks beside the step, on every step, around the step's own column", () => {
+await test("Belle is on every step, around the step's own column", () => {
   const page = source("src/app/setup/[step]/page.tsx");
-  // In the shell rather than a branch of Body(): every step gets the toggle,
-  // and the step keeps its own column inside the dock, so its Continue /
+  // In the shell rather than a branch of Body(): every step gets the bell,
+  // and the step keeps its own column inside the host, so its Continue /
   // Save / Go live button stays exactly where it was.
   const shell = page.indexOf("export default async function SetupStepPage");
   assert.ok(shell > 0);
   assert.ok(page.indexOf("<BelleDock") > shell, "the dock is inside a step's body, not the shell");
   assert.equal(page.split("<BelleDock").length, 2, "more than one dock");
   assert.match(page, /<BelleDock[^>]*>\s*<div className="setup-grid"/);
-  // Docked, she is given the step she is beside, and its greeting.
+  // She is given the step she is opened on, and its greeting.
   assert.match(page, /step=\{step\.id\}/);
   assert.match(page, /greeting=\{setupGreeting\(venue, step\.id\)\}/);
 });
 
-await test("the panel is a labelled region, closed by Escape, remembered, and never a phone's", () => {
+await test("the window is a labelled dialog the bell controls, closed by Escape back to the bell, and remembered", () => {
   const dock = source("src/app/setup/BelleDock.tsx");
-  assert.match(dock, /min-width: 1024px/);
-  // Below the breakpoint nothing is docked at all: the panel is behind `wide`.
-  assert.match(dock, /const docked = wide && open/);
-  assert.match(dock, /\{docked && \(/);
-  assert.match(dock, /aria-labelledby="belle-dock-title"/);
-  assert.match(dock, /e\.key !== "Escape"/);
-  assert.match(dock, /panelRef\.current\?\.focus\(\)/, "focus does not move into the panel");
-  assert.match(dock, /toggleRef\.current\?\.focus\(\)/, "focus does not come back to the toggle");
-  // Storage that throws must not stop the panel opening.
+  // A dialog, named by its own heading, that the bell says it opens.
+  assert.match(dock, /role="dialog"/);
+  assert.match(dock, /aria-labelledby="belle-pop-title"/);
+  assert.match(dock, /<h2 id="belle-pop-title"[^>]*>\s*Ask Belle\s*<\/h2>/);
+  assert.match(dock, /id="belle-pop"/);
+  assert.match(dock, /aria-expanded=\{open\}/);
+  assert.match(dock, /aria-controls="belle-pop"/);
+  // Non-modal on a desk, where the page stays usable; modal on a phone, where
+  // it fills the screen, and only there is Tab kept inside it.
+  assert.match(dock, /aria-modal=\{phone \? "true" : "false"\}/);
+  assert.match(dock, /if \(!phone \|\| e\.key !== "Tab"/);
+  // Its own close button, with a name, in every size.
+  assert.match(dock, /aria-label="Close Ask Belle" onClick=\{\(\) => set\(false, "toggle"\)\}/);
+  // Escape closes it and focus goes back to the bell; opening moves focus to the message box.
+  assert.match(dock, /e\.key !== "Escape"[^}]*\) return;\s*set\(false, "toggle"\)/);
+  assert.match(dock, /follow\.current === "toggle" && !open\) toggleRef\.current\?\.focus\(\)/, "focus does not come back to the bell");
+  assert.match(dock, /follow\.current === "panel" && open\) \(inputRef\.current \?\? panelRef\.current\)\?\.focus\(\)/, "focus does not move into the window");
+  assert.match(dock, /inputRef=\{inputRef\}/);
+  // A page load never moves focus: only set() arms `follow`, and the restore does not call it.
+  assert.match(dock, /if \(stored === "open" && !window\.matchMedia\(PHONE\)\.matches\) setOpen\(true\);/);
+  assert.equal(dock.match(/follow\.current = focus/g)?.length, 1);
+  // Hidden, not unmounted, so a half-typed question survives closing.
+  assert.match(dock, /hidden=\{!open\}/);
+  assert.doesNotMatch(dock, /\{open && \(/);
+  // Remembered under the same keys as before, and storage that throws must not stop it opening.
+  assert.match(dock, /storageKey = "belline\.setup\.belle-dock"/);
+  assert.match(source("src/app/(app)/layout.tsx"), /storageKey="belline\.app\.belle-dock"/);
+  assert.match(dock, /window\.localStorage\.setItem\(storageKey, next \? "open" : "closed"\)/);
   assert.match(dock, /window\.localStorage\.setItem\(storageKey[^}]*\}\s*catch/);
   assert.match(dock, /window\.localStorage\.getItem\(storageKey\);\s*\}\s*catch/);
-  // One Belle: the docked chat is the assistant page's own component.
+  // One Belle: the window's chat is the assistant page's own component.
   assert.match(dock, /import \{ BelleChat \} from "\.\/assistant\/SetupAssistant"/);
-  const css = source("src/app/globals.css");
-  // In the flow beside the step, never over it, so nothing on the step is covered.
-  assert.match(css, /\.setup-dock-panel \{[^}]*position: sticky/);
-  assert.doesNotMatch(css, /\.setup-dock-panel \{[^}]*position: fixed/);
-  assert.match(css, /prefers-reduced-motion: reduce\) \{ \.setup-dock-panel \{ animation: none/);
 });
 
-await test("/setup/assistant still stands on its own, and the narrow way in points at it", () => {
+await test("the window floats over the page instead of squeezing it, and keeps still for reduced motion", () => {
+  const dock = source("src/app/setup/BelleDock.tsx");
+  const css = source("src/app/globals.css");
+  // The page is rendered whole, not in a column beside a dock.
+  assert.match(dock, /<div className="belle-host">\s*\{children\}/);
+  assert.doesNotMatch(dock, /setup-dock/);
+  assert.doesNotMatch(css, /\.setup-dock/, "the split-screen dock CSS is still there");
+  // Fixed above the bell, bottom right, roughly a support widget's size.
+  assert.match(css, /\.belle-pop \{[^}]*position: fixed;[^}]*right: 24px;[^}]*bottom: 96px;[^}]*width: 380px;[^}]*height: min\(640px, calc\(100vh - 120px\)\)/);
+  assert.match(css, /\.belle-pop\[hidden\] \{ display: none; \}/);
+  // A phone gets the whole screen, over the bell, inside the safe area.
+  assert.match(css, /@media \(max-width: 599px\) \{\s*\.belle-pop \{[^}]*inset: 0;[^}]*z-index: 60;[^}]*env\(safe-area-inset-bottom\)/);
+  assert.match(dock, /const PHONE = "\(max-width: 599px\)"/);
+  // Scales in, except for somebody who asked for less motion.
+  assert.match(css, /\.belle-pop \{[^}]*animation: belle-pop-in/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{ \.belle-pop \{ animation: none; \} \}/);
+});
+
+await test("/setup/assistant still stands on its own, and the bell no longer leaves the page for it", () => {
   const page = source("src/app/setup/assistant/page.tsx");
   assert.match(page, /export default async function SetupAssistantPage/);
   assert.match(page, /<SetupAssistant\b/);
-  // Below 1024px the bell opens the full page instead of docking.
+  // At every width the bell opens the window; it never navigates.
   const dock = source("src/app/setup/BelleDock.tsx");
-  assert.match(dock, /wide \? set\(true, "panel"\) : router\.push\(fullPage\)/);
+  assert.doesNotMatch(dock, /router\.push|useRouter|\/setup\/assistant\?/);
+  assert.doesNotMatch(dock, /1024/);
+  assert.match(dock, /onClick=\{\(\) => set\(!open, open \? "toggle" : "panel"\)\}/);
 });
 
 await test("the floating bell is the one way to Belle, on the setup steps and the dashboard", () => {
@@ -371,6 +405,8 @@ await test("the floating bell is the one way to Belle, on the setup steps and th
   const css = source("src/app/globals.css");
   // A real button, named "Ask Belle" by its own text, which stays for screen readers when only the bell shows.
   assert.match(dock, /<button\s+ref=\{toggleRef\}\s+type="button"\s+className="belle-fab"/);
+  // Always rendered, so it is there to press whether the window is open or closed.
+  assert.doesNotMatch(dock, /\{!docked && \(/);
   assert.match(dock, /<span className="belle-fab-say">Ask Belle<\/span>/);
   assert.match(dock, /<svg[^>]*aria-hidden="true"/);
   assert.match(css, /\.belle-fab-say \{ position: absolute; width: 1px;/);

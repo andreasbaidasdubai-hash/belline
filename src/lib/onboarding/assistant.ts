@@ -9,6 +9,7 @@ import { raiseException } from "../errors/customer";
 import { destinationOf, serviceLengthsRequired } from "../booking/destination";
 import { PBX_NOTE, forwardingCodes, uaeCarriers } from "../telephony/forwarding";
 import { bellineNumberOf } from "../telephony/number";
+import { venueChip } from "../verticals";
 import { KIND_META, isExceptionKind, openException, ownerTickets } from "../exceptions";
 import { DAYS, dayIndexes } from "./review";
 import { readiness } from "./index";
@@ -349,7 +350,7 @@ export function executeSetupTool(
     }
 
     case "add_service": {
-      if (!location.salon) return { ok: false, say: "This is a restaurant: tables and service times are set on the How it works page. Say so." };
+      if (!location.salon) return { ok: false, say: "This is a restaurant: tables and service times are set under Your business. Say so." };
       const serviceName = text(input.name, 80);
       if (!serviceName) return { ok: false, say: "Ask what the service is called." };
       const durationMin = Math.max(0, Math.round(Number(input.duration_min) || 0));
@@ -553,7 +554,7 @@ export function executeSetupTool(
       const to = number ? `your Belline number, ${number}` : "your Belline number";
       const prefix = number
         ? ""
-        : "Their Belline number is still being prepared and appears on the Go live page when it is ready; they can arrange forwarding now and use it then. ";
+        : "Their Belline number is still being prepared and appears on the Phone & WhatsApp step when it is ready; they can arrange forwarding now and use it then. ";
       if (line === "pbx") return { ok: true, say: prefix + PBX_NOTE };
       if (line === "landline") {
         const known = uaeCarriers(number).find((c) => c.id === carrier);
@@ -576,7 +577,7 @@ export function executeSetupTool(
       }
       // No number, no codes: a code with a placeholder in it gets dialled as printed.
       if (!forwardingCodes(number).length) {
-        return { ok: true, say: `${prefix}The mobile codes appear on the Go live page with the number in them, as soon as the number is ready. Do not give codes before then.` };
+        return { ok: true, say: `${prefix}The mobile codes appear on the Phone & WhatsApp step with the number in them, as soon as the number is ready. Do not give codes before then.` };
       }
       const codes = forwardingCodes(number)
         .map((c) => `${c.when}: dial ${c.dial} (${c.meaning.replace(/\.$/, "")})`)
@@ -634,7 +635,7 @@ export async function runSetupTool(
   const location = getLocation(locationId);
   if (!location) return { ok: false, say: "The venue could not be found." };
   const key = location.embed?.key;
-  if (!key) return { ok: false, say: "The website chat has not been created for this business yet. Send them to the Your website page to create it." };
+  if (!key) return { ok: false, say: "The website chat has not been created for this business yet. Send them to the Website chat step to create it." };
   const out = await checkInstall(String(input.url ?? "").slice(0, 300), key);
   return out.installed
     ? { ok: true, say: "The chat snippet is on that page. It will show as working once the first visitor uses it." }
@@ -649,7 +650,9 @@ function summary(location: Location): string {
     })
     .join("; ");
   const lines = [
-    `Business: ${location.name} (${location.vertical}), ${location.address || "no address yet"}`,
+    // The business's own type, never the engine: a property developer runs on
+    // the diary engine called "salon", and Belle must not call it one.
+    `Business: ${location.name} (${venueChip(location) ?? "type of business not given"}), ${location.address || "no address yet"}`,
     `Hours: ${hours}`,
     location.salon
       ? `Services: ${location.salon.services.map((s) => `${s.name} ${s.durationMin > 0 ? `${s.durationMin}min` : "no length"} ${s.price > 0 ? s.price : "no price"}`).join("; ") || "none"}`
@@ -791,7 +794,7 @@ export async function runSetupTurn(
       "When they are stuck, use explain_forwarding, check_widget_install or help_article and walk them through it yourself. " +
       "Only open_exception for the kinds it lists; never promise a person otherwise, and never invent a ticket number. " +
       (askedForPerson ? "The owner has just asked for a person, once. Help with what they are stuck on, and say that if they still want a person they can ask again. " : "") +
-      "When nothing is missing, say the next steps are to forward their phone line (the Go live page) and to add the chat and voice button to their website (the Your website page).\n\n" +
+      "When nothing is missing, say the next steps are to add the chat and voice button to their website (the Website chat step) and to forward their phone line (the Phone & WhatsApp step).\n\n" +
       `${context(venue, j)}\n\nStill missing: ${missing().join(", ") || "nothing"}\n\nWhat is saved now:\n${summary(venue)}`;
 
     const response = await model({

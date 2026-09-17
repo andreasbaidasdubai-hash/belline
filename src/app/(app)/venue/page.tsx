@@ -2,25 +2,33 @@ import { notFound } from "next/navigation";
 import { canEditAgent } from "@/lib/auth";
 import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
-import { terms } from "@/lib/verticals";
-import { validateVenue } from "@/lib/booking/config";
+import { currentVenue } from "@/lib/onboarding";
+import { venueMarket } from "@/lib/onboarding/rules";
+import { onBellineDiary, serviceLengthsRequired } from "@/lib/booking/destination";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
-import VenueEditor from "./VenueEditor";
-import VersionHistory from "./VersionHistory";
 import { historyFor } from "@/lib/brain";
+import SetupWizard from "@/app/setup/SetupWizard";
+import VersionHistory from "./VersionHistory";
+import SectionTabs from "@/components/SectionTabs";
+import { businessTabs } from "@/lib/nav";
+import LogoUpload from "@/components/LogoUpload";
+import { logoUrlFor } from "@/lib/logo";
 
 export const dynamic = "force-dynamic";
 
 /**
- * How the venue actually works.
+ * Your business: the details Belline answers from.
  *
- * The Agent page changes what it says. This changes what the engine does —
- * the room, the price list, the team, the rules — and until it existed, every
- * one of those was a value in a seed file that only a developer could reach.
+ * The name, the greeting, the address and phone, the hours, what the business
+ * offers and the questions people ask — the same form setup ends on, opened on
+ * what is saved. It used to be only reachable by running setup again, which
+ * moved the owner on through steps they had finished; and this page was the
+ * diary's editor, with stylists, rooms and turnaround, for businesses that
+ * since the pivot take requests and have none of those.
  *
- * Hidden from floor staff for the same reason the Agent page is: these are the
- * settings a caller experiences as the venue's own word, and changing them is
- * a decision rather than a task.
+ * The diary's machinery lives on /venue/diary, for the venues that have it.
+ * Hidden from floor staff for the same reason the Agent page is: this is what
+ * a caller hears as the business's own word.
  */
 export default async function VenuePage({
   searchParams,
@@ -34,33 +42,40 @@ export default async function VenuePage({
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
   if (!canEditAgent(user, location.id)) notFound();
 
-  const t = terms(location);
-
   return (
     <>
       <PageHeader
-        title="How this venue works"
-        subtitle={
-          location.restaurant
-            ? "The room, the sittings and the house rules. Every change is live on the next call — nothing to deploy."
-            : `The ${t.services}, the ${t.staffPlural}, the rooms and the house rules. Every change is live on the next call — nothing to deploy.`
-        }
+        title="Your business"
+        subtitle="What Belline tells your customers. Every change is live on the next call — nothing to deploy."
       />
       <LocationTabs base="/venue" active={location.id} />
+      <SectionTabs tabs={businessTabs(location)} label="Your business" />
 
-      <VenueEditor
+      {/* The logo belongs to the business, so it is set here first. The website
+          chat's header shows it, and the website button can too. */}
+      <section className="panel" style={{ padding: "16px 18px", marginBottom: 22 }} aria-labelledby="business-logo">
+        <h2 id="business-logo" style={{ fontSize: 14.5, fontWeight: 600, margin: "0 0 4px" }}>
+          Logo
+        </h2>
+        <p className="muted" style={{ fontSize: 13, lineHeight: 1.55, margin: "0 0 10px", maxWidth: "64ch" }}>
+          Shown at the top of your website chat and your chat link. You can also put it on the website button, under Channels,
+          Website chat.
+        </p>
+        <LogoUpload key={location.id} locationId={location.id} logoUrl={logoUrlFor(location)} />
+      </section>
+
+      <SetupWizard
+        // A fresh form per location: switching tabs must not carry one
+        // venue's unsaved edits into another's.
+        key={location.id}
+        mode="dashboard"
         locationId={location.id}
+        vertical={location.vertical}
         currency={location.currency}
-        terms={t}
-        initial={{
-          policy: location.policy ?? {},
-          restaurant: location.restaurant,
-          salon: location.salon,
-        }}
-        // Checked on the server so a venue arriving at this page already
-        // misconfigured — seeded years ago, or edited by an older build — is
-        // told before it changes anything else.
-        initialFindings={validateVenue(location)}
+        current={currentVenue(location)}
+        lengthsRequired={serviceLengthsRequired(location)}
+        diary={onBellineDiary(location)}
+        country={venueMarket(location)}
       />
 
       <VersionHistory

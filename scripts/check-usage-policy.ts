@@ -522,6 +522,32 @@ await test("the billing page shows the chooser for a trial, not only for a paid 
   assert.match(form, /applies from your first plan/);
 });
 
+await test("the chooser's radios are real radios, and its options are not in capitals", () => {
+  const css = fs.readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
+  const form = fs.readFileSync(path.join(process.cwd(), "src/app/(app)/billing/UsagePolicy.tsx"), "utf8");
+  // The text-field rule (width 100%, padding, background, box-shadow focus)
+  // reaches every <input>; radios and checkboxes must be given all of it back.
+  const reset = css.match(/input\[type="radio"\],\s*input\[type="checkbox"\]\s*\{([^}]*)\}/);
+  assert.ok(reset, "no radio/checkbox reset after the text-field rule");
+  for (const undo of [/width:\s*16px/, /padding:\s*0/, /background:\s*none/, /box-shadow:\s*none/, /border:\s*0/]) {
+    assert.match(reset![1], undo, `the reset does not undo ${undo}`);
+  }
+  assert.ok(css.indexOf(reset![0]) > css.search(/\ninput,\s*textarea,\s*select\s*\{/), "the reset must come after the rule it undoes");
+  // Keyboard focus survives `input:focus { outline: none }`.
+  assert.match(css, /input\[type="radio"\]:focus-visible,\s*input\[type="checkbox"\]:focus-visible\s*\{[^}]*outline:\s*2px/);
+  // The labels: sentence case, by a class that says so.
+  const plain = css.match(/label\.label-plain,\s*label\.choice\s*\{([^}]*)\}/);
+  assert.ok(plain, "no sentence-case label class");
+  assert.match(plain![1], /text-transform:\s*none/);
+  assert.match(form, /className="choice"/);
+  assert.doesNotMatch(form, /type="radio"[^>]*style=\{\{[^}]*width/, "a radio styled like a text field");
+  assert.doesNotMatch(form, /textTransform:\s*"uppercase"/);
+  // The names the end-to-end test clicks by.
+  assert.match(form, /title: "Stop at the allowance"/);
+  assert.match(form, /"Save choice"/);
+  assert.match(form, /text: "Saved\."/);
+});
+
 await test("packs are live in the catalogue now that the policy works", () => {
   for (const pack of PACKS) assert.equal(pack.status, "live", pack.id);
 });

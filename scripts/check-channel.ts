@@ -316,7 +316,7 @@ console.log("\n\x1b[1mThe forwarding test call\x1b[0m\n");
     assert.equal(venue().onboarding?.channels.phone?.verification, undefined, "the window stayed open after verifying");
     assert.equal(listCalls(venue().id).length, before, "the test call shows in the venue's calls and counts");
     assert.ok(listCalls(venue().id, { includeTests: true }).some((c) => c.id === call.id));
-    assert.equal(journey(venue()).steps.find((s) => s.id === "channels")!.done, true);
+    assert.equal(journey(venue()).steps.find((s) => s.id === "phone")!.done, true);
     assert.equal(verificationState(venue()).state, "verified");
   });
 

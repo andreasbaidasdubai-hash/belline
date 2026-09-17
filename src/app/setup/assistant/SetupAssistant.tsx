@@ -180,9 +180,9 @@ export default function SetupAssistant({
           </ul>
         ) : (
           <div style={{ display: "grid", gap: 8, fontSize: 13 }}>
-            <a href="/golive">Forward your phone line →</a>
-            <a href="/website">Add it to your website →</a>
-            <a href="/test">Talk to it now →</a>
+            <a href="/setup/phone">Forward your phone line →</a>
+            <a href="/setup/website">Add it to your website →</a>
+            <a href="/channels">Talk to it now →</a>
           </div>
         )}
         <p className="muted" style={{ fontSize: 11.5, margin: "14px 0 0", lineHeight: 1.55 }}>

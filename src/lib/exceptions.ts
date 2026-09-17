@@ -62,7 +62,7 @@ interface KindMeta {
 }
 
 export const KIND_META: Record<ExceptionKind, KindMeta> = {
-  pool_empty: { label: "No number available", next: "Buy or assign a number for this venue, then tell the owner it is on the Go live page.", belle: true },
+  pool_empty: { label: "No number available", next: "Buy or assign a number for this venue, then tell the owner it is on their Phone page (Channels, then Phone).", belle: true },
   number_assign_failed: { label: "Number could not be assigned", next: "Check the number in Twilio and assign it by hand.", belle: true },
   forwarding_unverified_2x: { label: "Forwarding failed twice", next: "Call the owner and walk through their carrier or phone system settings.", belle: true },
   whatsapp_rejected: { label: "WhatsApp number refused", next: "Read Meta's reason and help the owner with the next attempt.", belle: true },

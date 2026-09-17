@@ -329,8 +329,117 @@ console.log("\nHow it looks — the venue's choices, within the guidelines\n");
     const js = fs.readFileSync(path.join(process.cwd(), "public", "embed.js"), "utf8");
     assert.ok(js.includes('"/api/embed/" + encodeURIComponent(key) + "/config"'));
     assert.ok(js.includes("the defaults are already on screen"));
-    // The mark is not configurable: no path in the bell comes from the config.
+    // No drawing comes from the config: no path in the bell, no icon, no SVG.
+    // The one picture it may carry instead is the venue's logo (below), and
+    // only from Belline's own /api/logo/.
     assert.ok(!/cfg\.(bell|icon|mark|svg)/.test(js));
+  });
+
+  // -------------------------------------------------------------------------
+  // The logo on the button, and ringing.
+
+  await test("the button mark is the bell or the logo, and ringing is on or off — anything else is refused", () => {
+    const logo = parseAppearance({ buttonMark: "logo", ring: true });
+    assert.ok(logo.ok && logo.appearance.buttonMark === "logo" && logo.appearance.ring === true);
+    const bell = parseAppearance({ buttonMark: "bell", ring: false });
+    assert.ok(bell.ok && bell.appearance.buttonMark === "bell" && bell.appearance.ring === false);
+    const other = parseAppearance({ buttonMark: "https://evil.example/logo.png" });
+    assert.ok(!other.ok && other.problem.field === "buttonMark");
+    const yes = parseAppearance({ ring: "yes" });
+    assert.ok(!yes.ok && yes.problem.field === "ring");
+  });
+
+  await test("by default the button shows the bell and does not ring", () => {
+    const look = resolveAppearance({});
+    assert.equal(look.buttonMark, "bell");
+    assert.equal(look.ring, false);
+    assert.equal(look.logoUrl, null);
+    // A logo uploaded but not chosen stays off the button.
+    assert.equal(resolveAppearance({}, "en", "/api/logo/lg_" + "a".repeat(24)).buttonMark, "bell");
+  });
+
+  await test("the logo is drawn only when chosen and uploaded; a choice without a logo falls back to the bell", () => {
+    const url = "/api/logo/lg_" + "b".repeat(24);
+    const chosen = resolveAppearance({ buttonMark: "logo" }, "en", url);
+    assert.equal(chosen.buttonMark, "logo");
+    assert.equal(chosen.logoUrl, url);
+    const noLogo = resolveAppearance({ buttonMark: "logo" }, "en", null);
+    assert.equal(noLogo.buttonMark, "bell", "a button with no logo to draw was told to draw one");
+    assert.equal(noLogo.logoUrl, null);
+  });
+
+  await test("the widget config carries the mark, the logo URL and the ring, and still nothing private", () => {
+    const url = "/api/logo/lg_" + "c".repeat(24);
+    const cfg = widgetConfig(
+      {
+        key: "be_x",
+        enabled: true,
+        allowedOrigins: ["https://secret.example"],
+        maxCallsPerDay: 40,
+        maxCallSeconds: 300,
+        appearance: { buttonMark: "logo", ring: true },
+      },
+      null,
+      "en",
+      null,
+      url,
+    );
+    assert.equal(cfg.buttonMark, "logo");
+    assert.equal(cfg.logoUrl, url);
+    assert.equal(cfg.ring, true);
+    assert.ok(!JSON.stringify(cfg).includes("secret.example"));
+    const route = fs.readFileSync(path.join(process.cwd(), "src", "app", "api", "embed", "[key]", "config", "route.ts"), "utf8");
+    assert.match(route, /widgetConfig\(location\.embed, link, answersIn\(location\), logoUrlFor\(location\)\)/);
+  });
+
+  await test("embed.js draws only a Belline-served logo, decoratively, and puts the bell back if it fails", () => {
+    const js = fs.readFileSync(path.join(process.cwd(), "public", "embed.js"), "utf8");
+    assert.match(js, /cfg\.buttonMark === "logo"/);
+    // The URL from the config must be one of our logo paths, and is joined to our own origin.
+    assert.ok(js.includes("/^\\/api\\/logo\\/lg_[0-9a-f]{24}$/.test(cfg.logoUrl)"), "the logo URL is not checked");
+    assert.match(js, /img\.src = origin \+ logoPath/);
+    assert.match(js, /img\.alt = ""/);
+    assert.match(js, /addEventListener\("error"[\s\S]{0,120}replaceChild\(mark, holder\)/);
+    assert.ok(!/innerHTML[^;]*logo/i.test(js), "the logo is written as HTML");
+    // Always in a white circle, contained.
+    assert.match(js, /\.belline-logo\{[^}]*background:#FFFFFF/);
+    assert.match(js, /object-fit:contain/);
+  });
+
+  await test("embed.js rings only without reduced motion, follows the setting live, and stops for good on interaction", () => {
+    const js = fs.readFileSync(path.join(process.cwd(), "public", "embed.js"), "utf8");
+    assert.match(js, /cfg\.ring === true\) ring\(\)/);
+    // Checked before every burst, and a change to the setting quiets a running ring.
+    assert.match(js, /matchMedia\("\(prefers-reduced-motion: reduce\)"\)/);
+    assert.match(js, /if \(!reducedMotion\(\) && !document\.hidden && !panel\)/);
+    assert.match(js, /addEventListener\("change", onChange\)/);
+    assert.match(js, /if \(stillQuery\.matches\) quiet\(\)/);
+    // No matchMedia at all counts as reduce.
+    assert.match(js, /return !stillQuery \|\| stillQuery\.matches/);
+    // Any sign of interest stops it permanently: the flag is never reset.
+    assert.match(js, /\["pointerenter", "mouseenter", "focusin", "touchstart", "click"\]\.forEach[\s\S]{0,120}stopRinging/);
+    assert.match(js, /function open\(kind, label\) \{\s*if \(panel\) return;\s*stopRinging\(\);/);
+    assert.equal((js.match(/ringStopped = true/g) ?? []).length, 1);
+    assert.ok(!/ringStopped = false;[\s\S]*ringStopped = false/.test(js), "something turns ringing back on");
+    assert.match(js, /if \(ringStopped\) return;/);
+    // Occasional, not constant, and capped per page view.
+    assert.match(js, /var RING_EVERY_MS = \d{5}/);
+    assert.match(js, /var RING_MAX = \d+;/);
+    // And the CSS itself is scoped to the widget's own names and off under reduced motion.
+    assert.match(js, /@keyframes belline-shake/);
+    assert.ok(!/@keyframes (bell-|shake|ring|nudge)/.test(js), "an unscoped keyframe name could collide with the host page");
+    assert.match(js, /@media \(prefers-reduced-motion:reduce\)\{[^"]*"\s*\+\s*"\.belline-ringing/);
+  });
+
+  await test("the editor offers the logo only once there is one, rings in the preview, and respects reduced motion", () => {
+    const editor = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "website", "WidgetEditor.tsx"), "utf8");
+    assert.match(editor, /<LogoUpload locationId=\{locationId\} logoUrl=\{logoUrl\} onChange=\{setLogoUrl\} \/>/);
+    assert.match(editor, /const disabled = value === "logo" && !logoUrl;/);
+    assert.match(editor, /Upload your logo above to put it on the button/);
+    assert.match(editor, /Ring the button now and then/);
+    assert.match(editor, /logoUrl\?: string \| null;/, "logoUrl must stay an optional prop");
+    const css = fs.readFileSync(path.join(process.cwd(), "src", "app", "globals.css"), "utf8");
+    assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.widget-preview-ring,/);
   });
 }
 
@@ -370,9 +479,9 @@ console.log("\n\x1b[1mKnowing it is installed\x1b[0m\n");
     assert.equal(fresh().onboarding?.channels.web?.lastCheckAt, later.toISOString());
   });
 
-  await test("detection completes the phone-and-website step without any conversation", () => {
+  await test("detection completes the website chat step without any conversation", () => {
     const steps = journey(fresh()).steps;
-    assert.equal(steps.find((s) => s.id === "channels")!.done, true);
+    assert.equal(steps.find((s) => s.id === "website")!.done, true);
   });
 
   await test("a switched-off widget is not detected, even from its own site", () => {
@@ -420,7 +529,8 @@ console.log("\n\x1b[1mKnowing it is installed\x1b[0m\n");
   });
 
   await test("the install panel and the header follow the save, not the server's snapshot of the page", () => {
-    const page = source("src/app/(app)/website/page.tsx");
+    // The section both the Channels tab and the setup step render.
+    const page = source("src/app/(app)/channels/sections.tsx");
     const editor = source("src/app/(app)/website/WidgetEditor.tsx");
 
     // The defect this pins: the panel that watches for the widget appearing
