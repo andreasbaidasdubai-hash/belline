@@ -404,6 +404,10 @@ console.log("\nHow it looks — the venue's choices, within the guidelines\n");
     // Always in a white circle, contained.
     assert.match(js, /\.belline-logo\{[^}]*background:#FFFFFF/);
     assert.match(js, /object-fit:contain/);
+    // The logo holder is a span too: relabelling must not write the label over
+    // it, and the rules that hide a round or phone button's label must not hide it.
+    assert.ok(!js.includes('fab.querySelector("span")'), "relabel would overwrite the logo with the label");
+    assert.ok(!/\.belline-fab span\{display:none\}/.test(js), "a round or phone-width button hides the logo");
   });
 
   await test("embed.js rings only without reduced motion, follows the setting live, and stops for good on interaction", () => {

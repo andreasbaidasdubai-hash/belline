@@ -90,7 +90,7 @@
     ".belline-fab.belline-second svg{color:#0071E3}" +
     // Round: the mark alone, as on a phone, at every width.
     ".belline-dock.belline-round .belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
-    ".belline-dock.belline-round .belline-fab span{display:none}" +
+    ".belline-dock.belline-round .belline-fab span:not(.belline-logo){display:none}" +
     ".belline-panel{position:fixed;bottom:24px;right:24px;z-index:2147483001;" +
     "width:380px;max-width:calc(100vw - 32px);height:520px;max-height:calc(100vh - 48px);" +
     "border:0;border-radius:14px;overflow:hidden;background:#1D1D1F;" +
@@ -103,7 +103,7 @@
     "max-width:none;max-height:none;border-radius:0}" +
     ".belline-dock{bottom:18px;right:18px}.belline-dock.belline-left{left:18px}" +
     ".belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
-    ".belline-fab span{display:none}}" +
+    ".belline-fab span:not(.belline-logo){display:none}}" +
     // The venue's logo in place of the mark: always in a white circle, with
     // room around it, so a dark logo on a dark accent (or a white one on
     // white) still reads. Contained, never cropped — a wordmark stays whole.
@@ -269,7 +269,7 @@
     var fab = fabs[kind];
     if (!fab || !label) return;
     fab.setAttribute("aria-label", label);
-    var span = fab.querySelector("span");
+    var span = fab.querySelector("span:not(.belline-logo)");
     if (span) span.textContent = label;
   }
 
