@@ -504,7 +504,7 @@ test("clinic: every step done, the checks pass, and Go live stays shut", async (
 
 // ── Plan section 5 steps with no local path yet ──────────────────────────────
 
-test.fixme("landing: 'Connect your business' on the site opens /checkout?trade=salon", () => {
+test.fixme("landing: 'Get started' on the site opens /checkout?trade=salon", () => {
   // The marketing site is built separately (site/, other config); the app has no landing route to click from.
 });
 test.fixme("import: a website and price-list.pdf read by the stub model into a draft with one missing price", () => {

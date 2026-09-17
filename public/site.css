@@ -3205,7 +3205,7 @@ footer a { color: var(--bl-ink-900); }
 }
 
 /* --- Land und Sprache ------------------------------------------------------
-   Der Wähler im Kopf, vor "Connect your business" (scripts/site-locale.ts).
+   Der Wähler im Kopf, vor "Get started" (scripts/site-locale.ts).
    Im Markup ein <details>: ohne JavaScript klappt er auf, und jedes Land ist
    ein Link. site.js macht daraus einen Knopf mit aria-expanded. Links die
    Länder mit ihrer Währung, rechts nur die Sprachen, die es für dieses Land

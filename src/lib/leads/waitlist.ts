@@ -7,7 +7,7 @@ import { SIGNUP_LIMITS, clientKey, createSignupLimiter } from "../onboarding/lim
  * The waitlist on the German pages.
  *
  * Belline is not open in Germany, Austria or Switzerland, so the German
- * landing pages sell nothing: every button that says "Connect your business"
+ * landing pages sell nothing: every button that says "Get started"
  * in English goes to this form. An entry is a lead like the book-a-call form's
  * (leads/index.ts), stored in the same JSON store and shown on the same staff
  * Enquiries screen, with `source: "dach-waitlist"`, the country chosen and no

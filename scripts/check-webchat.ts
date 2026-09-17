@@ -797,7 +797,7 @@ await test("the trade pages label the demo number as international and state the
   const seconds = Number(/demo:\s*\{[\s\S]*?maxCallSeconds:\s*(\d+)/.exec(seed)![1]);
   assert.equal(seconds, 600, "the demo cap changed — update the trade pages' call length");
   assert.match(html, /up to ten minutes/, "the trade pages do not say calls last up to ten minutes");
-  assert.match(html, /Connect your business/);
+  assert.match(html, /Get started/);
 });
 
 await test("the call panel's status words say request and handover, never booked", () => {
@@ -1220,7 +1220,7 @@ await test("the German pages say Belline answers in English and is not available
     assert.match(plain, /Belline antwortet derzeit auf Englisch/, `${file}: the hero does not say English`);
     assert.match(plain, /Noch nicht verfügbar in Deutschland, Österreich und der Schweiz/, `${file}: the hero does not say not available`);
     assert.match(plain, /Spricht Belline Deutsch\? Noch nicht\. Belline antwortet auf Englisch/, `${file}: the FAQ does not say English`);
-    assert.doesNotMatch(visible, /app\.belline\.ai\/checkout|Connect your business|Unternehmen verbinden|Start free|Kostenlos starten/, `${file}: a way to buy`);
+    assert.doesNotMatch(visible, /app\.belline\.ai\/checkout|Get started|Connect your business|Unternehmen verbinden|Start free|Kostenlos starten/, `${file}: a way to buy`);
     for (const cta of visible.matchAll(/<a class="(?:btn|nav-cta)[^"]*" href="([^"]+)"[^>]*>([^<]+)<\/a>/g)) {
       const [, href, label] = cta;
       assert.ok(href === "#warteliste" || /call\?start=1/.test(href), `${file}: "${label}" goes to ${href}`);

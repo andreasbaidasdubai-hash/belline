@@ -282,7 +282,7 @@ What Belline is not: an "AI from the future", a developer platform, cute or cart
 
 ### Writing rules
 
-- Sentence case everywhere, including buttons. Actions say what happens: "Connect your business", "Speak to Belline", "Call back".
+- Sentence case everywhere, including buttons. Actions say what happens: "Get started", "Speak to Belline", "Call back".
 - Name what the owner cares about (calls, enquiries, follow-ups), not how the system works.
 - **Honesty is the brand.** Never say or imply that WhatsApp, a calendar or any integration is live before it is. Belline takes requests and passes them to the team; it does not book into a calendar or booking system. Use Available / Beta / Coming soon exactly as defined above.
 - No statistics, testimonials, customer logos or live counters on the website.
