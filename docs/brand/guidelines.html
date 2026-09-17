@@ -1,48 +1,48 @@
 <title>Belline Brand Guidelines</title>
-<meta name="description" content="The Bell Button in Navy + Electric Blue: logo, colour, type, iconography, photography, UI foundations and voice for Belline.">
+<meta name="description" content="The Bell Button in the Apple look: logo, colour, type, iconography, photography, UI foundations and voice for Belline.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
   /* Brand palette: fixed values, the same in every theme (swatches and marks). */
   :root {
-    --ground: #FFFFFF; --surface: #F2F4F7; --sunken: #E9ECF2;
-    --ink: #1B2735; --text2: #535862; --muted-fixed: #5B6472;
-    --blue: #2667FF; --blue-hover: #1A4FD6; --blue-pressed: #1640B0;
-    --tint: #EEF3FF; --line: #DDE3F5; --lit: #8FB0FF;
-    --navy: #1B2735; --navy-card: #253041; --on-navy-2: #C3CAD6;
+    --ground: #FFFFFF; --surface: #F5F5F7; --sunken: #E8E8ED;
+    --ink: #1D1D1F; --text2: #6E6E73; --muted-fixed: #6E6E73;
+    --blue: #0071E3; --blue-hover: #006EDB; --blue-pressed: #0062C4; --accent-fixed: #0066CC;
+    --tint: #F0F6FE; --line: #D2D2D7; --lit: #2997FF;
+    --navy: #1D1D1F; --navy-card: #333336; --on-navy-2: #A1A1A6;
     --success: #047857; --success-tint: #ECFDF5;
     --warning: #B45309; --warning-tint: #FFFBEB;
     --danger: #B91C1C; --danger-tint: #FEF2F2;
 
     /* Page chrome: light theme tokens. */
-    --bg: #FFFFFF; --panel: #F2F4F7; --card: #FFFFFF;
-    --text: #1B2735; --text-2: #535862; --muted: #5B6472;
-    --accent-text: #1A4FD6; --rule: #DDE3F5; --rule-strong: rgba(27,39,53,.18);
-    --focus: #2667FF;
-    --display: "Plus Jakarta Sans", ui-sans-serif, "Segoe UI", Arial, sans-serif;
-    --sans: "Inter", ui-sans-serif, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --bg: #FFFFFF; --panel: #F5F5F7; --card: #FFFFFF;
+    --text: #1D1D1F; --text-2: #6E6E73; --muted: #6E6E73;
+    --accent-text: #0066CC; --rule: #D2D2D7; --rule-strong: rgba(0,0,0,.18);
+    --focus: #0071E3;
+    --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Helvetica Neue", Arial, sans-serif;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #1B2735; --panel: #253041; --card: #212C3B;
-      --text: #FFFFFF; --text-2: #C3CAD6; --muted: #AEB6C4;
-      --accent-text: #8FB0FF; --rule: rgba(255,255,255,.12); --rule-strong: rgba(255,255,255,.24);
+      --bg: #000000; --panel: #1D1D1F; --card: #1D1D1F;
+      --text: #F5F5F7; --text-2: #A1A1A6; --muted: #A1A1A6;
+      --accent-text: #2997FF; --rule: rgba(255,255,255,.12); --rule-strong: rgba(255,255,255,.24);
       --focus: #FFFFFF;
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #1B2735; --panel: #253041; --card: #212C3B;
-    --text: #FFFFFF; --text-2: #C3CAD6; --muted: #AEB6C4;
-    --accent-text: #8FB0FF; --rule: rgba(255,255,255,.12); --rule-strong: rgba(255,255,255,.24);
+    --bg: #000000; --panel: #1D1D1F; --card: #1D1D1F;
+    --text: #F5F5F7; --text-2: #A1A1A6; --muted: #A1A1A6;
+    --accent-text: #2997FF; --rule: rgba(255,255,255,.12); --rule-strong: rgba(255,255,255,.24);
     --focus: #FFFFFF;
     color-scheme: dark;
   }
 
   * { box-sizing: border-box; }
-  body { background: var(--bg); color: var(--text); font: 400 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+  body { background: var(--bg); color: var(--text); font: 400 17px/1.47 var(--sans); letter-spacing: -0.022em; -webkit-font-smoothing: antialiased; }
   .page { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 80px; }
   a { color: var(--accent-text); text-underline-offset: 3px; }
   a:hover { color: var(--text); }
@@ -50,8 +50,8 @@
   code { font: 500 .88em/1.4 ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--panel); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
 
   h1, h2, h3 { font-family: var(--display); color: var(--text); margin: 0; }
-  h1 { font-weight: 500; font-size: clamp(2.6rem, 1.4rem + 5vw, 5rem); line-height: 1.02; letter-spacing: -.04em; }
-  h2 { font-weight: 500; font-size: clamp(1.8rem, 1.3rem + 2vw, 2.6rem); line-height: 1.08; letter-spacing: -.035em; }
+  h1 { font-weight: 600; font-size: clamp(2.6rem, 1.4rem + 5vw, 5rem); line-height: 1.07; letter-spacing: -.015em; }
+  h2 { font-weight: 600; font-size: clamp(1.8rem, 1.3rem + 2vw, 2.6rem); line-height: 1.1; letter-spacing: -.01em; }
   h3 { font-weight: 600; font-size: 1.15rem; line-height: 1.3; letter-spacing: -.015em; margin-bottom: 10px; }
   p { margin: 0 0 14px; color: var(--text-2); max-width: 68ch; }
   .label { font-size: 14px; font-weight: 600; color: var(--accent-text); margin: 0 0 12px; }
@@ -77,9 +77,9 @@
   .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .card { background: var(--card); border: 1px solid var(--rule); border-radius: 16px; padding: 20px; min-width: 0; }
+  .card { background: var(--card); border: 1px solid var(--rule); border-radius: 18px; padding: 20px; min-width: 0; }
   .card p:last-child { margin-bottom: 0; }
-  .tile { border-radius: 16px; border: 1px solid var(--rule); min-height: 150px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .tile { border-radius: 18px; border: 1px solid var(--rule); min-height: 150px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
   .tile .cap { font-size: 13px; font-weight: 600; }
   .tile .show { flex: 1; display: flex; align-items: center; justify-content: center; }
   .on-ground { background: var(--ground); color: var(--ink); border-color: var(--line); }
@@ -89,7 +89,7 @@
   .on-navy .cap { color: var(--on-navy-2); }
 
   .clear { position: relative; display: inline-flex; align-items: center; gap: 16px; padding: 16px; border: 1px dashed var(--blue); background: var(--ground); color: var(--ink); max-width: 100%; }
-  .clear .x { position: absolute; width: 16px; height: 16px; background: var(--tint); color: var(--blue-hover); font-size: 10px; font-weight: 600; display: grid; place-items: center; }
+  .clear .x { position: absolute; width: 16px; height: 16px; background: var(--tint); color: var(--accent-fixed); font-size: 10px; font-weight: 600; display: grid; place-items: center; }
 
   .dont { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
   .dont li { padding-left: 22px; position: relative; color: var(--text-2); }
@@ -97,44 +97,44 @@
   .dont li::after { content: ""; position: absolute; left: 2px; top: .62em; width: 10px; height: 2px; background: var(--danger); transform: rotate(-45deg); }
 
   .swatch { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  .chip { height: 76px; border-radius: 16px; border: 1px solid var(--rule); display: flex; align-items: flex-end; padding: 8px 10px; font-size: 12px; font-weight: 600; }
+  .chip { height: 76px; border-radius: 18px; border: 1px solid var(--rule); display: flex; align-items: flex-end; padding: 8px 10px; font-size: 12px; font-weight: 600; }
   .swatch b { font-size: 14px; }
   .swatch span { font-size: 13px; color: var(--muted); line-height: 1.4; }
 
-  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 16px; background: var(--card); }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 18px; background: var(--card); }
   table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
   th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
   th { font-size: 13px; font-weight: 600; color: var(--text-2); background: var(--panel); }
   tr:last-child td { border-bottom: 0; }
-  td .pair { display: inline-flex; align-items: center; justify-content: center; min-width: 88px; height: 30px; padding: 0 10px; border-radius: 8px; font-weight: 600; font-size: 13px; border: 1px solid rgba(27,39,53,.12); }
+  td .pair { display: inline-flex; align-items: center; justify-content: center; min-width: 88px; height: 30px; padding: 0 10px; border-radius: 8px; font-weight: 600; font-size: 13px; border: 1px solid rgba(0,0,0,.12); }
   .num { font-variant-numeric: tabular-nums; font-weight: 600; }
 
   .spec { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 8px 24px; align-items: center; padding: 12px 0; border-top: 1px solid var(--rule); }
   .spec .meta { font-size: 13px; color: var(--muted); line-height: 1.4; }
   .spec .meta b { color: var(--text); }
 
-  .btn { display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 22px; border-radius: 999px; font: 600 15px/1 var(--sans); text-decoration: none; white-space: nowrap; cursor: pointer; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 21px; border-radius: 980px; font: 400 17px/1 var(--sans); text-decoration: none; white-space: nowrap; cursor: pointer; }
   .btn-primary { background: var(--blue); color: #FFFFFF; border: 1px solid var(--blue); padding-left: 6px; }
   .btn-primary:hover { background: var(--blue-hover); border-color: var(--blue-hover); color: #FFFFFF; }
   .btn-primary:focus-visible { outline-color: var(--blue); }
-  .btn-secondary { background: var(--ground); color: var(--ink); border: 1px solid rgba(27,39,53,.18); }
+  .btn-secondary { background: var(--ground); color: var(--ink); border: 1px solid rgba(0,0,0,.18); }
   .btn-secondary:hover { background: var(--tint); color: var(--ink); }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .state { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
   .state-available { background: var(--success-tint); color: var(--success); }
   .state-available::before { content: ""; width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
   .state-beta { background: var(--tint); color: var(--blue-hover); }
-  .state-soon { border-color: rgba(27,39,53,.18); color: var(--muted-fixed); font-weight: 500; background: var(--ground); }
+  .state-soon { border-color: rgba(0,0,0,.18); color: var(--muted-fixed); font-weight: 500; background: var(--ground); }
   .state-request { border-color: var(--ink); color: var(--ink); background: var(--ground); }
-  .demo { background: var(--ground); color: var(--ink); border-radius: 16px; border: 1px solid var(--line); padding: 20px; }
+  .demo { background: var(--ground); color: var(--ink); border-radius: 18px; border: 1px solid var(--line); padding: 20px; }
   .demo p { color: var(--text2); }
-  .demo .label { color: var(--blue-hover); }
+  .demo .label { color: var(--accent-fixed); }
   .field { display: grid; gap: 6px; }
   .field label { font-size: 13px; font-weight: 600; }
-  .field .input { height: 46px; border-radius: 10px; border: 1px solid rgba(27,39,53,.18); outline: 2px solid var(--blue); outline-offset: 2px; background: #fff; padding: 0 14px; display: flex; align-items: center; font-size: 15px; }
+  .field .input { height: 46px; border-radius: 12px; border: 1px solid rgba(0,0,0,.18); outline: 2px solid var(--blue); outline-offset: 2px; background: #fff; padding: 0 14px; display: flex; align-items: center; font-size: 15px; }
   .field small { font-size: 12px; color: var(--muted-fixed); margin-top: 6px; }
 
-  .bands { display: grid; gap: 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+  .bands { display: grid; gap: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); }
   .band { padding: 20px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
   .band .mini { border-radius: 12px; padding: 14px; font-size: 13px; min-height: 64px; }
   .band-white { background: var(--ground); }
@@ -146,7 +146,7 @@
   .band .mini b { display: block; font-family: var(--display); font-weight: 600; margin-bottom: 4px; color: var(--ink); }
   .band-navy .mini b { color: #fff; }
 
-  .chat { background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; max-width: 380px; }
+  .chat { background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; max-width: 380px; }
   .chat header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #fff; border-bottom: 1px solid var(--line); }
   .chat header b { display: block; font-size: 15px; }
   .chat header span { font-size: 12px; color: var(--muted-fixed); }
@@ -155,7 +155,7 @@
   .them { background: var(--surface); color: var(--ink); border-bottom-left-radius: 4px; justify-self: start; }
   .you { background: var(--blue); color: #FFFFFF; border-bottom-right-radius: 4px; justify-self: end; }
   .chat footer { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
-  .chat footer .type { flex: 1; height: 40px; border-radius: 999px; border: 1px solid rgba(27,39,53,.18); display: flex; align-items: center; padding: 0 14px; font-size: 14px; color: var(--muted-fixed); }
+  .chat footer .type { flex: 1; height: 40px; border-radius: 999px; border: 1px solid rgba(0,0,0,.18); display: flex; align-items: center; padding: 0 14px; font-size: 14px; color: var(--muted-fixed); }
   .chat footer .send { width: 40px; height: 40px; border-radius: 999px; background: var(--blue); display: grid; place-items: center; flex: none; }
 
   .voice-attr { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 4px 16px; padding: 12px 0; border-top: 1px solid var(--rule); }
@@ -187,8 +187,8 @@
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <g id="bell"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g>
-    <g id="badge"><circle cx="24" cy="24" r="24" fill="#2667FF"/><g fill="#FFFFFF" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></g>
-    <g id="badge-inv"><circle cx="24" cy="24" r="24" fill="#FFFFFF"/><g fill="#2667FF" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></g>
+    <g id="badge"><circle cx="24" cy="24" r="24" fill="#0071E3"/><g fill="#FFFFFF" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></g>
+    <g id="badge-inv"><circle cx="24" cy="24" r="24" fill="#FFFFFF"/><g fill="#0071E3" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></g>
   </defs>
 </svg>
 
@@ -205,9 +205,9 @@
 
   <div class="hero">
     <div>
-      <p class="label">Brand guidelines, Navy + Electric Blue</p>
+      <p class="label">Brand guidelines, Apple look</p>
       <h1>The bell button.</h1>
-      <p>The front-desk bell becomes a button you press: one solid blue badge with a white bell that is the logo, the app icon, the avatar and the shape of every primary action. White grounds, navy type, calm grey body text and a single electric blue give Belline the steady look of business software an owner can trust with their phone line.</p>
+      <p>The front-desk bell becomes a button you press: one solid blue badge with a white bell that is the logo, the app icon, the avatar and the shape of every primary action. White and light grey grounds, near-black type, calm grey secondary text and a single Apple blue give Belline the quiet, precise look of software an owner can trust with their phone line.</p>
       <p>The calm, competent front-of-house professional who is always there and never oversteps. For owners of any UAE business that takes calls, messages or bookings and wants their phone and website chat answered properly, with the team told what to do next.</p>
     </div>
     <div class="hero-mark"><svg viewBox="0 0 48 48" role="img" aria-label="The Belline bell button"><use href="#badge"/></svg></div>
@@ -216,14 +216,14 @@
   <section id="logo">
     <div class="sec-head">
       <h2>Logo</h2>
-      <p>White bell on blue; blue bell on white for blue grounds. The name is Plus Jakarta Sans 700 in navy. The bell never leaves its badge in a lockup, and the badge never takes a colour outside these pairs. Files live in <code>public/brand/</code> with the same names and URLs as before; the wordmark SVGs carry their own font subset.</p>
+      <p>White bell on blue; blue bell on white for blue grounds. The name is the wordmark at 700 in ink #1D1D1F. The bell never leaves its badge in a lockup, and the badge never takes a colour outside these pairs. Files live in <code>public/brand/</code> with the same names and URLs as before; the wordmark SVGs carry their own font subset (the unchanged Plus Jakarta Sans letters), which is part of the mark, not a loaded webfont.</p>
     </div>
 
     <div class="grid g4">
-      <div class="tile on-ground"><div class="cap">Primary lockup</div><div class="show"><span class="lockup"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge"/></svg><span class="wordmark" style="font-size:30px;color:#1B2735">Belline</span></span></div></div>
+      <div class="tile on-ground"><div class="cap">Primary lockup</div><div class="show"><span class="lockup"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge"/></svg><span class="wordmark" style="font-size:30px;color:#1D1D1F">Belline</span></span></div></div>
       <div class="tile on-blue"><div class="cap">On blue</div><div class="show"><span class="lockup"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge-inv"/></svg><span class="wordmark" style="font-size:30px">Belline</span></span></div></div>
       <div class="tile on-navy"><div class="cap">Mono white</div><div class="show"><span class="lockup"><svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true"><mask id="ko"><rect width="48" height="48" fill="#fff"/><g fill="#000" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><use href="#bell"/></g></mask><circle cx="24" cy="24" r="24" fill="#FFFFFF" mask="url(#ko)"/></svg><span class="wordmark" style="font-size:30px;color:#FFFFFF">Belline</span></span></div></div>
-      <div class="tile on-ground"><div class="cap">Stacked</div><div class="show" style="flex-direction:column;gap:8px"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge"/></svg><span class="wordmark" style="font-size:26px;color:#1B2735">Belline</span></div></div>
+      <div class="tile on-ground"><div class="cap">Stacked</div><div class="show" style="flex-direction:column;gap:8px"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><use href="#badge"/></svg><span class="wordmark" style="font-size:26px;color:#1D1D1F">Belline</span></div></div>
     </div>
 
     <div class="grid g2" style="margin-top:16px">
@@ -256,7 +256,7 @@
       <div class="card">
         <h3>Do not</h3>
         <ul class="dont">
-          <li>Put navy on blue (3.22:1). Words and bells on blue are always white.</li>
+          <li>Put ink on blue (3.58:1). Words and bells on blue are always white.</li>
           <li>Add gradients, shadows, glows, outlines, sound waves or motion lines to the mark.</li>
           <li>Take the bell out of its badge in a lockup, or rotate, stretch or re-space it.</li>
           <li>Set "Belline" in another face or weight, or track it tighter than −0.025em.</li>
@@ -266,11 +266,11 @@
       <div class="card">
         <h3>Avatars and icons</h3>
         <div class="row" style="gap:18px;margin-bottom:12px">
-          <svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Avatar, circular crop"><circle cx="48" cy="48" r="48" fill="#2667FF"/><g fill="#FFFFFF" transform="translate(24 24) scale(1)"><use href="#bell"/></g></svg>
-          <svg width="40" height="40" viewBox="0 0 96 96" role="img" aria-label="Avatar at 40 pixels"><circle cx="48" cy="48" r="48" fill="#2667FF"/><g fill="#FFFFFF" transform="translate(24 24)"><use href="#bell"/></g></svg>
-          <svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Favicon at 16 pixels"><circle cx="8" cy="8" r="8" fill="#2667FF"/><g fill="#FFFFFF"><rect x="7" y="3" width="2" height="2" rx="1"/><path d="M3.5 10.5a4.5 4.5 0 0 1 9 0Z"/><rect x="3" y="11.5" width="10" height="2" rx="1"/></g></svg>
+          <svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Avatar, circular crop"><circle cx="48" cy="48" r="48" fill="#0071E3"/><g fill="#FFFFFF" transform="translate(24 24) scale(1)"><use href="#bell"/></g></svg>
+          <svg width="40" height="40" viewBox="0 0 96 96" role="img" aria-label="Avatar at 40 pixels"><circle cx="48" cy="48" r="48" fill="#0071E3"/><g fill="#FFFFFF" transform="translate(24 24)"><use href="#bell"/></g></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="Favicon at 16 pixels"><circle cx="8" cy="8" r="8" fill="#0071E3"/><g fill="#FFFFFF"><rect x="7" y="3" width="2" height="2" rx="1"/><path d="M3.5 10.5a4.5 4.5 0 0 1 9 0Z"/><rect x="3" y="11.5" width="10" height="2" rx="1"/></g></svg>
         </div>
-        <p>Full-bleed blue square with the white bell inside the central 50%, so any circular crop is safe. WhatsApp is <b style="color:var(--text)">coming soon</b>: every WhatsApp avatar preview or caption must say so. The OG image is white, names phone and website chat only, and carries a small blue dot grid.</p>
+        <p>Full-bleed blue square with the white bell inside the central 50%, so any circular crop is safe. WhatsApp is <b style="color:var(--text)">coming soon</b>: every WhatsApp avatar preview or caption must say so. The OG image is white fading to the blue tint, names phone and website chat only, and carries a small blue dot grid.</p>
       </div>
     </div>
   </section>
@@ -278,92 +278,91 @@
   <section id="colour">
     <div class="sec-head">
       <h2>Colour</h2>
-      <p>White grounds, a light grey band, navy type, grey body text and one electric blue. One dark navy band per page. Success, warning and danger are separate from the accent and only mean status. Every text pairing below meets WCAG AA; ratios are computed from the hex values.</p>
+      <p>White grounds, a light grey band, near-black type, grey secondary text and one Apple blue. One near-black band per page. Success, warning and danger are separate from the accent and only mean status. Every text pairing below meets WCAG AA; ratios are computed from the hex values.</p>
     </div>
     <div class="grid g4">
-      <div class="swatch"><div class="chip" style="background:#FFFFFF;color:#1B2735">Navy 15.13</div><b>Ground</b><span>#FFFFFF · page, cards, inputs</span></div>
-      <div class="swatch"><div class="chip" style="background:#F2F4F7;color:#5B6472">Muted 5.43</div><b>Grey band</b><span>#F2F4F7 · band, table heads</span></div>
-      <div class="swatch"><div class="chip" style="background:#E9ECF2;color:#5B6472">Muted 5.05</div><b>Sunken</b><span>#E9ECF2 · hover, pressed rows</span></div>
-      <div class="swatch"><div class="chip" style="background:#EEF3FF;color:#1A4FD6">Blue hover 6.03</div><b>Blue tint</b><span>#EEF3FF · selected, Beta, washes</span></div>
-      <div class="swatch"><div class="chip" style="background:#1B2735;color:#FFFFFF">White 15.13</div><b>Navy</b><span>#1B2735 · headings, text, the dark band</span></div>
-      <div class="swatch"><div class="chip" style="background:#253041;color:#C3CAD6">On navy 2 8.07</div><b>Navy card</b><span>#253041 · cards on the dark band</span></div>
-      <div class="swatch"><div class="chip" style="background:#535862;color:#FFFFFF">White 7.14</div><b>Text 2</b><span>#535862 · body text</span></div>
-      <div class="swatch"><div class="chip" style="background:#5B6472;color:#FFFFFF">White 5.98</div><b>Muted</b><span>#5B6472 · meta text</span></div>
-      <div class="swatch"><div class="chip" style="background:#2667FF;color:#FFFFFF">White 4.70</div><b>Blue</b><span>#2667FF · primary, focus, links on white</span></div>
-      <div class="swatch"><div class="chip" style="background:#1A4FD6;color:#FFFFFF">White 6.70</div><b>Blue hover</b><span>#1A4FD6 · hover, small accent text · pressed #1640B0</span></div>
-      <div class="swatch"><div class="chip" style="background:#FFFFFF;color:#1B2735;border-color:#DDE3F5">Line #DDE3F5</div><b>Card line</b><span>#DDE3F5 · card borders, never text</span></div>
+      <div class="swatch"><div class="chip" style="background:#FFFFFF;color:#1D1D1F">Ink 16.83</div><b>Ground</b><span>#FFFFFF · page, cards, inputs</span></div>
+      <div class="swatch"><div class="chip" style="background:#F5F5F7;color:#6E6E73">Grey 4.66</div><b>Grey band</b><span>#F5F5F7 · band, table heads, hover rows</span></div>
+      <div class="swatch"><div class="chip" style="background:#E8E8ED;color:#1D1D1F">Ink 13.78</div><b>Sunken</b><span>#E8E8ED · pressed; grey text only 4.15 here</span></div>
+      <div class="swatch"><div class="chip" style="background:#F0F6FE;color:#0066CC">Accent text 5.12</div><b>Blue tint</b><span>#F0F6FE · selected, Beta, washes</span></div>
+      <div class="swatch"><div class="chip" style="background:#1D1D1F;color:#F5F5F7">Off-white 15.46</div><b>Ink</b><span>#1D1D1F · headings, text, the dark band</span></div>
+      <div class="swatch"><div class="chip" style="background:#333336;color:#A1A1A6">On dark 2 4.90</div><b>Dark card</b><span>#333336 · cards on the dark band</span></div>
+      <div class="swatch"><div class="chip" style="background:#6E6E73;color:#FFFFFF">White 5.07</div><b>Grey</b><span>#6E6E73 · secondary and meta text</span></div>
+      <div class="swatch"><div class="chip" style="background:#0066CC;color:#FFFFFF">White 5.57</div><b>Accent text</b><span>#0066CC · links and small blue text</span></div>
+      <div class="swatch"><div class="chip" style="background:#0071E3;color:#FFFFFF">White 4.70</div><b>Blue</b><span>#0071E3 · primary, badge, focus</span></div>
+      <div class="swatch"><div class="chip" style="background:#006EDB;color:#FFFFFF">White 4.94</div><b>Blue hover</b><span>#006EDB · hover · pressed #0062C4</span></div>
+      <div class="swatch"><div class="chip" style="background:#FFFFFF;color:#1D1D1F;border-color:#D2D2D7">Line #D2D2D7</div><b>Card line</b><span>#D2D2D7 · card borders, never text</span></div>
       <div class="swatch"><div class="chip" style="background:#047857;color:#FFFFFF">White 5.48</div><b>Success</b><span>#047857 · Available · tint #ECFDF5</span></div>
       <div class="swatch"><div class="chip" style="background:#B45309;color:#FFFFFF">White 5.02</div><b>Warning</b><span>#B45309 · waiting, due · tint #FFFBEB</span></div>
       <div class="swatch"><div class="chip" style="background:#B91C1C;color:#FFFFFF">White 6.47</div><b>Danger</b><span>#B91C1C · errors · tint #FEF2F2</span></div>
     </div>
 
-    <p style="margin-top:22px"><b style="color:var(--text)">Muted was adjusted.</b> The first pick, #667085, passes on white (4.97) but only just on the grey band (4.51) and fails on the hover surface. #5B6472 is a step darker and passes on every ground it sits on. <b style="color:var(--text)">Blue as small text</b> is #2667FF on white only (4.70); on the grey band (4.27) and the tint (4.23) small blue text uses #1A4FD6.</p>
+    <p style="margin-top:22px"><b style="color:var(--text)">Greys.</b> Apple's #6E6E73 is 5.07 on white, 4.66 on the grey band and 4.67 on the tint, so it is both secondary and meta text. The lighter #86868B is 3.62 on white: large or decorative text only. On sunken the grey is 4.15, so the dashboard's hover rows use the grey band. <b style="color:var(--text)">Blue.</b> White on #0071E3 is 4.70. Apple's own hover #0077ED leaves white at 4.32, so hover goes a step darker (#006EDB, 4.94). Small blue text is #0066CC everywhere (5.57 on white, 5.11 on the grey band).</p>
 
     <h3 style="margin-top:22px">Text pairings</h3>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Sample</th><th>Text</th><th>Ground</th><th>Ratio</th><th>Use</th></tr></thead>
         <tbody>
-          <tr><td><span class="pair" style="background:#FFFFFF;color:#1B2735">Aa</span></td><td>Navy</td><td>White</td><td class="num">15.13</td><td>All text</td></tr>
-          <tr><td><span class="pair" style="background:#F2F4F7;color:#1B2735">Aa</span></td><td>Navy</td><td>Grey band</td><td class="num">13.73</td><td>All text</td></tr>
-          <tr><td><span class="pair" style="background:#E9ECF2;color:#1B2735">Aa</span></td><td>Navy</td><td>Sunken</td><td class="num">12.78</td><td>Hovered rows</td></tr>
-          <tr><td><span class="pair" style="background:#EEF3FF;color:#1B2735">Aa</span></td><td>Navy</td><td>Blue tint</td><td class="num">13.61</td><td>Selected rows</td></tr>
-          <tr><td><span class="pair" style="background:#FFFFFF;color:#535862">Aa</span></td><td>Text 2</td><td>White</td><td class="num">7.14</td><td>Body</td></tr>
-          <tr><td><span class="pair" style="background:#F2F4F7;color:#535862">Aa</span></td><td>Text 2</td><td>Grey band</td><td class="num">6.48</td><td>Body on the band</td></tr>
-          <tr><td><span class="pair" style="background:#E9ECF2;color:#535862">Aa</span></td><td>Text 2</td><td>Sunken</td><td class="num">6.04</td><td>Hovered rows</td></tr>
-          <tr><td><span class="pair" style="background:#EEF3FF;color:#535862">Aa</span></td><td>Text 2</td><td>Blue tint</td><td class="num">6.43</td><td>Washes, selected rows</td></tr>
-          <tr><td><span class="pair" style="background:#FFFFFF;color:#5B6472">Aa</span></td><td>Muted</td><td>White</td><td class="num">5.98</td><td>Meta</td></tr>
-          <tr><td><span class="pair" style="background:#F2F4F7;color:#5B6472">Aa</span></td><td>Muted</td><td>Grey band</td><td class="num">5.43</td><td>Meta on the band</td></tr>
-          <tr><td><span class="pair" style="background:#E9ECF2;color:#5B6472">Aa</span></td><td>Muted</td><td>Sunken</td><td class="num">5.05</td><td>Meta on hover</td></tr>
-          <tr><td><span class="pair" style="background:#EEF3FF;color:#5B6472">Aa</span></td><td>Muted</td><td>Blue tint</td><td class="num">5.38</td><td>Meta on selected</td></tr>
-          <tr><td><span class="pair" style="background:#2667FF;color:#FFFFFF">Aa</span></td><td>White</td><td>Blue</td><td class="num">4.70</td><td>Primary buttons, visitor bubble</td></tr>
-          <tr><td><span class="pair" style="background:#1A4FD6;color:#FFFFFF">Aa</span></td><td>White</td><td>Blue hover</td><td class="num">6.70</td><td>Primary hover</td></tr>
-          <tr><td><span class="pair" style="background:#1640B0;color:#FFFFFF">Aa</span></td><td>White</td><td>Blue pressed</td><td class="num">8.77</td><td>Primary pressed</td></tr>
-          <tr><td><span class="pair" style="background:#FFFFFF;color:#2667FF">Aa</span></td><td>Blue</td><td>White</td><td class="num">4.70</td><td>Links on white only</td></tr>
-          <tr><td><span class="pair" style="background:#F2F4F7;color:#1A4FD6">Aa</span></td><td>Blue hover</td><td>Grey band</td><td class="num">6.08</td><td>Links and labels on grey</td></tr>
-          <tr><td><span class="pair" style="background:#E9ECF2;color:#1A4FD6">Aa</span></td><td>Blue hover</td><td>Sunken</td><td class="num">5.66</td><td>Links on hover</td></tr>
-          <tr><td><span class="pair" style="background:#EEF3FF;color:#1A4FD6">Aa</span></td><td>Blue hover</td><td>Blue tint</td><td class="num">6.03</td><td>Beta, current nav item</td></tr>
-          <tr><td><span class="pair" style="background:#1B2735;color:#FFFFFF">Aa</span></td><td>White</td><td>Navy</td><td class="num">15.13</td><td>The navy band</td></tr>
-          <tr><td><span class="pair" style="background:#253041;color:#FFFFFF">Aa</span></td><td>White</td><td>Navy card</td><td class="num">13.31</td><td>Card headings on the band</td></tr>
-          <tr><td><span class="pair" style="background:#253041;color:#C3CAD6">Aa</span></td><td>On navy 2</td><td>Navy card</td><td class="num">8.07</td><td>Card text on the band (9.18 on navy)</td></tr>
-          <tr><td><span class="pair" style="background:#1B2735;color:#8FB0FF">Aa</span></td><td>Blue lit</td><td>Navy</td><td class="num">7.08</td><td>Accent on navy (6.23 on navy card)</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#1D1D1F">Aa</span></td><td>Ink</td><td>White</td><td class="num">16.83</td><td>All text</td></tr>
+          <tr><td><span class="pair" style="background:#F5F5F7;color:#1D1D1F">Aa</span></td><td>Ink</td><td>Grey band</td><td class="num">15.46</td><td>All text</td></tr>
+          <tr><td><span class="pair" style="background:#E8E8ED;color:#1D1D1F">Aa</span></td><td>Ink</td><td>Sunken</td><td class="num">13.78</td><td>Pressed fills</td></tr>
+          <tr><td><span class="pair" style="background:#F0F6FE;color:#1D1D1F">Aa</span></td><td>Ink</td><td>Blue tint</td><td class="num">15.48</td><td>Selected rows</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#6E6E73">Aa</span></td><td>Grey (text 2, muted)</td><td>White</td><td class="num">5.07</td><td>Secondary and meta text</td></tr>
+          <tr><td><span class="pair" style="background:#F5F5F7;color:#6E6E73">Aa</span></td><td>Grey</td><td>Grey band</td><td class="num">4.66</td><td>Text on the band, hover rows</td></tr>
+          <tr><td><span class="pair" style="background:#F0F6FE;color:#6E6E73">Aa</span></td><td>Grey</td><td>Blue tint</td><td class="num">4.67</td><td>Washes, selected rows</td></tr>
+          <tr><td><span class="pair" style="background:#E8E8ED;color:#6E6E73">Aa</span></td><td>Grey</td><td>Sunken</td><td class="num">4.15</td><td>Large text only</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#86868B">Aa</span></td><td>Light grey #86868B</td><td>White</td><td class="num">3.62</td><td>Large or decorative only (3.33 on grey)</td></tr>
+          <tr><td><span class="pair" style="background:#0071E3;color:#FFFFFF">Aa</span></td><td>White</td><td>Blue</td><td class="num">4.70</td><td>Primary buttons, visitor bubble</td></tr>
+          <tr><td><span class="pair" style="background:#006EDB;color:#FFFFFF">Aa</span></td><td>White</td><td>Blue hover</td><td class="num">4.94</td><td>Primary hover</td></tr>
+          <tr><td><span class="pair" style="background:#0062C4;color:#FFFFFF">Aa</span></td><td>White</td><td>Blue pressed</td><td class="num">5.93</td><td>Primary pressed</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#0066CC">Aa</span></td><td>Accent text</td><td>White</td><td class="num">5.57</td><td>Links, eyebrows</td></tr>
+          <tr><td><span class="pair" style="background:#F5F5F7;color:#0066CC">Aa</span></td><td>Accent text</td><td>Grey band</td><td class="num">5.11</td><td>Links and labels on grey</td></tr>
+          <tr><td><span class="pair" style="background:#E8E8ED;color:#0066CC">Aa</span></td><td>Accent text</td><td>Sunken</td><td class="num">4.56</td><td>Links on pressed fills</td></tr>
+          <tr><td><span class="pair" style="background:#F0F6FE;color:#0066CC">Aa</span></td><td>Accent text</td><td>Blue tint</td><td class="num">5.12</td><td>Labels on washes</td></tr>
+          <tr><td><span class="pair" style="background:#F0F6FE;color:#006EDB">Aa</span></td><td>Blue hover</td><td>Blue tint</td><td class="num">4.54</td><td>Beta, current nav item</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#0071E3">Aa</span></td><td>Blue</td><td>White</td><td class="num">4.70</td><td>Large blue text (4.31 on grey, 4.32 on tint)</td></tr>
+          <tr><td><span class="pair" style="background:#1D1D1F;color:#F5F5F7">Aa</span></td><td>Off-white</td><td>Dark band</td><td class="num">15.46</td><td>The dark band (white 16.83)</td></tr>
+          <tr><td><span class="pair" style="background:#333336;color:#F5F5F7">Aa</span></td><td>Off-white</td><td>Dark card</td><td class="num">11.57</td><td>Card headings on the band (white 12.59)</td></tr>
+          <tr><td><span class="pair" style="background:#333336;color:#A1A1A6">Aa</span></td><td>On dark 2</td><td>Dark card</td><td class="num">4.90</td><td>Card text on the band (6.54 on the band)</td></tr>
+          <tr><td><span class="pair" style="background:#1D1D1F;color:#2997FF">Aa</span></td><td>Blue lit</td><td>Dark band</td><td class="num">5.58</td><td>Accent on dark (6.96 on black; 4.18 on a dark card: large only)</td></tr>
           <tr><td><span class="pair" style="background:#ECFDF5;color:#047857">Aa</span></td><td>Success</td><td>Success tint</td><td class="num">5.21</td><td>Available badge</td></tr>
-          <tr><td><span class="pair" style="background:#FFFFFF;color:#047857">Aa</span></td><td>Success</td><td>White</td><td class="num">5.48</td><td>Success text (4.98 on grey)</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#047857">Aa</span></td><td>Success</td><td>White</td><td class="num">5.48</td><td>Success text (5.04 on grey)</td></tr>
           <tr><td><span class="pair" style="background:#FFFBEB;color:#B45309">Aa</span></td><td>Warning</td><td>Warning tint</td><td class="num">4.84</td><td>Waiting panels</td></tr>
-          <tr><td><span class="pair" style="background:#FFFFFF;color:#B45309">Aa</span></td><td>Warning</td><td>White</td><td class="num">5.02</td><td>Warning text (4.56 on grey)</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#B45309">Aa</span></td><td>Warning</td><td>White</td><td class="num">5.02</td><td>Warning text (4.61 on grey)</td></tr>
           <tr><td><span class="pair" style="background:#FEF2F2;color:#B91C1C">Aa</span></td><td>Danger</td><td>Danger tint</td><td class="num">5.91</td><td>Error panels</td></tr>
-          <tr><td><span class="pair" style="background:#FFFFFF;color:#B91C1C">Aa</span></td><td>Danger</td><td>White</td><td class="num">6.47</td><td>Field errors</td></tr>
+          <tr><td><span class="pair" style="background:#FFFFFF;color:#B91C1C">Aa</span></td><td>Danger</td><td>White</td><td class="num">6.47</td><td>Field errors (5.94 on grey)</td></tr>
           <tr><td><span class="pair" style="background:#B91C1C;color:#FFFFFF">Aa</span></td><td>White</td><td>Danger</td><td class="num">6.47</td><td>Counts, destructive fills</td></tr>
         </tbody>
       </table>
     </div>
-    <p style="margin-top:14px">Non-text: the blue badge is 4.70:1 on white and 4.27:1 on the grey band; the white bell is 4.70:1 on the badge. The blue focus ring is 4.70 / 4.27 / 3.97 / 4.23 on white, grey band, sunken and tint. On navy it would be 3.22 (2.83 on a navy card), so the navy band uses white focus rings (15.13 / 13.31). The card line #DDE3F5 (1.28 on white) is decoration only. Navy on blue is 3.22:1 and is never used.</p>
+    <p style="margin-top:14px">Non-text: the blue badge is 4.70:1 on white and 4.31:1 on the grey band; the white bell is 4.70:1 on the badge. The blue focus ring is 4.70 / 4.31 / 3.85 / 4.32 on white, grey band, sunken and tint. On the dark band it would be 3.58 (2.68 on a dark card), so the dark band uses white focus rings (16.83 / 12.59). The card line #D2D2D7 (1.51 on white) is decoration only. Ink on blue is 3.58:1 and is never used.</p>
   </section>
 
   <section id="type">
     <div class="sec-head">
       <h2>Typography</h2>
-      <p><b style="color:var(--text)">Plus Jakarta Sans</b> for display and headings: 500 for large headlines with tight tracking, 600 for small headings, 700 only in the wordmark. <b style="color:var(--text)">Inter 400–600</b> for everything you read and every button. Both from Google Fonts, with system fallbacks. No all-caps labels.</p>
+      <p><b style="color:var(--text)">The system stack:</b> SF Pro Display and SF Pro Text on Apple devices, <b style="color:var(--text)">Inter</b> everywhere else. SF Pro may not be self-hosted or served as a webfont on a non-Apple site, so it is only named for devices that already have it; Inter is the one webfont loaded. Headlines 600, body 400 at 17 px with Apple's tracking, buttons 17 px at 400. No all-caps labels.</p>
     </div>
     <div class="card">
-      <div class="spec"><div class="meta"><b>Display</b> · Jakarta 500<br>72/1.02 web · 32/1.1 app · −0.04em</div><div style="font-family:var(--display);font-weight:500;font-size:clamp(2.2rem,1.4rem + 3.4vw,3.6rem);line-height:1.02;letter-spacing:-.04em">Someone always answers.</div></div>
-      <div class="spec"><div class="meta"><b>H2</b> · Jakarta 500<br>48/1.08 web · 25/1.2 app · −0.035em</div><div style="font-family:var(--display);font-weight:500;font-size:clamp(1.8rem,1.3rem + 2vw,2.6rem);line-height:1.08;letter-spacing:-.035em">Set up from what you already have.</div></div>
-      <div class="spec"><div class="meta"><b>H3</b> · Jakarta 600<br>20/1.3 web · 16/1.3 app · −0.015em</div><div style="font-family:var(--display);font-weight:600;font-size:1.25rem;line-height:1.3;letter-spacing:-.015em">Your team gets the hard ones</div></div>
-      <div class="spec"><div class="meta"><b>Body</b> · Inter 400<br>17/1.6 web · 15/1.5 app</div><div style="font-size:17px;line-height:1.6;color:var(--text-2)">Belline answers from your own information and passes anything it should not decide to your team.</div></div>
-      <div class="spec"><div class="meta"><b>Small</b> · Inter 400<br>14/1.55 web · 13/1.45 app</div><div style="font-size:14px;color:var(--muted)">Handed to reception at 14:32 · caller asked for a named dentist.</div></div>
-      <div class="spec"><div class="meta"><b>Button</b> · Inter 600<br>15/1 web · 13/1 app</div><div><span class="btn btn-secondary" style="cursor:default">Speak to Belline</span></div></div>
+      <div class="spec"><div class="meta"><b>Display</b> · 600<br>74/1.07 web · 32/1.1 app · −0.015em</div><div style="font-family:var(--display);font-weight:600;font-size:clamp(2.2rem,1.4rem + 3.4vw,3.6rem);line-height:1.07;letter-spacing:-.015em">Someone always answers.</div></div>
+      <div class="spec"><div class="meta"><b>H2</b> · 600<br>48/1.1 web · 25/1.2 app · −0.01em</div><div style="font-family:var(--display);font-weight:600;font-size:clamp(1.8rem,1.3rem + 2vw,2.6rem);line-height:1.1;letter-spacing:-.01em">Set up from what you already have.</div></div>
+      <div class="spec"><div class="meta"><b>H3</b> · 600<br>18/1.3 web · 16/1.3 app · −0.015em</div><div style="font-family:var(--display);font-weight:600;font-size:1.15rem;line-height:1.3;letter-spacing:-.015em">Your team gets the hard ones</div></div>
+      <div class="spec"><div class="meta"><b>Body</b> · 400<br>17/1.47 web · 15/1.5 app · −0.022em web</div><div style="font-size:17px;line-height:1.47;letter-spacing:-.022em;color:var(--text-2)">Belline answers from your own information and passes anything it should not decide to your team.</div></div>
+      <div class="spec"><div class="meta"><b>Small</b> · 400<br>14/1.55 web · 13/1.45 app</div><div style="font-size:14px;letter-spacing:0;color:var(--muted)">Handed to reception at 14:32 · caller asked for a named dentist.</div></div>
+      <div class="spec"><div class="meta"><b>Button</b> · 400<br>17/1 web · 13/1 app</div><div><span class="btn btn-secondary" style="cursor:default">Speak to Belline</span></div></div>
     </div>
   </section>
 
   <section id="icons">
     <div class="sec-head">
       <h2>Iconography and photography</h2>
-      <p>Icons are quiet line drawings in blue on the website and navy in the dashboard; the bell is the only filled pictogram and only ever appears as the mark. The blue dot grid behind the website hero is decoration, never behind text. Photography shows real front-of-house moments, not technology.</p>
+      <p>Icons are quiet line drawings in blue on the website and ink in the dashboard; the bell is the only filled pictogram and only ever appears as the mark. The blue dot grid behind the website hero is decoration, never behind text. Photography shows real front-of-house moments, not technology.</p>
     </div>
     <div class="grid g2">
       <div class="card">
         <h3>Icons</h3>
-        <div class="row" style="gap:18px;margin-bottom:14px;color:#2667FF">
+        <div class="row" style="gap:18px;margin-bottom:14px;color:#0071E3">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Phone" role="img"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Microphone" role="img"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Website chat" role="img"><path d="M4 4h16a1.5 1.5 0 0 1 1.5 1.5v10A1.5 1.5 0 0 1 20 17h-9l-5 4v-4H4a1.5 1.5 0 0 1-1.5-1.5v-10A1.5 1.5 0 0 1 4 4Z"/><path d="M7 9h10M7 12.5h6"/></svg>
@@ -383,14 +382,14 @@
   <section id="ui">
     <div class="sec-head">
       <h2>UI foundations</h2>
-      <p>Pills 999 px, website cards 16 px with a 1 px #DDE3F5 line, dashboard panels 14 px, inputs 10 px, a 4 px spacing base, no shadows on cards, and a 2 px blue focus ring (white on the navy band). The primary button is blue with white words and may carry the inverse bell button at its leading edge.</p>
+      <p>Pills 980 px, website tiles 18 px with a 1 px #D2D2D7 line, dashboard panels 14 px, inputs 12 px, a 4 px spacing base, no shadows on cards, and a 2 px blue focus ring (white on the dark band). The site header is Apple's translucent grey bar over a blur. The primary button is blue with white words and may carry the inverse bell button at its leading edge.</p>
     </div>
 
     <h3>Page rhythm</h3>
     <div class="bands" aria-label="Band rhythm example">
-      <div class="band band-white"><div class="mini"><b>White section</b>Thin blue-bordered cards with a blue line icon.</div><div class="mini"><b>Your phone</b>Available</div><div class="mini"><b>WhatsApp</b>Coming soon</div></div>
-      <div class="band band-navy"><div class="mini"><b>Navy band</b>One per page, navy cards, white text.</div><div class="mini"><b>It doesn't make things up.</b>Answers from your information.</div><div class="mini"><b>Urgent calls go to a person.</b>With a summary.</div></div>
-      <div class="band band-grey"><div class="mini"><b>Grey band</b>White cards on #F2F4F7.</div><div class="mini"><b>Check what it found</b>Fix anything wrong.</div><div class="mini"><b>Switch it on</b>Ring it yourself first.</div></div>
+      <div class="band band-white"><div class="mini"><b>White section</b>Hairline-bordered tiles with a blue line icon.</div><div class="mini"><b>Your phone</b>Available</div><div class="mini"><b>WhatsApp</b>Coming soon</div></div>
+      <div class="band band-navy"><div class="mini"><b>Dark band</b>One per page, #333336 cards, off-white text.</div><div class="mini"><b>It doesn't make things up.</b>Answers from your information.</div><div class="mini"><b>Urgent calls go to a person.</b>With a summary.</div></div>
+      <div class="band band-grey"><div class="mini"><b>Grey band</b>White cards on #F5F5F7.</div><div class="mini"><b>Check what it found</b>Fix anything wrong.</div><div class="mini"><b>Switch it on</b>Ring it yourself first.</div></div>
     </div>
 
     <div class="grid g2" style="margin-top:16px">
@@ -430,7 +429,7 @@
             <div class="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
           </footer>
         </div>
-        <p style="margin-top:14px">Sample venue, for illustration. The business speaks on the grey #F2F4F7, the visitor on blue with white words. Send is blue with a white arrow. On customers' sites the floating button defaults to blue with a white bell.</p>
+        <p style="margin-top:14px">Sample venue, for illustration. The business speaks on the grey #F5F5F7, the visitor on blue with white words. Send is blue with a white arrow. On customers' sites the floating button defaults to blue with a white bell.</p>
       </div>
     </div>
 
@@ -440,25 +439,28 @@
         <thead><tr><th>Token</th><th>Value</th><th>Mapped app names and earlier aliases</th></tr></thead>
         <tbody>
           <tr><td><code>--bl-ground</code></td><td>#FFFFFF</td><td><code>--bg</code>, <code>--panel</code>; alias <code>--bl-ivory</code>, <code>--bl-white</code></td></tr>
-          <tr><td><code>--bl-surface</code></td><td>#F2F4F7</td><td><code>--panel-2</code>; alias <code>--bl-sand</code></td></tr>
-          <tr><td><code>--bl-sunken</code></td><td>#E9ECF2</td><td><code>--hover</code></td></tr>
-          <tr><td><code>--bl-blue-line</code> / <code>--bl-border</code></td><td>#DDE3F5</td><td>Card borders; alias <code>--bl-indigo-line</code>, <code>--bl-rule-brass</code></td></tr>
-          <tr><td><code>--bl-rule</code> / <code>-soft</code> / <code>-strong</code></td><td>navy 12% / 7% / 18%</td><td><code>--border</code>, <code>--border-soft</code></td></tr>
-          <tr><td><code>--bl-ink-900</code></td><td>#1B2735</td><td><code>--text</code>; alias <code>--bl-ink</code></td></tr>
-          <tr><td><code>--bl-text-2</code></td><td>#535862</td><td><code>--text-2</code>; alias <code>--bl-graphite</code></td></tr>
-          <tr><td><code>--bl-muted</code></td><td>#5B6472</td><td><code>--muted</code>; alias <code>--bl-stone</code></td></tr>
-          <tr><td><code>--bl-blue</code></td><td>#2667FF</td><td><code>--accent</code>, <code>--brass</code>, <code>--gold</code>, <code>--brass-fill</code>; alias <code>--bl-indigo</code>, <code>--bl-brass</code></td></tr>
-          <tr><td><code>--bl-blue-hover</code> / <code>-pressed</code></td><td>#1A4FD6 / #1640B0</td><td><code>--accent-hover</code> / <code>--accent-pressed</code>; <code>--bl-accent-text</code>, alias <code>--bl-brass-desk</code></td></tr>
-          <tr><td><code>--bl-blue-tint</code></td><td>#EEF3FF</td><td><code>--accent-soft</code>; alias <code>--bl-indigo-tint</code>, <code>--bl-brass-tint</code></td></tr>
-          <tr><td><code>--bl-blue-lit</code></td><td>#8FB0FF</td><td><code>--gold-lit</code>; alias <code>--bl-indigo-lit</code>, <code>--bl-brass-lit</code></td></tr>
-          <tr><td><code>--bl-navy</code> / <code>--bl-navy-card</code></td><td>#1B2735 / #253041</td><td>The dark band and its cards; call screen</td></tr>
-          <tr><td><code>--bl-on-navy</code> / <code>-2</code></td><td>#FFFFFF / #C3CAD6</td><td>Text on the dark band</td></tr>
+          <tr><td><code>--bl-surface</code></td><td>#F5F5F7</td><td><code>--panel-2</code>, <code>--hover</code>; alias <code>--bl-sand</code></td></tr>
+          <tr><td><code>--bl-sunken</code></td><td>#E8E8ED</td><td>Pressed and sunken fills</td></tr>
+          <tr><td><code>--bl-blue-line</code> / <code>--bl-border</code></td><td>#D2D2D7</td><td>Card borders; alias <code>--bl-indigo-line</code>, <code>--bl-rule-brass</code></td></tr>
+          <tr><td><code>--bl-rule</code> / <code>-soft</code> / <code>-strong</code></td><td>black 12% / 7% / 18%</td><td><code>--border</code>, <code>--border-soft</code></td></tr>
+          <tr><td><code>--bl-ink-900</code></td><td>#1D1D1F</td><td><code>--text</code>; alias <code>--bl-ink</code></td></tr>
+          <tr><td><code>--bl-text-2</code></td><td>#6E6E73</td><td><code>--text-2</code>; alias <code>--bl-graphite</code></td></tr>
+          <tr><td><code>--bl-muted</code></td><td>#6E6E73</td><td><code>--muted</code>; alias <code>--bl-stone</code></td></tr>
+          <tr><td><code>--bl-blue</code></td><td>#0071E3</td><td><code>--accent</code>, <code>--brass</code>, <code>--brass-fill</code>; alias <code>--bl-indigo</code>, <code>--bl-brass</code></td></tr>
+          <tr><td><code>--bl-blue-hover</code> / <code>-pressed</code></td><td>#006EDB / #0062C4</td><td><code>--accent-hover</code> / <code>--accent-pressed</code></td></tr>
+          <tr><td><code>--bl-accent-text</code></td><td>#0066CC</td><td><code>--gold</code>, <code>--gold-ink</code>; alias <code>--bl-brass-desk</code></td></tr>
+          <tr><td><code>--bl-blue-tint</code></td><td>#F0F6FE</td><td><code>--accent-soft</code>; alias <code>--bl-indigo-tint</code>, <code>--bl-brass-tint</code></td></tr>
+          <tr><td><code>--bl-blue-lit</code></td><td>#2997FF</td><td><code>--gold-lit</code>; alias <code>--bl-indigo-lit</code>, <code>--bl-brass-lit</code></td></tr>
+          <tr><td><code>--bl-navy</code> / <code>--bl-navy-card</code></td><td>#1D1D1F / #333336</td><td>The dark band and its cards; call screen</td></tr>
+          <tr><td><code>--bl-on-navy</code> / <code>-2</code></td><td>#F5F5F7 / #A1A1A6</td><td>Text on the dark band</td></tr>
           <tr><td><code>--bl-success</code> / <code>-tint</code></td><td>#047857 / #ECFDF5</td><td><code>--ok</code> / <code>--ok-soft</code>; alias <code>--bl-lagoon</code></td></tr>
           <tr><td><code>--bl-warning</code> / <code>-tint</code></td><td>#B45309 / #FFFBEB</td><td><code>--warn</code> / <code>--warn-soft</code></td></tr>
           <tr><td><code>--bl-danger</code> / <code>-tint</code></td><td>#B91C1C / #FEF2F2</td><td><code>--bad</code> / <code>--bad-soft</code>; alias <code>--bl-alert</code></td></tr>
-          <tr><td><code>--bl-font-display</code> / <code>--bl-font-text</code></td><td>Plus Jakarta Sans / Inter</td><td>Weights <code>--bl-weight-display</code> 500, <code>--bl-weight-heading</code> 600</td></tr>
+          <tr><td><code>--bl-font-display</code> / <code>--bl-font-text</code></td><td>System stack: SF Pro Display / SF Pro Text, then Inter</td><td>Weights <code>--bl-weight-display</code> and <code>--bl-weight-heading</code> 600, <code>--bl-weight-button</code> 400</td></tr>
+          <tr><td><code>--bl-text-size</code> / <code>--bl-line-body</code> / <code>--bl-track-body</code></td><td>17px / 1.47 / −0.022em</td><td>Website body</td></tr>
+          <tr><td><code>--bl-track-display</code> / <code>-h1</code> / <code>-h2</code></td><td>−0.015em / −0.015em / −0.01em</td><td>Headlines</td></tr>
           <tr><td><code>--bl-focus</code></td><td>2px solid blue, 2px offset</td><td><code>--focus</code>; <code>--bl-focus-on-dark</code> white</td></tr>
-          <tr><td><code>--bl-radius-pill / card / panel / input</code></td><td>999 / 16 / 14 / 10 px</td><td>Buttons, website cards, dashboard panels, fields</td></tr>
+          <tr><td><code>--bl-radius-pill / card / panel / input</code></td><td>980 / 18 / 14 / 12 px</td><td>Buttons, website tiles, dashboard panels, fields</td></tr>
         </tbody>
       </table>
     </div>
