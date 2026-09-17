@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
-import type { EmbedAppearance, EmbedConfig, EmbedMode, Location } from "./types";
+import type { EmbedAppearance, EmbedConfig, EmbedMode, Location, VenueLanguage } from "./types";
+import { languageEntry } from "../config/languages";
+import { copy } from "./customer-copy";
 import { listCalls, upsertLocation } from "./store";
 import { dateIn, todayIn } from "./time";
 import { serviceState } from "./billing/entitlement";
@@ -306,11 +308,21 @@ import { resolveAppearance } from "./embed-look";
  * so it is built from a whitelist. The origins list, the ceilings and the
  * key's owner are not in it and must not be.
  */
-export function widgetConfig(config: EmbedConfig, whatsappLink: string | null, language: "en" | "de" = "en") {
+export function widgetConfig(
+  config: EmbedConfig,
+  whatsappLink: string | null,
+  language: VenueLanguage = "en",
+  /** "Also speaks Deutsch", in the main language, where the business answers in more than one. */
+  notice: string | null = null,
+) {
   const look = resolveAppearance(config.appearance, language);
   return {
     mode: modeOf(config) ?? "voice",
     ...look,
     whatsappLink: look.whatsapp ? whatsappLink : null,
+    // Only where there is something to say, so a one-language widget's config is what it was.
+    ...(notice ? { notice, lang: language, dir: languageEntry(language).dir } : {}),
+    // The widget's own words, where they are not English.
+    ...(language !== "en" ? { strings: { closeChat: copy(language, "embed.close_chat"), closeCall: copy(language, "embed.close_call") } } : {}),
   };
 }

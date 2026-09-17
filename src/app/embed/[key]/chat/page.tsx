@@ -7,7 +7,10 @@ import { listLocations } from "@/lib/store";
 import { originAllowed } from "@/lib/embed";
 import { chatAllowed, chatGate, newVisitorId, voiceAllowed } from "@/lib/webchat";
 import { widgetOpenFor } from "@/lib/embed-preview";
-import { lineFor, answersIn, inHouseSpelling } from "@/lib/language";
+import { lineFor, answersIn, inHouseSpelling, languageNotice } from "@/lib/language";
+
+/** The website chat is its own channel for a business that sets a language per channel. */
+const CHAT = { channel: "web_chat" } as const;
 import { CHAT_KEYS, copyTable } from "@/lib/customer-copy";
 import Chat from "./Chat";
 
@@ -86,10 +89,11 @@ export default async function ChatPage({
       agentName={location.agent.displayName}
       /** The 2-in-1: offered only where the venue has the bell on as well. */
       voiceHref={voiceAllowed(location.embed) ? voiceUrl(key, o) : undefined}
-      // Only for a German venue; English keeps the lines written in Chat.tsx.
-      {...(answersIn(location) === "en"
+      // Only for a venue not answered in English; English keeps the lines written in Chat.tsx.
+      {...(answersIn(location, CHAT) === "en"
         ? {}
-        : { language: answersIn(location), copy: spelledTable(location, copyTable(answersIn(location), CHAT_KEYS)) })}
+        : { language: answersIn(location, CHAT), copy: spelledTable(location, copyTable(answersIn(location, CHAT), CHAT_KEYS)) })}
+      notice={languageNotice(location, CHAT) ?? undefined}
     />
   );
 }

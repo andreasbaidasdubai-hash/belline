@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { seedIfEmpty } from "@/lib/seed";
 import { listLocations } from "@/lib/store";
 import { widgetConfig } from "@/lib/embed";
-import { answersIn } from "@/lib/language";
+import { answersIn, languageNotice } from "@/lib/language";
 import { venueWhatsApp, whatsappLink } from "@/lib/whatsapp";
 import { isActivated } from "@/lib/onboarding/journey";
 
@@ -40,7 +40,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   const account = await venueWhatsApp(location).catch(() => null);
   const link = account?.phoneE164 ? `https://wa.me/${account.phoneE164.slice(1)}` : whatsappLinkFor(location.id);
 
-  return NextResponse.json(widgetConfig(location.embed, link, answersIn(location)), {
+  return NextResponse.json(widgetConfig(location.embed, link, answersIn(location), languageNotice(location)), {
     headers: { ...cors(), "cache-control": "public, max-age=60" },
   });
 }

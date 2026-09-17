@@ -153,7 +153,7 @@ export async function visitorTurn(visitor: Visitor, input: TurnInput): Promise<N
         return NextResponse.json({
           ok: true,
           messages: [
-            { id: -1, sender: "ai", body: gate.message ?? lineFor(location, "embed.unavailable"), createdAt: now() },
+            { id: -1, sender: "ai", body: gate.message ?? lineFor(location, "embed.unavailable", {}, { channel: "web_chat" }), createdAt: now() },
           ],
           status: "AI_ACTIVE" as const,
           ceiling: true,

@@ -15,7 +15,32 @@ import {
   timesIn,
 } from "../agent/honesty";
 import { takesRequestsOnly } from "../booking/destination";
-import { answersIn, inHouseSpelling, lineFor } from "../language";
+import { allowedLanguages, answersIn, detectLanguage, inHouseSpelling, lineFor, type LanguageChannel } from "../language";
+import type { VenueLanguage } from "../types";
+
+/**
+ * The language a written conversation is in: the customer's latest message
+ * where it tells, otherwise the most recent earlier one that does. Null when
+ * nothing tells, or the business speaks one language.
+ */
+export function conversationLanguage(
+  location: Location,
+  channel: LanguageChannel,
+  latest: string,
+  history: Anthropic.MessageParam[],
+): VenueLanguage | null {
+  const allowed = allowedLanguages(location, { channel });
+  if (allowed.length < 2) return null;
+  const earlier = history
+    .filter((m) => m.role === "user" && typeof m.content === "string")
+    .map((m) => m.content as string)
+    .reverse();
+  for (const text of [latest, ...earlier]) {
+    const found = detectLanguage(text, allowed);
+    if (found) return found;
+  }
+  return null;
+}
 import { metaAdapter } from "./channel/meta";
 import { twilioAdapter } from "./channel/twilio";
 import { internalAdapter } from "./channel/internal";
@@ -139,18 +164,24 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   // Something Belline cannot read. Said plainly rather than answered around —
   // a receptionist who received a photograph and replied about opening hours
   // is worse than one who says it cannot see it.
+  // The channel, for a business that sets a language per channel.
+  const languageChannel = conversation.channel === "webchat" ? ("web_chat" as const) : ("whatsapp" as const);
+
   if (!accepted.text) {
-    const english = answersIn(location) === "en";
+    const earlier = (await agentHistory(tenantId, conversationId)) as Anthropic.MessageParam[];
+    // In the language the customer has been writing in, where the business speaks it.
+    const ctx = { channel: languageChannel, current: conversationLanguage(location, languageChannel, "", earlier) };
+    const english = answersIn(location, ctx) === "en";
     const say =
       accepted.message.content.type === "audio"
         ? english
           ? "I can't listen to voice notes just yet — could you type it instead?"
-          : lineFor(location, "messages.voice_note")
+          : lineFor(location, "messages.voice_note", {}, ctx)
         : english
           ? "I can't open that here. Could you tell me in a message what you need?"
-          : lineFor(location, "messages.attachment");
+          : lineFor(location, "messages.attachment", {}, ctx);
     return sendAndRecord(accepted, account, location, say, traceId, {
-      history: (await agentHistory(tenantId, conversationId)) as Anthropic.MessageParam[],
+      history: earlier,
       skipModel: true,
     });
   }
@@ -175,6 +206,10 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
     // So what the model spends on this thread can be summed per conversation.
     conversationId: String(conversationId),
   });
+  // Chat follows the customer the moment they write in another language the
+  // business speaks: the model is told which, and so is every line below.
+  const written = conversationLanguage(location, languageChannel, accepted.text, history);
+  session.setLanguage(written);
 
   let reply = "";
   let handoff: { reason: string; summary: string } | undefined;
@@ -235,10 +270,14 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
   // could fit you in is around 5:30" — and sentence-level repair threw the
   // correct half away with the wrong one.
   const requestsOnly = takesRequestsOnly(location);
-  // German venues are guarded in German as well as English: see honesty.ts.
-  // The guards below are bound to the venue's language once, here, so no
-  // call to them can forget it.
-  const language = answersIn(location);
+  // Guarded in every language the business speaks, as well as English: see
+  // honesty.ts. Any repair is written in the language the reply is in — what
+  // the model wrote, else what the customer wrote, else the main language.
+  // Bound once, here, so no call to the guards can forget it.
+  const allowed = allowedLanguages(location, { channel: languageChannel });
+  const replyLanguage = answersIn(location, { channel: languageChannel, current: detectLanguage(reply, allowed) ?? written });
+  const language = [replyLanguage, ...allowed.filter((l) => l !== replyLanguage)];
+  const ctx = { channel: languageChannel, current: replyLanguage };
   const checkSlotOffers = (text: string) => checkSlotOffersIn(text, language);
   const checkRequestReply = (text: string) => checkRequestReplyIn(text, language);
   const repairReply = (text: string, verdict: Parameters<typeof repairReplyIn>[1], opts: { requestsOnly: boolean }) =>
@@ -315,7 +354,7 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
 
   // Swiss spelling for a Swiss venue, whatever the model wrote. A no-op for
   // everyone else.
-  reply = inHouseSpelling(location, reply);
+  reply = inHouseSpelling(location, reply, ctx);
 
   if (modelError && !reply) {
     // Nothing usable came back. Escalating is the honest answer: a customer
@@ -326,7 +365,7 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
       conversationId,
       "the agent could not answer",
       `Belline failed to produce a reply (${modelError}). The customer is waiting.`,
-      lineFor(location, "messages.handed_over_unanswered"),
+      lineFor(location, "messages.handed_over_unanswered", {}, ctx),
     );
     return { sent: false, failed: modelError };
   }

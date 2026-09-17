@@ -185,7 +185,7 @@ export function chatGate(location: Location, opts: { via?: "widget" | "link" } =
     allowed: false,
     used,
     limit,
-    message: lineFor(location, "webchat.busy"),
+    message: lineFor(location, "webchat.busy", {}, { channel: "web_chat" }),
   };
 }
 
@@ -250,6 +250,6 @@ export function messageCeiling(location: Location): number {
  */
 export function ceilingMessage(location: Location): string {
   return location.businessPhone
-    ? lineFor(location, "webchat.ceiling_ring", { phone: location.businessPhone })
-    : lineFor(location, "webchat.ceiling");
+    ? lineFor(location, "webchat.ceiling_ring", { phone: location.businessPhone }, { channel: "web_chat" })
+    : lineFor(location, "webchat.ceiling", {}, { channel: "web_chat" });
 }

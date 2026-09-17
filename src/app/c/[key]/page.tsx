@@ -5,7 +5,10 @@ import { seedIfEmpty } from "@/lib/seed";
 import { newVisitorId } from "@/lib/webchat";
 import { widgetOpenFor } from "@/lib/embed-preview";
 import { findChatVenue, linkPageState } from "@/lib/chat-link";
-import { answersIn, inHouseSpelling } from "@/lib/language";
+import { answersIn, inHouseSpelling, languageNotice } from "@/lib/language";
+
+/** The chat link is website chat, for a business that sets a language per channel. */
+const CHAT = { channel: "web_chat" } as const;
 import { CHAT_KEYS, copyTable } from "@/lib/customer-copy";
 import Chat from "@/app/embed/[key]/chat/Chat";
 
@@ -47,14 +50,15 @@ export default async function ChatLinkPage({ params }: { params: Promise<{ key: 
         freshToken={signVisitorToken(location.id, newVisitorId())}
         venueName={location.name}
         agentName={location.agent.displayName}
-        {...(answersIn(location) === "en"
+        {...(answersIn(location, CHAT) === "en"
           ? {}
           : {
-              language: answersIn(location),
+              language: answersIn(location, CHAT),
               copy: Object.fromEntries(
-                Object.entries<string>(copyTable(answersIn(location), CHAT_KEYS)).map(([k, v]) => [k, inHouseSpelling(location, v)]),
+                Object.entries<string>(copyTable(answersIn(location, CHAT), CHAT_KEYS)).map(([k, v]) => [k, inHouseSpelling(location, v)]),
               ) as Record<(typeof CHAT_KEYS)[number], string>,
             })}
+        notice={languageNotice(location, CHAT) ?? undefined}
       />
     </div>
   );
