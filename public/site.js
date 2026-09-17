@@ -578,6 +578,97 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   if (/[?&]chat=1(?:&|$)/.test(window.location.search)) open();
 })();
 
+/* --- the video panel -------------------------------------------------------
+   Belline's video receptionist, on our own site — and only once it is switched
+   on for our own venue. There is no button in the markup: it is made here when
+   the venue's widget config says `video: true`, so with the feature off (as it
+   is in production until approved) the page is exactly the page it was, and a
+   failed fetch costs nothing but the button.
+
+   The panel is the same one a venue's website gets from embed.js: an iframe on
+   app.belline.ai, allowed the microphone and never the camera. */
+(function () {
+  var chatFab = document.querySelector("[data-chat]");
+  if (!chatFab || typeof window.fetch !== "function") return;
+  var chatUrl = chatFab.getAttribute("data-chat") || "";
+  var match = /^(https?:\/\/[^/]+)\/embed\/([^/]+)\/chat$/.exec(chatUrl);
+  if (!match) return;
+
+  var label = SITE_DE ? "Videoanruf mit Belle" : "Video call with Belle";
+  var fab = null;
+  var dock = null;
+
+  function close() {
+    if (!dock) return;
+    dock.remove();
+    dock = null;
+    fab.hidden = false;
+    document.removeEventListener("keydown", onKey);
+    try {
+      fab.focus();
+    } catch (e) {
+      /* focus is a nicety, never a failure */
+    }
+  }
+
+  function onKey(e) {
+    if (e.key === "Escape") close();
+  }
+
+  function open() {
+    if (dock) return;
+    fab.hidden = true;
+
+    dock = document.createElement("div");
+    dock.className = "video-dock";
+    dock.setAttribute("role", "region");
+    dock.setAttribute("aria-label", label);
+
+    var frame = document.createElement("iframe");
+    frame.src = match[1] + "/embed/" + match[2] + "/video?o=" + encodeURIComponent(location.origin);
+    frame.title = label;
+    frame.className = "video-frame";
+    // Microphone and sound; never the camera.
+    frame.allow = "microphone; autoplay";
+
+    var shut = document.createElement("button");
+    shut.type = "button";
+    shut.className = "call-shut";
+    shut.setAttribute("aria-label", SITE_DE ? "Videoanruf schließen" : "Close the video call");
+    shut.textContent = "×";
+    shut.addEventListener("click", close);
+
+    dock.appendChild(frame);
+    dock.appendChild(shut);
+    document.body.appendChild(dock);
+    shut.focus();
+    document.addEventListener("keydown", onKey);
+  }
+
+  fetch(match[1] + "/api/embed/" + match[2] + "/config", { mode: "cors" })
+    .then(function (r) {
+      return r.ok ? r.json() : null;
+    })
+    .then(function (cfg) {
+      if (!cfg || cfg.video !== true) return;
+      fab = document.createElement("button");
+      fab.type = "button";
+      fab.className = "video-fab";
+      fab.setAttribute("aria-label", label);
+      fab.title = label;
+      fab.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+        '<rect x="3" y="6.5" width="12.5" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/>' +
+        '<path d="M15.5 10.6 20.4 8v8l-4.9-2.6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>' +
+        '<span class="video-fab-say">' + label + "</span>";
+      fab.addEventListener("click", open);
+      document.body.appendChild(fab);
+    })
+    .catch(function () {
+      /* no button is the right failure */
+    });
+})();
+
 /* --- monthly / annual ------------------------------------------------------
    The prices for both cycles are already in the markup as data attributes, so
    the page reads correctly with no JavaScript at all and this only swaps
