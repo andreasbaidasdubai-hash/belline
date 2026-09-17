@@ -44,7 +44,7 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
       {tables.length === 0 ? (
         <div className="panel">
           <p className="muted" style={{ padding: "26px 18px", margin: 0, fontSize: 13.5 }}>
-            No tables yet. <Link href={`/venue?loc=${location.id}`}>Add them under How it works</Link>.
+            No tables yet. <Link href={`/venue/diary?loc=${location.id}`}>Add them under How it works</Link>.
           </p>
         </div>
       ) : (

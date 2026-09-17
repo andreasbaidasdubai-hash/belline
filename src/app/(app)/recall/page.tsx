@@ -93,7 +93,7 @@ export default async function RecallPage({
             weeks for a root touch-up, nothing at all for a filling. Set them and this list fills
             itself from the bookings you already have.
           </p>
-          <Link className="btn" href={`/venue?loc=${location.id}`}>
+          <Link className="btn" href={`/venue/diary?loc=${location.id}`}>
             Set recall intervals
           </Link>
         </div>

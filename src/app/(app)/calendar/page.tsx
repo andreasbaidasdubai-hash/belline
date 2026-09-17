@@ -211,7 +211,7 @@ export default async function CalendarPage({
           <p className="muted" style={{ padding: "30px 18px", margin: 0, fontSize: 13 }}>
             Nothing to draw a day against yet —{" "}
             {isRestaurant(location) ? "no tables are set up." : "no staff are set up."}{" "}
-            <Link href={`/venue?loc=${location.id}`} style={{ color: "var(--accent)", textDecoration: "underline" }}>
+            <Link href={`/venue/diary?loc=${location.id}`} style={{ color: "var(--accent)", textDecoration: "underline" }}>
               Add them under How it works
             </Link>
             .

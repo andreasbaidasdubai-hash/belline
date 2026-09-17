@@ -56,7 +56,7 @@ export default async function RotaPage({ searchParams }: { searchParams: Promise
       {rows.length === 0 ? (
         <div className="panel">
           <p className="muted" style={{ padding: "26px 18px", margin: 0, fontSize: 13.5 }}>
-            Nobody on the team yet. <Link href={`/venue?loc=${location.id}`}>Add people under How it works</Link>.
+            Nobody on the team yet. <Link href={`/venue/diary?loc=${location.id}`}>Add people under How it works</Link>.
           </p>
         </div>
       ) : (
