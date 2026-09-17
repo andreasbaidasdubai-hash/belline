@@ -7,7 +7,8 @@ import { seedIfEmpty } from "@/lib/seed";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 import AgentEditor from "./AgentEditor";
 import { venueMarket } from "@/lib/onboarding/rules";
-import { languageChoiceOpen } from "@/lib/language";
+import { answersIn, languageChoiceOpen, savedLanguages, selectableLanguages } from "@/lib/language";
+import LanguageSettings from "./LanguageSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +41,15 @@ export default async function AgentsPage({
         locationId={location.id}
         initial={location.agent}
         country={venueMarket(location)}
-        initialLanguage={location.language ?? "en"}
+        initialLanguage={answersIn(location)}
         languageOpen={languageChoiceOpen()}
+        languageSettings={
+          <LanguageSettings
+            locationId={location.id}
+            initial={savedLanguages(location)}
+            options={selectableLanguages().map((l) => ({ code: l.code, name: l.name, nativeName: l.nativeName, formality: l.formality }))}
+          />
+        }
       />
 
       <div className="panel" style={{ marginTop: 16 }}>

@@ -6,7 +6,7 @@ import type { AgentConfig } from "@/lib/types";
 import { publish } from "@/lib/brain";
 import { requireE164 } from "@/lib/phone";
 import { checkTransferNumber, venueMarket } from "@/lib/onboarding/rules";
-import { languageChoiceOpen, parseLanguage } from "@/lib/language";
+import { languageChoiceOpen, languageUsable, parseLanguage, savedLanguages } from "@/lib/language";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ export async function PATCH(request: Request) {
   const body = (await request.json()) as {
     locationId?: string;
     agent?: Partial<AgentConfig>;
-    /** The language customers are answered in. Only accepted while `language.de` is on. */
+    /** The main language, from before the languages panel. Only a language selectable on this deployment. */
     language?: unknown;
     /** One line on what changed, kept with the version in the history. */
     note?: string;
@@ -87,13 +87,18 @@ export async function PATCH(request: Request) {
   if (body.language !== undefined) {
     const chosen = parseLanguage(body.language);
     if (!chosen) return NextResponse.json({ error: "Choose a language from the list.", field: "language" }, { status: 422 });
-    if (chosen !== "en" && !languageChoiceOpen()) {
-      return NextResponse.json({ error: "German is not available yet.", field: "language" }, { status: 422 });
+    if (chosen !== "en" && (!languageChoiceOpen() || !languageUsable(chosen))) {
+      return NextResponse.json({ error: "That language is not available yet.", field: "language" }, { status: 422 });
     }
     language = chosen;
   }
+  const saved = savedLanguages(location);
+  const languages =
+    body.language !== undefined && language
+      ? { ...saved, main: language, also: saved.also.filter((l) => l !== language) }
+      : location.languages;
 
-  upsertLocation({ ...location, agent: next, ...(language ? { language } : {}) });
+  upsertLocation({ ...location, agent: next, ...(language ? { language } : {}), ...(languages ? { languages } : {}) });
 
   // Record the change. Publishing after the save rather than instead of it
   // keeps the live venue as the single source of truth for the next call,
