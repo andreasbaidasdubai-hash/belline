@@ -46,6 +46,38 @@ export async function createCall(opts: CallOptions): Promise<CallAdapter> {
   return opts.session.provider === "mock" ? createMockCall(opts) : createTavusCall(opts);
 }
 
+/**
+ * Start fetching the live call client (Daily, for Tavus) the moment the visitor
+ * taps, so it downloads while the session is being created instead of after.
+ * The same dynamic import `createTavusCall` uses, so it is fetched once.
+ */
+export function preloadCallClient(provider: CallSession["provider"]): void {
+  if (provider === "tavus") void import("@daily-co/daily-js").catch(() => undefined);
+}
+
+/** How long a voice may sit paused, with a stream attached, before the visitor is asked to tap. */
+export const AUDIO_WATCH_MS = 1500;
+
+/**
+ * Play the face's voice, and never stay silent without saying so.
+ *
+ * A refused play() (autoplay policy, iOS in a frame) is reported at once. Some
+ * browsers neither play nor refuse until there is a gesture, so a voice still
+ * paused a moment later is reported too. Either way the panel shows "Tap to
+ * hear", whose tap is the gesture that lets it play.
+ */
+export function playVoice(audio: HTMLAudioElement, emit: (event: CallEvent) => void): void {
+  try {
+    const playing = audio.play();
+    if (playing && typeof playing.catch === "function") playing.catch(() => emit({ type: "audio_blocked" }));
+  } catch {
+    emit({ type: "audio_blocked" });
+  }
+  setTimeout(() => {
+    if (audio.srcObject && audio.paused) emit({ type: "audio_blocked" });
+  }, AUDIO_WATCH_MS);
+}
+
 // ---------------------------------------------------------------------------
 // Tavus, through Daily
 
@@ -76,8 +108,7 @@ async function createTavusCall(opts: CallOptions): Promise<CallAdapter> {
     }
     if (e.type === "audio" && media.audio) {
       media.audio.srcObject = new MediaStream([e.track]);
-      // iOS may want one more tap before it plays sound in a frame.
-      void media.audio.play().catch(() => emit({ type: "audio_blocked" }));
+      playVoice(media.audio, emit);
     }
   });
   call.on("app-message", (e) => {
@@ -135,6 +166,9 @@ function createMockCall(opts: CallOptions): CallAdapter {
   };
   const later = (fn: () => void, ms: number) => timers.push(setTimeout(fn, ms));
   const speakFor = (text: string) => Math.min(6000, Math.max(900, text.length * 45));
+  // A silent voice, played through the same element and the same checks as a
+  // real face's, so the mock exercises "Tap to hear" as a live call would.
+  let silence: AudioContext | null = null;
 
   const online = () => emit({ type: "network", state: "ok" });
   const offline = () => emit({ type: "network", state: "reconnecting" });
@@ -190,6 +224,18 @@ function createMockCall(opts: CallOptions): CallAdapter {
     async join() {
       await new Promise((resolve) => setTimeout(resolve, 250));
       emit({ type: "joined" });
+      if (opts.media.audio) {
+        try {
+          const Context = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+          if (Context) {
+            silence = new Context();
+            opts.media.audio.srcObject = silence.createMediaStreamDestination().stream;
+            playVoice(opts.media.audio, emit);
+          }
+        } catch {
+          /* no audio stack: the mock carries on in captions */
+        }
+      }
       emit({ type: "speaking", who: "agent", on: true });
       emit({ type: "caption", who: "agent", text: session.greeting });
       later(() => emit({ type: "speaking", who: "agent", on: false }), speakFor(session.greeting));
@@ -206,6 +252,8 @@ function createMockCall(opts: CallOptions): CallAdapter {
       gone = true;
       turn?.abort();
       timers.forEach(clearTimeout);
+      void silence?.close().catch(() => undefined);
+      silence = null;
       window.removeEventListener("online", online);
       window.removeEventListener("offline", offline);
     },

@@ -33,6 +33,8 @@ export interface PanelState {
   reconnecting: boolean;
   warned: boolean;
   captions: { agent: string; visitor: string };
+  /** Whose words changed last: the one line under the circle shows theirs. */
+  captionLast?: "agent" | "visitor";
   endedReason?: string;
   /** The browser refused to play the face's voice without another tap (iOS). */
   audioBlocked?: boolean;
@@ -104,7 +106,7 @@ function onCall(state: PanelState, event: CallEvent, now: number): PanelState {
     case "speaking":
       return event.who === "agent" ? { ...state, agentSpeaking: event.on } : { ...state, visitorSpeaking: event.on };
     case "caption":
-      return { ...state, captions: { ...state.captions, [event.who]: event.text.slice(-400) } };
+      return { ...state, captions: { ...state.captions, [event.who]: event.text.slice(-400) }, captionLast: event.who };
     case "network":
       return { ...state, reconnecting: event.state === "reconnecting" };
     case "left":
@@ -147,7 +149,7 @@ export function statusText(state: PanelState, agentName: string): string {
     case "mic":
       return "Waiting for your microphone";
     case "connecting":
-      return `Connecting you to ${agentName}…`;
+      return `Connecting to ${agentName}…`;
     case "ended":
       return "Call ended";
     case "error":
@@ -185,6 +187,19 @@ export function durationWords(seconds: number): string {
   const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   if (m === 0) return unit(r, "second");
   return r === 0 ? unit(m, "minute") : `${unit(m, "minute")} ${unit(r, "second")}`;
+}
+
+/**
+ * The one caption line under the circle: the latest words of whoever spoke
+ * last, trimmed from the front so the newest words are the ones on screen.
+ */
+export function captionLine(state: PanelState, agentName: string, max = 64): string {
+  const who = state.captionLast;
+  if (!who) return "";
+  const text = state.captions[who].replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const tail = text.length > max ? `…${text.slice(-(max - 1)).replace(/^\S*\s/, "")}` : text;
+  return `${who === "agent" ? agentName : "You"}: ${tail}`;
 }
 
 /** 65 → "1:05". */

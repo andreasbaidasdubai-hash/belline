@@ -63,7 +63,7 @@
   var whatsappLabel = script.getAttribute("data-whatsapp-label") || "WhatsApp us";
   // The widget's own words, replaced by the venue's language from its config
   // (customer-copy.ts `embed.close_*`) once that arrives.
-  var STRINGS = { closeChat: "Close chat", closeCall: "Close call", closeVideo: "Close video call" };
+  var STRINGS = { closeChat: "Close chat", closeCall: "Close call", closeVideo: "Close video call", otherWays: "Other ways to reach us" };
   var attrSide = script.hasAttribute("data-side");
   var attrVoice = script.hasAttribute("data-label");
   var attrChat = script.hasAttribute("data-chat-label");
@@ -149,9 +149,11 @@
     // "Also speaks Deutsch": a small line under the buttons, in the venue's main language.
     ".belline-notice{font:12px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1D1D1F;" +
     "background:rgba(255,255,255,.92);padding:3px 9px;border-radius:999px;unicode-bidi:plaintext}" +
-    // The video greeting bubble sits at the top of the stack, right edges aligned.
+    // Video on: the round bubble takes the dock, and the other buttons fold into
+    // its one "Other ways to reach us" menu. Their notice line stays under it.
     ".belline-dock .bvb{--bvb-size:200px}.belline-dock .belline-fab[hidden]{display:none}" +
-    "@media (max-width:520px){.belline-dock .bvb{--bvb-size:128px}.belline-dock .bvb-talk{min-height:40px;font-size:13px}}";
+    ".belline-dock.belline-has-video .belline-fab{display:none}" +
+    "@media (max-width:520px){.belline-dock .bvb{--bvb-size:136px}.belline-dock .bvb-talk{min-height:40px;font-size:13px}}";
 
   var style = document.createElement("style");
   style.textContent = css;
@@ -313,6 +315,7 @@
       if (cfg.strings.closeChat) STRINGS.closeChat = String(cfg.strings.closeChat);
       if (cfg.strings.closeCall) STRINGS.closeCall = String(cfg.strings.closeCall);
       if (cfg.strings.closeVideo) STRINGS.closeVideo = String(cfg.strings.closeVideo);
+      if (cfg.strings.otherWays) STRINGS.otherWays = String(cfg.strings.otherWays);
     }
     if (cfg.notice && !dock.querySelector(".belline-notice")) {
       var notice = document.createElement("div");
@@ -346,10 +349,10 @@
       fabs.whatsapp = wa;
     }
     // Video, only where Belline has switched it on for this venue: a round
-    // greeting bubble at the top of the stack (embed-video.js, loaded now, after
-    // the page has painted), and a quiet Video button that brings it back once
-    // the visitor has closed it. No session exists until they tap. After
-    // WhatsApp, so the bubble is always the topmost thing in the column.
+    // greeting bubble in the dock (embed-video.js, loaded now, after the page
+    // has painted), with the other buttons folded into its menu. The Video
+    // button is only the fallback if that script cannot load. No session
+    // exists until they tap. After WhatsApp, so every channel is in the menu.
     if (cfg.video === true && !fabs.video) {
       var video = fabFor("video", script.getAttribute("data-video-label") || "Video call", CAMERA, true);
       dock.insertBefore(video, fabs.chat || fabs.voice || null);
@@ -468,14 +471,28 @@
 
   var videoCtl = null;
 
+  /**
+   * The video bubble, where Belline has switched video on for this venue.
+   *
+   * The bubble is the widget's front door: the face, "Talk to Belle", and one
+   * small secondary button whose menu holds whatever else this widget offers
+   * (WhatsApp, the chat, the bell), each doing exactly what its own button did.
+   * The call happens in the bubble itself (embed-video.js). Without video none
+   * of this runs and the widget is the one it always was.
+   *
+   * If embed-video.js cannot load, the buttons stay as they are and the Video
+   * button opens the call panel directly instead.
+   */
   function mountVideo(bubbleCfg, videoFab) {
     videoFab.hidden = true;
-    // The Video button reopens the bubble rather than a panel of its own.
-    var reopenVideo = function (e) {
-      e.stopImmediatePropagation();
-      if (videoCtl) videoCtl.reopen();
-    };
-    videoFab.addEventListener("click", reopenVideo, true);
+
+    function others() {
+      var list = [];
+      if (fabs.chat) list.push({ kind: "chat", label: fabs.chat.getAttribute("aria-label") || chatLabel, run: function () { fabs.chat.click(); } });
+      if (fabs.whatsapp) list.push({ kind: "whatsapp", label: fabs.whatsapp.getAttribute("aria-label") || whatsappLabel, run: function () { fabs.whatsapp.click(); } });
+      if (fabs.voice) list.push({ kind: "voice", label: fabs.voice.getAttribute("aria-label") || voiceLabel, run: function () { fabs.voice.click(); } });
+      return list;
+    }
 
     function ready(api) {
       videoCtl = api.mount({
@@ -485,46 +502,25 @@
         key: key,
         hostOrigin: location.origin,
         side: side,
+        strings: { closeCall: STRINGS.closeVideo, otherWays: STRINGS.otherWays },
+        others: others,
         place: function (bubble) {
           dock.insertBefore(bubble, dock.firstChild);
+          dock.classList.add("belline-has-video");
         },
-        onBubbleShown: function () {
-          videoFab.hidden = true;
-        },
-        onDismissed: function () {
-          videoFab.hidden = false;
-        },
-        frameClass: "belline-panel belline-video" + (side === "left" ? " belline-left" : ""),
-        shutClass: "belline-shut",
-        placeCall: function (frame, closeBtn) {
+        onCallOpened: function () {
           stopRinging();
-          closeBtn.setAttribute("aria-label", STRINGS.closeVideo);
-          frame.style.background = "#FFFFFF";
-          document.body.appendChild(frame);
-          panel = frame;
-          shut = closeBtn;
-          panelKind = "video";
-          position(closeBtn);
-          document.body.appendChild(closeBtn);
-          dock.style.display = "none";
-          window.addEventListener("resize", reposition);
         },
-        onCallClosed: function () {
-          panel = null;
-          shut = null;
-          panelKind = null;
-          dock.style.display = "";
-          window.removeEventListener("resize", reposition);
-          videoFab.hidden = false;
-          try {
-            videoFab.focus();
-          } catch (e) {
-            /* focus is a nicety */
+        // "Type instead" during a call: the chat panel, as its own button opens it.
+        onSwitch: function (to) {
+          if (to === "chat") {
+            reopen = null;
+            open("chat", chatLabel);
+          } else if (fabs.voice) {
+            fabs.voice.click();
           }
         },
       });
-      // Dismissed earlier this session: no greeting, so the button is the way in.
-      if (!videoCtl.state().bubble) videoFab.hidden = false;
     }
 
     if (window.BellineVideo) return ready(window.BellineVideo);
@@ -534,12 +530,10 @@
     loader.async = true;
     loader.onerror = function () {
       // No bubble; the Video button opens the call directly instead.
-      videoFab.removeEventListener("click", reopenVideo, true);
       videoFab.hidden = false;
     };
     document.head.appendChild(loader);
   }
-
   function open(kind, label) {
     if (panel) return;
     stopRinging();

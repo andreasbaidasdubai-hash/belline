@@ -424,7 +424,8 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     dock.remove();
     dock = null;
     bell.hidden = false;
-    document.removeEventListener("keydown", onKey);
+    document.removeEventListener("keydown", onKey);    document.dispatchEvent(new CustomEvent("belline:dock", { detail: { open: false } }));
+
     bell.focus();
   }
 
@@ -473,7 +474,7 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     document.body.appendChild(dock);
     // Into the dock, so a keyboard is not left on the page behind it.
     shut.focus();
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey);    document.dispatchEvent(new CustomEvent("belline:dock", { detail: { open: true } }));
   }
 
   triggers.forEach(function (t) {
@@ -520,7 +521,8 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     dock.remove();
     dock = null;
     fab.hidden = false;
-    document.removeEventListener("keydown", onKey);
+    document.removeEventListener("keydown", onKey);    document.dispatchEvent(new CustomEvent("belline:dock", { detail: { open: false } }));
+
     try {
       fab.focus();
     } catch (e) {
@@ -566,7 +568,7 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     document.body.appendChild(dock);
     // Into the dock, so a keyboard is not left on the page behind it.
     shut.focus();
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey);    document.dispatchEvent(new CustomEvent("belline:dock", { detail: { open: true } }));
   }
 
   fab.addEventListener("click", open);
@@ -582,12 +584,14 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
    Belline's video receptionist, on our own site — and only once it is switched
    on for our own venue. Nothing is in the markup: when the venue's widget
    config says `video: true`, this loads embed-video.js from the app, which
-   opens a round greeting bubble above the floating buttons (a muted clip or a
-   poster; no session, no microphone) and, on a tap, the call itself. With the
-   feature off, as in production until approved, the page is the page it was.
+   puts Belle's round bubble in the corner (a muted clip or a poster; no
+   session, no microphone) and, on a tap, grows it into the call itself.
 
-   A labelled Video button joins the stack once the bubble has been closed, so
-   the receptionist stays one tap away without greeting again on every page. */
+   With the bubble on screen the three floating buttons (WhatsApp, chat, the
+   bell) step aside: one small "Other ways to reach us" button beside the
+   bubble opens a menu of the same three, and each still does exactly what its
+   button did. With the feature off, as in production until approved, or if
+   embed-video.js never arrives, the page is the page it was. */
 (function () {
   var chatFab = document.querySelector("[data-chat]");
   if (!chatFab || typeof window.fetch !== "function") return;
@@ -597,26 +601,17 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   var appOrigin = match[1];
   var key = match[2];
 
-  var label = SITE_DE ? "Videoanruf mit Belle" : "Video call with Belle";
-  var fab = null;
-  var dock = null;
   var ctl = null;
+  var waFab = document.querySelector(".wa-fab");
+  var bellFab = document.querySelector(".bell-fab");
 
-  function makeFab() {
-    fab = document.createElement("button");
-    fab.type = "button";
-    fab.className = "video-fab";
-    fab.hidden = true;
-    fab.setAttribute("aria-label", label);
-    fab.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
-      '<rect x="3" y="6.5" width="12.5" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/>' +
-      '<path d="M15.5 10.6 20.4 8v8l-4.9-2.6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>' +
-      '<span class="video-fab-say">' + label + "</span>";
-    fab.addEventListener("click", function () {
-      if (ctl) ctl.reopen();
-    });
-    document.body.appendChild(fab);
+  function others() {
+    var list = [];
+    // Chat first: the quiet way in for somebody who cannot talk out loud now.
+    list.push({ kind: "chat", label: SITE_DE ? "Chat" : "Chat", run: function () { chatFab.click(); } });
+    if (waFab) list.push({ kind: "whatsapp", label: "WhatsApp", run: function () { waFab.click(); } });
+    if (bellFab) list.push({ kind: "voice", label: SITE_DE ? "Anruf" : "Voice call", run: function () { bellFab.click(); } });
+    return list;
   }
 
   function ready(api) {
@@ -627,47 +622,27 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       key: key,
       hostOrigin: location.origin,
       fixed: true,
+      strings: SITE_DE ? { otherWays: "Andere Wege zu uns", caption: "Hallo, ich bin Belle — zum Sprechen tippen" } : {},
+      others: others,
       place: function (bubble) {
         bubble.classList.add("video-bubble");
         document.body.appendChild(bubble);
+        // The bubble and its menu now stand in for the three buttons.
+        document.body.classList.add("has-video-bubble");
       },
-      onBubbleShown: function () {
-        fab.hidden = true;
-      },
-      onDismissed: function () {
-        fab.hidden = false;
-      },
-      frameClass: "video-frame",
-      shutClass: "call-shut",
-      placeCall: function (frame, shut) {
-        dock = document.createElement("div");
-        dock.className = "video-dock";
-        dock.setAttribute("role", "region");
-        dock.setAttribute("aria-label", label);
-        dock.appendChild(frame);
-        dock.appendChild(shut);
-        document.body.appendChild(dock);
-        shut.focus();
-        fab.hidden = true;
-      },
-      onCallClosed: function () {
-        var gone = dock;
-        dock = null;
-        // The frame is removed by embed-video.js a moment later; the dock with it.
-        setTimeout(function () {
-          if (gone) gone.remove();
-        }, 400);
-        fab.hidden = false;
-        try {
-          fab.focus();
-        } catch (e) {
-          /* focus is a nicety, never a failure */
-        }
+      // "Type instead" during a call: the chat opens where the bubble was.
+      onSwitch: function (to) {
+        if (to === "chat") chatFab.click();
+        else if (bellFab) bellFab.click();
       },
     });
-    // Dismissed earlier this session: no greeting, so the button is the way in.
-    if (!ctl.state().bubble) fab.hidden = false;
   }
+
+  // The chat and the call dock in the same corner: the bubble steps out of
+  // their way while one is open, and comes back when it closes.
+  document.addEventListener("belline:dock", function (e) {
+    if (ctl) ctl.setHidden(Boolean(e.detail && e.detail.open));
+  });
 
   fetch(appOrigin + "/api/embed/" + key + "/config", { mode: "cors" })
     .then(function (r) {
@@ -675,7 +650,6 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     })
     .then(function (cfg) {
       if (!cfg || cfg.video !== true) return;
-      makeFab();
       window.__bellineVideoConfig = cfg.videoBubble || {};
       if (window.BellineVideo) return ready(window.BellineVideo);
       (window.__bellineVideoReady = window.__bellineVideoReady || []).push(ready);
@@ -688,7 +662,6 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       /* no bubble is the right failure */
     });
 })();
-
 /* --- monthly / annual ------------------------------------------------------
    The prices for both cycles are already in the markup as data attributes, so
    the page reads correctly with no JavaScript at all and this only swaps

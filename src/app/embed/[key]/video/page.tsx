@@ -7,7 +7,8 @@ import { chatAllowed, newVisitorId, voiceAllowed } from "@/lib/webchat";
 import { widgetOpenFor } from "@/lib/embed-preview";
 import { isActivated } from "@/lib/onboarding/journey";
 import { lineFor } from "@/lib/language";
-import { videoAvailability } from "@/lib/video/availability";
+import { videoAvailability, videoBubbleConfig } from "@/lib/video/availability";
+import { facePreview } from "@/lib/video/face-preview";
 import { venueByEmbedKey } from "@/lib/video/http";
 import VideoPanel from "./VideoPanel";
 
@@ -36,10 +37,10 @@ export default async function VideoPage({
   searchParams,
 }: {
   params: Promise<{ key: string }>;
-  searchParams: Promise<{ o?: string; autostart?: string }>;
+  searchParams: Promise<{ o?: string; autostart?: string; bubble?: string }>;
 }) {
   const { key } = await params;
-  const { o, autostart } = await searchParams;
+  const { o, autostart, bubble } = await searchParams;
   const location = venueByEmbedKey(key);
   if (!location?.embed) notFound();
 
@@ -73,8 +74,23 @@ export default async function VideoPage({
     );
   }
 
+  // On a page of its own the face's muted preview plays in the circle while the
+  // call connects, as it does in the bubble on a website (where the page's own
+  // circle shows it under this frame, so none is needed here).
+  let preview = { clipUrl: "", posterUrl: "" };
+  if (bubble !== "1") {
+    const own = videoBubbleConfig(location);
+    preview = { clipUrl: own.clipUrl, posterUrl: own.posterUrl };
+    if (!own.mock && (!own.clipUrl || !own.posterUrl)) {
+      const face = await facePreview(availability.config);
+      if (face) preview = { clipUrl: own.clipUrl || face.clipUrl, posterUrl: own.posterUrl || face.posterUrl };
+    }
+  }
+
   return (
     <VideoPanel
+      previewClipUrl={preview.clipUrl}
+      previewPosterUrl={preview.posterUrl}
       embedKey={key}
       freshToken={signVisitorToken(location.id, newVisitorId())}
       venueName={location.name}
@@ -85,6 +101,9 @@ export default async function VideoPage({
       voiceHref={voiceHref}
       // From the greeting bubble: the visitor already tapped to talk.
       autostart={autostart === "1"}
+      // Inside the page's own bubble: chromeless, and it talks only to the origin checked above.
+      bubble={bubble === "1" && Boolean(framedBy)}
+      hostOrigin={bubble === "1" && framedBy ? framedBy : undefined}
     />
   );
 }

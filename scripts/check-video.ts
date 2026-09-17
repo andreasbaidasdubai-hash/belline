@@ -345,6 +345,32 @@ await test("4. session creation with a mocked Tavus: documented fields only, a P
   }
 });
 
+await test("4a. the owner's template PAL is fetched once: after that a session never waits for it, even once it is stale", async () => {
+  const fake = fakeTavus(tavusHappyPath);
+  let gets = 0;
+  const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
+    if ((init?.method ?? "GET") === "GET" && gets++ > 0) return new Promise<Response>(() => undefined);
+    return fake.fetchImpl(input as string, init);
+  }) as typeof fetch;
+  const provider = new TavusProvider(videoConfig({ ...process.env, ...TAVUS_ENV }), fetchImpl);
+  const input = {
+    sessionId: "vs_t1", businessName: "X", agentName: "Belle", greeting: "Hi", languages: ["en"], maxCallSeconds: 300,
+    absentTimeoutSeconds: 60, leftTimeoutSeconds: 10, llmToken: "t", llmBaseUrl: "https://app.example/api/video/llm", callbackUrl: "https://app.example/cb", euPolicy: false,
+  };
+  await provider.createSession(input);
+  assert.equal(gets, 1, "the first session reads the template");
+  // Ten minutes later: stale. The refresh hangs forever here, and the session must not wait for it.
+  (provider as unknown as { template: { at: number } }).template.at = 0;
+  const second = await Promise.race([
+    provider.createSession({ ...input, sessionId: "vs_t2" }).then(() => "created"),
+    new Promise((resolve) => setTimeout(() => resolve("waited"), 2000)),
+  ]);
+  assert.equal(second, "created");
+  assert.equal(gets, 2, "and the template is refreshed in the background");
+  const pal = fake.calls.filter((c) => c.url.endsWith("/v2/pals") && c.method === "POST").at(-1)!;
+  assert.deepEqual(pal.body.layers.tts, { voice_id: "v1" }, "with the voice from the kept copy");
+});
+
 await test("4b. shared-PAL mode puts the token in the context, and the model route trusts it only from a system message", async () => {
   const env = { ...process.env, ...TAVUS_ENV, VIDEO_TAVUS_PAL_MODE: "shared", VIDEO_LLM_SHARED_KEY: "shared-key-1" };
   const fake = fakeTavus(tavusHappyPath);
@@ -566,7 +592,7 @@ await test("7c. the model route answers while the session is still being created
 // ---------------------------------------------------------------------------
 console.log("\n  What the visitor meets");
 
-await test("8. a refused microphone is explained, with the chat offered, and no session is created", () => {
+await test("8. a refused microphone is explained, with the chat offered, and any session made beside the prompt is ended", () => {
   for (const name of ["NotAllowedError", "SecurityError"]) {
     assert.equal(machine.micErrorCode({ name }), "mic_denied");
   }
@@ -579,8 +605,16 @@ await test("8. a refused microphone is explained, with the chat offered, and no 
   assert.match(copy, /allow the microphone for this site/);
   assert.match(copy, /chat instead/i);
   const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
-  // The session request comes after the microphone, never before.
-  assert.ok(panel.indexOf("getUserMedia") < panel.indexOf("/session`, {"), "the microphone is asked for before any session exists");
+  // Nothing is created before the tap. After it, the session is made beside the
+  // microphone prompt to save the wait, except where the browser has already
+  // refused the microphone; a prompt then refused ends that session at once.
+  const startBody = panel.slice(panel.indexOf("startRef.current = async () => {"), panel.indexOf("type SessionReply"));
+  assert.match(startBody, /const refused = await micAlreadyRefused\(\);\s*const sessionReply = refused \? null : requestSession\(\);/);
+  assert.ok(startBody.indexOf("requestSession()") < startBody.indexOf("getUserMedia({"), "the session starts beside the prompt, not after it");
+  assert.match(startBody, /dispatch\(\{ type: "fail", code, retryable: code !== "mic_denied" \}\);\s*discardSession\(sessionReply, "mic_refused"\);/);
+  assert.match(panel, /function discardSession[\s\S]{0,400}\/session\/end/);
+  assert.match(startBody, /if \(endingRef\.current\) \{\s*endOnServer\("visitor"\);/, "closed while connecting ends the session as soon as it exists");
+  assert.match(startBody, /m\.preloadCallClient\(provider\)/, "the call client downloads while the session is made");
   assert.equal(/facingMode|video:\s*true/.test(panel), false, "the camera is never requested");
   assert.match(panel, /video: false/);
 });
@@ -957,6 +991,7 @@ function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; storage?:
     focus(): void;
     play(): Promise<void>;
     pause(): void;
+    contains(other: Node): boolean;
     [k: string]: unknown;
   };
   const fetched: string[] = [];
@@ -1008,6 +1043,10 @@ function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; storage?:
         for (const fn of node.listeners.click ?? []) fn({});
       },
       focus() {},
+      contains(other: Node) {
+        for (let n: Node | null = other; n; n = n.parent) if (n === node) return true;
+        return false;
+      },
       play() {
         return Promise.resolve();
       },
@@ -1029,7 +1068,12 @@ function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; storage?:
     removeEventListener() {},
   };
   const store = opts.storage ?? new Map<string, string>();
+  const winListeners: Record<string, ((e: unknown) => void)[]> = {};
   const env = {
+    addEventListener: (type: string, fn: (e: unknown) => void) => void (winListeners[type] ??= []).push(fn),
+    removeEventListener: (type: string, fn: (e: unknown) => void) => {
+      winListeners[type] = (winListeners[type] ?? []).filter((f) => f !== fn);
+    },
     document: doc,
     sessionStorage: {
       getItem: (k: string) => store.get(k) ?? null,
@@ -1046,25 +1090,27 @@ function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; storage?:
     requestAnimationFrame: (fn: () => void) => void timers.push(fn),
   };
   const all = (node: Node = body): Node[] => node.children.flatMap((c) => [c, ...all(c)]);
+  const message = (e: unknown) => [...(winListeners.message ?? [])].forEach((fn) => fn(e));
+  const envListeners = (type: string) => (winListeners[type] ?? []).length;
   const find = (pred: (n: Node) => boolean) => all().find(pred);
   const byClass = (cls: string) => find((n) => n.className.split(" ").includes(cls));
   const flush = () => {
     while (timers.length) timers.shift()!();
   };
-  return { env, dock, body, store, fetched, posted, find, byClass, flush, all };
+  return { env, dock, body, store, fetched, posted, find, byClass, flush, all, message, envListeners };
 }
 
 function loadBubble() {
   const sandbox: { window: Record<string, unknown> } = { window: {} };
   vm.runInNewContext(read("public/embed-video.js"), sandbox);
   return sandbox.window.BellineVideo as {
-    mount: (o: Record<string, unknown>) => { reopen(): void; state(): { bubble: boolean; call: boolean; dismissed: boolean } };
+    mount: (o: Record<string, unknown>) => { reopen(): void; state(): { bubble: boolean; mini: boolean; call: boolean; menu: boolean; dismissed: boolean } };
     DISMISSED: string;
   };
 }
 
-function mountBubble(page: ReturnType<typeof fakePage>, config: Record<string, unknown> = {}) {
-  const calls: { frames: unknown[]; closed: number } = { frames: [], closed: 0 };
+function mountBubble(page: ReturnType<typeof fakePage>, config: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
+  const calls = { opened: 0, closed: 0 };
   const ctl = loadBubble().mount({
     env: page.env,
     config: { agentName: "Belle", ...config },
@@ -1072,12 +1118,9 @@ function mountBubble(page: ReturnType<typeof fakePage>, config: Record<string, u
     key: "be_site",
     hostOrigin: "https://venue.example",
     place: (bubble: unknown) => page.dock.appendChild(bubble as Parameters<typeof page.dock.appendChild>[0]),
-    placeCall: (frame: unknown, shut: unknown) => {
-      calls.frames.push(frame);
-      page.body.appendChild(frame as Parameters<typeof page.body.appendChild>[0]);
-      page.body.appendChild(shut as Parameters<typeof page.body.appendChild>[0]);
-    },
+    onCallOpened: () => calls.opened++,
     onCallClosed: () => calls.closed++,
+    ...extra,
   });
   return { ctl, calls };
 }
@@ -1087,7 +1130,7 @@ await test("the bubble opens on load, greeting, when video is on and it has not 
   const { ctl } = mountBubble(page, { clipUrl: "/video/greeting.mp4", posterUrl: "/video/greeting.jpg" });
   assert.equal(ctl.state().bubble, true);
   const caption = page.byClass("bvb-caption");
-  assert.equal(caption?.textContent, "Hi, I'm Belle, the AI concierge. Tap to talk.");
+  assert.equal(caption?.textContent, "Hi, I'm Belle — tap to talk");
   assert.equal(page.byClass("bvb-ai")?.textContent, "AI concierge");
   assert.ok(page.find((n) => n.tagName === "BUTTON" && n.attrs["aria-label"] === "Close Belle's video greeting"));
   assert.ok(page.find((n) => n.tagName === "BUTTON" && n.textContent === "Talk to Belle"));
@@ -1101,72 +1144,152 @@ await test("the bubble opens on load, greeting, when video is on and it has not 
   // The widget only loads the bubble when the config says so (and the route only says so when video is offered).
   assert.match(read("public/embed.js"), /if \(cfg\.video === true && !fabs\.video\) \{[\s\S]{0,200}mountVideo\(/);
   assert.match(read("public/site.js"), /if \(!cfg \|\| cfg\.video !== true\) return;/);
+  // The greeting line never covers the page on a narrow screen.
+  assert.match(read("public/embed-video.js"), /@media \(max-width:900px\)\{\.bvb-caption\{display:none\}\}/);
 });
 
-await test("no live session is created on load — only a tap opens the call frame, which starts it", () => {
+await test("no live session is created on load — a tap grows the same circle into the call, with no panel beside it", () => {
   const page = fakePage();
   const { ctl, calls } = mountBubble(page, { mock: true });
   page.flush();
   assert.deepEqual(page.fetched, [], "the bubble made a request on load");
-  assert.equal(calls.frames.length, 0, "a call frame existed before any tap");
-  assert.equal(page.find((n) => n.tagName === "IFRAME"), undefined);
+  assert.equal(page.find((n) => n.tagName === "IFRAME"), undefined, "a call frame existed before any tap");
   assert.equal(page.byClass("bvb-mock")?.textContent, "MOCK — not a live avatar");
   assert.ok(page.byClass("bvb-ph"), "the lettered placeholder stands in for a missing clip");
   // Nothing in the bubble can reach the session route, the SDK or the microphone.
   const source = read("public/embed-video.js");
   assert.equal(/\/session|getUserMedia|daily|fetch\(/.test(source), false);
+  const before = page.body.children.length;
+  // The page's own class on the bubble (site.js positions it by one) survives every state.
+  page.byClass("bvb")!.className += " video-bubble";
   // The tap.
   page.byClass("bvb-circle")!.click();
-  assert.equal(calls.frames.length, 1);
   const frame = page.find((n) => n.tagName === "IFRAME")!;
-  assert.equal(frame.src, "https://app.example/embed/be_site/video?autostart=1&o=https%3A%2F%2Fvenue.example");
+  const root = page.byClass("bvb")!;
+  assert.match(root.className, /\bvideo-bubble\b/, "the page's class was wiped");
+  assert.equal(frame.parent, root, "the call is inside the bubble, not a panel of its own");
+  assert.equal(page.body.children.length, before, "nothing was added to the page beside the bubble");
+  assert.equal(calls.opened, 1);
+  assert.match(root.className, /\bis-call\b/, "the circle grows into the call");
+  assert.equal(root.attrs["data-state"], "call");
+  assert.equal(frame.src, "https://app.example/embed/be_site/video?autostart=1&bubble=1&o=https%3A%2F%2Fvenue.example");
   assert.equal(frame.allow, "microphone; autoplay", "never the camera");
-  assert.equal(ctl.state().bubble, false, "the bubble becomes the call");
-  // And the panel only creates a session when it starts, which autostart does on mount.
+  assert.equal(ctl.state().call, true);
+  assert.equal(ctl.state().bubble, false);
+  // "AI concierge" stays on the circle through the call; the × becomes "close the call".
+  assert.ok(page.byClass("bvb-ai"));
+  assert.ok(page.find((n) => n.attrs["aria-label"] === "Close video call"));
+  // The grow is a transform on the circle, switched off under reduced motion.
+  assert.match(source, /\.bvb\.is-growing \.bvb-circle\{transition:transform/);
+  assert.match(source, /@media \(prefers-reduced-motion:reduce\)\{[^}]*\}\s*"?\s*\+?\s*"?\.bvb\.is-growing \.bvb-circle,\.bvb-frame,\.bvb-tags,\.bvb-shut\{transition:none\}\}/);
+  assert.match(source, /if \(!before \|\| reducedMotion\(\)\) return;/);
+  // And the frame only creates a session when it starts, which autostart does on mount.
   const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
   assert.match(panel, /if \(autostart\) void start\(\);/);
 });
 
-await test("close dismisses the bubble and it stays dismissed for the session; the Video button brings it back", () => {
+await test("other ways to reach us: one small button, a menu of the page's own channels, each doing what its button did", () => {
+  const page = fakePage();
+  const ran: string[] = [];
+  const others = ["chat", "whatsapp", "voice"].map((kind) => ({ kind, label: kind, run: () => ran.push(kind) }));
+  mountBubble(page, {}, { others });
+  const more = page.find((n) => n.attrs["aria-label"] === "Other ways to reach us")!;
+  assert.ok(more, "the secondary button");
+  const menu = page.byClass("bvb-menu")!;
+  assert.equal(menu.hidden, true, "closed at rest");
+  // Only two buttons at rest: Talk to Belle and this one.
+  const buttons = page.all(page.byClass("bvb-row")!).filter((n) => n.tagName === "BUTTON");
+  assert.deepEqual(buttons.map((b) => b.className), ["bvb-talk", "bvb-more"]);
+  more.click();
+  assert.equal(menu.hidden, false);
+  assert.equal(more.attrs["aria-expanded"], "true");
+  const items = menu.children.filter((n) => n.className === "bvb-item");
+  assert.deepEqual(items.map((i) => i.attrs["data-kind"]), ["chat", "whatsapp", "voice"]);
+  items[1].click();
+  assert.deepEqual(ran, ["whatsapp"]);
+  assert.equal(menu.hidden, true, "choosing closes the menu");
+  // One channel is not a menu: the button does it directly.
+  const single = fakePage();
+  const once: string[] = [];
+  mountBubble(single, {}, { others: [{ kind: "chat", label: "Chat", run: () => once.push("chat") }] });
+  single.find((n) => n.attrs["aria-label"] === "Other ways to reach us")!.click();
+  assert.deepEqual(once, ["chat"]);
+  // None: no button at all.
+  const none = fakePage();
+  mountBubble(none);
+  assert.equal(none.byClass("bvb-more"), undefined);
+  // The hosts fold their buttons into it, only where video is on.
+  assert.match(read("public/site.css"), /body\.has-video-bubble \.wa-fab,\s*body\.has-video-bubble \.chat-fab,\s*body\.has-video-bubble \.bell-fab \{ display: none; \}/);
+  assert.match(read("public/site.js"), /run: function \(\) \{ chatFab\.click\(\); \}/);
+  assert.match(read("public/site.js"), /run: function \(\) \{ waFab\.click\(\); \}/);
+  assert.match(read("public/site.js"), /run: function \(\) \{ bellFab\.click\(\); \}/);
+  const embed = read("public/embed.js");
+  assert.match(embed, /\.belline-dock\.belline-has-video \.belline-fab\{display:none\}/);
+  assert.match(embed, /dock\.classList\.add\("belline-has-video"\)/);
+});
+
+await test("close shrinks the bubble to a small face for the session; the face brings it back", () => {
   const storage = new Map<string, string>();
   const page = fakePage({ storage });
   const api = loadBubble();
   const { ctl } = mountBubble(page);
   page.find((n) => n.attrs["aria-label"] === "Close Belle's video greeting")!.click();
   assert.equal(ctl.state().bubble, false);
+  assert.equal(ctl.state().mini, true);
   assert.equal(storage.get(api.DISMISSED), "1");
-  // The next page in the same browser session: no bubble.
+  // The next page in the same browser session: the small face, not the greeting.
   const next = fakePage({ storage });
   const again = mountBubble(next);
   assert.equal(again.ctl.state().bubble, false);
-  assert.equal(next.byClass("bvb"), undefined);
-  // Both launchers show their Video button when the bubble did not open.
-  assert.match(read("public/embed.js"), /if \(!videoCtl\.state\(\)\.bubble\) videoFab\.hidden = false;/);
-  assert.match(read("public/site.js"), /if \(!ctl\.state\(\)\.bubble\) fab\.hidden = false;/);
-  // The launcher's Video button.
-  again.ctl.reopen();
+  assert.equal(again.ctl.state().mini, true);
+  assert.equal(next.byClass("bvb")!.attrs["data-state"], "mini");
+  assert.ok(next.byClass("bvb-ai"), "still labelled AI concierge when small");
+  // Tapping the small face.
+  next.byClass("bvb-circle")!.click();
   assert.equal(again.ctl.state().bubble, true);
+  assert.equal(again.ctl.state().call, false, "the small face opens the greeting, not a call");
   assert.equal(storage.get(api.DISMISSED), undefined);
 });
 
 await test("closing during a call asks the frame to end the session, removes it, and the frame ends it on the server", async () => {
   const page = fakePage();
-  const { ctl, calls } = mountBubble(page);
+  const switched: string[] = [];
+  const { ctl, calls } = mountBubble(page, {}, { onSwitch: (to: string) => switched.push(to) });
   page.byClass("bvb-talk")!.click();
   const frame = page.find((n) => n.tagName === "IFRAME")!;
   page.find((n) => n.attrs["aria-label"] === "Close video call")!.click();
   assert.equal(JSON.stringify(page.posted), JSON.stringify([{ source: "belline-host", type: "end" }]));
   assert.equal(calls.closed, 1);
   assert.equal(ctl.state().call, false);
+  assert.equal(ctl.state().bubble, true, "back to the resting bubble");
   assert.ok(frame.parent, "the frame is given a moment to end the session");
   page.flush();
   assert.equal(frame.parent, null, "then removed");
+  assert.equal(page.envListeners("message"), 0, "the message listener goes with it");
+
+  // The frame's own messages: only from the app's origin and that frame.
+  page.byClass("bvb-talk")!.click();
+  const second = page.find((n) => n.tagName === "IFRAME")!;
+  page.message({ origin: "https://evil.example", source: second.contentWindow, data: { source: "belline-video", type: "ended" } });
+  page.message({ origin: "https://app.example", source: {}, data: { source: "belline-video", type: "ended" } });
+  assert.equal(ctl.state().call, true, "a message from anywhere else changes nothing");
+  page.message({ origin: "https://app.example", source: second.contentWindow, data: { source: "belline-video", type: "size", height: 480 } });
+  assert.equal(second.style.height, "480px");
+  page.message({ origin: "https://app.example", source: second.contentWindow, data: { source: "belline-video", type: "size", height: 5000 } });
+  assert.equal(second.style.height, "480px", "a height out of range is ignored");
+  page.message({ origin: "https://app.example", source: second.contentWindow, data: { source: "belline-video", type: "switch", to: "chat" } });
+  assert.equal(ctl.state().call, false);
+  assert.deepEqual(switched, ["chat"], "Type instead opens the page's chat");
+  assert.equal(page.posted.length, 1, "the frame ended its own call; no second end is sent");
+
   // Inside the frame: the host's message ends the call the same way End does,
   // and the page going away sends the beacon regardless.
   const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
   assert.match(panel, /data\?\.source !== "belline-host" \|\| data\.type !== "end"\) return;\s*void end\("visitor"\);/);
   assert.match(panel, /e\.source !== window\.parent/);
   assert.match(panel, /navigator\.sendBeacon/);
+  assert.match(panel, /window\.parent\.postMessage\(\{ source: "belline-video", \.\.\.message \}, hostOrigin\)/, "messages go to the framing origin only");
+  assert.match(read("src/app/embed/[key]/video/page.tsx"), /hostOrigin=\{bubble === "1" && framedBy \? framedBy : undefined\}/);
   // And the server side of that end is idempotent cleanup (case 7).
   const started = await sessions.startVideoSession(getLocation(A.id)!, "visitor-bubble");
   assert.ok(started.ok);
@@ -1177,6 +1300,51 @@ await test("closing during a call asks the frame to end the session, removes it,
   );
   assert.deepEqual(await res.json(), { ok: true, ended: true });
   assert.equal(mockVideoRecord().ended.length, 1);
+});
+
+await test("the call view: two main controls and a small menu, captions off until asked, one caption line, and never silently mute", () => {
+  const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
+  assert.equal(/className="bv-top"/.test(panel), false, "no header bar");
+  assert.match(panel, /const \[showCaptions, setShowCaptions\] = useState\(false\);/);
+  for (const label of ['aria-label={state.muted ? "Unmute microphone" : "Mute microphone"}', 'aria-label="End call"', 'aria-label="More options"']) {
+    assert.ok(panel.includes(label), label);
+  }
+  assert.match(panel, /role="menuitem"[\s\S]{0,160}<PersonIcon \/>\s*<span>Talk to a person<\/span>/);
+  assert.match(panel, /role="menuitemcheckbox"\s*aria-checked=\{showCaptions\}/);
+  assert.match(panel, /Type instead/);
+  assert.match(panel, /Tap to hear \{agentName\}/);
+  assert.match(panel, /html, body \{ background: transparent !important/);
+  // The caption line: whoever spoke last, their newest words.
+  let s = machine.reduce({ ...machine.INITIAL, phase: "live" as const, joinedAt: 1 }, { type: "call", event: { type: "caption", who: "agent", text: "Hello there" }, now: 2 });
+  assert.equal(machine.captionLine(s, "Belle"), "Belle: Hello there");
+  s = machine.reduce(s, { type: "call", event: { type: "caption", who: "visitor", text: "What do you do for salons that take bookings by phone all day long?" }, now: 3 });
+  const line = machine.captionLine(s, "Belle", 40);
+  assert.match(line, /^You: …/);
+  assert.ok(line.endsWith("all day long?"), line);
+  assert.ok(line.length <= 46, line);
+  assert.equal(machine.captionLine(machine.INITIAL, "Belle"), "");
+  // Audio: a refused or stalled play() always surfaces as "Tap to hear".
+  const calls = read("src/lib/video/client/calls.ts");
+  assert.match(calls, /playing\.catch\(\(\) => emit\(\{ type: "audio_blocked" \}\)\)/);
+  assert.match(calls, /if \(audio\.srcObject && audio\.paused\) emit\(\{ type: "audio_blocked" \}\)/);
+  assert.equal((calls.match(/playVoice\(/g) ?? []).length, 3, "the live face and the mock both go through playVoice");
+  assert.equal(machine.reduce({ ...machine.INITIAL, phase: "live" as const }, { type: "call", event: { type: "audio_blocked" }, now: 1 }).audioBlocked, true);
+});
+
+await test("Belle's opening line on Belline's own venue: short, says what Belline does, and promises nothing she can't do", () => {
+  const belline = getLocation("loc_belline")!;
+  const greeting = sessions.videoGreeting(belline);
+  assert.equal(greeting, "Hi, I'm Belle, Belline's AI concierge. Belline answers your business's calls, website chats and WhatsApp, and passes the rest to your team. Ask me anything, or I can help you get started.");
+  const words = greeting.split(/\s+/).length;
+  assert.ok(words <= 38, `${words} words is over ~15 seconds spoken`);
+  assert.match(greeting, /AI concierge/);
+  // Setup time is never promised (seed-belline.ts FAQ and policies).
+  assert.equal(/minute|quick|instant/i.test(greeting), false);
+  // "Help you get started" is real: her sales tools are on the video line.
+  const tools = toolsFor(belline, "video").map((t) => t.name);
+  for (const name of ["start_trial", "build_demo", "record_lead"]) assert.ok(tools.includes(name), `video Belle lacks ${name}`);
+  // Every other venue is named in its own greeting.
+  assert.equal(sessions.videoGreeting(getLocation(A.id)!), `Hi, I'm ${getLocation(A.id)!.agent.displayName}, the AI concierge for ${getLocation(A.id)!.name}. How may I help you today?`);
 });
 
 await test("reduced motion and Data Saver show the poster, never the looping clip", () => {
@@ -1191,9 +1359,8 @@ await test("reduced motion and Data Saver show the poster, never the looping cli
   const page = fakePage({ reducedMotion: true });
   mountBubble(page, { clipUrl: "https://cdn.example/greeting.mp4" });
   assert.ok(page.byClass("bvb-ph"));
-  assert.match(read("public/embed-video.js"), /@media \(prefers-reduced-motion:reduce\)\{\.bvb-ph span\{animation:none\}\}/);
+  assert.match(read("public/embed-video.js"), /@media \(prefers-reduced-motion:reduce\)\{\.bvb-ph span\{animation:none\}/);
 });
-
 await test("the widget config carries the bubble's clip, poster and name only when video is offered", async () => {
   const restore = setEnv({ VIDEO_GREETING_CLIP_URL: "/video/greeting-rf90eb925bd8.mp4", VIDEO_GREETING_POSTER_URL: "javascript:alert(1)" });
   try {
@@ -1236,19 +1403,21 @@ await test("12. the mobile panel: full screen in the widget and on our site, saf
   }
   const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
   assert.match(panel, /env\(safe-area-inset-bottom\)/);
-  assert.match(panel, /@media \(max-width: 520px\)/);
   assert.match(panel, /@media \(orientation: landscape\) and \(max-height: 500px\)/);
   assert.match(panel, /min-height: 48px/);
+  assert.match(panel, /\.bv-ctl-i \{ width: 56px; height: 56px;/, "controls big enough to hit");
   assert.match(panel, /playsInline/);
   assert.match(panel, /prefers-reduced-motion: reduce/);
   assert.match(panel, /AI concierge/);
   assert.match(panel, /MOCK — not a live avatar/);
-  const css = read("public/site.css");
-  assert.match(css, /\.video-dock \{ inset: 0; width: 100%; height: 100%;/);
+  // The bubble's call circle fits a phone, inside the safe area.
+  const bubble = read("public/embed-video.js");
+  assert.match(bubble, /@media \(max-width:520px\)\{\.bvb\{--bvb-call:min\(252px,calc\(100vw - 40px\),calc\(100dvh - 230px\)\)\}\}/);
+  assert.match(read("public/site.css"), /bottom: calc\(20px \+ env\(safe-area-inset-bottom, 0px\)\);/);
   // Daily is loaded on Start, never with the panel or the page.
   assert.equal(/from "@daily-co\/daily-js"/.test(panel), false);
   assert.match(read("src/lib/video/client/calls.ts"), /await import\("@daily-co\/daily-js"\)/);
-  assert.match(panel, /await import\("@\/lib\/video\/client\/calls"\)/);
+  assert.match(panel, /= import\("@\/lib\/video\/client\/calls"\)\.then/);
 });
 
 await test("13. chat and voice are unaffected: widget modes, the bell's gate and entitlement, the prompts and tools", async () => {

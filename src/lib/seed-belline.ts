@@ -83,6 +83,19 @@ export const BELLINE_LOCATION_ID = "loc_belline";
 const assisted = assistedSetupSpoken("AE");
 
 /**
+ * What Belle says first on a video call from belline.ai's bubble: who she is,
+ * what Belline does, and what she can do next, in about twelve seconds.
+ *
+ * Every clause is something she can stand behind on that call. She answers
+ * from the FAQs above, and her sales tools (build_demo, start_trial, record_lead)
+ * are on the video line too, so "help you get started" is a thing she does. What
+ * it deliberately does not say is how long setup takes: the FAQ and the policies
+ * below refuse to promise a number, so the greeting cannot either.
+ */
+export const BELLINE_VIDEO_GREETING =
+  "Hi, I'm Belle, Belline's AI concierge. Belline answers your business's calls, website chats and WhatsApp, and passes the rest to your team. Ask me anything, or I can help you get started.";
+
+/**
  * What Belline will say about itself.
  *
  * Every one of these is true today, and several of them are answers most

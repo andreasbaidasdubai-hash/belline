@@ -6,6 +6,7 @@ import { releaseCall } from "../booking/holds";
 import { meterCallTime } from "../billing/cost";
 import { openException } from "../exceptions";
 import { BELLINE_TENANT_ID } from "../tenancy";
+import { BELLINE_LOCATION_ID, BELLINE_VIDEO_GREETING } from "../seed-belline";
 import { answersIn } from "../language";
 import { videoAvailability, type VideoOffReason } from "./availability";
 import type { VideoConfig } from "./config";
@@ -134,10 +135,15 @@ export function clearVideoSessions(): void {
   globalRef.__bellineVideoSessions = { sessions: new Map(), pending: new Map() };
 }
 
-/** The opening line: the agent's own name, the business's, and that it is an AI. */
+/**
+ * The opening line: the agent's own name, the business's, and that it is an AI.
+ * Belline's own venue introduces the product as well (seed-belline.ts); every
+ * other venue is named in its greeting.
+ */
 export function videoGreeting(location: Location): string {
   const own = venueVideoSettings(location.id)?.greeting?.trim();
   if (own) return own;
+  if (location.id === BELLINE_LOCATION_ID) return BELLINE_VIDEO_GREETING;
   return `Hi, I'm ${location.agent.displayName}, the AI concierge for ${location.name}. How may I help you today?`;
 }
 
