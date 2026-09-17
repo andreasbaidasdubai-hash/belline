@@ -1212,6 +1212,7 @@ body.has-video-bubble .bell-fab { display: none; }
    call started while the hero is out of view, and is parked (a phone) until
    a call starts. See "Belle's launcher" at the end of this file. */
 .video-bubble.vb-parked { display: none; }
+.video-bubble.vb-leaving { visibility: hidden; }
 .video-bubble.vb-float:not(.is-pip) {
   position: fixed;
   z-index: 41;
@@ -3811,4 +3812,31 @@ footer a { color: var(--bl-ink-900); }
   .video-launcher { transition: none; }
   .vl-act.is-ringing,
   .vl-act.is-ringing::after { animation: none; }
+}
+/* The launcher tucked into the margin: the face alone, 56 px, where the pill
+   would cover content. The words stay for a screen reader. */
+.video-launcher.is-tucked { right: 12px; }
+.video-launcher.is-tucked .vl-act { display: none; }
+.video-launcher.is-tucked .vl-main { width: 56px; padding: 0; justify-content: center; }
+.video-launcher.is-tucked .vl-say { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* No entrance animation on Belle's column: an element with a transform
+   animation contains fixed descendants, and the call that floats in the corner
+   would float inside the hero instead. */
+.hero-video { animation: none; transform: none; }
+/* Equal cards, prices on one line: each card takes the grid's seven rows
+   (tag, name, who it suits, price, allowances, what differs, button). An
+   earlier rule set the cards to flex, which quietly beat the subgrid. */
+@supports (grid-template-rows: subgrid) {
+  #price .plans .plan { display: grid; grid-template-rows: subgrid; align-content: start; }
+  #price .plan .plan-price { align-self: end; }
+  #price .plan .plan-diff { align-self: start; }
+  #price .plan .btn { align-self: end; }
+}
+@media (max-width: 1000px) {
+  #price .plans { grid-template-rows: none; }
+  #price .plans .plan { grid-row: auto; display: flex; }
+}@supports (grid-template-rows: subgrid) {
+  #price .plans { row-gap: 0; column-gap: 20px; }
+  #price .plan .plan-tag { margin-bottom: 10px; }
+  #price .plan .plan-price { margin: 20px 0 18px; }
 }

@@ -663,7 +663,8 @@
         resize("rest", hide);
         playPreview();
         try {
-          state.circle.focus();
+          // Without scrolling: a host may have floated the call away from where the bubble rests.
+          state.circle.focus({ preventScroll: true });
         } catch (e) {
           /* focus is a nicety */
         }

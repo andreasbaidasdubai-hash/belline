@@ -808,26 +808,39 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   }
 
   // What the launcher must never sit on: the pricing, and any button or form.
-  var AVOID = "#price, .btn, .nav-cta, .roi-result, .cta-row, #warteliste, .chat-dock, .call-dock";
+  var AVOID =
+    "#price .sec-head, #price .market-note, #price .price-bar, #price .plans, #price .plan-shared, #price .price-tax, #price .compare, #price .terms, " +
+    ".btn, .nav-cta, .cta-row, .roi-result, #warteliste, .chat-dock, .call-dock";
 
   function overlaps(a, b) {
     return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
   }
 
-  /** Step aside (and back) by where the launcher would be, not where its slide has got to. */
-  function avoid() {
+  /** Where the launcher is laid out, whatever its slide has got to (offsets ignore transforms). */
+  function covers() {
     var box = {
       left: launcher.offsetLeft,
       top: launcher.offsetTop,
       right: launcher.offsetLeft + launcher.offsetWidth,
       bottom: launcher.offsetTop + launcher.offsetHeight,
     };
-    var hit = [].some.call(document.querySelectorAll(AVOID), function (el) {
+    return [].some.call(document.querySelectorAll(AVOID), function (el) {
       if (launcher.contains(el)) return false;
       var r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0 && overlaps(box, r);
     });
-    launcher.classList.toggle("is-away", hit);
+  }
+
+  /**
+   * Step aside: first to the face alone, tucked into the margin; if even that
+   * would cover something (a phone has no margin), out of view until the
+   * content has scrolled past. Back as soon as there is room.
+   */
+  function avoid() {
+    launcher.classList.remove("is-tucked", "is-away");
+    if (!covers()) return;
+    launcher.classList.add("is-tucked");
+    if (covers()) launcher.classList.add("is-away");
   }
 
   function update() {
@@ -853,7 +866,7 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     if (!ctl || !bubble) return;
     stopRing();
     if (!(inHero() && bubbleOnScreen())) {
-      bubble.classList.remove("vb-parked");
+      bubble.classList.remove("vb-parked", "vb-leaving");
       bubble.classList.add("vb-float");
     }
     inCall = true;
@@ -862,12 +875,31 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   }
 
   function callClosed() {
+    var floated = Boolean(bubble && bubble.classList.contains("vb-float"));
     inCall = false;
-    if (bubble) {
-      bubble.classList.remove("vb-float");
-      if (!inHero()) bubble.classList.add("vb-parked");
+    if (bubble && inHero()) bubble.classList.remove("vb-float");
+    else if (bubble) {
+      // Out of sight at once, but still rendered while the call frame ends its
+      // session (embed-video.js gives it END_GRACE_MS): a frame under
+      // display:none may never get to stop the microphone.
+      var leaving = bubble;
+      leaving.classList.add("vb-leaving");
+      window.setTimeout(function () {
+        leaving.classList.remove("vb-leaving");
+        if (inCall) return;
+        leaving.classList.remove("vb-float");
+        leaving.classList.add("vb-parked");
+      }, 600);
     }
     update();
+    // A call that floated ends where it was: focus goes to the launcher, not to a bubble off screen.
+    if (floated && launcher && !launcher.hidden) {
+      try {
+        launcher.querySelector(".vl-main").focus({ preventScroll: true });
+      } catch (e) {
+        /* focus is a nicety */
+      }
+    }
   }
 
   function ready(api) {
