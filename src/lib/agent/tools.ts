@@ -309,7 +309,10 @@ export function toolsFor(
       WhatsApp would mean the agent deciding a conversation was over, which is
       a judgement it is in no position to make.
     */
-    ...(channel === "voice"
+    // A video call is held open and let go of like a telephone call, so it
+    // takes the spoken verbs. transfer_call already refuses where there is no
+    // live line to put anybody through on, which a website never has.
+    ...(channel !== "text"
       ? ([
           {
             name: "transfer_call",

@@ -36,6 +36,7 @@ export const FLAG_NAMES = [
   "forwarding.autotest",
   "forwarding.carrier.virgin",
   "language.de",
+  "video.avatar",
   "stubs",
 ] as const;
 
@@ -82,7 +83,22 @@ const DEFS: Record<Exclude<StaticFlag, "stubs">, FlagDef> = {
   // English, so nothing further to hold; on only once somebody has heard a
   // real German call on staging. See language.ts.
   "language.de": { needs: [], explicit: true },
+  // The video receptionist (docs/video): a Tavus face on the website. On only
+  // once somebody has watched a real call on staging. Tavus's key, the face,
+  // and the secret that ties Tavus's model requests to one conversation —
+  // unless the mock was asked for, see videoDef.
+  "video.avatar": { needs: ["TAVUS_API_KEY", "TAVUS_FACE_ID", "VIDEO_LLM_SECRET"], explicit: true },
 };
+
+/**
+ * `video.avatar` needs Tavus's credentials, unless `VIDEO_AVATAR_PROVIDER=mock`
+ * asked for the stand-in. The mock never counts as available where the stubs
+ * would be refused: in production, or next to a real database.
+ */
+function videoDef(env: Env): FlagDef | "unsafe" {
+  if ((env.VIDEO_AVATAR_PROVIDER ?? "").trim().toLowerCase() !== "mock") return DEFS["video.avatar"];
+  return stubsRefusal(env) ? "unsafe" : { needs: [], explicit: true };
+}
 
 function partnerId(name: string): string | null {
   const m = /^booking\.partner\.([a-z0-9-]+)$/.exec(name);
@@ -157,9 +173,11 @@ export function flagState(name: FlagName, env: Env = process.env): FlagState {
       : { name, on: true, reason: "on", missing: [] };
   }
 
-  const def = defFor(name);
-  if (!def) return { name, on: false, reason: "unknown", missing: [] };
+  const found = name === "video.avatar" ? videoDef(env) : defFor(name);
+  if (!found) return { name, on: false, reason: "unknown", missing: [] };
   if (set === "off") return { name, on: false, reason: "disabled", missing: [] };
+  if (found === "unsafe") return { name, on: false, reason: "unsafe", missing: [] };
+  const def = found;
 
   // Under stubs the fakes stand in for credentials, but the capability still
   // has to be asked for by name: a stubbed run turns on what it tests.

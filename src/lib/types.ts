@@ -1389,6 +1389,20 @@ export interface Call {
   /** Twilio's id for a phone call, so a retried webhook cannot record it twice. */
   callSid?: string;
   /**
+   * Set when this `embed` call was the video receptionist rather than the bell
+   * (docs/video). Metered as web-voice minutes like the bell; kept out of the
+   * bell's daily ceiling, because video has its own.
+   */
+  video?: {
+    provider: "tavus" | "mock";
+    /** Our session id. */
+    sessionId: string;
+    /** The provider's conversation id, once it has one. */
+    conversationId?: string;
+    /** Why it ended, in the provider's words or ours. Never shown to a visitor. */
+    endReason?: string;
+  };
+  /**
    * A voicemail the caller chose to leave on a venue that had not gone live.
    *
    * No agent, no stream and no speech-to-text: Twilio played a greeting and

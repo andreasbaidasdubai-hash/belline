@@ -209,7 +209,8 @@ export function checkEmbedGate(location: Location): EmbedGate {
   // widget off for the day — while the widget screen reported their calls as
   // visitors'.
   const used = listCalls(location.id).filter(
-    (call) => call.channel === "embed" && dateIn(call.startedAt, location.timezone) === today,
+    // Video calls have their own ceiling (video/availability.ts).
+    (call) => call.channel === "embed" && !call.video && dateIn(call.startedAt, location.timezone) === today,
   ).length;
 
   if (used < config.maxCallsPerDay) {

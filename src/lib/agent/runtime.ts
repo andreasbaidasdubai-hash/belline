@@ -273,6 +273,12 @@ export interface AgentSessionOptions {
    * the model spends can be summed per conversation, not only per episode.
    */
   conversationId?: string;
+  /**
+   * The opening line when somebody other than this session speaks it — the
+   * video provider says it from `custom_greeting` before the model is ever
+   * asked anything. The model is told it was said, exactly as on a phone call.
+   */
+  greeting?: string;
 }
 
 export class AgentSession {
@@ -305,6 +311,7 @@ export class AgentSession {
     this.channel = opts.channel ?? "voice";
     this.messages = opts.history ? [...opts.history] : [];
     this.tools = toolsFor(location, this.channel);
+    if (opts.greeting) this.spokenGreeting = opts.greeting;
   }
 
   /**
@@ -542,8 +549,8 @@ ${
           // before the model is ever called — so the model has to be told not
           // to say hello twice. A message thread has no such moment: the first
           // thing Belline writes *is* the greeting.
-          this.channel === "voice"
-            ? `You have already greeted the caller with: "${
+          this.channel !== "text"
+            ? `You have already greeted the ${this.channel === "video" ? "visitor" : "caller"} with: "${
                 this.spokenGreeting ?? this.location.agent.greeting
               }" — do not greet them again.`
             : ""
