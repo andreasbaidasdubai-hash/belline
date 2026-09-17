@@ -161,12 +161,31 @@ export function normaliseOrigin(raw: string): string | null {
  * control: they will list one, it will work on their staging site and fail on
  * their live one, and nobody will know why.
  */
-export function originAllowed(config: EmbedConfig, origin: string | null): boolean {
+export function originAllowed(config: EmbedConfig, origin: string | null, env: Record<string, string | undefined> = process.env): boolean {
   if (!config.enabled) return false;
   const asked = origin ? normaliseOrigin(origin) : null;
   if (!asked) return false;
   const strip = (o: string) => o.replace("://www.", "://");
+  if (config.key === BELLINE_SITE_EMBED_KEY && asked === ownSiteOrigin(env)) return true;
   return config.allowedOrigins.some((allowed) => strip(allowed) === strip(asked));
+}
+
+/** The widget on Belline's own marketing site (seed-belline.ts). */
+export const BELLINE_SITE_EMBED_KEY = "be_belline_site";
+
+/**
+ * Where this server serves Belline's own marketing site, when that is not a
+ * belline.ai host — i.e. staging, which serves the site and the app from one
+ * Railway hostname. The seeded allowlist names belline.ai only, so on staging
+ * our own site's chat and video refused to open ("only from the website it
+ * belongs to"). Production (belline.ai) is untouched by this.
+ */
+function ownSiteOrigin(env: Record<string, string | undefined>): string | null {
+  const raw = (env.PUBLIC_APP_URL || env.PUBLIC_ORIGIN || "").trim();
+  const own = raw ? normaliseOrigin(raw) : null;
+  if (!own || !own.startsWith("https://")) return null;
+  const host = new URL(own).hostname;
+  return host === "belline.ai" || host.endsWith(".belline.ai") ? null : own;
 }
 
 export interface EmbedGate {

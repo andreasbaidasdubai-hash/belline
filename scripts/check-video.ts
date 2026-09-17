@@ -263,6 +263,37 @@ await test("3. missing configuration fails gracefully: names only, a readable re
   assert.equal(videoProvider({ VIDEO_AVATAR_PROVIDER: "mock", NODE_ENV: "production" }), null);
 });
 
+await test("3b. the bubble shows the chosen face's own Tavus preview: fetched server-side with the key, cached, https only", async () => {
+  const { facePreview, resetFacePreviewCache } = await import("../src/lib/video/face-preview");
+  const { videoConfig } = await import("../src/lib/video/config");
+  const config = videoConfig({ TAVUS_API_KEY: "tvs_secret_key", TAVUS_FACE_ID: "rf90eb925bd8", VIDEO_LLM_SECRET: "x".repeat(40) });
+  resetFacePreviewCache();
+  const calls: { url: string; key: string | null }[] = [];
+  const fake = (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), key: new Headers(init?.headers).get("x-api-key") });
+    return new Response(JSON.stringify({ thumbnail_video_url: "https://cdn.replica.tavus.io/1/a.mp4", thumbnail_image_url: "https://cdn.replica.tavus.io/1/a.jpg" }), { status: 200 });
+  }) as typeof fetch;
+  const first = await facePreview(config, fake, 1_000);
+  assert.deepEqual(first, { clipUrl: "https://cdn.replica.tavus.io/1/a.mp4", posterUrl: "https://cdn.replica.tavus.io/1/a.jpg" });
+  assert.equal(calls[0].url, "https://tavusapi.com/v2/faces/rf90eb925bd8");
+  assert.equal(calls[0].key, "tvs_secret_key");
+  await facePreview(config, fake, 2_000);
+  assert.equal(calls.length, 1, "the face was looked up again inside the cache window");
+  assert.ok(!JSON.stringify(first).includes("tvs_secret_key"));
+
+  // A non-https or script-shaped address never reaches the page; mock and missing keys look nothing up.
+  resetFacePreviewCache();
+  const hostile = (async () => new Response(JSON.stringify({ thumbnail_video_url: "javascript:alert(1)", thumbnail_image_url: "http://x/a.jpg" }), { status: 200 })) as typeof fetch;
+  assert.equal(await facePreview(config, hostile, 3_000), null);
+  resetFacePreviewCache();
+  let looked = false;
+  const spy = (async () => { looked = true; return new Response("{}"); }) as typeof fetch;
+  assert.equal(await facePreview(videoConfig({ VIDEO_AVATAR_PROVIDER: "mock" }), spy), null);
+  assert.equal(await facePreview(videoConfig({ TAVUS_FACE_ID: "rf90eb925bd8" }), spy), null);
+  assert.equal(looked, false);
+  resetFacePreviewCache();
+});
+
 // ---------------------------------------------------------------------------
 console.log("\n  Sessions against the provider contract");
 

@@ -147,6 +147,20 @@ await test("an empty allowlist allows nothing", () => {
   assert.equal(originAllowed(none, "https://marinahair.ae"), false);
 });
 
+await test("staging's own origin opens Belline's own site widget, and only that widget", async () => {
+  const { BELLINE_SITE_EMBED_KEY } = await import("../src/lib/embed");
+  const staging = { PUBLIC_ORIGIN: "https://belline-staging.up.railway.app" };
+  const ours = { ...venue.embed!, key: BELLINE_SITE_EMBED_KEY, allowedOrigins: ["https://belline.ai"] };
+  assert.equal(originAllowed(ours, "https://belline-staging.up.railway.app", staging), true);
+  // A customer's widget never trusts our origin.
+  assert.equal(originAllowed(venue.embed!, "https://belline-staging.up.railway.app", staging), false);
+  // Production and anything not https add nothing.
+  assert.equal(originAllowed(ours, "https://app.belline.ai", { PUBLIC_ORIGIN: "https://app.belline.ai" }), false);
+  assert.equal(originAllowed(ours, "http://belline-staging.up.railway.app", { PUBLIC_ORIGIN: "http://belline-staging.up.railway.app" }), false);
+  assert.equal(originAllowed(ours, "https://evil.example", staging), false);
+  assert.equal(originAllowed({ ...ours, enabled: false }, "https://belline-staging.up.railway.app", staging), false);
+});
+
 await test("a disabled widget refuses even a registered origin", () => {
   const off = { ...venue.embed!, enabled: false };
   assert.equal(originAllowed(off, "https://marinahair.ae"), false);

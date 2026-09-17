@@ -7,6 +7,8 @@ import { venueWhatsApp, whatsappLink } from "@/lib/whatsapp";
 import { isActivated } from "@/lib/onboarding/journey";
 import { logoUrlFor } from "@/lib/logo";
 import { videoBubbleConfig, videoOffered } from "@/lib/video/availability";
+import { videoConfig } from "@/lib/video/config";
+import { facePreview } from "@/lib/video/face-preview";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +48,23 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   // `video` says only whether to show it (lib/video/availability.ts); the bubble's
   // clip, poster and agent name come with it, and only then.
   const video = videoOffered(location);
+  let videoBubble = video ? videoBubbleConfig(location) : null;
+  // No clip of our own: the chosen face's own Tavus preview, so the circle shows her.
+  if (videoBubble && !videoBubble.mock && (!videoBubble.clipUrl || !videoBubble.posterUrl)) {
+    const preview = await facePreview(videoConfig());
+    if (preview) {
+      videoBubble = {
+        ...videoBubble,
+        clipUrl: videoBubble.clipUrl || preview.clipUrl,
+        posterUrl: videoBubble.posterUrl || preview.posterUrl,
+      };
+    }
+  }
   return NextResponse.json(
     {
       ...widgetConfig(location.embed, link, answersIn(location), languageNotice(location), logoUrlFor(location)),
       video,
-      ...(video ? { videoBubble: videoBubbleConfig(location) } : {}),
+      ...(videoBubble ? { videoBubble } : {}),
     },
     { headers: { ...cors(), "cache-control": "public, max-age=60" } },
   );
