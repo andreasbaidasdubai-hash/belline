@@ -1546,6 +1546,8 @@ export interface Call {
     provider: "tavus" | "mock";
     /** Our session id. */
     sessionId: string;
+    /** Set when the call ran on a personalised video-demo link: counted against the demo ceilings, not the website's. */
+    demoLinkId?: string;
     /** The provider's conversation id, once it has one. */
     conversationId?: string;
     /** Why it ended, in the provider's words or ours. Never shown to a visitor. */

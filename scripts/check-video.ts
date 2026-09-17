@@ -2191,5 +2191,53 @@ await test("13. chat and voice are unaffected: widget modes, the bell's gate and
   assert.equal(videoOffered(getLocation(OFF.id)!), false);
 });
 
+await test("daily ceilings: a customer venue's website, Belline's own website, and demo links each count only their own sessions", async () => {
+  const { dailyVideoLimit, videoSessionsToday } = await import("../src/lib/video/availability");
+  const defaults = videoConfig({});
+  assert.equal(defaults.maxSessionsPerDay, 20);
+  assert.equal(defaults.maxSessionsPerDayBelline, 300);
+  assert.equal(defaults.maxDemoSessionsPerDay, 200);
+  assert.equal(dailyVideoLimit(A, defaults), 20, "a customer venue keeps VIDEO_MAX_SESSIONS_PER_DAY");
+  assert.equal(dailyVideoLimit({ id: "loc_belline" }, defaults), 300, "Belline's homepage bubble has its own ceiling");
+  assert.equal(dailyVideoLimit({ id: "loc_belline" }, defaults, "demo"), 200);
+  assert.equal(videoConfig({ VIDEO_MAX_SESSIONS_PER_DAY_BELLINE: "450", VIDEO_DEMO_MAX_SESSIONS_PER_DAY: "90" }).maxSessionsPerDayBelline, 450);
+  assert.equal(videoConfig({ VIDEO_DEMO_MAX_SESSIONS_PER_DAY: "90" }).maxDemoSessionsPerDay, 90);
+
+  const venue = getLocation(A.id)!;
+  const add = (demoLinkId?: string) => {
+    const call = startCall(venue, "embed", "website");
+    call.video = { provider: "mock", sessionId: `vs_ceiling_${Math.random().toString(36).slice(2)}`, ...(demoLinkId ? { demoLinkId } : {}) };
+    call.endedAt = new Date().toISOString();
+    saveCall(call);
+  };
+  const website = videoSessionsToday(venue);
+  const demos = videoSessionsToday(venue, "demo");
+  add();
+  add("link_a");
+  add("link_b");
+  assert.equal(videoSessionsToday(venue), website + 1, "demo sessions are not website sessions");
+  assert.equal(videoSessionsToday(venue, "demo"), demos + 2);
+
+  // The website at its ceiling: the bubble is off, a demo still starts.
+  const full = setEnv({ VIDEO_MAX_SESSIONS_PER_DAY: String(website + 1), VIDEO_DEMO_MAX_SESSIONS_PER_DAY: String(demos + 3) });
+  try {
+    assert.equal((videoAvailability(venue) as { reason?: string }).reason, "daily_limit");
+    assert.equal(videoAvailability(venue, { kind: "demo" }).on, true, "the website's ceiling blocked a demo");
+  } finally {
+    full();
+  }
+  // The demos at theirs: demos are off, the website is not.
+  const demoFull = setEnv({ VIDEO_MAX_SESSIONS_PER_DAY: String(website + 5), VIDEO_DEMO_MAX_SESSIONS_PER_DAY: String(demos + 2) });
+  try {
+    assert.equal((videoAvailability(venue, { kind: "demo" }) as { reason?: string }).reason, "daily_limit");
+    assert.equal(videoAvailability(venue).on, true, "demo sessions used up the website");
+  } finally {
+    demoFull();
+  }
+  // A demo session is marked as one on its call record.
+  assert.match(read("src/lib/video/sessions.ts"), /kind: opts\.demo \? "demo" : "website"/);
+  assert.match(read("src/lib/video/sessions.ts"), /\.\.\.\(demo \? \{ demoLinkId: demo\.linkId \} : \{\}\)/);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

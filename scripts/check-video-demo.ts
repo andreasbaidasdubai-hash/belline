@@ -306,6 +306,45 @@ await test("three video sessions a link a day; the fourth is 429 and offers the 
   assert.equal(fourth.json.fallback.chat, true);
 });
 
+await test("demo sessions never use Belline's website ceiling, and have their own demo-wide one", async () => {
+  const { videoSessionsToday, videoAvailability } = await import("../src/lib/video/availability");
+  const website = videoSessionsToday(belline);
+  const demos = videoSessionsToday(belline, "demo");
+  const saved = { ...process.env };
+  try {
+    // Belline's website allowance is used up (the staging incident): demos still start.
+    process.env.VIDEO_MAX_SESSIONS_PER_DAY_BELLINE = String(Math.max(1, website));
+    process.env.VIDEO_MAX_SESSIONS_PER_DAY = "1";
+    if (website === 0) {
+      const { startCall } = await import("../src/lib/calls");
+      const { saveCall } = await import("../src/lib/store");
+      const call = startCall(belline, "embed", "website");
+      call.video = { provider: "mock", sessionId: "vs_homepage_bubble" };
+      call.endedAt = new Date().toISOString();
+      saveCall(call);
+    }
+    assert.equal((videoAvailability(getLocation(belline.id)!) as { reason?: string }).reason, "daily_limit", "the homepage is at its ceiling");
+    freshStore();
+    const a = await makeLink(STUB_PROSPECT.leadId);
+    process.env.VIDEO_DEMO_MAX_SESSIONS_PER_DAY = String(demos + 1);
+    const first = await startSession(a.token);
+    assert.equal(first.res.status, 200, JSON.stringify(first.json));
+    assert.equal(getCall(sessions.getVideoSession(first.json.session.sessionId)!.callId)!.video!.demoLinkId, a.link.id);
+    assert.equal(videoSessionsToday(getLocation(belline.id)!), Math.max(1, website), "the demo counted as a website session");
+    // The demo-wide ceiling: another link, with its own allowance left, is refused and its reservation given back.
+    const b = await makeLink(OTHER.leadId);
+    const second = await startSession(b.token);
+    assert.equal(second.res.status, 429);
+    assert.equal(second.json.error, "daily_limit");
+    assert.equal((await demoStore().get(b.link.id))!.daily[storeMod.utcDay()]?.video ?? 0, 0);
+  } finally {
+    for (const k of ["VIDEO_MAX_SESSIONS_PER_DAY_BELLINE", "VIDEO_DEMO_MAX_SESSIONS_PER_DAY", "VIDEO_MAX_SESSIONS_PER_DAY"]) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  }
+});
+
 await test("a double click reuses the session and does not use up the day", async () => {
   freshStore();
   const { link, token: t } = await makeLink();

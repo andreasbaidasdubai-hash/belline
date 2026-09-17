@@ -52,7 +52,20 @@ export interface VideoConfig {
   warnBeforeSeconds: number;
   /** A visitor who never joins the room is let go of after this. */
   joinTimeoutSeconds: number;
+  /** Video sessions a day on a customer venue's website. */
   maxSessionsPerDay: number;
+  /**
+   * Belline's own website venue (loc_belline): the homepage bubble takes far
+   * more visitors than any customer's site, so it has its own ceiling.
+   */
+  maxSessionsPerDayBelline: number;
+  /**
+   * Personalised video-demo sessions a day, across every link. Counted apart
+   * from the venue's website sessions (they run on loc_belline but must never
+   * use up the homepage's allowance, or the other way round); each link also
+   * has its own per-day allowance (sales/video-demo/service.ts demoLimits).
+   */
+  maxDemoSessionsPerDay: number;
   maxConcurrentPerVenue: number;
   /** The bubble's muted greeting clip and its poster, for every venue without its own. */
   greetingClipUrl: string;
@@ -106,6 +119,8 @@ export function videoConfig(env: Env = process.env): VideoConfig {
     warnBeforeSeconds: Math.min(num(env.VIDEO_WARN_BEFORE_SECONDS, 30, 5, 300), Math.floor(maxCallSeconds / 2)),
     joinTimeoutSeconds: num(env.VIDEO_JOIN_TIMEOUT_SECONDS, 60, 15, 300),
     maxSessionsPerDay: num(env.VIDEO_MAX_SESSIONS_PER_DAY, 20, 1, 1000),
+    maxSessionsPerDayBelline: num(env.VIDEO_MAX_SESSIONS_PER_DAY_BELLINE, 300, 1, 5000),
+    maxDemoSessionsPerDay: num(env.VIDEO_DEMO_MAX_SESSIONS_PER_DAY, 200, 1, 5000),
     maxConcurrentPerVenue: num(env.VIDEO_MAX_CONCURRENT_PER_VENUE, 2, 1, 50),
     greetingClipUrl: httpsOrPath(env.VIDEO_GREETING_CLIP_URL),
     greetingPosterUrl: httpsOrPath(env.VIDEO_GREETING_POSTER_URL),

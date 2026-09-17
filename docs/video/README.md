@@ -111,7 +111,9 @@ All placeholders are in `.env.example`.
 | `VIDEO_MAX_CALL_SECONDS` | optional | Default 300 (30–1800) |
 | `VIDEO_WARN_BEFORE_SECONDS` | optional | Default 30 |
 | `VIDEO_JOIN_TIMEOUT_SECONDS` | optional | Default 60; also Tavus `participant_absent_timeout` |
-| `VIDEO_MAX_SESSIONS_PER_DAY` | optional | Per venue, default 20 |
+| `VIDEO_MAX_SESSIONS_PER_DAY` | optional | Website sessions a day per customer venue, default 20 |
+| `VIDEO_MAX_SESSIONS_PER_DAY_BELLINE` | optional | Website sessions a day on Belline's own venue (`loc_belline`, the homepage bubble), default 300 |
+| `VIDEO_DEMO_MAX_SESSIONS_PER_DAY` | optional | Personalised demo-link sessions a day, all links together, default 200. Never counted against a venue's website ceiling; each link also has `VIDEO_DEMO_SESSIONS_PER_DAY` (3) |
 | `VIDEO_MAX_CONCURRENT_PER_VENUE` | optional | Default 2 |
 | `VIDEO_TAVUS_PAL_MODE` | optional | `shared` (default: one PAL per venue and face, made and kept by Belline, pre-warmed) or `per_session` (a PAL per call; the rollback) |
 | `VIDEO_FAST_MODEL` | optional | Video small talk on this model first, any tool turn on the venue's model. Default `claude-haiku-4-5`; `off` disables |

@@ -5,7 +5,7 @@ import { seedIfEmpty } from "@/lib/seed";
 import { flagState } from "@/lib/flags";
 import { videoConfig, missingVideoConfig } from "@/lib/video/config";
 import { readVideoControl } from "@/lib/video/control";
-import { venueAllowlisted, videoAvailability, videoSessionsToday } from "@/lib/video/availability";
+import { dailyVideoLimit, venueAllowlisted, videoAvailability, videoSessionsToday } from "@/lib/video/availability";
 import { liveVideoSessions } from "@/lib/video/sessions";
 import { recentVideoMetrics, type VideoMetricName } from "@/lib/video/metrics";
 import { ConsoleHeader, EmptyState, KeyValues, Pill, ago } from "../../ui";
@@ -115,7 +115,7 @@ export default async function VideoSettings() {
                       <td>{listed ? "Yes" : "No"}</td>
                       <td>{availability.on ? <Pill tone="ok">Yes</Pill> : `No: ${REASON[availability.reason] ?? availability.reason.replace(/_/g, " ")}`}</td>
                       <td className="num">
-                        {videoSessionsToday(v)} of {config.maxSessionsPerDay}
+                        {videoSessionsToday(v)} of {dailyVideoLimit(v, config)}
                       </td>
                       <td>{listed ? <VideoAction action="disallow" locationId={v.id} label="Remove" confirm={`Stop offering video on ${v.name}'s website?`} /> : <VideoAction action="allow" locationId={v.id} label="Allow video" />}</td>
                     </tr>

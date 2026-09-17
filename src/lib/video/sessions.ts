@@ -180,7 +180,8 @@ export async function startVideoSession(
   opts: { env?: Env; preview?: boolean; provider?: VideoAvatarProvider; demo?: VideoDemoStart } = {},
 ): Promise<StartResult> {
   const env = opts.env ?? process.env;
-  const available = videoAvailability(location, { env, skipLive: opts.preview });
+  // A demo link's session counts against the demo ceilings, never the website's.
+  const available = videoAvailability(location, { env, skipLive: opts.preview, kind: opts.demo ? "demo" : "website" });
   if (!available.on) {
     const status = available.reason === "daily_limit" ? 429 : 403;
     return { ok: false, reason: available.reason, retryable: false, status };
@@ -258,7 +259,7 @@ async function create(
   const startedAt = Date.now();
 
   const call = startCall(location, "embed", "website");
-  call.video = { provider: provider.name, sessionId };
+  call.video = { provider: provider.name, sessionId, ...(demo ? { demoLinkId: demo.linkId } : {}) };
   // Our own venue and our demo lines are ours to pay for, never a customer's.
   if (location.internal || location.demo?.enabled) call.isDemo = true;
   saveCall(call);
