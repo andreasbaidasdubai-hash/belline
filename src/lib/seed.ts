@@ -767,16 +767,20 @@ export function splitVenuePhones(now: Date = new Date()): { id: string; rule: Ph
 }
 
 /**
- * Give every venue a language, once: English, which is what every venue saved
- * before the field existed was answered in. Writes only a missing value, so
- * the second boot touches nothing, and a venue an owner switched to German is
- * never switched back. Returns the ids it filled.
+ * Give every venue its languages, once.
+ *
+ * A venue saved before `language` existed was answered in English, and one
+ * saved before `languages` existed was answered in its `language`: that becomes
+ * its main language, with nothing else, switching automatically. Writes only
+ * what is missing, so the second boot touches nothing and an owner's choice is
+ * never undone. Returns the ids it filled.
  */
 export function ensureLanguage(): string[] {
   const filled: string[] = [];
   for (const location of listLocations({ includeInternal: true, includeArchived: true })) {
-    if (location.language) continue;
-    upsertLocation({ ...location, language: "en" });
+    if (location.language && location.languages) continue;
+    const main = location.languages?.main ?? location.language ?? "en";
+    upsertLocation({ ...location, language: main, languages: location.languages ?? { main, also: [], pick: "auto" } });
     filled.push(location.id);
   }
   return filled;

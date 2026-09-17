@@ -8,11 +8,13 @@
  * once per language, and nothing customer-facing keeps its own copy, so a
  * German caller cannot reach an English sentence by a path nobody thought of.
  *
- * `check:german` reads this table: every key has both languages, the German
- * is not the English, and the two carry the same `{placeholders}`. Adding an
- * English line without its German fails that check and the type check both.
+ * `check:languages` reads this table: every key has a line in every language
+ * an owner can choose (config/languages.ts, status "live"), no line is the
+ * English copied, and every language carries the same `{placeholders}`. A
+ * language with an incomplete column cannot be selected, and a missing line
+ * falls back to English and says so in the log.
  *
- * Pure data and one pure function, with no imports: the chat box and the
+ * Pure data and pure functions, with type-only imports: the chat box and the
  * booking page are browser components and read it directly. The venue's
  * language is decided in language.ts `answersIn`, never here.
  *
@@ -20,18 +22,12 @@
  * existed. Change it here and it changes everywhere, deliberately.
  */
 
-export type CopyLanguage = "en" | "de";
+import type { LanguageCode } from "../config/languages";
 
-/** The languages an owner can choose from, as the agent page lists them. */
-export const LANGUAGES: readonly { id: CopyLanguage; label: string }[] = [
-  { id: "en", label: "English" },
-  { id: "de", label: "German (Deutsch)" },
-];
+export type CopyLanguage = LanguageCode;
 
-interface Line {
-  en: string;
-  de: string;
-}
+/** English always; every other language has a column once it is being localised. */
+type Line = { en: string } & Partial<Record<Exclude<CopyLanguage, "en">, string>>;
 
 export const CUSTOMER_COPY = {
   // --- The telephone -------------------------------------------------------
@@ -115,6 +111,9 @@ export const CUSTOMER_COPY = {
   /** The button on a venue's own website, where the owner has not written their own. */
   "embed.voice_label": { en: "Talk to us", de: "Mit uns sprechen" },
   "embed.chat_label": { en: "Chat with us", de: "Chat mit uns" },
+  /** The close button on the website widget's panel, for screen readers. */
+  "embed.close_chat": { en: "Close chat", de: "Chat schließen" },
+  "embed.close_call": { en: "Close call", de: "Anruf schließen" },
   "embed.whatsapp_label": { en: "WhatsApp us", de: "Per WhatsApp schreiben" },
   "embed.not_switched_on": { en: "{name} has not switched this on yet.", de: "{name} hat das noch nicht eingeschaltet." },
   "embed.chat_off": { en: "Chat isn't switched on for this website yet.", de: "Der Chat ist für diese Website noch nicht eingeschaltet." },
@@ -193,6 +192,16 @@ export const CUSTOMER_COPY = {
   "chat.recording_label": { en: "Recording — release to send", de: "Aufnahme – zum Senden loslassen" },
   "chat.hold_label": { en: "Hold to record a voice note", de: "Gedrückt halten für eine Sprachnachricht" },
   "chat.send": { en: "Send", de: "Senden" },
+  /** Under the chat header and on the website widget, where a business answers in more than one language. */
+  "notice.also_speaks": { en: "Also speaks {languages}", de: "Spricht auch {languages}" },
+  /**
+   * Ask mode: after the greeting, one line in each other language the business
+   * speaks, in that language, so a caller hears the offer in words they know.
+   */
+  "voice.also_speak": {
+    en: "You can also speak English with me.",
+    de: "Sie können auch gern Deutsch mit mir sprechen.",
+  },
 
   // --- The call button on a venue's website (test/Console.tsx, minimal) ---
   // The English stays inline in Console.tsx, which is also the owner's own
@@ -430,6 +439,7 @@ export const CHAT_KEYS = [
   "chat.recording_label",
   "chat.hold_label",
   "chat.send",
+  "notice.also_speaks",
 ] as const satisfies readonly CopyKey[];
 
 export const CALL_KEYS = [
@@ -476,11 +486,31 @@ export function placeholdersOf(text: string): string[] {
  * with "{name}" in it) is inserted as written rather than filled again.
  */
 export function copy(language: CopyLanguage, key: CopyKey, vars: Record<string, string | number> = {}): string {
+  return fill(lineIn(language, key), vars);
+}
+
+/** The line in one language, or English — logged once per language and key — where it has none. */
+function lineIn(language: CopyLanguage, key: CopyKey): string {
   const line: Line = CUSTOMER_COPY[key];
-  return fill(line[language] ?? line.en, vars);
+  if (language === "en") return line.en;
+  const own = line[language];
+  if (own) return own;
+  const seen = `${language}:${key}`;
+  if (!fellBack.has(seen)) {
+    fellBack.add(seen);
+    console.warn(`[language] "${key}" has no ${language} line yet; the customer gets the English.`);
+  }
+  return line.en;
+}
+
+const fellBack = new Set<string>();
+
+/** Whether every line has this language: what "fully localised" means for customer messages. */
+export function copyComplete(language: CopyLanguage): boolean {
+  return language === "en" || Object.values(CUSTOMER_COPY).every((line) => Boolean((line as Line)[language as Exclude<CopyLanguage, "en">]?.trim()));
 }
 
 /** A whole language's lines for the keys a browser component needs, so only those are sent. */
 export function copyTable<K extends CopyKey>(language: CopyLanguage, keys: readonly K[]): Record<K, string> {
-  return Object.fromEntries(keys.map((k) => [k, CUSTOMER_COPY[k][language]])) as Record<K, string>;
+  return Object.fromEntries(keys.map((k) => [k, lineIn(language, k)])) as Record<K, string>;
 }
