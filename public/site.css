@@ -2709,6 +2709,11 @@ h2.display {
   .hero-demo { gap: 56px; }
   .hero-demo h1.display { font-size: clamp(2.55rem, 1rem + 4vw, 4.6rem); }
 }
+/* With Belle in the hero, her column shares the width instead of hugging the
+   far edge, so the bubble (centred in it) sits nearer the words. */
+@media (min-width: 901px) {
+  .hero-demo.has-video-hero { grid-template-columns: minmax(0, 1fr) minmax(340px, 0.85fr); }
+}
 @media (max-width: 900px) {
   .hero-demo { grid-template-columns: minmax(0, 1fr); gap: 40px; }
 }
@@ -3459,11 +3464,12 @@ footer a { color: var(--bl-ink-900); }
 .hero-note .gen { color: var(--bl-ink-900); font-weight: 500; }
 .hero-note-more { color: var(--bl-muted); }
 
+/* Centred in its column (site review, 2026-09-17). */
 .hero-video {
   margin: 0;
   width: 340px;
   max-width: 100%;
-  justify-self: end;
+  justify-self: center;
   display: grid;
   gap: 22px;
   justify-items: center;

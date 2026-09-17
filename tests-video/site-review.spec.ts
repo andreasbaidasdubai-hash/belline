@@ -188,7 +188,23 @@ test("Belle is large in the hero on load, on a phone within the first screen, an
       const circle = await box(bubble.locator(".bvb-circle"));
       if (wide) {
         expect(circle.width).toBeGreaterThanOrEqual(296);
+        // Centred in the right-hand column, not pushed to its far edge.
+        const column = await page.evaluate(() => {
+          const grid = document.querySelector(".hero-video")!.parentElement!;
+          const r = grid.getBoundingClientRect();
+          const css = getComputedStyle(grid);
+          const [first, second] = css.gridTemplateColumns.split(" ").map(parseFloat);
+          const left = r.left + parseFloat(css.paddingLeft) + first + (parseFloat(css.columnGap) || 0);
+          return { centre: left + second / 2, right: left + second };
+        });
+        expect(Math.abs(circle.x + circle.width / 2 - column.centre), "Belle is not centred in her column").toBeLessThanOrEqual(12);
+        // Her column is wider than she is: not flush with the page's right edge.
+        expect(column.right - (circle.x + circle.width)).toBeGreaterThanOrEqual(60);
         await shot(page, "desktop-hero");
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.waitForTimeout(300);
+        await shot(page, "desktop-hero-1440");
+        await page.setViewportSize(size);
       } else {
         // Large, within the first screen with her icons and the included line: under the headline and the pills, before the paragraph.
         // About 220-240px: 240 on a 390x844 phone, a little less on a short one (375x667) so her icons and the line fit too.
