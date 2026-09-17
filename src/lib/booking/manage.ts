@@ -3,7 +3,7 @@ import { signBookingToken } from "../auth";
 import { findAvailability } from "./index";
 import { lateCancelNotice } from "./policy";
 import { instantOf } from "../reminders";
-import { addDays, dateToGerman, dateToSpoken, minutesToClock, minutesToGerman, minutesToSpoken, todayIn } from "../time";
+import { addDays, dateWrittenIn, minutesToClock, minutesToSpokenIn, todayIn } from "../time";
 import { answersIn, inHouseSpelling } from "../language";
 import { copy, type CopyKey } from "../customer-copy";
 import { emailEnabled, sendEmail } from "../providers/email";
@@ -45,9 +45,10 @@ export function whatWasBooked(location: Location, booking: Booking, language: Ve
  * page writes it, in the venue's language.
  */
 export function bookingWhen(location: Location, booking: Pick<Booking, "date" | "startMin">, language: VenueLanguage = "en"): string {
-  return language === "de"
-    ? copy("de", "booking.when", { date: dateToGerman(booking.date, location.timezone), time: minutesToGerman(booking.startMin) })
-    : copy("en", "booking.when", { date: dateToSpoken(booking.date, location.timezone), time: minutesToSpoken(booking.startMin) });
+  return copy(language, "booking.when", {
+    date: dateWrittenIn(language, booking.date, location.timezone),
+    time: minutesToSpokenIn(language, booking.startMin),
+  });
 }
 
 export function withWhom(location: Location, booking: Booking): string | null {
@@ -116,8 +117,8 @@ export function bookingIcs(location: Location, booking: Booking): string {
   const start = instantOf(booking.date, booking.startMin, location.timezone);
   const end = instantOf(booking.date, booking.endMin, location.timezone);
   const who = withWhom(location, booking);
-  const language = answersIn(location);
-  const spell = (text: string) => inHouseSpelling(location, text);
+  const language = answersIn(location, { current: booking.language });
+  const spell = (text: string) => inHouseSpelling(location, text, { current: booking.language });
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -157,7 +158,7 @@ function esc(value: string): string {
 }
 
 export function bookingEmail(location: Location, booking: Booking, kind: BookingEmailKind) {
-  const language = answersIn(location);
+  const language = answersIn(location, { current: booking.language });
   const t = (key: CopyKey, vars?: Record<string, string | number>) => copy(language, key, vars);
   const what = whatWasBooked(location, booking, language);
   const who = withWhom(location, booking);
@@ -235,7 +236,7 @@ ${policy ? `<tr><td style="padding:14px 28px 0;font-size:13px;color:#746C63">${e
 </td></tr></table></body></html>`;
 
   // Swiss spelling for a Swiss venue; unchanged for everyone else.
-  const spell = (value: string) => inHouseSpelling(location, value);
+  const spell = (value: string) => inHouseSpelling(location, value, { current: booking.language });
   return { subject: spell(subject), text: spell(text), html: spell(html) };
 }
 

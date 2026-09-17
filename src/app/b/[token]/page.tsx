@@ -3,7 +3,7 @@ import { verifyBookingToken } from "@/lib/auth";
 import { getBooking, getLocation } from "@/lib/store";
 import { bookingWhen, manageable, whatWasBooked, withWhom } from "@/lib/booking/manage";
 import { lateCancelNotice } from "@/lib/booking/policy";
-import { answersIn, inHouseSpelling } from "@/lib/language";
+import { answersIn, directionOf, inHouseSpelling, type LanguageCode } from "@/lib/language";
 import { MANAGE_KEYS, copy, copyTable, type CopyKey } from "@/lib/customer-copy";
 import ManageBooking from "./ManageBooking";
 
@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   const booking = bookingId ? getBooking(bookingId) : undefined;
   const location = booking ? getLocation(booking.locationId) : undefined;
   return {
-    title: copy(location ? answersIn(location) : "en", "manage.page_title"),
+    title: copy(location && booking ? answersIn(location, { current: booking.language }) : "en", "manage.page_title"),
     robots: { index: false, follow: false },
   };
 }
@@ -33,7 +33,7 @@ export default async function BookingPage({ params }: { params: Promise<{ token:
   const location = booking ? getLocation(booking.locationId) : undefined;
 
   const shell = (children: React.ReactNode, lang = "en") => (
-    <main lang={lang === "en" ? undefined : lang} style={{ minHeight: "100vh", background: "var(--bl-ground)", color: "var(--bl-ink-900)", padding: "48px 20px" }}>
+    <main lang={lang === "en" ? undefined : lang} dir={lang === "en" ? undefined : directionOf(lang as LanguageCode)} style={{ minHeight: "100vh", background: "var(--bl-ground)", color: "var(--bl-ink-900)", padding: "48px 20px" }}>
       <div style={{ maxWidth: 520, margin: "0 auto" }}>{children}</div>
     </main>
   );
@@ -47,8 +47,9 @@ export default async function BookingPage({ params }: { params: Promise<{ token:
     );
   }
 
-  const language = answersIn(location);
-  const t = (key: CopyKey, vars?: Record<string, string | number>) => inHouseSpelling(location, copy(language, key, vars));
+  const ctx = { current: booking.language };
+  const language = answersIn(location, ctx);
+  const t = (key: CopyKey, vars?: Record<string, string | number>) => inHouseSpelling(location, copy(language, key, vars), ctx);
   const state = manageable(location, booking, Date.now(), language);
   const who = withWhom(location, booking);
   const rows: [string, string][] = [
@@ -92,7 +93,7 @@ export default async function BookingPage({ params }: { params: Promise<{ token:
           phone={location.businessPhone}
           venueName={location.name}
           language={language}
-          copy={spelled(copyTable(language, MANAGE_KEYS), (text) => inHouseSpelling(location, text))}
+          copy={spelled(copyTable(language, MANAGE_KEYS), (text) => inHouseSpelling(location, text, ctx))}
         />
       ) : (
         <p style={{ marginTop: 24, color: "var(--bl-text-2)", fontSize: 15 }}>

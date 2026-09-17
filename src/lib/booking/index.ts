@@ -7,7 +7,7 @@ import type {
   Slot,
 } from "../types";
 import { bookingRef, id, listBookings, saveBooking } from "../store";
-import { addDays, minutesToSpoken, dateToSpoken, dateToGerman, minutesToGerman } from "../time";
+import { addDays, minutesToSpoken, dateToSpoken, dateWrittenIn, minutesToSpokenIn } from "../time";
 import { answersIn, inHouseSpelling } from "../language";
 import { copy } from "../customer-copy";
 import { normalisePhone } from "../guests";
@@ -535,11 +535,13 @@ export function describeBookingShort(location: Location, booking: Booking): stri
 
 /** The confirmation text a guest receives. Short — it is read on a lock screen. */
 export function confirmationMessage(location: Location, booking: Booking): string {
-  const language = answersIn(location);
-  const when =
-    language === "de"
-      ? copy("de", "booking.when", { date: dateToGerman(booking.date, location.timezone), time: minutesToGerman(booking.startMin) })
-      : copy("en", "booking.when", { date: dateToSpoken(booking.date, location.timezone), time: minutesToSpoken(booking.startMin) });
+  // The language the guest booked in, where it was another the business speaks.
+  const ctx = { current: booking.language };
+  const language = answersIn(location, ctx);
+  const when = copy(language, "booking.when", {
+    date: dateWrittenIn(language, booking.date, location.timezone),
+    time: minutesToSpokenIn(language, booking.startMin),
+  });
   const what =
     booking.vertical === "restaurant"
       ? copy(language, "booking.table", { n: String(booking.partySize) })
@@ -553,6 +555,7 @@ export function confirmationMessage(location: Location, booking: Booking): strin
   return inHouseSpelling(
     location,
     copy(language, "booking.confirmation_text", { name: location.name, what, when, ref: booking.ref, link: manage }),
+    ctx,
   );
 }
 
