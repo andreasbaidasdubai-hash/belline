@@ -5,6 +5,7 @@ import { bookingLinkOf, takesRequestsOnly } from "../booking/destination";
 import { requestRulesOf } from "../booking/requests";
 import { allowedLanguages, formalityOf, languagesFor, variantOf, type LanguageChannel } from "../language";
 import { languageEntry } from "../../config/languages";
+import { belleKnowledge } from "../belle/knowledge";
 
 /**
  * A clinic's rule about medical detail. In the prompt for every clinic,
@@ -440,7 +441,11 @@ ${facts}
 # Answers to common questions
 ${a.faqs.map((f) => `Q: ${f.q}\nA: ${f.a}`).join("\n\n")}
 
-${CLOSING[channel](Boolean(location.agent.transferNumber))}${
+${
+    // Belline's own line reads the one knowledge base every Belle reads
+    // (belle/knowledge.ts), generated from the catalogue and the flags.
+    selling ? `${belleKnowledge({ mode: "sales" })}\n\n` : ""
+  }${CLOSING[channel](Boolean(location.agent.transferNumber))}${
     location.demo?.enabled && !selling
       ? `
 
