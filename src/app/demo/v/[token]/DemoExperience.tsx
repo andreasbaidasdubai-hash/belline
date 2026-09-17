@@ -54,7 +54,6 @@ export default function DemoExperience(props: Props) {
       <style>{CSS}</style>
       <header className="dx-top">
         <span className="dx-brand">Belline</span>
-        <span className="dx-pill">AI concierge</span>
       </header>
 
       <section className="dx-head">
@@ -90,11 +89,8 @@ export default function DemoExperience(props: Props) {
       </section>
 
       <section className="dx-foot">
-        {mode === "video" && videoOn ? (
-          <button type="button" className="dx-link" onClick={() => setMode("chat")}>
-            Prefer to type? Chat with Belle
-          </button>
-        ) : videoOn ? (
+        {/* On video, the call panel's own "Chat instead" is the one way to switch; the "AI concierge" pill is on the circle. */}
+        {mode === "video" && videoOn ? null : videoOn ? (
           <button type="button" className="dx-link" onClick={() => setMode("video")}>
             Talk to Belle on video instead
           </button>
@@ -196,8 +192,6 @@ const CSS = `
 .dx > * { width: 100%; max-width: 560px }
 .dx-top { display: flex; align-items: center; justify-content: space-between; padding: 16px 0 4px }
 .dx-brand { font-family: var(--bl-font-display); font-weight: 600; font-size: 19px; letter-spacing: -0.01em }
-.dx-pill { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 3px 10px;
-  border-radius: 999px; color: var(--bl-accent-text); background: var(--bl-blue-tint); border: 1px solid var(--bl-blue-line) }
 .dx-head { text-align: center; padding: 18px 0 6px }
 .dx-eyebrow { margin: 0 0 6px; font-size: 14px; color: var(--bl-text-2) }
 .dx-head h1 { margin: 0; font-family: var(--bl-font-display); font-weight: 600; font-size: clamp(26px, 7vw, 34px);
