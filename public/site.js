@@ -580,6 +580,73 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   if (/[?&]chat=1(?:&|$)/.test(window.location.search)) open();
 })();
 
+/* --- the hero's card --------------------------------------------------------
+   The three example conversations and the example calendar are four figures
+   in the markup; here they become the tabs of one card, labelled from each
+   figure's data-tab (so the German page names them in German). One is shown
+   at a time and the visitor chooses: nothing rotates by itself. Without
+   JavaScript the four stack, as they always could. */
+(function () {
+  var stage = document.querySelector(".stage[data-tabs]");
+  if (!stage) return;
+  var panels = [].slice.call(stage.children).filter(function (n) {
+    return n.hasAttribute("data-tab");
+  });
+  if (panels.length < 2) return;
+
+  var list = document.createElement("div");
+  list.className = "stage-tabs";
+  list.setAttribute("role", "tablist");
+  list.setAttribute("aria-label", stage.getAttribute("data-tabs"));
+
+  var tabs = panels.map(function (panel, i) {
+    if (!panel.id) panel.id = "stage-panel-" + i;
+    var tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = "stage-tab";
+    tab.id = panel.id + "-tab";
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", panel.id);
+    tab.textContent = panel.getAttribute("data-tab");
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", tab.id);
+    tab.addEventListener("click", function () {
+      show(i, false);
+    });
+    list.appendChild(tab);
+    return tab;
+  });
+
+  function show(index, focus) {
+    tabs.forEach(function (tab, j) {
+      var on = j === index;
+      tab.setAttribute("aria-selected", String(on));
+      tab.tabIndex = on ? 0 : -1;
+      panels[j].classList.toggle("is-on", on);
+    });
+    if (focus) tabs[index].focus();
+  }
+
+  // Arrow keys move between tabs, as in any tab list.
+  list.addEventListener("keydown", function (e) {
+    var i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    var n = tabs.length;
+    var next =
+      e.key === "ArrowRight" ? (i + 1) % n :
+      e.key === "ArrowLeft" ? (i - 1 + n) % n :
+      e.key === "Home" ? 0 :
+      e.key === "End" ? n - 1 : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    show(next, true);
+  });
+
+  stage.insertBefore(list, stage.firstChild);
+  stage.classList.add("is-tabbed");
+  show(0, false);
+})();
+
 /* --- the video receptionist ------------------------------------------------
    Belline's video receptionist, on our own site — and only once it is switched
    on for our own venue. Nothing is in the markup: when the venue's widget
@@ -644,6 +711,22 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   document.addEventListener("belline:dock", function (e) {
     if (ctl) ctl.setHidden(Boolean(e.detail && e.detail.open));
   });
+
+  // Every "Talk to Belle" on the page (the hero's first) starts the video call
+  // in Belle's circle once the bubble is here. Caught before the voice dock's
+  // own listener; until then, and without video, they ring the voice call.
+  document.addEventListener(
+    "click",
+    function (e) {
+      if (!ctl || ctl.state().hidden) return;
+      var trigger = e.target && e.target.closest ? e.target.closest("[data-call]") : null;
+      if (!trigger) return;
+      e.preventDefault();
+      e.stopPropagation();
+      ctl.openCall();
+    },
+    true
+  );
 
   fetch(appOrigin + "/api/embed/" + key + "/config", { mode: "cors" })
     .then(function (r) {
@@ -712,22 +795,6 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
 
    So the browser offers a correction, and the server resolves the domain's
    mail records before accepting it. Neither refuses an address outright on
-  // Every "Talk to Belle" on the page (the hero's first) starts the video call
-  // in Belle's circle once the bubble is here. Caught before the voice dock's
-  // own listener; until then, and without video, they ring the voice call.
-  document.addEventListener(
-    "click",
-    function (e) {
-      if (!ctl || ctl.state().hidden) return;
-      var trigger = e.target && e.target.closest ? e.target.closest("[data-call]") : null;
-      if (!trigger) return;
-      e.preventDefault();
-      e.stopPropagation();
-      ctl.openCall();
-    },
-    true
-  );
-
    spelling alone: somebody's real mailbox may genuinely be at an address one
    letter from a famous one, and a form telling a customer they do not exist
    is worse than a bounce. */

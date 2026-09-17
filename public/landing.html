@@ -138,19 +138,22 @@
 <main>
 
   <!--
-    The hero. Claim on the left; on the right, the three conversations Belline
-    has today (website chat, a phone call, WhatsApp on a second number) and
-    the calendar the call's request lands in. Everything is drawn in HTML and
-    labelled as an example. None of the conversations ends in a booked time.
+    The hero. Claim on the left; on the right, one calm card with a tab for
+    each way Belline answers today (website chat, a phone call, WhatsApp on a
+    second number) and the calendar a request lands in. One conversation at a
+    time, chosen by the visitor: nothing rotates on its own. Belle's own face
+    is the bubble in the corner (only where video is switched on), so the
+    hero does not draw a second one. Everything is drawn in HTML and labelled
+    as an example. None of the conversations ends in a booked time.
     Connecting Google Calendar or Outlook is not live yet, so the calendar
     carries a "Coming soon" badge and its new entry is a request waiting for
     the team, never a confirmed booking. The lead says "soon" for the same
-    reason.
+    reason. Without JavaScript the four cards simply stack.
   -->
   <section class="hero">
     <div class="wrap hero-in hero-demo">
       <div class="hero-copy">
-        <p class="eyebrow rise">AI voice and chat reception</p>
+        <p class="eyebrow rise">AI video, voice and chat reception</p>
         <h1 class="display rise rise-1">Someone always answers.</h1>
         <p class="lead rise rise-2">
           Belline answers the calls, website chats and WhatsApp messages your
@@ -162,7 +165,7 @@
 
         <div class="cta-row rise rise-3">
           <a class="btn" href="https://app.belline.ai/checkout" data-cta="hero">Get started</a>
-          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Speak to Belline</a>
+          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Talk to Belle</a>
         </div>
 
         <p class="hero-note rise rise-4">
@@ -172,18 +175,16 @@
       </div>
 
       <!--
-        Four pieces on a two-column stage: chat above WhatsApp on the left;
-        the call above the calendar on the right, joined by a short dashed
-        line so the call's request visibly lands in the calendar. On a phone
-        they stack chat, call, calendar, WhatsApp, which keeps that pair
-        together. The calendar is neither Google's nor Outlook's (no logos)
-        and carries the Coming soon badge. The new entry is the caller's
-        request, waiting for the team, because Belline does not confirm
-        bookings today.
+        Four pieces in one card. site.js turns each data-tab into a tab (chat,
+        phone, WhatsApp, calendar); only the chosen one is shown, and all four
+        share one height so nothing below moves. The calendar is neither
+        Google's nor Outlook's (no logos) and carries the Coming soon badge.
+        The new entry is the caller's request, waiting for the team, because
+        Belline does not confirm bookings today.
       -->
-      <div class="stage" role="group" aria-label="Three example conversations, and an example calendar">
+      <div class="stage" role="group" aria-label="Three example conversations, and an example calendar" data-tabs="Where Belline answers">
         <!-- Website chat -->
-        <figure class="demo-card demo-chat">
+        <figure class="demo-card demo-chat" id="demo-chat" data-tab="Chat">
           <figcaption class="demo-head">
             <span class="demo-badge" aria-hidden="true">
               <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" class="mark-ground"/><g class="mark-glyph" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>
@@ -205,7 +206,7 @@
         </figure>
 
         <!-- Phone call -->
-        <figure class="demo-card demo-call">
+        <figure class="demo-card demo-call" id="demo-call" data-tab="Phone">
           <figcaption class="demo-head demo-head-ink">
             <span class="demo-title">Phone call</span>
             <span class="demo-example">Example conversation</span>
@@ -237,7 +238,7 @@
         </figure>
 
         <!-- The calendar the call's request lands in. Not live yet. -->
-        <figure class="cal">
+        <figure class="cal" id="demo-cal" data-tab="Calendar">
           <figcaption class="cal-head">
             <span class="cal-day">
               <span class="cal-dow">Friday</span>
@@ -267,7 +268,7 @@
           Belline, and its existing WhatsApp is left as it is. Like the chat,
           it ends with the request passed to the team, never a booked time.
         -->
-        <figure class="demo-card demo-wa">
+        <figure class="demo-card demo-wa" id="demo-wa" data-tab="WhatsApp">
           <figcaption class="demo-head demo-head-wa">
             <span class="demo-wa-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path fill="currentColor" d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z"/></svg>
@@ -445,7 +446,7 @@
       </ul>
 
       <div class="cta-row">
-        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Speak to Belline</a>
+        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Talk to Belle</a>
       </div>
     </div>
   </section>
@@ -532,7 +533,7 @@
       <p class="stop-small">Not yet: Belline doesn’t send confirmation or reminder texts to your customers.</p>
 
       <div class="cta-row">
-        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Speak to Belline</a>
+        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Talk to Belle</a>
         <span class="cta-aside">Ask it something awkward.</span>
       </div>
     </div>
@@ -854,7 +855,7 @@
         <p class="lead">Get started, or speak to Belline first and decide.</p>
         <div class="cta-row">
           <a class="btn" href="https://app.belline.ai/checkout" data-cta="closer">Get started</a>
-          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Speak to Belline</a>
+          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Talk to Belle</a>
         </div>
         <p class="fine"><span class="gen" data-gen="trial-short">30 days free, no card.</span></p>
       </div>
@@ -894,7 +895,7 @@
       <span>Belline</span>
     </a>
     <p>
-      AI voice and chat reception for UAE businesses that take calls, messages or bookings.<br>
+      AI video, voice and chat reception for UAE businesses that take calls, messages or bookings.<br>
       <a href="tel:+15717785920">+1 571 778 5920</a> ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
       <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a><br>

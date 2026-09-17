@@ -707,7 +707,7 @@ ${CALL_PANEL}
       <span>Belline</span>
     </a>
     <p>
-      AI voice and chat reception for UAE businesses that take calls, messages or bookings.<br>
+      AI video, voice and chat reception for UAE businesses that take calls, messages or bookings.<br>
       <a href="tel:+15717785920">+1 571 778 5920</a> (an international call from the UAE) ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
       <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a><br>
