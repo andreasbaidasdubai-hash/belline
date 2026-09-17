@@ -64,16 +64,18 @@ const CATALOGUE_FIGURES = new Set<number>([
   ...PACKS.map((p) => p.units),
   TRIAL.minutes,
   TRIAL.conversations,
+  // "Each video minute uses 2.5 voice minutes": the ratio, from the pricing generator (plans.ts after merge).
+  (await import("./site-pricing")).VIDEO_VOICE_MINUTE_RATIO,
 ]);
 
 /** The same figures as they are ever written: 2000, "2,000", "two thousand". */
 const ALLOWED = new Set<string>(
-  [...CATALOGUE_FIGURES].flatMap((n) => [String(n), n.toLocaleString("en-GB"), numberWords(n)]),
+  [...CATALOGUE_FIGURES].flatMap((n) => (Number.isInteger(n) ? [String(n), n.toLocaleString("en-GB"), numberWords(n)] : [String(n)])),
 );
 
 const UNIT = "(?:voice min(?:ute)?s?|text conversations)";
 /** "750 text conversations", "1,300 voice minutes" — a figure written in digits. */
-const DIGITS = new RegExp(`(\\d[\\d,]*)\\s+(?:extra\\s+)?${UNIT}`, "gi");
+const DIGITS = new RegExp(`(?<![\\d.])(\\d[\\d,]*(?:\\.\\d+)?)\\s+(?:extra\\s+)?${UNIT}`, "gi");
 /** The vocabulary numberWords builds a spoken figure out of. */
 const WORD = /^(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|and)(?:-(?:one|two|three|four|five|six|seven|eight|nine))?$/i;
 /** Whatever words run up to a unit: "with three hundred voice minutes". */

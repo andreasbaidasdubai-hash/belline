@@ -415,7 +415,8 @@ const V2_GROWTH_FEATURES: Feature[] = [
     gap: "Built in src/lib/reminders.ts, but no text is sent until TWILIO_SMS_FROM is set in Railway.",
   },
   { text: "Your own rules about what it may and may not decide", status: "live" },
-  { text: "Every change versioned, with one-click revert", status: "live" },
+  // The same History panel as the 2026-09 line above, in a customer's words (site review, 2026-09-17).
+  { text: "Restore earlier settings any time", status: "live" },
   {
     text: "Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number",
     status: "not-yet",

@@ -102,24 +102,47 @@ function esc(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/** The group headings, by state: what connects today first, the roadmap last and quietest. */
+export const GROUP_HEADING: Record<StripLang, Record<IntegrationState, string>> = {
+  en: { available: "Connects today", soon: "Coming soon", roadmap: "On our roadmap" },
+  de: { available: "Heute verbunden", soon: "Demnächst", roadmap: "Geplant" },
+};
+
 /**
- * The list itself: every name under its icon, each with its state in words.
- * site.js turns it into a slow moving strip; without JavaScript, or with
- * reduced motion asked for, it stays this still list.
+ * The strip: one group per state that has a name in it, in the order
+ * available, coming soon, roadmap. "Connects today" only exists while a flag
+ * is on, so it can never head a list of things that do not connect. Every
+ * name keeps its tag in words under its icon, and the roadmap row is set
+ * smaller and lighter (site.css), because it is not something to buy on.
+ * Nothing moves.
  */
 export function renderIntegrations(env: Env, lang: StripLang = "en"): string {
   const labels = lang === "de" ? STATE_LABEL_DE : STATE_LABEL;
-  const items = INTEGRATIONS.map((item) => {
-    const state = integrationState(item, env);
-    return `        <li class="connect" data-integration="${esc(item.flag)}" data-state="${state}">
-          <img class="connect-logo" src="/img/logos/${esc(item.logo)}" width="40" height="40" alt="" loading="lazy">
-          <span class="connect-name">${esc(item.name)}</span>
-          <span class="${STATE_CLASS[state]}">${labels[state]}</span>
-        </li>`;
-  }).join("\n");
-  return `      <ul class="connects-list" aria-label="${LIST_LABEL[lang]}">
-${items}
-      </ul>`;
+  const order: IntegrationState[] = ["available", "soon", "roadmap"];
+  const groups = order
+    .map((state) => ({ state, items: INTEGRATIONS.filter((item) => integrationState(item, env) === state) }))
+    .filter((g) => g.items.length > 0)
+    .map(({ state, items }) => {
+      const lis = items
+        .map(
+          (item) => `          <li class="connect" data-integration="${esc(item.flag)}" data-state="${state}">
+            <img class="connect-logo" src="/img/logos/${esc(item.logo)}" width="40" height="40" alt="" loading="lazy">
+            <span class="connect-name">${esc(item.name)}</span>
+            <span class="${STATE_CLASS[state]}">${labels[state]}</span>
+          </li>`,
+        )
+        .join("\n");
+      return `        <div class="connects-group connects-${state}">
+          <h3 class="connects-group-h">${GROUP_HEADING[lang][state]}</h3>
+          <ul class="connects-list">
+${lis}
+          </ul>
+        </div>`;
+    })
+    .join("\n");
+  return `      <div class="connects-groups" role="group" aria-label="${LIST_LABEL[lang]}">
+${groups}
+      </div>`;
 }
 
 const START = "<!-- integrations:start";

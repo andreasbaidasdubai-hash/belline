@@ -62,6 +62,7 @@ export const CATALOGUE_DE: Record<string, string> = {
   "A reminder text the day before every booking": "Eine Erinnerungs-SMS am Tag vor jeder Buchung",
   "Your own rules about what it may and may not decide": "Ihre eigenen Regeln dafür, was Belline entscheiden darf und was nicht",
   "Every change versioned, with one-click revert": "Jede Änderung versioniert, mit Zurücksetzen per Klick",
+  "Restore earlier settings any time": "Frühere Einstellungen jederzeit wiederherstellen",
   "Waitlist — when a slot frees, the guest who wanted it is at the top of your list, with their number":
     "Warteliste – wird ein Termin frei, steht der Gast, der ihn wollte, mit Nummer oben auf Ihrer Liste",
   "One specialist booking integration — Fresha, Treatwell, SevenRooms or OpenTable":

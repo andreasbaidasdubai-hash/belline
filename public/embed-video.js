@@ -55,6 +55,9 @@
   var PIP_HOLD_MS = 450;
   var PIP_CONTROLS_MS = 4000;
   var PIP_MARGIN = 12;
+  /** How many times the icons ring after load, and how long that takes (the last icon starts 1.7 s late). */
+  var RINGS = 3;
+  var RING_MS = RINGS * 1500 + 1700;
 
   var BLUE = "var(--bl-blue,#0071E3)";
   var INK = "var(--bl-ink-900,#1D1D1F)";
@@ -127,9 +130,10 @@
     "@media (max-width:520px){.bvb-row{gap:6px}.bvb-talk{font-size:13.5px;padding:0 10px}.bvb-act{width:46px;height:46px}}" +
     // The ring: the bell's own beat on belline.ai (bell-shake, bell-nudge, bell-ring), value for value.
     ".bvb-act::after{content:'';position:absolute;inset:0;border-radius:inherit;border:2px solid " + BLUE + ";pointer-events:none;opacity:0;z-index:-1}" +
-    ".bvb-act.is-ringing{animation:bvb-bell-nudge 1.5s ease-in-out infinite}" +
-    ".bvb-act.is-ringing svg{animation:bvb-bell-shake 1.5s ease-in-out infinite}" +
-    ".bvb-act.is-ringing::after{animation:bvb-bell-ring 1.5s ease-out infinite}" +
+    // Three rings after load, then still: a bubble that never stops ringing is an alarm, not a greeting.
+    ".bvb-act.is-ringing{animation:bvb-bell-nudge 1.5s ease-in-out " + RINGS + "}" +
+    ".bvb-act.is-ringing svg{animation:bvb-bell-shake 1.5s ease-in-out " + RINGS + "}" +
+    ".bvb-act.is-ringing::after{animation:bvb-bell-ring 1.5s ease-out " + RINGS + "}" +
     // One after the other, as on belline.ai: two buttons in step would be an alarm.
     ".bvb-act.is-ringing[data-kind=chat],.bvb-act.is-ringing[data-kind=chat] svg,.bvb-act.is-ringing[data-kind=chat]::after{animation-delay:1.2s}" +
     ".bvb-act.is-ringing[data-kind=whatsapp],.bvb-act.is-ringing[data-kind=whatsapp] svg,.bvb-act.is-ringing[data-kind=whatsapp]::after{animation-delay:1.7s}" +
@@ -486,6 +490,8 @@
       ["pointerdown", "pointerenter", "focusin", "keydown", "touchstart"].forEach(function (type) {
         state.root.addEventListener(type, state.onInterest);
       });
+      // The CSS rings RINGS times; after that the icons are simply still.
+      env.setTimeout(stopRinging, RING_MS);
     }
 
     function stopRinging() {
@@ -657,7 +663,8 @@
         resize("rest", hide);
         playPreview();
         try {
-          state.circle.focus();
+          // Without scrolling: a host may have floated the call away from where the bubble rests.
+          state.circle.focus({ preventScroll: true });
         } catch (e) {
           /* focus is a nicety */
         }

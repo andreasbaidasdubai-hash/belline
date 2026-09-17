@@ -38,151 +38,108 @@ type Env = Record<string, string | undefined>;
 export interface SiteSwap {
   /** The page in `public/`, by its source name. */
   file: string;
-  /** Exactly as it appears in the page. */
+  /** Exactly as it appears in the page, on one line. */
   off: string;
   on: string;
+  /** How many times `off` is in the page (default once): the example's three channels share Belle's last line. */
+  count?: number;
+}
+
+/**
+ * The landing pages' flagged pieces (site review, 2026-09-17).
+ *
+ * - The hero's capability row: "Takes booking requests", or what books.
+ * - The example conversations (one salon customer on chat, phone and
+ *   WhatsApp): Belle's last line passes the request on, or books the time.
+ * - The example calendar under them: its badge, and the customer's entry,
+ *   "Waiting for your team" or "Confirmed". Never both at once.
+ * - "Whatever you book with": Google Calendar and Outlook, one entry each.
+ */
+const EN = {
+  canOff: '<li class="can-cal">Takes booking requests</li>',
+  canGoogle: '<li class="can-cal">Books into Google Calendar</li>',
+  canOutlook: '<li class="can-cal">Books into Outlook</li>',
+  canBoth: '<li class="can-cal">Books into Google Calendar or Outlook</li>',
+  badgeOff: '<span class="state state-soon cal-soon">Coming soon: books into your calendar</span>',
+  badgeGoogle: '<span class="state state-available cal-soon">Books into Google Calendar</span>',
+  badgeOutlook: '<span class="state state-available cal-soon">Books into Outlook</span>',
+  badgeBoth: '<span class="state state-available cal-soon">Books into Google Calendar or Outlook</span>',
+  sayOff: "I’ll pass that to the team, and they’ll confirm a time with you.",
+  sayOn: "Saturday at 10:00 is free, so I’ve booked you in.",
+  entryOff:
+    '<li class="cal-ev cal-ev-new"><span class="cal-new-k">New request from Belline</span><span class="cal-new-what">Layla H., balayage, Saturday morning</span><span class="cal-new-state">Waiting for your team</span></li>',
+  entryOn:
+    '<li class="cal-ev cal-ev-new is-booked"><span class="cal-new-k">Booked by Belline</span><span class="cal-new-what">10:00 Layla H., balayage</span><span class="cal-new-state">Confirmed</span></li>',
+  googleOff: "<dd>Belline takes booking requests today. Booking straight into Google Calendar is coming soon.</dd>",
+  googleOn: "<dd>Connect Google Calendar and Belline checks it for times already taken, then books straight into it.</dd>",
+  outlookOff: "<dd>Belline takes booking requests today. Booking straight into Outlook is coming soon.</dd>",
+  outlookOn: "<dd>Connect Outlook and Belline checks it for times already taken, then books straight into it.</dd>",
+};
+
+const DE = {
+  canOff: '<li class="can-cal">Nimmt Buchungsanfragen auf</li>',
+  canGoogle: '<li class="can-cal">Bucht in Google Calendar</li>',
+  canOutlook: '<li class="can-cal">Bucht in Outlook</li>',
+  canBoth: '<li class="can-cal">Bucht in Google Calendar oder Outlook</li>',
+  badgeOff: '<span class="state state-soon cal-soon">Demnächst: bucht in Ihren Kalender</span>',
+  badgeGoogle: '<span class="state state-available cal-soon">Bucht in Google Calendar</span>',
+  badgeOutlook: '<span class="state state-available cal-soon">Bucht in Outlook</span>',
+  badgeBoth: '<span class="state state-available cal-soon">Bucht in Google Calendar oder Outlook</span>',
+  sayOff: "Ich gebe das an das Team weiter, und das Team stimmt einen Termin mit Ihnen ab.",
+  sayOn: "Samstag um 10:00 ist frei, ich habe den Termin für Sie eingetragen.",
+  entryOff:
+    '<li class="cal-ev cal-ev-new"><span class="cal-new-k">Neue Anfrage von Belline</span><span class="cal-new-what">Lena W., Balayage, Samstagvormittag</span><span class="cal-new-state">Wartet auf Ihr Team</span></li>',
+  entryOn:
+    '<li class="cal-ev cal-ev-new is-booked"><span class="cal-new-k">Von Belline eingetragen</span><span class="cal-new-what">10:00 Lena W., Balayage</span><span class="cal-new-state">Bestätigt</span></li>',
+  googleOff: "<dd>Belline nimmt heute Buchungsanfragen auf. Direkt in Google Calendar buchen kann Belline demnächst.</dd>",
+  googleOn: "<dd>Verbinden Sie Google Calendar, und Belline prüft dort, welche Zeiten schon belegt sind, und bucht dann direkt hinein.</dd>",
+  outlookOff: "<dd>Belline nimmt heute Buchungsanfragen auf. Direkt in Outlook buchen kann Belline demnächst.</dd>",
+  outlookOn: "<dd>Verbinden Sie Outlook, und Belline prüft dort, welche Zeiten schon belegt sind, und bucht dann direkt hinein.</dd>",
+};
+
+type Words = typeof EN;
+
+function googleSwaps(file: string, w: Words): SiteSwap[] {
+  return [
+    { file, off: w.canOff, on: w.canGoogle },
+    { file, off: w.badgeOff, on: w.badgeGoogle },
+    { file, off: w.sayOff, on: w.sayOn, count: 3 },
+    { file, off: w.entryOff, on: w.entryOn },
+    { file, off: w.googleOff, on: w.googleOn },
+  ];
+}
+
+/** Outlook alone, then Google and Outlook: written against the page as Google's flag leaves it. */
+function outlookSwaps(file: string, w: Words): SiteSwap[] {
+  return [
+    { file, off: w.canOff, on: w.canOutlook },
+    { file, off: w.canGoogle, on: w.canBoth },
+    { file, off: w.badgeOff, on: w.badgeOutlook },
+    { file, off: w.badgeGoogle, on: w.badgeBoth },
+    // The conversation and the entry read the same whichever calendar it is.
+    { file, off: w.sayOff, on: w.sayOn, count: 3 },
+    { file, off: w.entryOff, on: w.entryOn },
+    { file, off: w.outlookOff, on: w.outlookOn },
+  ];
 }
 
 export const SITE_FLAG_COPY: Partial<Record<FlagName, SiteSwap[]>> = {
   "booking.google": [
-    {
-      file: "landing.html",
-      off: "Soon, it will also book straight into the calendar you already use.",
-      on: "It can also book straight into your Google Calendar, after checking it for times already taken.",
-    },
-    {
-      file: "landing.html",
-      off: '<span class="state state-soon cal-soon">Coming soon: books into your calendar</span>',
-      on: '<span class="state state-available cal-soon">Books into Google Calendar</span>',
-    },
-    {
-      file: "landing.html",
-      off: "<dd>Belline takes booking requests today. Booking straight into Google Calendar is coming soon.</dd>",
-      on: "<dd>Connect Google Calendar and Belline checks it for times already taken, then books straight into it. Outlook isn’t connected yet, so for Outlook Belline takes booking requests.</dd>",
-    },
-    {
-      file: "privacy.html",
-      off: "<li><strong>Google</strong> — only if a business connects a Google Calendar, once that connection is available. No calendar can be connected yet.</li>",
-      on: "<li><strong>Google</strong> — only if a business connects a Google Calendar.</li>",
-    },
-    {
-      file: "privacy.html",
-      off: "<p>Connecting a Google Calendar is not available yet. When it is, and only if a business chooses to connect one, this is how Belline treats the information it receives from Google:</p>",
-      on: "<p>Connecting a Google Calendar is optional. Only if a business chooses to connect one, this is how Belline treats the information it receives from Google:</p>",
-    },
-    // The German pages: the same sentences, translated, in the same order.
-    {
-      file: "landing.de.html",
-      off: "Bald kann Belline auch direkt in den Kalender buchen, den Sie schon nutzen.",
-      on: "Belline kann auch direkt in Ihren Google Calendar buchen, nachdem es dort geprüft hat, welche Zeiten schon belegt sind.",
-    },
-    {
-      file: "landing.de.html",
-      off: '<span class="state state-soon cal-soon">Demnächst: bucht in Ihren Kalender</span>',
-      on: '<span class="state state-available cal-soon">Bucht in Google Calendar</span>',
-    },
-    {
-      file: "landing.de.html",
-      off: "<dd>Belline nimmt heute Buchungsanfragen auf. Direkt in Google Calendar buchen kann Belline demnächst.</dd>",
-      on: "<dd>Verbinden Sie Google Calendar, und Belline prüft dort, welche Zeiten schon belegt sind, und bucht dann direkt hinein. Outlook ist noch nicht verbunden, deshalb nimmt Belline für Outlook Buchungsanfragen auf.</dd>",
-    },
-    {
-      file: "privacy.de.html",
-      off: "<li><strong>Google</strong> — nur wenn ein Unternehmen einen Google Kalender verbindet, sobald diese Verbindung verfügbar ist. Derzeit kann noch kein Kalender verbunden werden.</li>",
-      on: "<li><strong>Google</strong> — nur wenn ein Unternehmen einen Google Kalender verbindet.</li>",
-    },
-    {
-      file: "privacy.de.html",
-      off: "<p>Die Verbindung eines Google Kalenders ist noch nicht verfügbar. Sobald sie verfügbar ist, und nur wenn sich ein Unternehmen dafür entscheidet, einen zu verbinden, geht Belline mit den Informationen, die es von Google erhält, wie folgt um:</p>",
-      on: "<p>Die Verbindung eines Google Kalenders ist optional. Nur wenn sich ein Unternehmen dafür entscheidet, einen zu verbinden, geht Belline mit den Informationen, die es von Google erhält, wie folgt um:</p>",
-    },
+    ...googleSwaps("landing.html", EN),
+    { file: "privacy.html", off: "<li><strong>Google</strong> — only if a business connects a Google Calendar, once that connection is available. No calendar can be connected yet.</li>", on: "<li><strong>Google</strong> — only if a business connects a Google Calendar.</li>" },
+    { file: "privacy.html", off: "<p>Connecting a Google Calendar is not available yet. When it is, and only if a business chooses to connect one, this is how Belline treats the information it receives from Google:</p>", on: "<p>Connecting a Google Calendar is optional. Only if a business chooses to connect one, this is how Belline treats the information it receives from Google:</p>" },
+    // The German pages: the same pieces, translated, in the same order.
+    ...googleSwaps("landing.de.html", DE),
+    { file: "privacy.de.html", off: "<li><strong>Google</strong> — nur wenn ein Unternehmen einen Google Kalender verbindet, sobald diese Verbindung verfügbar ist. Derzeit kann noch kein Kalender verbunden werden.</li>", on: "<li><strong>Google</strong> — nur wenn ein Unternehmen einen Google Kalender verbindet.</li>" },
+    { file: "privacy.de.html", off: "<p>Die Verbindung eines Google Kalenders ist noch nicht verfügbar. Sobald sie verfügbar ist, und nur wenn sich ein Unternehmen dafür entscheidet, einen zu verbinden, geht Belline mit den Informationen, die es von Google erhält, wie folgt um:</p>", on: "<p>Die Verbindung eines Google Kalenders ist optional. Nur wenn sich ein Unternehmen dafür entscheidet, einen zu verbinden, geht Belline mit den Informationen, die es von Google erhält, wie folgt um:</p>" },
   ],
   "booking.outlook": [
-    // The hero's lead: Outlook alone, then Google and Outlook.
-    {
-      file: "landing.html",
-      off: "Soon, it will also book straight into the calendar you already use.",
-      on: "It can also book straight into your Outlook calendar, after checking it for times already taken.",
-    },
-    {
-      file: "landing.html",
-      off: "It can also book straight into your Google Calendar, after checking it for times already taken.",
-      on: "It can also book straight into your Google Calendar or Outlook, after checking it for times already taken.",
-    },
-    // The example calendar's badge.
-    {
-      file: "landing.html",
-      off: '<span class="state state-soon cal-soon">Coming soon: books into your calendar</span>',
-      on: '<span class="state state-available cal-soon">Books into Outlook</span>',
-    },
-    {
-      file: "landing.html",
-      off: '<span class="state state-available cal-soon">Books into Google Calendar</span>',
-      on: '<span class="state state-available cal-soon">Books into Google Calendar or Outlook</span>',
-    },
-    // "Whatever you book with".
-    {
-      file: "landing.html",
-      off: "<dd>Belline takes booking requests today. Booking straight into Google Calendar is coming soon.</dd>",
-      on: "<dd>Connect Outlook and Belline checks it for times already taken, then books straight into it. Booking straight into Google Calendar is coming soon.</dd>",
-    },
-    {
-      file: "landing.html",
-      off: "<dd>Connect Google Calendar and Belline checks it for times already taken, then books straight into it. Outlook isn’t connected yet, so for Outlook Belline takes booking requests.</dd>",
-      on: "<dd>Connect Google Calendar or Outlook and Belline checks it for times already taken, then books straight into it.</dd>",
-    },
-    // The privacy page: Microsoft as a processor, and its section's lead.
-    {
-      file: "privacy.html",
-      off: "<li><strong>Microsoft</strong> — only if a business connects an Outlook calendar, once that connection is available. Outlook calendars cannot be connected to Belline yet.</li>",
-      on: "<li><strong>Microsoft</strong> — only if a business connects an Outlook calendar, through Microsoft Graph.</li>",
-    },
-    {
-      file: "privacy.html",
-      off: "<p>Outlook calendars cannot be connected to Belline yet. When they can, and only if a business chooses to connect one, this is how Belline treats the information it receives from Microsoft:</p>",
-      on: "<p>Connecting an Outlook calendar is optional. Only if a business chooses to connect one, this is how Belline treats the information it receives from Microsoft:</p>",
-    },
-    // The German pages.
-    {
-      file: "landing.de.html",
-      off: "Bald kann Belline auch direkt in den Kalender buchen, den Sie schon nutzen.",
-      on: "Belline kann auch direkt in Ihren Outlook-Kalender buchen, nachdem es dort geprüft hat, welche Zeiten schon belegt sind.",
-    },
-    {
-      file: "landing.de.html",
-      off: "Belline kann auch direkt in Ihren Google Calendar buchen, nachdem es dort geprüft hat, welche Zeiten schon belegt sind.",
-      on: "Belline kann auch direkt in Ihren Google Calendar oder Ihren Outlook-Kalender buchen, nachdem es dort geprüft hat, welche Zeiten schon belegt sind.",
-    },
-    {
-      file: "landing.de.html",
-      off: '<span class="state state-soon cal-soon">Demnächst: bucht in Ihren Kalender</span>',
-      on: '<span class="state state-available cal-soon">Bucht in Outlook</span>',
-    },
-    {
-      file: "landing.de.html",
-      off: '<span class="state state-available cal-soon">Bucht in Google Calendar</span>',
-      on: '<span class="state state-available cal-soon">Bucht in Google Calendar oder Outlook</span>',
-    },
-    {
-      file: "landing.de.html",
-      off: "<dd>Belline nimmt heute Buchungsanfragen auf. Direkt in Google Calendar buchen kann Belline demnächst.</dd>",
-      on: "<dd>Verbinden Sie Outlook, und Belline prüft dort, welche Zeiten schon belegt sind, und bucht dann direkt hinein. Direkt in Google Calendar buchen kann Belline demnächst.</dd>",
-    },
-    {
-      file: "landing.de.html",
-      off: "<dd>Verbinden Sie Google Calendar, und Belline prüft dort, welche Zeiten schon belegt sind, und bucht dann direkt hinein. Outlook ist noch nicht verbunden, deshalb nimmt Belline für Outlook Buchungsanfragen auf.</dd>",
-      on: "<dd>Verbinden Sie Google Calendar oder Outlook, und Belline prüft dort, welche Zeiten schon belegt sind, und bucht dann direkt hinein.</dd>",
-    },
-    {
-      file: "privacy.de.html",
-      off: "<li><strong>Microsoft</strong> — nur wenn ein Unternehmen einen Outlook-Kalender verbindet, sobald diese Verbindung verfügbar ist. Outlook-Kalender können noch nicht mit Belline verbunden werden.</li>",
-      on: "<li><strong>Microsoft</strong> — nur wenn ein Unternehmen einen Outlook-Kalender verbindet, über Microsoft Graph.</li>",
-    },
-    {
-      file: "privacy.de.html",
-      off: "<p>Outlook-Kalender können noch nicht mit Belline verbunden werden. Sobald dies möglich ist, und nur wenn sich ein Unternehmen dafür entscheidet, einen zu verbinden, geht Belline mit den Informationen, die es von Microsoft erhält, wie folgt um:</p>",
-      on: "<p>Die Verbindung eines Outlook-Kalenders ist optional. Nur wenn sich ein Unternehmen dafür entscheidet, einen zu verbinden, geht Belline mit den Informationen, die es von Microsoft erhält, wie folgt um:</p>",
-    },
+    ...outlookSwaps("landing.html", EN),
+    { file: "privacy.html", off: "<li><strong>Microsoft</strong> — only if a business connects an Outlook calendar, once that connection is available. Outlook calendars cannot be connected to Belline yet.</li>", on: "<li><strong>Microsoft</strong> — only if a business connects an Outlook calendar, through Microsoft Graph.</li>" },
+    { file: "privacy.html", off: "<p>Outlook calendars cannot be connected to Belline yet. When they can, and only if a business chooses to connect one, this is how Belline treats the information it receives from Microsoft:</p>", on: "<p>Connecting an Outlook calendar is optional. Only if a business chooses to connect one, this is how Belline treats the information it receives from Microsoft:</p>" },
+    ...outlookSwaps("landing.de.html", DE),
+    { file: "privacy.de.html", off: "<li><strong>Microsoft</strong> — nur wenn ein Unternehmen einen Outlook-Kalender verbindet, sobald diese Verbindung verfügbar ist. Outlook-Kalender können noch nicht mit Belline verbunden werden.</li>", on: "<li><strong>Microsoft</strong> — nur wenn ein Unternehmen einen Outlook-Kalender verbindet, über Microsoft Graph.</li>" },
+    { file: "privacy.de.html", off: "<p>Outlook-Kalender können noch nicht mit Belline verbunden werden. Sobald dies möglich ist, und nur wenn sich ein Unternehmen dafür entscheidet, einen zu verbinden, geht Belline mit den Informationen, die es von Microsoft erhält, wie folgt um:</p>", on: "<p>Die Verbindung eines Outlook-Kalenders ist optional. Nur wenn sich ein Unternehmen dafür entscheidet, einen zu verbinden, geht Belline mit den Informationen, die es von Microsoft erhält, wie folgt um:</p>" },
   ],
 };
 
@@ -284,7 +241,7 @@ export function applySiteFlags(file: string, html: string, env: Env = process.en
 }
 
 /**
- * Swaps whose `off` sentence is not in its page exactly once, as "file:
+ * Swaps whose `off` sentence is not in its page exactly `count` times (once by default), as "file:
  * sentence". A later flag's swap may be written against the page with the
  * earlier flags on, so it is also looked for there. Empty when all are found.
  */
@@ -296,7 +253,8 @@ export function strandedSiteCopy(read: (file: string) => string): string[] {
       const page = read(s.file);
       let earlierOn = page;
       for (const [, before] of flags.slice(0, i)) for (const b of before) if (b.file === s.file) earlierOn = swap(earlierOn, b.off, b.on);
-      if (page.split(s.off).length !== 2 && earlierOn.split(s.off).length !== 2) out.push(`${s.file}: ${s.off}`);
+      const parts = (s.count ?? 1) + 1;
+      if (page.split(s.off).length !== parts && earlierOn.split(s.off).length !== parts) out.push(`${s.file}: ${s.off}`);
     }
   });
   return out;
