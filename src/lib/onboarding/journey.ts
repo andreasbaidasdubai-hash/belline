@@ -24,8 +24,18 @@ import { bellineNumberOf } from "../telephony/number";
  * and still have no services, and that is a blocker, not a detail.
  */
 
-export const STEP_IDS = ["business", "import", "review", "bookings", "rules", "channels", "test", "golive", "first-week"] as const;
+export const STEP_IDS = ["business", "import", "review", "bookings", "rules", "website", "phone", "test", "golive", "first-week"] as const;
 export type StepId = (typeof STEP_IDS)[number];
+
+/**
+ * Step addresses that no longer exist, and the step that took their place.
+ *
+ * "channels" was one step, "Phone and website", until 2026-09-17. It asked an
+ * owner to add a widget and forward a phone on one screen, and sent them out
+ * to two dashboard pages to do either. It is two steps now, each done in
+ * place, and a bookmark or an old email still lands on the first of them.
+ */
+export const RENAMED_STEPS: Record<string, StepId> = { channels: "website" };
 
 export interface Step {
   id: StepId;
@@ -36,6 +46,13 @@ export interface Step {
   action: string;
   url: string;
   done: boolean;
+  /**
+   * Not done, and not needed either: the website chat when the owner already
+   * reaches customers by phone, chat link or WhatsApp, or the other way round.
+   * Going live needs one way in, not both, so neither step blocks it once the
+   * other is done. Shown as optional, never as done.
+   */
+  optional: boolean;
 }
 
 export interface Blocker {
@@ -74,14 +91,18 @@ const META: Record<StepId, { title: string; action: string }> = {
   review: { title: "Check what it knows", action: "Looks right" },
   bookings: { title: "Where bookings go", action: "Use this" },
   rules: { title: "Your rules", action: "Confirm these rules" },
-  channels: { title: "Phone and website", action: "Continue" },
+  website: { title: "Website chat", action: "Continue" },
+  phone: { title: "Phone & WhatsApp", action: "Continue" },
   test: { title: "Try it", action: "Run the checks" },
   golive: { title: "Go live", action: "Go live" },
   "first-week": { title: "Your first week", action: "Open the dashboard" },
 };
 
 /** The steps an owner must finish before Go live is offered. */
-const BEFORE_LIVE: StepId[] = ["business", "import", "review", "bookings", "rules", "channels", "test"];
+const BEFORE_LIVE: StepId[] = ["business", "import", "review", "bookings", "rules", "website", "phone", "test"];
+
+/** The two ways-in steps. Either one is enough to go live. */
+const WAYS_IN: readonly StepId[] = ["website", "phone"];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -127,16 +148,12 @@ export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now:
     review: Boolean(o.reviewedAt),
     bookings: Boolean(o.destination),
     rules: Boolean(o.rulesConfirmedAt),
-    // At least one way in: the widget seen on the site, forwarding proved by a
-    // test call, a real conversation on either, WhatsApp connected, or the
-    // chat link made (it needs no website, which is the point of it).
-    channels: Boolean(
-      location.chatLink ||
-        o.channels.web?.detectedAt ||
-        o.channels.phone?.forwardingVerifiedAt ||
-        o.channels.whatsapp?.status === "live" ||
-        facts.phoneCalls > 0 ||
-        facts.webConversations > 0,
+    // The widget seen loading on the site, or a real conversation through it.
+    website: Boolean(o.channels.web?.detectedAt || facts.webConversations > 0),
+    // Forwarding proved by a test call or a real call, WhatsApp connected, or
+    // the chat link made (it needs no website, which is the point of it).
+    phone: Boolean(
+      location.chatLink || o.channels.phone?.forwardingVerifiedAt || o.channels.whatsapp?.status === "live" || facts.phoneCalls > 0,
     ),
     // The automatic checks, passed, against the setup as it is now. Talking to
     // it in the test console is useful, and proves nothing about the eight
@@ -155,12 +172,27 @@ export function journey(location: Location, facts: JourneyFacts = NO_FACTS, now:
     return activated || doneBeforeLive[id];
   };
 
-  const steps: Step[] = STEP_IDS.map((id, i) => ({ id, n: i + 1, ...META[id], url: stepUrl(id), done: done(id) }));
-  const next = steps.find((s) => !s.done) ?? null;
+  // One way in is enough: once either ways-in step is done, the other is optional.
+  const wayIn = WAYS_IN.some((id) => done(id));
+  const steps: Step[] = STEP_IDS.map((id, i) => {
+    const isDone = done(id);
+    return { id, n: i + 1, ...META[id], url: stepUrl(id), done: isDone, optional: !isDone && wayIn && WAYS_IN.includes(id) };
+  });
+  const next = steps.find((s) => !s.done && !s.optional) ?? null;
 
   const blockers: Blocker[] = [];
   if (!activated) {
-    for (const step of steps.filter((s) => BEFORE_LIVE.includes(s.id) && !s.done)) {
+    for (const step of steps.filter((s) => BEFORE_LIVE.includes(s.id) && !s.done && !s.optional)) {
+      // Neither way in is done: one blocker for the pair, on the first of them.
+      if (step.id === "phone") continue;
+      if (step.id === "website") {
+        blockers.push({
+          step: "website",
+          label: "Connect one way for customers to reach Belline: your website chat, your chat link or your phone",
+          fix: step.url,
+        });
+        continue;
+      }
       const label =
         step.id === "test" && o.tests && !testsCurrent(location)
           ? "You changed your setup after the last checks. Run the checks again"
@@ -238,19 +270,29 @@ export interface Checklist {
 
 export function checklistOf(j: Journey): Checklist {
   const items = j.steps.filter((s) => CHECKLIST.includes(s.id));
-  const done = items.filter((s) => s.done).length;
-  return { items, done, total: items.length, next: items.find((s) => !s.done) ?? null };
+  // An optional step is nothing left to do, so it counts towards finishing and
+  // is never offered as "next". It is still not called done.
+  const settled = (s: Step) => s.done || s.optional;
+  return { items, done: items.filter(settled).length, total: items.length, next: items.find((s) => !settled(s)) ?? null };
 }
 
 /**
  * Where "Continue" or "Skip for now" goes from a step: the next unfinished step
  * after it, or the first unfinished one before it, or the dashboard.
+ *
+ * Except from Go live and the first week, which only ever move forward.
+ * Skipping Go live used to wrap round to the first unfinished step before it,
+ * so "Skip for now" on the last step sent the owner back to step seven. Forward
+ * from Go live is the first week once live, and the dashboard (null) until then.
  */
 export function stepAfter(j: Journey, from: StepId): Step | null {
+  if (from === "golive") return j.activated ? (j.steps.find((s) => s.id === "first-week") ?? null) : null;
+  if (from === "first-week") return null;
   const at = STEP_IDS.indexOf(from);
-  const later = j.steps.find((s, i) => i > at && !s.done && s.id !== "first-week");
+  const open = (s: Step) => !s.done && !s.optional && s.id !== "first-week";
+  const later = j.steps.find((s, i) => i > at && open(s));
   if (later) return later;
-  return j.steps.find((s) => !s.done && s.id !== from && s.id !== "first-week") ?? null;
+  return j.steps.find((s) => open(s) && s.id !== from) ?? null;
 }
 
 export type ChannelId = "phone" | "web" | "link" | "whatsapp";
@@ -315,14 +357,14 @@ export function channelStatuses(
   const j = live ? null : journey(location, facts, opts.now, { clinicSelfServe: opts.clinicSelfServe });
   // Why a connected channel is not answering yet: the first blocker other than
   // "connect a channel", which it already is.
-  const blocker = j?.blockers.find((b) => b.step !== "channels");
+  const blocker = j?.blockers.find((b) => !WAYS_IN.includes(b.step));
   const waitingWhy = blocker
     ? `Connected, not answering customers yet: ${blocker.label.charAt(0).toLowerCase()}${blocker.label.slice(1)}.`
     : "Connected. It starts answering customers when you press Go live.";
   const o = location.onboarding;
 
   const phone = ((): ChannelStatus => {
-    const base = { id: "phone" as const, label: "Phone", href: "/golive" };
+    const base = { id: "phone" as const, label: "Phone", href: "/channels/phone" };
     if (channelConnected(location, "phone", facts)) {
       return live
         ? { ...base, state: "live", detail: `Forwarded calls are answered. Customers keep dialling the number they already have.` }
@@ -335,7 +377,7 @@ export function channelStatuses(
   })();
 
   const web = ((): ChannelStatus => {
-    const base = { id: "web" as const, label: "Website chat", href: "/website" };
+    const base = { id: "web" as const, label: "Website chat", href: "/channels/website" };
     if (channelConnected(location, "web", facts)) {
       return live ? { ...base, state: "live", detail: "The chat on your website is answering visitors." } : { ...base, state: "waiting", detail: waitingWhy };
     }
@@ -352,7 +394,7 @@ export function channelStatuses(
   })();
 
   const whatsapp = ((): ChannelStatus => {
-    const base = { id: "whatsapp" as const, label: "WhatsApp", href: "/integrations" };
+    const base = { id: "whatsapp" as const, label: "WhatsApp", href: "/channels/whatsapp" };
     if (channelConnected(location, "whatsapp", facts, opts)) {
       return live ? { ...base, state: "live", detail: "Belline answers your second WhatsApp number." } : { ...base, state: "waiting", detail: waitingWhy };
     }
@@ -363,7 +405,7 @@ export function channelStatuses(
   })();
 
   const link = ((): ChannelStatus => {
-    const base = { id: "link" as const, label: "Chat link", href: "/channels" };
+    const base = { id: "link" as const, label: "Chat link", href: "/channels/link" };
     if (channelConnected(location, "link", facts)) {
       return live
         ? { ...base, state: "live", detail: "Anybody with your chat link can message Belline." }

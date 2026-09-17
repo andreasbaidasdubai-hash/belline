@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SelftestResult } from "@/lib/types";
+import { SkipLink } from "./StepActions";
 
 /**
  * Step 7: the automatic checks.
@@ -21,7 +22,10 @@ export default function SelftestPanel({
   available,
   done,
   next,
+  skipHref,
 }: {
+  /** Before the checks pass: where "Skip for now" goes. */
+  skipHref?: string;
   checks: { id: string; title: string }[];
   initial: SelftestResult[] | null;
   /** The last run is from before a change to the setup. */
@@ -133,6 +137,22 @@ export default function SelftestPanel({
           );
         })}
       </ol>
+
+      {/* The same button again under the eight checks, beside Skip for now. */}
+      {available && (
+        <div className="setup-footer">
+          {passed && !running && onward ? (
+            <a href={onward} className="btn btn-accent" style={primary}>
+              Continue
+            </a>
+          ) : (
+            <button type="button" className="btn btn-accent" onClick={run} disabled={running} style={primary}>
+              {running ? "Checking…" : results ? "Run the checks again" : "Run the checks"}
+            </button>
+          )}
+          {skipHref && !passed && <SkipLink href={skipHref} />}
+        </div>
+      )}
     </div>
   );
 }

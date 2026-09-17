@@ -44,6 +44,28 @@ function Problem({ error, fix, id }: { error: string | null; fix?: string; id?: 
 
 const hint = { fontSize: 12.5, lineHeight: 1.5, margin: "4px 0 0" } as const;
 
+/**
+ * The bottom of a step: its main button again, beside "Skip for now".
+ *
+ * The main button used to be only at the top, placed before the detail so a
+ * phone shows it without scrolling. An owner who reads the step to the end
+ * then found "Skip for now" and nothing else, and skipped a step they had just
+ * filled in. The server page renders this row for steps whose button is a
+ * link; these components render it themselves, because the button is theirs.
+ */
+export function SkipLink({ href }: { href: string }) {
+  return (
+    <>
+      <a href={href} className="btn" style={{ padding: "12px 18px" }} data-testid="setup-skip">
+        Skip for now
+      </a>
+      <span className="muted" style={{ fontSize: 12.5 }}>
+        It stays on your checklist on Home.
+      </span>
+    </>
+  );
+}
+
 export function ActionButton({ action, label }: { action: "rules" | "activate"; label: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +152,7 @@ export function DestinationPicker({
   requested,
   partners,
   notice,
+  skipHref,
 }: {
   options: DestinationOption[];
   current?: string;
@@ -138,6 +161,8 @@ export function DestinationPicker({
   partners: { id: string; name: string }[];
   /** A sentence about what just happened, such as coming back from Google. */
   notice?: string;
+  /** Where "Skip for now" goes, when the step is not done yet. */
+  skipHref?: string;
 }) {
   const open = options.filter((o) => o.state === "available").map((o) => o.id as string);
   const initial = current === "requests" && currentLink ? "link" : current && open.includes(current) ? current : "requests";
@@ -148,6 +173,7 @@ export function DestinationPicker({
   const [error, setError] = useState<string | null>(null);
 
   async function run() {
+    if (busy) return;
     setError(null);
     if (chosen === "link" && !link.trim()) {
       setError("Paste your booking link first.");
@@ -260,6 +286,16 @@ export function DestinationPicker({
         </select>
         <RequestIntegration key={partner} id={partner} name={partnerName} requested={requested.includes(partner)} />
       </div>
+
+      <div className="setup-footer">
+        <button type="button" className="btn btn-accent" onClick={run} disabled={busy} style={{ padding: "12px 22px" }}>
+          {busy ? "Saving…" : "Use this"}
+        </button>
+        {skipHref && <SkipLink href={skipHref} />}
+        <div style={{ flexBasis: "100%" }}>
+          <Problem error={error} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -282,16 +318,34 @@ export function RulesForm({
   country,
   countryIso,
   initial,
+  skipHref,
+  stay = false,
+  locationId,
+  children,
 }: {
+  /** Shown under the answers and above the buttons, such as the rules that are always on. */
+  children?: React.ReactNode;
+  /** The venue these rules are for. Setup leaves it out: a new account has one. */
+  locationId?: string;
   mode: "requests" | "belline";
   restaurant: boolean;
   country: string;
   /** The business's own market, the country every phone field starts on. */
   countryIso: string;
   initial: RulesInitial;
+  /** On the setup step, before it is done: where "Skip for now" goes. */
+  skipHref?: string;
+  /**
+   * Your business → Rules. The same form, saved where it is: no step to move
+   * on to, so it says "Saved." instead. Until 2026-09-17 the dashboard linked
+   * "Booking and escalation rules" into setup, and an owner changing one number
+   * was dropped into onboarding and walked on to the next step.
+   */
+  stay?: boolean;
 }) {
   const [v, setV] = useState(initial);
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<{ message: string; field?: string } | null>(null);
   const set = <K extends keyof RulesInitial>(k: K, value: RulesInitial[K]) => setV((s) => ({ ...s, [k]: value }));
   const transfer = useRef<PhoneFieldHandle | null>(null);
@@ -301,7 +355,9 @@ export function RulesForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setError(null);
+    setSaved(false);
     // Numbers are checked at the field before anything is sent: red, the reason under it, focus on it.
     if (!transfer.current?.check()) return;
     let notify = v.notify.trim();
@@ -325,14 +381,21 @@ export function RulesForm({
             neverSay: v.neverSay,
           }
         : { transferNumber: transferE164.current };
-    const out = await send({ action: "rules", rules });
+    const out = await send({ action: "rules", rules, ...(locationId ? { locationId } : {}) });
     if (out.error) {
       setError({ message: out.error, field: out.field });
       setBusy(false);
       return;
     }
+    if (stay) {
+      setBusy(false);
+      setSaved(true);
+      return;
+    }
     go(out.next);
   }
+
+  const label = busy ? "Saving…" : stay ? "Save rules" : "Confirm these rules";
 
   const fieldError = (name: string) =>
     error?.field === name ? <Problem id={`${name}-error`} error={error.message} /> : null;
@@ -340,10 +403,13 @@ export function RulesForm({
 
   return (
     <form onSubmit={submit} noValidate>
-      <button type="submit" className="btn btn-accent" disabled={busy} style={{ padding: "12px 22px" }}>
-        {busy ? "Saving…" : "Confirm these rules"}
-      </button>
-      {error && !error.field && <Problem error={error.message} />}
+      {/* On the dashboard the one button is at the bottom, under the answers it saves. */}
+      {!stay && (
+        <button type="submit" className="btn btn-accent" disabled={busy} style={{ padding: "12px 22px" }}>
+          {label}
+        </button>
+      )}
+      {error && !error.field && !stay && <Problem error={error.message} />}
 
       <div style={{ display: "grid", gap: 18, marginTop: 22, maxWidth: 520 }}>
         {mode === "requests" && (
@@ -433,6 +499,21 @@ export function RulesForm({
             </div>
           </>
         )}
+      </div>
+
+      {children}
+
+      <div className="setup-footer">
+        <button type="submit" className="btn btn-accent" disabled={busy} style={{ padding: "12px 22px" }}>
+          {label}
+        </button>
+        {stay && error && !error.field && <Problem error={error.message} />}
+        {stay && saved && (
+          <span role="status" style={{ fontSize: 13.5, color: "var(--ok)" }}>
+            Saved. Belline follows these from the next call and chat.
+          </span>
+        )}
+        {skipHref && <SkipLink href={skipHref} />}
       </div>
     </form>
   );
