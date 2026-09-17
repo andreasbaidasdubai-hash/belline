@@ -266,6 +266,8 @@ await test("every route that spends money asks the gate first", () => {
     ["src/app/api/voices/preview/route.ts", /verifyRefusal\(auth\.user\)[\s\S]*ttsEnabled\(\)/],
     ["server.ts", /pathname === "\/ws\/voice"[\s\S]{0,900}paidWorkRefusal\(user, consoleVenue\)[\s\S]{0,400}browserWss\.handleUpgrade/],
     ["src/lib/onboarding/activate.ts", /paidWorkRefusal\(getUser\(by\.id\), location/],
+    // An owner's video preview before Go live is paid provider time; a visitor on a live venue is not the owner.
+    ["src/app/api/video/[key]/session/route.ts", /const preview = !isActivated\(location\);\s*if \(preview\) \{\s*const held = paidWorkRefusal\(await currentUser\(\)[\s\S]*startVideoSession\(location, claim\.visitorId, \{ preview \}\)/],
   ];
   for (const [file, pattern] of gated) assert.match(source(file), pattern, file);
 });

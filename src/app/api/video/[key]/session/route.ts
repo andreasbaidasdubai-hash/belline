@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyVisitorToken } from "@/lib/auth";
+import { currentUser } from "@/lib/auth-server";
+import { paidWorkRefusal } from "@/lib/abuse/gate";
 import { widgetOpenFor } from "@/lib/embed-preview";
 import { isActivated } from "@/lib/onboarding/journey";
 import { chatAllowed, voiceAllowed } from "@/lib/embed";
@@ -37,7 +39,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
     return NextResponse.json({ error: "not_found" }, { status: 404, headers: NO_STORE });
   }
 
-  const result = await startVideoSession(location, claim.visitorId, { preview: !isActivated(location) });
+  // Before Go live only a signed-in owner can get this far (widgetOpenFor), so
+  // a session then is the owner's own preview: paid provider time spent at
+  // their request, held to the same gate as the test console and the other
+  // owner-started paid work (lib/abuse/gate.ts) — confirmed email, trial not
+  // paused. A visitor on a live venue's website is not the owner, has no
+  // account to verify, and is bounded by the plan, the per-business caps and
+  // video's own ceilings in startVideoSession instead.
+  const preview = !isActivated(location);
+  if (preview) {
+    const held = paidWorkRefusal(await currentUser().catch(() => null), location);
+    if (held) {
+      return NextResponse.json({ error: held.code, message: held.error, fix: held.fix }, { status: held.status, headers: NO_STORE });
+    }
+  }
+
+  const result = await startVideoSession(location, claim.visitorId, { preview });
   if (!result.ok) {
     return NextResponse.json(
       {

@@ -197,6 +197,19 @@ prices and allowances unchanged). Calls on Belline's own or demo venues are
 the bell's. Tavus's own cost is not priced on Belline's rate card (the docs
 publish no rates); it is visible in Tavus's dashboard.
 
+Because it is web voice, everything that limits the bell limits video too:
+the plan must include the voice button, and `serviceState` applies the trial's
+minutes (counted across accounts that share the business's website, phone or
+card), a trial staff have suspended, and the owner's usage policy. The trial
+clock itself starts at Go live, as for every channel.
+
+**The abuse gate.** Before Go live only a signed-in owner can open the panel,
+so a session then is the owner's own preview: paid Tavus time at their
+request. `/api/video/<key>/session` holds it to `paidWorkRefusal`, as the test
+console is held — email confirmed, trial not suspended. A visitor on a live
+venue's website is not owner work and is not asked; the plan, the caps above
+and video's own daily and concurrent ceilings bound it instead.
+
 ## Timings and events
 
 Server: `session_create_started`, `session_created` (ms), `session_create_failed`,
