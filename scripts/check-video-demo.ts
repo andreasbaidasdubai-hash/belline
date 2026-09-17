@@ -174,7 +174,7 @@ await test("a revoked link stops the page routes too (chat, track, go)", async (
   assert.equal((await chatRoute.POST(post({ token: visitor(), chatId: "chat_abcdefgh", text: "hi" }), params(t))).status, 410);
   assert.equal((await trackRoute.POST(post({ name: "opened" }), params(t))).status, 410);
   const go = await goRoute.GET(new Request("http://localhost/x"), params(t));
-  assert.equal(go.headers.get("location"), "http://localhost/start", "a dead link still goes to signup, without a ref");
+  assert.equal(go.headers.get("location"), "http://localhost/checkout", "a dead link still goes to signup, without a ref");
 });
 
 // ---------------------------------------------------------------------------
@@ -560,7 +560,7 @@ await test("Tavus minutes are costed at the metering rate; Get started goes to s
   assert.equal((await demoStore().get(link.id))!.stats.costUsd, Math.round(2 * TAVUS_BUSINESS_PER_MIN_USD * 10_000) / 10_000);
   const go = await goRoute.GET(new Request("http://localhost/api/video-demo/x/go"), params(t));
   assert.equal(go.status, 303);
-  assert.equal(go.headers.get("location"), `http://localhost/start?ref=demo_${link.id}`);
+  assert.equal(go.headers.get("location"), `http://localhost/checkout?ref=demo_${link.id}`);
   assert.equal((await demoStore().get(link.id))!.stats.getStartedClicks, 1);
 });
 
@@ -624,6 +624,97 @@ await test("the staff route refuses anyone who is not Belline staff", () => {
   // The old list redirects into Leads; nothing is left behind it.
   assert.match(read("next.config.mjs"), /source: "\/sales\/video-demos", destination: "\/sales\/leads\?view=video-demos"/);
   assert.ok(!fs.existsSync(path.join(ROOT, "src/app/(internal)/sales/video-demos/page.tsx")));
+});
+
+// ---------------------------------------------------------------------------
+console.log("\n\x1b[1mThe demo page sells: brand, one tap, packages, setup\x1b[0m\n");
+
+await test("the page carries Belline's logo to the site, and Get started is the solid blue button in the header and at the end", () => {
+  const client = read("src/app/demo/v/[token]/DemoExperience.tsx");
+  const page = read("src/app/demo/v/[token]/page.tsx");
+  assert.match(client, /import Brand from "@\/components\/Brand";/);
+  assert.match(client, /<a href=\{props\.siteOrigin\} className="dx-logo"[^>]*>\s*<Brand /);
+  assert.match(page, /siteOrigin=\{siteOrigin\(\)\}/);
+  assert.match(client, /\.dx-btn \{[^}]*background: var\(--bl-blue\); color: var\(--bl-white\)/);
+  assert.match(client, /<a className="dx-btn dx-btn-sm" href=\{go\(\)\}[^>]*data-cta="header">\s*Get started/);
+  assert.match(client, /<a className="dx-btn dx-btn-lg" href=\{go\(\)\}[^>]*data-cta="closer">\s*Get started/);
+  // The trust strip the founder removed from the homepage is not here either.
+  assert.doesNotMatch(client, /Your number stays yours|dx-trust/);
+});
+
+await test("one tap: nothing before it, and the face's opening never waits on the microphone prompt", () => {
+  const client = read("src/app/demo/v/[token]/DemoExperience.tsx");
+  assert.match(client, /tapLabel="Tap to meet Belle"/);
+  assert.match(client, /\blistenFirst\b/);
+  assert.match(client, /\bpreloadClient\b/);
+  const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
+  // Preloading is code only.
+  const preload = panel.match(/if \(!preloadClient\) return;[\s\S]*?\}, \[preloadClient, provider\]\);/)?.[0] ?? "";
+  assert.match(preload, /preloadCallClient\(provider\)/);
+  assert.doesNotMatch(preload, /requestSession|fetch\(|getUserMedia/);
+  // The session, the client and the prompt start together; the call joins with no microphone and gets it later.
+  const listen = panel.slice(panel.indexOf("async function startListening()"), panel.indexOf("type SessionReply"));
+  assert.ok(listen.indexOf("requestSession()") < listen.indexOf("getUserMedia("), "the session starts with the prompt");
+  assert.match(listen, /micTrack: null/);
+  assert.ok(listen.indexOf("await call.join()") < listen.indexOf("await mic"), "the call waits for the microphone");
+  assert.match(listen, /call\.setMicTrack\(got\)/);
+  assert.match(listen, /She'll keep talking/, "a refused microphone ends the call instead of offering the chat");
+  assert.match(read("src/lib/video/client/calls.ts"), /audioSource: micTrack \?\? false/);
+});
+
+await test("packages come from the catalogue, Growth recommended, each Get started carries its plan and the link's ref", async () => {
+  const { demoPackages } = await import("../src/lib/sales/video-demo/packages");
+  const { sellable, priceOf, videoMinutesFor } = await import("../src/lib/billing/plans");
+  const { formatMoney } = await import("../src/lib/markets");
+  const packs = demoPackages("AE");
+  assert.deepEqual(packs.map((p) => p.id), sellable("AE").map((p) => p.id));
+  assert.deepEqual(packs.map((p) => p.name), ["Starter", "Growth", "Scale"]);
+  assert.deepEqual(packs.filter((p) => p.recommended).map((p) => p.name), ["Growth"]);
+  for (const p of packs) {
+    assert.equal(p.monthly, formatMoney(priceOf(p.id, "AE"), "AE"));
+    assert.match(p.voice, /voice minutes/);
+    assert.match(p.text, /text conversations/);
+    // Video only while it may be described as working, and then from the 2.5 ratio.
+    const minutes = sellable("AE").find((s) => s.id === p.id)!.pools!.minutes!;
+    assert.equal(p.video, `${videoMinutesFor(minutes)} video minutes (each uses 2.5 voice minutes)`);
+  }
+  const off = { ...process.env };
+  process.env.FLAG_VIDEO_AVATAR = "off";
+  try {
+    assert.ok(demoPackages("AE").every((p) => p.video === null), "video minutes shown while video is not live");
+  } finally {
+    process.env.FLAG_VIDEO_AVATAR = off.FLAG_VIDEO_AVATAR;
+  }
+  // Nothing typed: no price and no plan name in the page's own source.
+  const client = read("src/app/demo/v/[token]/DemoExperience.tsx");
+  assert.doesNotMatch(client, /AED\s*\d|\b(?:249|499|999)\b/);
+  assert.match(read("src/app/demo/v/[token]/page.tsx"), /packages=\{demoPackages\("AE"\)\}/);
+
+  freshStore();
+  const { link, token: t } = await makeLink();
+  const go = async (q: string) => (await goRoute.GET(new Request(`http://localhost/api/video-demo/x/go${q}`), params(t))).headers.get("location");
+  assert.equal(await go("?plan=v2_growth"), `http://localhost/checkout?products=v2_growth&market=AE&ref=demo_${link.id}`);
+  assert.equal(await go("?plan=v2_scale&cycle=annual"), `http://localhost/checkout?products=v2_scale&market=AE&cycle=annual&ref=demo_${link.id}`);
+  assert.equal(await go("?plan=everything_free"), `http://localhost/checkout?ref=demo_${link.id}`, "a plan not on sale is dropped");
+});
+
+await test("the setup claim is one sentence, the same on the page and in Belle's answer and policy, and promises no time", async () => {
+  const { SETUP_CLAIM, bellineVenue } = await import("../src/lib/seed-belline");
+  assert.doesNotMatch(SETUP_CLAIM, /\bminutes?\b|\bhours?\b|\bdays?\b|\bseconds?\b|instant|no developer/i);
+  assert.match(read("src/app/demo/v/[token]/page.tsx"), /setupClaim=\{SETUP_CLAIM\}/);
+  const faq = bellineVenue.agent.faqs.find((f) => f.q === "How long does it take to set up?")!;
+  assert.ok(faq.a.startsWith(SETUP_CLAIM), "Belle's setup answer does not say the page's words");
+  assert.match(faq.a, /haven't timed enough setups to promise a number/);
+  const policy = bellineVenue.agent.policies.find((p) => p.startsWith("Never say how long setup takes"))!;
+  assert.ok(policy.includes(SETUP_CLAIM), "Belle's policy does not give her the page's words");
+  // The steps on the page are the onboarding journey's own.
+  const journey = read("src/lib/onboarding/journey.ts");
+  for (const step of ['title: "Read your business"', 'title: "Check what it knows"', 'title: "Where bookings go"', 'title: "Go live"']) assert.ok(journey.includes(step), step);
+  // Three questions at most, answered in Belle's own words.
+  const page = read("src/app/demo/v/[token]/page.tsx");
+  const asked = page.match(/const FAQ_QUESTIONS = \[([^\]]*)\]/)![1].split(",").length;
+  assert.ok(asked <= 3);
+  assert.match(page, /venue\.agent\.faqs\.find/);
 });
 
 // ---------------------------------------------------------------------------

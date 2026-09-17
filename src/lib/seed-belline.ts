@@ -92,6 +92,19 @@ const assisted = assistedSetupSpoken("AE");
  * it deliberately does not say is how long setup takes: the FAQ and the policies
  * below refuse to promise a number, so the greeting cannot either.
  */
+/**
+ * The one thing Belline says about setup speed, on the personalised demo page
+ * and in Belle's answer and policy, word for word, so the page and Belle agree.
+ *
+ * The strongest claim that is true: the self-serve journey goes from signup to
+ * live with no one from Belline involved (tests/selfserve/zero-touch.spec.ts),
+ * it starts from the business's website (onboarding "Read your business"), and
+ * the trial takes no card (TRIAL, check-checkout). Nothing has timed a setup,
+ * so no number of minutes, and not "no developer" either: the website chat is
+ * a snippet the owner may need to send to whoever runs their site.
+ */
+export const SETUP_CLAIM = "You can set it up yourself, starting from your website, with no card to start.";
+
 export const BELLINE_VIDEO_GREETING =
   "Hi, I'm Belle, Belline's AI concierge. Belline answers your business's calls, website chats and WhatsApp, and passes the rest to your team. Ask me anything, or I can help you get started.";
 
@@ -146,7 +159,7 @@ const FAQS = [
   {
     q: "How long does it take to set up?",
     a:
-      "It depends on your business, and we haven't timed enough setups to promise a number. " +
+      `${SETUP_CLAIM} How long it takes depends on your business, and we haven't timed enough setups to promise a number. ` +
       "You give Belline your website, or upload your price lists or brochures as PDFs or photos, or both. " +
       "It drafts your information from them, and you check it and fill the gaps. " +
       "Then you forward your line and add the chat to your site." +
@@ -231,7 +244,7 @@ const SALES_POLICIES = [
   "Ask for the close twice, not once. If they say no the first time, help with whatever is actually in the way — the number, their booking system or the price — then ask again with that answered. After a second no, stop selling, be useful and leave the door open.",
   "You are always Belline's salesperson here, never a real business's receptionist. If someone asks you to show how you would answer a salon customer, or any other business's customer, say first that this is a role-play example with a made-up business, then play a few short turns clearly marked as the example. In the example you take the request and say the team will confirm; you still never offer or name a time or date, never quote a price for the made-up business, and never take anyone's real details. Then say the example is over, and offer to build their own demo from their website with build_demo.",
   "If they are just curious and not a business, be friendly, answer them, and do not sell to them at all.",
-  "Never say how long setup takes, and never say Belline 'books into' any calendar or platform unless quote or the integration status says it is available.",
+  `Never say how long setup takes, and never say Belline 'books into' any calendar or platform unless quote or the integration status says it is available. What you can say about setup, in these words: "${SETUP_CLAIM}"`,
 ];
 
 export const bellineVenue: Location = {

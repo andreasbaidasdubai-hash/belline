@@ -14,6 +14,7 @@ import {
   startErrorCode,
   statusText,
   type CallEvent,
+  type VideoErrorCode,
 } from "@/lib/video/client/machine";
 import type { CallAdapter, CallSession } from "@/lib/video/client/calls";
 import Greenscreen from "./Greenscreen";
@@ -90,6 +91,18 @@ type Props = {
   startLabel?: string;
   /** Switching to chat is handled by the page (the demo page's own chat), not a navigation. */
   onChat?: () => void;
+  /**
+   * One tap and the face talks (the personalised demo page). The tap starts the
+   * session, the call client and the microphone prompt together; the call joins
+   * listening only, so the face's opening never waits on the prompt, and the
+   * microphone is added when the browser grants it. Refused, she keeps talking
+   * and the chat is offered. Nothing is created before the tap.
+   */
+  listenFirst?: boolean;
+  /** A large start button laid over the face while resting, in place of the intro's heading and Start button. */
+  tapLabel?: string;
+  /** Fetch the call client's code (Daily, for a live face) on load, so the tap is instant. Code only: no session, no room. */
+  preloadClient?: boolean;
 };
 
 type Session = CallSession & { maxCallSeconds: number; warnBeforeSeconds: number; captions: boolean; perception: boolean };
@@ -117,6 +130,9 @@ export default function VideoPanel({
   introBody,
   startLabel,
   onChat,
+  listenFirst,
+  tapLabel,
+  preloadClient,
 }: Props) {
   const [state, dispatch] = useReducer(reduce, INITIAL);
   const [now, setNow] = useState(() => Date.now());
@@ -263,6 +279,8 @@ export default function VideoPanel({
     // Inside the press: the one moment iOS Safari lets a page start audio.
     void audioRef.current?.play().catch(() => undefined);
 
+    if (listenFirst) return startListening();
+
     if (!navigator.mediaDevices?.getUserMedia) {
       dispatch({ type: "fail", code: "mic_unsupported", retryable: false });
       report("client_error", undefined, "mic_unsupported");
@@ -355,6 +373,95 @@ export default function VideoPanel({
     }
   };
 
+  /**
+   * `listenFirst`: the session, the call client and the microphone prompt all
+   * start on the tap; the call joins listening only, so the face starts
+   * talking whatever the prompt is doing, and the microphone joins it later.
+   */
+  async function startListening() {
+    const client = import("@/lib/video/client/calls").then((m) => {
+      m.preloadCallClient(provider);
+      return m;
+    });
+    client.catch(() => undefined);
+    const sessionReply = requestSession();
+    report("mic_prompted");
+    const mic: Promise<MediaStreamTrack | { error: VideoErrorCode }> = navigator.mediaDevices?.getUserMedia
+      ? navigator.mediaDevices
+          .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false })
+          .then(
+            (stream): MediaStreamTrack | { error: VideoErrorCode } => stream.getAudioTracks()[0] ?? { error: "mic_missing" },
+            (err: unknown) => ({ error: micErrorCode(err) }),
+          )
+      : Promise.resolve({ error: "mic_unsupported" });
+    const dropMic = () => void mic.then((got) => ("error" in got ? undefined : got.stop()));
+
+    const reply = await sessionReply;
+    if (!reply.res) {
+      dropMic();
+      report("client_error", undefined, "network");
+      dispatch({ type: "fail", code: "network", retryable: true });
+      return;
+    }
+    const { res, data } = reply;
+    if (!res.ok || !data.session) {
+      dropMic();
+      const code = startErrorCode(res.status, data.error);
+      report("client_error", undefined, code);
+      dispatch({ type: "fail", code, retryable: Boolean(data.retryable) || code === "failed" });
+      return;
+    }
+    const session = data.session;
+    sessionRef.current = session;
+    setBackground(session.background?.src ?? "");
+    if (endingRef.current) {
+      endOnServer("visitor");
+      dropMic();
+      return;
+    }
+    try {
+      const { createCall } = await client;
+      const call = await createCall({
+        session,
+        micTrack: null,
+        media: { video: videoRef.current, audio: audioRef.current },
+        onEvent: onCallEvent,
+        mockUrl: `${base}/mock`,
+      });
+      callRef.current = call;
+      await call.join();
+      report("ready", Date.now() - startedAtRef.current);
+    } catch {
+      dropMic();
+      report("client_error", undefined, "join_failed");
+      await end("error", { silent: true });
+      dispatch({ type: "fail", code: "network", retryable: true });
+      return;
+    }
+
+    const got = await mic;
+    const call = callRef.current;
+    const typeInstead = chatHref || onChat ? "; to reply, type instead" : "";
+    if ("error" in got) {
+      report(got.error === "mic_denied" ? "mic_denied" : "client_error", undefined, got.error);
+      if (call && !endingRef.current) {
+        setNote(`${agentName} can't hear you: ${got.error === "mic_denied" ? "the microphone is blocked" : "no microphone could be used"}. She'll keep talking${typeInstead}.`);
+      }
+      return;
+    }
+    if (!call || endingRef.current) {
+      got.stop();
+      return;
+    }
+    micRef.current = got;
+    dispatch({ type: "mic_granted" });
+    try {
+      await call.setMicTrack(got);
+    } catch {
+      setNote(`${agentName} can't hear your microphone just now${typeInstead}.`);
+    }
+  }
+
   type SessionReply = { res: Response | null; data: { session?: Session; error?: string; retryable?: boolean } };
 
   /** Create the session. Never throws: a network failure is `res: null`. */
@@ -382,6 +489,12 @@ export default function VideoPanel({
       }).catch(() => undefined);
     });
   }
+  // The call client's code only, on load, where the page asked: the tap then has nothing to download.
+  useEffect(() => {
+    if (!preloadClient) return;
+    void import("@/lib/video/client/calls").then((m) => m.preloadCallClient(provider)).catch(() => undefined);
+  }, [preloadClient, provider]);
+
   // The bubble's tap already said "talk": start without a second press. The
   // microphone prompt is the browser's own, with the hint on screen beside it.
   useEffect(() => {
@@ -619,6 +732,17 @@ export default function VideoPanel({
             )}
           </div>
 
+          {tapLabel && state.phase === "intro" && (
+            <button ref={startButtonRef} type="button" className="bv-tap" onClick={() => void start()}>
+              <span className="bv-tap-pill">
+                <span className="bv-tap-i" aria-hidden="true">
+                  <PlayIcon />
+                </span>
+                {tapLabel}
+              </span>
+            </button>
+          )}
+
           {state.audioBlocked && inCall && (
             <button type="button" className="bv-sound" onClick={unlockAudio}>
               <SpeakerIcon />
@@ -659,7 +783,8 @@ export default function VideoPanel({
 
       {resting && !(bubble && state.phase !== "error") && (
         <div className="bv-panel">
-          {state.phase === "intro" && (
+          {state.phase === "intro" && tapLabel && introBody && <p className="bv-small">{introBody}</p>}
+          {state.phase === "intro" && !tapLabel && (
             <>
               <h1>{introTitle ?? `Talk face to face with ${agentName}`}</h1>
               <p>
@@ -676,7 +801,7 @@ export default function VideoPanel({
           {state.phase === "ended" && <p>The call has ended. Thanks for talking with {agentName}.</p>}
 
           <div className="bv-actions">
-            {canRetry && (
+            {canRetry && !(tapLabel && state.phase === "intro") && (
               <button ref={startButtonRef} type="button" className="bv-btn bv-primary" onClick={() => void start()}>
                 {state.phase === "intro" ? (startLabel ?? "Start video call") : state.phase === "ended" ? "Start again" : "Try again"}
               </button>
@@ -799,6 +924,14 @@ function EndIcon() {
   );
 }
 
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 5.2v13.6a1 1 0 0 0 1.52.85l10.9-6.8a1 1 0 0 0 0-1.7L9.52 4.35A1 1 0 0 0 8 5.2Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 function SpeakerIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -876,6 +1009,19 @@ html, body { margin: 0; height: 100%; background: var(--bl-ground) }
   font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer;
   box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .45) }
 .bv-sound svg { width: 20px; height: 20px; flex: none }
+/* One tap to meet her: the whole face is the button, the pill says so. */
+.bv-tap { position: absolute; inset: 0; z-index: 4; border: 0; padding: 0 0 12%; margin: 0; border-radius: 50%; cursor: pointer;
+  display: flex; align-items: flex-end; justify-content: center; touch-action: manipulation;
+  background: linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, .34) 100%); font: inherit; color: inherit }
+.bv-tap-pill { display: inline-flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 22px 0 7px;
+  border-radius: var(--bl-radius-pill); background: var(--bl-white); color: var(--bl-ink-900);
+  font-size: 17px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, .5); transition: transform .18s ease }
+.bv-tap-i { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--bl-blue); color: var(--bl-white) }
+.bv-tap-i svg { width: 18px; height: 18px; margin-left: 2px }
+.bv-tap:hover .bv-tap-pill { transform: scale(1.03) }
+.bv-tap:focus-visible { outline: none }
+.bv-tap:focus-visible .bv-tap-pill { outline: var(--bl-focus); outline-offset: 3px }
 .bv-sound:focus-visible { outline: var(--bl-focus); outline-offset: 3px }
 
 .bv-status { margin: 0; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; line-height: 1.3; padding: 5px 12px;
@@ -947,7 +1093,7 @@ html, body { margin: 0; height: 100%; background: var(--bl-ground) }
   .bv-controls, .bv-panel { align-content: center; max-width: 320px; overflow-y: auto }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bv-face, .bv-avatar, .bv-circle, .bv-ctl-i { transition: none }
+  .bv-face, .bv-avatar, .bv-circle, .bv-ctl-i, .bv-tap-pill { transition: none }
   .bv-preview-clip { display: none }
   .bv-placeholder.is-loading::after { animation: none }
 }

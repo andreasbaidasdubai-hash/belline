@@ -29,6 +29,12 @@ export interface CallMedia {
 export interface CallAdapter {
   join(): Promise<void>;
   setMuted(muted: boolean): void;
+  /**
+   * The visitor's microphone, when it arrives after the call has started (a
+   * page that lets the face start talking while the browser asks). Until then
+   * the visitor only listens.
+   */
+  setMicTrack(track: MediaStreamTrack): Promise<void>;
   /** Say this on the visitor's behalf: the face answers as if they had spoken it. */
   say(text: string): void;
   /** Leave the room, stop everything, and never emit again. Safe to call twice. */
@@ -37,7 +43,8 @@ export interface CallAdapter {
 
 export interface CallOptions {
   session: CallSession;
-  micTrack: MediaStreamTrack;
+  /** Null: join listening only, and add the microphone with `setMicTrack` once it is granted. */
+  micTrack: MediaStreamTrack | null;
   media: CallMedia;
   onEvent: (event: CallEvent) => void;
   /** The mock's model relay. */
@@ -87,16 +94,19 @@ async function createTavusCall(opts: CallOptions): Promise<CallAdapter> {
   const { default: Daily } = await import("@daily-co/daily-js");
   const { session, micTrack, media } = opts;
   let gone = false;
+  let hasMic = Boolean(micTrack);
+  let muted = false;
   const emit = (event: CallEvent) => {
     if (!gone) opts.onEvent(event);
   };
 
   // Camera never: perception is off, so nothing needs to see the visitor.
   const call = Daily.createCallObject({
-    audioSource: micTrack,
+    // No track yet: listening only, never Daily's own microphone request.
+    audioSource: micTrack ?? false,
     videoSource: false,
     startVideoOff: true,
-    startAudioOff: false,
+    startAudioOff: !micTrack,
     subscribeToTracksAutomatically: true,
   });
   const mapTavus = createTavusMapper();
@@ -131,7 +141,15 @@ async function createTavusCall(opts: CallOptions): Promise<CallAdapter> {
     async join() {
       await call.join({ url: session.roomUrl, ...(session.meetingToken ? { token: session.meetingToken } : {}) });
     },
-    setMuted(muted) {
+    setMuted(value) {
+      muted = value;
+      // Before the microphone arrives there is nothing to switch.
+      if (hasMic) call.setLocalAudio(!muted);
+    },
+    async setMicTrack(track) {
+      if (gone) return;
+      await call.setInputDevicesAsync({ audioSource: track });
+      hasMic = true;
       call.setLocalAudio(!muted);
     },
     say(text) {
@@ -201,6 +219,7 @@ function createMockCall(opts: CallOptions): CallAdapter {
   const { session } = opts;
   let gone = false;
   let muted = false;
+  let mic = opts.micTrack;
   let turn: AbortController | null = null;
   const timers: ReturnType<typeof setTimeout>[] = [];
   const emit = (event: CallEvent) => {
@@ -288,7 +307,11 @@ function createMockCall(opts: CallOptions): CallAdapter {
     },
     setMuted(value) {
       muted = value;
-      opts.micTrack.enabled = !muted;
+      if (mic) mic.enabled = !muted;
+    },
+    async setMicTrack(track) {
+      mic = track;
+      mic.enabled = !muted;
     },
     say(text) {
       void send(text);

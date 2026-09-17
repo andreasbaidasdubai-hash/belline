@@ -7,6 +7,10 @@ import { videoConfig } from "@/lib/video/config";
 import { facePreview } from "@/lib/video/face-preview";
 import { bellineVenue } from "@/lib/sales/video-demo/http";
 import { pageViewAllowed, resolveDemoToken } from "@/lib/sales/video-demo/service";
+import { demoPackages } from "@/lib/sales/video-demo/packages";
+import { videoLive } from "@/lib/billing/plans";
+import { siteOrigin } from "@/lib/origin";
+import { SETUP_CLAIM } from "@/lib/seed-belline";
 import DemoExperience from "./DemoExperience";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +27,7 @@ export const metadata: Metadata = {
  *
  * Rendering this page spends nothing: no session, no model call, no provider
  * request beyond the face's cached preview. The call starts only when the
- * visitor presses "Start your demo", and "opened" is reported by the page's
+ * visitor taps "Tap to meet Belle", and "opened" is reported by the page's
  * script, not by this request (mail scanners fetch links nobody clicked).
  */
 export default async function VideoDemoPage({ params }: { params: Promise<{ token: string }> }) {
@@ -53,6 +57,9 @@ export default async function VideoDemoPage({ params }: { params: Promise<{ toke
     if (face) preview = { clipUrl: own.clipUrl || face.clipUrl, posterUrl: own.posterUrl || face.posterUrl };
   }
 
+  // Belle's own prepared answers, word for word, so the page and Belle agree.
+  const faqs = FAQ_QUESTIONS.map((q) => venue.agent.faqs.find((f) => f.q === q)).filter((f): f is { q: string; a: string } => Boolean(f));
+
   return (
     <DemoExperience
       token={resolved.token}
@@ -61,13 +68,21 @@ export default async function VideoDemoPage({ params }: { params: Promise<{ toke
       opening={link.opening}
       visitorToken={signVisitorToken(venue.id, newVisitorId())}
       videoOn={availability.on}
+      videoLive={videoLive()}
       provider={config.provider}
       maxCallSeconds={config.maxCallSeconds}
       previewClipUrl={preview.clipUrl}
       previewPosterUrl={preview.posterUrl}
+      siteOrigin={siteOrigin()}
+      packages={demoPackages("AE")}
+      setupClaim={SETUP_CLAIM}
+      faqs={faqs}
     />
   );
 }
+
+/** Three questions a prospect has after the call, answered in Belle's own prepared words (seed-belline.ts). */
+const FAQ_QUESTIONS = ["How long does it take to set up?", "Do we have to change our phone number?", "Can it transfer a call to a person?"];
 
 function Notice({ title, body }: { title: string; body: string }) {
   return (
