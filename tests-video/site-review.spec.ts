@@ -234,6 +234,24 @@ test("Belle is large in the hero on load, on a phone within the first screen, an
       expect(size.height - (small.y + small.height)).toBeLessThanOrEqual(26);
       await expect(launcher.locator(".vl-act")).toHaveCount(2);
       await expect(launcher.locator('[data-kind="whatsapp"]')).toHaveAttribute("aria-label", "WhatsApp Belle");
+      // The small face (and its icons, when shown) sits on none of the hero's words: every rendered line of text, not the boxes.
+      await page.waitForTimeout(300);
+      expect(/is-away/.test((await launcher.getAttribute("class")) ?? ""), "the small face went away instead of making room").toBe(false);
+      const covered = await page.evaluate(() => {
+        const shown = [...document.querySelectorAll<HTMLElement>(".video-launcher .vl-main, .video-launcher .vl-act")].map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0);
+        const hits: string[] = [];
+        for (const el of document.querySelectorAll<HTMLElement>(".hero h1, .hero-can, .hero .lead, .hero-note, .hero .btn")) {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          for (const line of range.getClientRects()) {
+            for (const r of shown) {
+              if (line.left < r.right && r.left < line.right && line.top < r.bottom && r.top < line.bottom) hits.push(`${el.className}: "${(el.textContent ?? "").trim().slice(0, 30)}"`);
+            }
+          }
+        }
+        return [...new Set(hits)];
+      });
+      expect(covered, `at ${size.width}x${size.height}, after ×, the small face covers the hero's text`).toEqual([]);
       if (!wide) await shot(page, `mobile-after-close-${size.width}x${size.height}`);
       // Still small after a reload in the same session.
       await page.reload();

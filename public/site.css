@@ -3834,6 +3834,13 @@ footer a { color: var(--bl-ink-900); }
 /* Tucked into the margin where the icons would cover content: the face alone. */
 .video-launcher.is-tucked { right: 12px; }
 .video-launcher.is-tucked .vl-act { display: none; }
+/* After × on a small phone (375x667), the hero's last lines reach the corner
+   where the small face sits. Leave that column free (12px margin + 64px face
+   + a gap), so the tucked face sits beside the words, never on them. */
+@media (max-width: 480px) {
+  body.belle-small .hero .lead,
+  body.belle-small .hero-note { padding-right: 80px; }
+}
 /* No entrance animation on Belle's column: an element with a transform
    animation contains fixed descendants, and the call that floats in the corner
    would float inside the hero instead. */

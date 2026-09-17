@@ -779,6 +779,8 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     document.body.appendChild(bubble);
     if (figure) figure.classList.remove("has-bubble");
     if (figure) figure.classList.add("is-small");
+    // site.css keeps the hero's words clear of the corner on a small phone.
+    document.body.classList.add("belle-small");
     if (heroDemo) heroDemo.classList.remove("has-video-hero");
   }
 
@@ -829,6 +831,28 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     "#price .sec-head, #price .market-note, #price .price-bar, #price .plans, #price .plan-shared, #price .price-tax, #price .compare, #price .terms, " +
     ".btn, .nav-cta, .cta-row, .roi-result, #warteliste, .chat-dock, .call-dock";
 
+  /**
+   * The hero's words: never under the small face either. Their content box
+   * only, so the room site.css leaves on a small phone (padding-right) counts
+   * as room. Tucked is enough there; it does not send her away.
+   */
+  var HERO_TEXT = ".hero .lead, .hero-note";
+
+  function coversText() {
+    var box = {
+      left: launcher.offsetLeft,
+      top: launcher.offsetTop,
+      right: launcher.offsetLeft + launcher.offsetWidth,
+      bottom: launcher.offsetTop + launcher.offsetHeight,
+    };
+    return [].some.call(document.querySelectorAll(HERO_TEXT), function (el) {
+      var r = el.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0)) return false;
+      var pad = parseFloat(window.getComputedStyle(el).paddingRight) || 0;
+      return overlaps(box, { left: r.left, top: r.top, right: r.right - pad, bottom: r.bottom });
+    });
+  }
+
   function overlaps(a, b) {
     return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
   }
@@ -855,9 +879,9 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
    */
   function avoid() {
     launcher.classList.remove("is-tucked", "is-away");
-    if (!covers()) return;
+    if (!covers() && !coversText()) return;
     launcher.classList.add("is-tucked");
-    if (covers()) launcher.classList.add("is-away");
+    if (covers() || coversText()) launcher.classList.add("is-away");
   }
 
   function update() {
