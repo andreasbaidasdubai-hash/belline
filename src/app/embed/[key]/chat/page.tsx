@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { signVisitorToken } from "@/lib/auth";
 import { seedIfEmpty } from "@/lib/seed";
 import { listLocations } from "@/lib/store";
-import { originAllowed } from "@/lib/embed";
+import { originAllowed, starterPromptsFor } from "@/lib/embed";
 import { chatAllowed, chatGate, newVisitorId, voiceAllowed } from "@/lib/webchat";
 import { widgetOpenFor } from "@/lib/embed-preview";
 import { lineFor, answersIn, inHouseSpelling, languageNotice } from "@/lib/language";
@@ -89,6 +89,8 @@ export default async function ChatPage({
       venueName={location.name}
       agentName={location.agent.displayName}
       logoUrl={logoUrlFor(location)}
+      opener={location.agent.chatGreeting?.trim() ? inHouseSpelling(location, location.agent.chatGreeting.trim()) : undefined}
+      starterPrompts={starterPromptsFor(location.agent)}
       /** The 2-in-1: offered only where the venue has the bell on as well. */
       voiceHref={voiceAllowed(location.embed) ? voiceUrl(key, o) : undefined}
       // Only for a venue not answered in English; English keeps the lines written in Chat.tsx.

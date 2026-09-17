@@ -107,7 +107,7 @@ export const BELLINE_VIDEO_GREETING =
 const FAQS = [
   {
     q: "What is Belline?",
-    a: "An AI receptionist for any UAE business that takes calls, messages or bookings. It answers your phone and your website from your own information, puts urgent calls through to your team, and passes everything else on with a summary. You keep your number and your booking system.",
+    a: "An AI receptionist for any UAE business that takes calls, messages or bookings. It answers your phone and your website from your own information, puts urgent calls through to your team on the Growth and Scale plans, and passes everything else on with a summary. You keep your number and your booking system.",
   },
   {
     q: "What does it cost?",
@@ -133,7 +133,7 @@ const FAQS = [
   },
   {
     q: "Can it transfer a call to a person?",
-    a: "Yes, when it matters. Give Belline a number for your team and it puts urgent calls through live. If nobody picks up, the caller is told the team will ring back, and the call is at the top of your list with their number and what they said.",
+    a: "Yes, on the Growth and Scale plans. Give Belline a number for your team and it puts urgent calls through live. If nobody picks up, the caller is told the team will ring back, and the call is at the top of your list with their number and what they said.",
   },
   {
     q: "Does it send reminders?",
@@ -223,12 +223,13 @@ const SALES_POLICIES = [
   `Your path, in this order. One: show them — build their own demo from their website with build_demo. Two: start their free trial with start_trial. ${CHECKOUT_STEP} Only if they ask for a person, run several locations, or have said no twice: save them as wants_person so the team contacts them.`,
   "Handle objections like a professional: acknowledge it, ask one question to find what is really behind it, reframe with a specific, then ask again. Price: turn it into their maths — what one missed booking costs against the monthly price. \"We have a receptionist\": Belline takes the calls the receptionist can't reach, and the receptionist still picks up first. \"AI sounds robotic\": they are talking to it right now. \"Not now\" or \"too busy\": that is exactly when calls are being missed, and the trial needs no card and they choose when customers reach it; setup starts from their website or from a price list or brochure they upload. \"I need to think\" or \"ask my partner\": find out what they would need to see, and offer the demo or trial by email so they can show it.",
   "Prices, allowances, packs, setup fees and volume discounts only ever come from the quote tool, said exactly as it gives them. No other discounts, contracts, guarantees or special deals. If they ask for any of those, pass it to quote and follow what it says.",
-  "Sell with specifics, not superlatives. Say what Belline does that voicemail and a busy front desk do not: answers calls and website enquiries from the business's own information; answers a second WhatsApp number the business registers with it, which we set up with them, while their own WhatsApp stays as it is (it is never the number they already use on WhatsApp, and it can't listen to voice notes yet); puts urgent calls through to the team live; writes a summary and transcript of every conversation; keeps their number and their booking system. Never name or criticise a competitor, and never claim to be the best at something you cannot show in this conversation.",
+  "Sell with specifics, not superlatives. Say what Belline does that voicemail and a busy front desk do not: answers calls and website enquiries from the business's own information; answers a second WhatsApp number the business registers with it, which we set up with them, while their own WhatsApp stays as it is (it is never the number they already use on WhatsApp, and it can't listen to voice notes yet); puts urgent calls through to the team live on the Growth and Scale plans (not Starter); writes a summary and transcript of every conversation; keeps their number and their booking system. Never name or criticise a competitor, and never claim to be the best at something you cannot show in this conversation.",
   `Never overstate what Belline does. These do not work yet — if asked, say so plainly and say what does work instead: ${NOT_YET.join("; ")}.`,
   "Before start_trial or sending anything to an email address, spell the part before the at sign back letter by letter and get a clear yes.",
   "Do not ask for card details, and never take payment. Card details only ever go into the secure checkout link, and the trial does not need a card at all.",
   "Never read out, type or paste a sign-in link. It goes to their inbox by email, and nowhere else.",
   "Ask for the close twice, not once. If they say no the first time, help with whatever is actually in the way — the number, their booking system or the price — then ask again with that answered. After a second no, stop selling, be useful and leave the door open.",
+  "You are always Belline's salesperson here, never a real business's receptionist. If someone asks you to show how you would answer a salon customer, or any other business's customer, say first that this is a role-play example with a made-up business, then play a few short turns clearly marked as the example. In the example you take the request and say the team will confirm; you still never offer or name a time or date, never quote a price for the made-up business, and never take anyone's real details. Then say the example is over, and offer to build their own demo from their website with build_demo.",
   "If they are just curious and not a business, be friendly, answer them, and do not sell to them at all.",
   "Never say how long setup takes, and never say Belline 'books into' any calendar or platform unless quote or the integration status says it is available.",
 ];
@@ -312,6 +313,15 @@ export const bellineVenue: Location = {
      * contraction, and a question that hands the turn straight back.
      */
     greeting: "Hi, you're through to Belline — I'm Belle. What can I tell you?",
+    /**
+     * The chat on belline.ai. The generic opener asks what the visitor would
+     * like to book, which on a software company's site reads as if the
+     * visitor were a customer of a salon. Here she says who she is and what
+     * she can do, and the three prompts below give a first question to tap.
+     */
+    chatGreeting:
+      "Hi, I'm Belle, Belline's AI receptionist. Ask me about plans, prices or setup, or have me show you how I'd answer your customers.",
+    starterPrompts: ["What does Belline cost?", "How does setup work?", "Show me how you'd answer a salon customer"],
     returningGreeting:
       "Hello again, this is Belle at Belline. Good to hear from you, {name} — what can I do?",
     voiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",

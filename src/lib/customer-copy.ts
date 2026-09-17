@@ -176,6 +176,7 @@ export const CUSTOMER_COPY = {
   "chat.passing": { en: "Passing you to the team", de: "Sie werden an das Team weitergegeben" },
   "chat.replies": { en: "{agent} · replies in seconds", de: "{agent} · antwortet in Sekunden" },
   "chat.rather_talk": { en: "Rather talk?", de: "Lieber sprechen?" },
+  "chat.starters": { en: "Suggested questions", de: "Vorgeschlagene Fragen" },
   "chat.opener": {
     en: "Hi — I'm {agent} at {venue}. Ask me anything, or tell me what you'd like to book.",
     de: "Guten Tag – ich bin {agent} von {venue}. Fragen Sie mich gern, oder sagen Sie mir, was Sie buchen möchten.",
@@ -429,6 +430,7 @@ export const CHAT_KEYS = [
   "chat.passing",
   "chat.replies",
   "chat.rather_talk",
+  "chat.starters",
   "chat.opener",
   "chat.note_listening",
   "chat.note_time",

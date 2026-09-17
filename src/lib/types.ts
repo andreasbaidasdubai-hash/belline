@@ -782,6 +782,16 @@ export interface AgentConfig {
   displayName: string;
   greeting: string;
   /**
+   * The website chat's opening line, where the venue has its own. Unset keeps
+   * the generic "Ask me anything, or tell me what you'd like to book".
+   */
+  chatGreeting?: string;
+  /**
+   * Up to three questions the website chat offers as tappable chips until the
+   * visitor's first message. Unset or empty shows none.
+   */
+  starterPrompts?: string[];
+  /**
    * Spoken instead of `greeting` when the caller's number matches a past
    * guest. `{name}` is replaced with the name they booked under. Left blank,
    * returning guests get the standard greeting.

@@ -1564,6 +1564,132 @@ if (!isConfigured()) {
   await close();
 }
 
+// ---------------------------------------------------------------------------
+head("Belle's chat on belline.ai: who she is, and what to ask");
+
+{
+  const React = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  (globalThis as { React?: unknown }).React = React;
+  const { default: Chat } = await import("../src/app/embed/[key]/chat/Chat");
+  const { starterPromptsFor, connectedWhatsAppLink, widgetConfig } = await import("../src/lib/embed");
+  const { bellineVenue } = await import("../src/lib/seed-belline");
+  const render = (props: Record<string, unknown>) =>
+    renderToStaticMarkup(
+      React.createElement(Chat, { embedKey: "k", freshToken: "t", venueName: "Belline", agentName: "Belle", ...props } as never),
+    );
+
+  await test("Belline's venue has an opener that says who Belle is, and exactly three starter prompts", () => {
+    assert.deepEqual(bellineVenue.agent.starterPrompts, [
+      "What does Belline cost?",
+      "How does setup work?",
+      "Show me how you'd answer a salon customer",
+    ]);
+    const opener = bellineVenue.agent.chatGreeting ?? "";
+    assert.match(opener, /Belle/);
+    assert.match(opener, /AI receptionist/);
+    assert.doesNotMatch(opener, /book/i, "the belline.ai opener still asks what the visitor would like to book");
+  });
+
+  await test("starter prompts are a generic per-venue feature: none unless seeded, three at most, cleaned", () => {
+    assert.deepEqual(starterPromptsFor({}), []);
+    assert.deepEqual(starterPromptsFor({ starterPrompts: "nope" }), []);
+    assert.deepEqual(starterPromptsFor({ starterPrompts: [" a ", "", "a", 4, "b", "c", "d"] }), ["a", "b", "c"]);
+    assert.deepEqual(starterPromptsFor({ starterPrompts: ["x".repeat(81)] }), []);
+    const seeded = fs.readFileSync(path.join(process.cwd(), "src", "lib", "seed.ts"), "utf8");
+    assert.equal((seeded.match(/starterPrompts:/g) ?? []).length, 1, "a venue other than Belline's is seeded with starter prompts");
+    const page = fs.readFileSync(path.join(process.cwd(), "src", "app", "embed", "[key]", "chat", "page.tsx"), "utf8");
+    assert.match(page, /starterPrompts=\{starterPromptsFor\(location\.agent\)\}/);
+  });
+
+  await test("the chips show until the first message, and a tapped chip sends its own words", () => {
+    const withChips = render({ starterPrompts: starterPromptsFor(bellineVenue.agent), opener: bellineVenue.agent.chatGreeting });
+    const chips = [...withChips.matchAll(/<button type="button" class="bl-starter">([^<]+)<\/button>/g)].map((m) => m[1].replace(/&#x27;/g, "'"));
+    assert.deepEqual(chips, bellineVenue.agent.starterPrompts);
+    assert.ok(withChips.includes("Belline&#x27;s AI receptionist"), "the venue's own opener is not shown");
+    assert.doesNotMatch(withChips, /tell me what you(&#x27;|&rsquo;|’)d\s+like to book/);
+    // A venue without prompts: no chips, and the generic opener as before.
+    const plain = render({});
+    assert.doesNotMatch(plain, /class="bl-starter"/);
+    assert.match(plain, /like to book/);
+    const src = fs.readFileSync(path.join(process.cwd(), "src", "app", "embed", "[key]", "chat", "Chat.tsx"), "utf8");
+    assert.match(src, /starterPrompts\.length > 0 && lines\.length === 0 && !busy/, "the chips do not hide after the first message");
+    assert.match(src, /onClick=\{\(\) => void send\(prompt\)\}/, "a chip does not send its prompt");
+    assert.match(src, /const text = \(said \?\? draft\)\.trim\(\)/);
+  });
+
+  await test("asked to show a salon customer, Belle frames a role-play, and the booking guards still hold", () => {
+    const policies = bellineVenue.agent.policies.join("\n");
+    assert.match(policies, /role-play example with a made-up business/);
+    assert.match(policies, /never offer or name a time or date/);
+    assert.match(policies, /You do not book anything on this line, and you never offer, suggest or name a time or date/);
+  });
+
+  await test("Belle says live transfer is on Growth and Scale, as the catalogue does", async () => {
+    const { PRODUCTS } = await import("../src/lib/billing/plans");
+    const has = (id: string) => PRODUCTS.find((p) => p.id === id)!.features.some((f) => /urgent calls through/.test(f.text));
+    assert.equal(has("v2_starter"), false);
+    assert.equal(has("v2_growth") && has("v2_scale"), true);
+    const transfer = bellineVenue.agent.faqs.find((f) => /transfer a call/.test(f.q))!;
+    assert.match(transfer.a, /Growth and Scale/);
+    assert.match(bellineVenue.agent.policies.join("\n"), /urgent calls through to the team live on the Growth and Scale plans/);
+    const setup = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "StepActions.tsx"), "utf8");
+    assert.match(setup, /On the Growth and Scale plans, Belline puts urgent calls through/);
+  });
+
+  head("The WhatsApp link only for a connected number");
+
+  await test("no connected number, no link — whatever WHATSAPP_NUMBER says", () => {
+    const had = process.env.WHATSAPP_NUMBER;
+    process.env.WHATSAPP_NUMBER = "+971500000000";
+    try {
+      assert.equal(connectedWhatsAppLink(null), null);
+      assert.equal(connectedWhatsAppLink(undefined), null);
+      assert.equal(connectedWhatsAppLink({ phoneE164: "+971501234567", status: "paused", channel: "whatsapp" }), null);
+      assert.equal(connectedWhatsAppLink({ phoneE164: "+971501234567", status: "active", channel: "sms" }), null);
+      assert.equal(connectedWhatsAppLink({ phoneE164: "", status: "active", channel: "whatsapp" }), null);
+      assert.equal(connectedWhatsAppLink({ phoneE164: "+971501234567", status: "active", channel: "whatsapp" }), "https://wa.me/971501234567");
+      const cfg = widgetConfig({ key: "k", enabled: true, allowedOrigins: [] } as never, connectedWhatsAppLink(null));
+      assert.equal(cfg.whatsappLink, null);
+    } finally {
+      if (had === undefined) delete process.env.WHATSAPP_NUMBER;
+      else process.env.WHATSAPP_NUMBER = had;
+    }
+  });
+
+  await test("the config route for belline.ai reports null WhatsApp without a connection, even with the number in the environment", async () => {
+    const had = process.env.WHATSAPP_NUMBER;
+    process.env.WHATSAPP_NUMBER = "+971500000000";
+    try {
+      const { GET } = await import("../src/app/api/embed/[key]/config/route");
+      const res = await GET(new Request("http://localhost/api/embed/be_belline_site/config"), { params: Promise.resolve({ key: "be_belline_site" }) });
+      const body = (await res.json()) as { live?: boolean; whatsappLink?: string | null };
+      assert.notEqual(body.live, false, "Belline's own widget is not live, so this proves nothing");
+      assert.equal(body.whatsappLink, null, "the WhatsApp icon would show with no connected number");
+      const src = fs.readFileSync(path.join(process.cwd(), "src", "app", "api", "embed", "[key]", "config", "route.ts"), "utf8");
+      assert.match(src, /const link = connectedWhatsAppLink\(account\);/);
+      assert.doesNotMatch(src, /whatsappLink\(/, "the route still falls back to the environment's number");
+    } finally {
+      if (had === undefined) delete process.env.WHATSAPP_NUMBER;
+      else process.env.WHATSAPP_NUMBER = had;
+    }
+  });
+
+  await test("/whatsapp without a connection explains and offers the chat and getting started, not a dead end", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "src", "app", "whatsapp", "page.tsx"), "utf8");
+    assert.match(src, /connectedWhatsAppLink\(account\)/, "the page decides on something other than a real connection");
+    assert.doesNotMatch(src, /whatsappConfigured\(/);
+    assert.match(src, /\$\{site\}\/\?chat=1/);
+    assert.match(src, /href="\/checkout"/);
+    assert.match(src, /Chat with Belle on the website/);
+    assert.match(src, /Get started/);
+    const plain = src.replace(/&rsquo;/g, "’").replace(/\s+/g, " ");
+    assert.match(plain, /second number you register with it/);
+    assert.doesNotMatch(plain, EXISTING_WHATSAPP_CLAIM);
+    assert.doesNotMatch(plain, /Not on WhatsApp yet/);
+  });
+}
+
 console.log(
   failed === 0
     ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n`

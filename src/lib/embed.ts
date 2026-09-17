@@ -321,6 +321,43 @@ export {
 } from "./embed-look";
 import { resolveAppearance } from "./embed-look";
 
+/** At most this many starter prompts are shown in the chat. */
+export const MAX_STARTER_PROMPTS = 3;
+
+/**
+ * The chat's starter prompts for a venue: trimmed, non-empty, de-duplicated,
+ * each a sensible length, and never more than three.
+ */
+export function starterPromptsFor(agent: { starterPrompts?: unknown }): string[] {
+  if (!Array.isArray(agent.starterPrompts)) return [];
+  const out: string[] = [];
+  for (const raw of agent.starterPrompts) {
+    if (typeof raw !== "string") continue;
+    const prompt = raw.replace(/\s+/g, " ").trim();
+    if (!prompt || prompt.length > 80 || out.includes(prompt)) continue;
+    out.push(prompt);
+    if (out.length === MAX_STARTER_PROMPTS) break;
+  }
+  return out;
+}
+
+/**
+ * The WhatsApp link a widget may show: only for a number actually connected
+ * to the venue and active, never one read from the environment alone.
+ *
+ * Belline's own venue used to fall back to `WHATSAPP_NUMBER`, so a server with
+ * the variable set and no connection (staging) put a WhatsApp icon on the
+ * site that led to "Not on WhatsApp yet". No connected number, no icon.
+ */
+export function connectedWhatsAppLink(
+  account: { phoneE164?: string | null; status?: string; channel?: string } | null | undefined,
+): string | null {
+  if (!account || account.status !== "active") return null;
+  if (account.channel !== undefined && account.channel !== "whatsapp") return null;
+  const number = account.phoneE164 ?? "";
+  return /^\+\d{8,15}$/.test(number) ? `https://wa.me/${number.slice(1)}` : null;
+}
+
 /**
  * What the widget fetches on load: the venue's choices and nothing else.
  *
