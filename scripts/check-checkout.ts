@@ -480,6 +480,16 @@ console.log("\n\x1b[1mThe checkout page\x1b[0m\n");
     assert.ok(render({ signedIn: true }).includes(state.VAT_NOTE));
   });
 
+  await test("with video live, the trial and the plan say their voice minutes as video minutes too", () => {
+    assert.equal(state.trialAllowance(TRIAL, true), "30 days, 30 voice minutes or 12 video minutes, 50 text conversations");
+    const html = render({ video: true });
+    assert.ok(html.includes("30 voice minutes or 12 video minutes"), "the trial allowance does not name video minutes");
+    assert.ok(html.includes("250 voice min or 100 video min"), "the Growth summary does not name video minutes");
+    assert.doesNotMatch(render({ video: false }), /video min/, "video minutes are named while video is not live");
+    const page = fs.readFileSync(path.join(process.cwd(), "src/app/checkout/page.tsx"), "utf8");
+    assert.match(page, /video=\{videoLive\(\)\}/);
+  });
+
   await test("the account side says what follows, and nothing promises four things", () => {
     const html = render();
     assert.doesNotMatch(html, /Four things/i);

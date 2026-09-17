@@ -149,6 +149,63 @@ export function poolText(pool: Pool, amount: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Video
+// ---------------------------------------------------------------------------
+
+/**
+ * How many voice minutes one minute of the video receptionist uses.
+ *
+ * Video is included in every plan and draws on the voice-minute pool. 2.5
+ * because it costs about that much more: Tavus Business is $975 for 4,000
+ * minutes, about $0.24 a minute for the avatar ($0.26 all-in with our model
+ * turns), against about $0.10 for a voice minute. Lowered when an enterprise
+ * rate with Tavus is signed — this one setting moves the meter, the caps,
+ * the alerts and every line that quotes video minutes.
+ */
+export const VIDEO_VOICE_MINUTE_RATIO = 2.5;
+
+/** Whole video minutes a number of voice minutes buys, rounded down: 75 → 30. For display everywhere. */
+export function videoMinutesFor(voiceMinutes: number): number {
+  if (!(voiceMinutes > 0)) return 0;
+  return Math.floor(voiceMinutes / VIDEO_VOICE_MINUTE_RATIO);
+}
+
+/**
+ * Voice minutes a video call uses: its seconds at the ratio, rounded up to the
+ * next whole minute once, the way every voice minute is (billing/usage.ts).
+ */
+export function voiceMinutesForVideoSeconds(seconds: number): number {
+  if (!(seconds > 0)) return 0;
+  return Math.ceil((seconds * VIDEO_VOICE_MINUTE_RATIO) / 60);
+}
+
+/**
+ * Whether the video receptionist may be described as working, the way the
+ * calendar lines follow theirs: the `video.avatar` flag, read when the
+ * catalogue is read.
+ */
+export const videoLive = () => publicFlag("video.avatar");
+
+const VIDEO_GAP =
+  "Built and running on staging behind the video.avatar flag (TAVUS_API_KEY, TAVUS_FACE_ID, VIDEO_LLM_SECRET); " +
+  "described as working once that flag is on in production.";
+
+/** "30 video minutes (each uses 2.5 voice minutes)", from a voice-minute pool. */
+export function videoAllowanceText(voiceMinutes: number): string {
+  return `${videoMinutesFor(voiceMinutes).toLocaleString("en-GB")} video minutes (each uses ${VIDEO_VOICE_MINUTE_RATIO} voice minutes)`;
+}
+
+const VIDEO_RECEPTIONIST: Feature = {
+  text: "Video receptionist on your website",
+  get status(): Feature["status"] {
+    return videoLive() ? "live" : "not-yet";
+  },
+  get gap() {
+    return videoLive() ? undefined : VIDEO_GAP;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Products
 // ---------------------------------------------------------------------------
 
@@ -344,6 +401,7 @@ const V2_STARTER_FEATURES: Feature[] = [
   { text: "Summary and full transcript of every call and chat", status: "live" },
   { text: "Your team can take over any chat from the inbox", status: "live" },
   { text: "Your own words and colours on the website buttons", status: "live" },
+  VIDEO_RECEPTIONIST,
   CALENDAR_CONNECTION,
   DEPOSITS,
 ];
@@ -1059,6 +1117,12 @@ export function allowanceFeatures(product: Product): Feature[] {
     const live = POOL_CHANNELS[pool].some((c) => CHANNELS[c].status === "live");
     return { text: poolText(pool, product.pools![pool]!), status: live ? ("live" as const) : ("not-yet" as const) };
   });
+  // What the voice-minute pool buys as video, generated from it. Only for a
+  // current plan: an older product was never sold video.
+  if (typeof product.pools?.minutes === "number" && product.version === CATALOGUE_VERSION) {
+    const on = videoLive();
+    pools.push({ text: videoAllowanceText(product.pools.minutes), status: on ? ("live" as const) : ("not-yet" as const), ...(on ? {} : { gap: VIDEO_GAP }) });
+  }
   const channels = CHANNEL_ORDER.filter((c) => typeof product.allowances[c] === "number").map((channel) => ({
     text: allowanceText(channel, product.allowances[channel] as number),
     status: CHANNELS[channel].status,

@@ -28,6 +28,7 @@ import {
   orderSearch,
   toggleEditing,
   trialAllowance,
+  voiceAllowance,
 } from "./order-state";
 
 /**
@@ -45,10 +46,10 @@ import {
 const serif = { fontFamily: "var(--bl-font-display)", fontWeight: 600, letterSpacing: "var(--bl-track-display)" } as const;
 
 /** "250 voice min · 600 text conversations · 5 users", or an older product's per-channel list, live channels only. */
-function shortAllowances(product: Product): string {
+function shortAllowances(product: Product, video: boolean): string {
   if (product.pools) {
     const parts: string[] = [];
-    if (product.pools.minutes) parts.push(`${product.pools.minutes.toLocaleString("en-GB")} voice min`);
+    if (product.pools.minutes) parts.push(voiceAllowance(product.pools.minutes, video, true));
     if (product.pools.conversations) parts.push(`${product.pools.conversations.toLocaleString("en-GB")} text conversations`);
     if (product.users) parts.push(`${product.users} users`);
     return parts.join(" · ");
@@ -88,7 +89,13 @@ export default function Order({
   markets,
   trade,
   siteOrigin,
+  video = false,
+  included,
 }: {
+  /** Each plan's "What's included" lines, read on the server (flags decide some of them). */
+  included?: Partial<Record<ProductId, string[]>>;
+  /** The video receptionist is live (plans.ts `videoLive`): allowances name video minutes too. */
+  video?: boolean;
   market: Market;
   initial: ProductId[];
   initialCycle: BillingCycle;
@@ -167,7 +174,7 @@ export default function Order({
               {cycle === "annual" && <span className="muted" style={{ fontFamily: "var(--bl-font-text)", fontWeight: 400, fontSize: 12 }}> billed yearly</span>}
             </span>
             <span className="muted" style={{ display: "block", fontSize: 12, marginTop: 4 }}>
-              {shortAllowances(plan)}
+              {shortAllowances(plan, video)}
             </span>
           </div>
           {plans.length > 1 && (
@@ -202,7 +209,7 @@ export default function Order({
                     <span style={{ ...serif, fontSize: 18, whiteSpace: "nowrap" }}>{priceLine(p.id)}</span>
                   </span>
                   <span className="muted" style={{ display: "block", fontSize: 12, marginTop: 4 }}>
-                    {shortAllowances(p)}
+                    {shortAllowances(p, video)}
                   </span>
                 </button>
               );
@@ -216,7 +223,7 @@ export default function Order({
             Phone, website voice button, website chat and WhatsApp in every plan, per location.
           </p>
           <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 4px" }}>
-            {publicLines(plan).map((line) => (
+            {(included?.[selected] ?? publicLines(plan)).map((line) => (
               <li key={line} style={{ position: "relative", paddingLeft: 19, marginBottom: 7, fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
                 <span aria-hidden="true" style={{ position: "absolute", left: 0, top: "0.62em", width: 8, height: 1, background: "var(--gold-ink)" }} />
                 {line}
@@ -232,7 +239,7 @@ export default function Order({
           </div>
           {!signedIn && (
             <p data-trial-allowance style={{ fontSize: 12.5, margin: "8px 0 0", lineHeight: 1.5, color: "var(--text-2)" }}>
-              Free trial: {trialAllowance(TRIAL)}. No card.
+              Free trial: {trialAllowance(TRIAL, video)}. No card.
             </p>
           )}
           <p className="muted" style={small}>

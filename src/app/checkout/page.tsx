@@ -2,7 +2,7 @@ import Brand from "@/components/Brand";
 import { currentUser } from "@/lib/auth-server";
 import { listLocationsFor } from "@/lib/store";
 import { seedIfEmpty } from "@/lib/seed";
-import { LEGACY_TO_BUNDLE, TRIAL, checkSelection, recommendedPlan, type BillingCycle } from "@/lib/billing/plans";
+import { LEGACY_TO_BUNDLE, TRIAL, checkSelection, publicLines, recommendedPlan, sellable, videoLive, type BillingCycle } from "@/lib/billing/plans";
 import { productsOf, subscriptionMarket } from "@/lib/billing/usage";
 import { MARKETS, liveMarkets, marketOf } from "@/lib/markets";
 import { tradeFromParam } from "@/lib/signup-rules";
@@ -98,6 +98,10 @@ export default async function CheckoutPage({
           markets={liveMarkets()}
           trade={trade}
           siteOrigin={site}
+          video={videoLive()}
+          // Read here, on the server: a feature that follows a flag must say
+          // the same in the browser as in the page the server sent.
+          included={Object.fromEntries(sellable(market).map((p) => [p.id, publicLines(p)]))}
         />
       </main>
     </div>

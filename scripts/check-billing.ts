@@ -1024,6 +1024,69 @@ console.log("\n[1mThe Stripe webhook: once, in order, and retried when it fails[
   delete process.env.STRIPE_WEBHOOK_SECRET;
 }
 
+console.log("\n\x1b[1mVideo: counted at 2.5, costed at Tavus\x1b[0m\n");
+
+{
+  const margin = await import("../src/lib/billing/margin");
+  const cost = await import("../src/lib/billing/cost");
+  const { VIDEO_VOICE_MINUTE_RATIO, PACKS } = plans;
+
+  test("the Tavus estimate is $975 for 4,000 minutes, and a video minute costs it plus the model turns", () => {
+    assert.equal(cost.TAVUS_BUSINESS_PER_MIN_USD, 0.244);
+    assert.ok(Math.abs(975 / 4000 - cost.TAVUS_BUSINESS_PER_MIN_USD) < 0.001);
+    for (const basis of margin.BASIS_ORDER) {
+      assert.ok(margin.videoMinuteCostUsd(basis) > cost.TAVUS_BUSINESS_PER_MIN_USD);
+      assert.equal(margin.videoCostPerVoiceMinuteUsd(basis), margin.videoMinuteCostUsd(basis) / VIDEO_VOICE_MINUTE_RATIO);
+      assert.ok(margin.poolCostUsd("minutes", basis) >= margin.videoCostPerVoiceMinuteUsd(basis), "the minute pool is costed below video");
+    }
+  });
+
+  test("every plan clears the floor at full use with every voice minute spent on video, both cycles, and so does the pack", () => {
+    for (const p of sellable("AE")) {
+      for (const cycle of ["monthly", "annual"] as const) {
+        const m = margin.marginOf(p, "AE", "conservative", 1, cycle);
+        // Recomputed with the minute pool entirely on video, conversations at their dearest, to prove the pool cost is not hiding it.
+        const months = cycle === "annual" ? 12 : 1;
+        const chargeUsd = m.revenueUsd * months;
+        const allVideo =
+          p.pools!.minutes! * margin.videoCostPerVoiceMinuteUsd("conservative") +
+          p.pools!.conversations! * margin.poolCostUsd("conversations", "conservative") +
+          margin.numberRentalUsd("conservative") +
+          margin.cardFeeUsd(chargeUsd) / months;
+        const videoMargin = (m.revenueUsd - allVideo) / m.revenueUsd;
+        assert.ok(videoMargin >= 0.3, `${p.id} ${cycle} on video: ${(videoMargin * 100).toFixed(1)}%`);
+        assert.ok(m.margin! >= 0.3, `${p.id} ${cycle}: ${(m.margin! * 100).toFixed(1)}%`);
+        assert.ok(m.costUsd >= allVideo - 1e-9, `${p.id} ${cycle}: the margin table costs less than all-video use`);
+      }
+    }
+    const pack = PACKS.find((x) => x.pool === "minutes")!;
+    assert.ok(margin.packMarginOf(pack, "AE", "conservative").margin! >= 0.3);
+  });
+
+  test("a finished video call records its raw seconds at the Tavus estimate; the mock records nothing", () => {
+    const venue = listLocations().find((l) => !l.internal && !l.demo?.enabled) ?? base;
+    const call = startCall(venue, "embed", "website");
+    cost.flushCosts();
+    cost.meterVideoTime(call, 90, "tavus");
+    cost.meterVideoTime(call, 90, "mock");
+    cost.flushCosts();
+    const summary = cost.costOfCall(call.id);
+    assert.equal(summary.events, 1);
+    assert.ok(Math.abs((summary.byVendor.tavus ?? 0) - 1.5 * cost.TAVUS_BUSINESS_PER_MIN_USD) < 1e-6);
+  });
+
+  test("video minutes are defined beside the minute definition, which the website quotes unchanged", () => {
+    assert.match(usage.VIDEO_MINUTE_DEFINITION, /uses 2\.5 voice minutes/);
+    assert.match(usage.VIDEO_MINUTE_DEFINITION, /rounded up/);
+    assert.doesNotMatch(MINUTE_DEFINITION, /video/i);
+    assert.equal(usage.videoLeftSentence(75, 5), "70 voice minutes left, or 28 video minutes (each video minute uses 2.5 voice minutes)");
+    assert.equal(usage.videoLeftSentence(75, 80), "0 voice minutes left, or 0 video minutes (each video minute uses 2.5 voice minutes)");
+    const page = fs.readFileSync(path.join(ROOT, "src/app/(app)/billing/page.tsx"), "utf8");
+    assert.match(page, /\{VIDEO_MINUTE_DEFINITION\}/);
+    assert.match(page, /videoLeftSentence\(included, used\)/);
+  });
+}
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 if (pendingCopy.length) {

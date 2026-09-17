@@ -1,4 +1,4 @@
-import type { BillingCycle, ProductId } from "@/lib/billing/plans";
+import { videoMinutesFor, type BillingCycle, type ProductId } from "@/lib/billing/plans";
 
 /**
  * The checkout's order, as plain functions so a check can hold them.
@@ -49,9 +49,20 @@ export function orderSearch(search: string, state: OrderState): string {
   return `?${params.toString()}`;
 }
 
-/** The trial in the catalogue's own numbers: "30 days, 30 voice minutes, 50 text conversations". */
-export function trialAllowance(trial: { days: number; minutes: number; conversations: number }): string {
-  return `${trial.days} days, ${trial.minutes} voice minutes, ${trial.conversations} text conversations`;
+/**
+ * "30 voice minutes", or "30 voice minutes or 12 video minutes" while the
+ * video receptionist is live (plans.ts `videoLive`, passed in by the server).
+ */
+export function voiceAllowance(minutes: number, video: boolean, short = false): string {
+  const voice = short ? `${minutes.toLocaleString("en-GB")} voice min` : `${minutes.toLocaleString("en-GB")} voice minutes`;
+  if (!video) return voice;
+  const v = videoMinutesFor(minutes).toLocaleString("en-GB");
+  return `${voice} or ${v} video ${short ? "min" : "minutes"}`;
+}
+
+/** The trial in the catalogue's own numbers: "30 days, 30 voice minutes or 12 video minutes, 50 text conversations". */
+export function trialAllowance(trial: { days: number; minutes: number; conversations: number }, video = false): string {
+  return `${trial.days} days, ${voiceAllowance(trial.minutes, video)}, ${trial.conversations} text conversations`;
 }
 
 /** The sign-up steps, in the order they happen after this page. */

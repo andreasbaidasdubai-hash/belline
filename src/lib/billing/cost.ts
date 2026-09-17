@@ -25,7 +25,7 @@ import { appendCosts, getCall, listCosts } from "../store";
 
 /** `test` is the setup checks (onboarding/selftest.ts): spend, but never a customer's usage. */
 export type CostChannel = "phone" | "embed_voice" | "webchat" | "whatsapp" | "test";
-export type CostVendor = "twilio" | "deepgram" | "elevenlabs" | "anthropic" | "meta" | "openai";
+export type CostVendor = "twilio" | "deepgram" | "elevenlabs" | "anthropic" | "meta" | "openai" | "tavus";
 export type CostUnit =
   | "min"
   | "chars"
@@ -334,6 +334,38 @@ export function meterCallTime(
   if (opts.stt) {
     recordCost({ ...ctx, vendor: "deepgram", unit: "min", units: minutes, usd: minutes * rate("DEEPGRAM_STREAMING"), detail: "DEEPGRAM_STREAMING nova-3" });
   }
+}
+
+/**
+ * Tavus Business, per video minute, in US dollars: $975 for 4,000 minutes.
+ * An estimate from the plan's list price, not a metered invoice line; replaced
+ * when an enterprise rate is signed (plans.ts VIDEO_VOICE_MINUTE_RATIO moves
+ * with it).
+ */
+export const TAVUS_BUSINESS_PER_MIN_USD = 0.244;
+
+/**
+ * A video call's provider time: the raw seconds, priced at the Tavus Business
+ * estimate. The mock provider costs nothing and is recorded as nothing. The
+ * model turns behind the face are metered by the agent runtime they run in (agent/runtime.ts).
+ */
+export function meterVideoTime(
+  call: Pick<Call, "id" | "locationId" | "channel">,
+  seconds: number,
+  provider: string,
+): void {
+  if (!(seconds > 0) || provider !== "tavus") return;
+  const minutes = seconds / 60;
+  recordCost({
+    venueId: call.locationId,
+    callId: call.id,
+    channel: costChannelOf(call),
+    vendor: "tavus",
+    unit: "min",
+    units: minutes,
+    usd: minutes * TAVUS_BUSINESS_PER_MIN_USD,
+    detail: `TAVUS_BUSINESS_PER_MIN_USD estimate · ${Math.round(seconds)}s video`,
+  });
 }
 
 /** Characters sent to ElevenLabs. Called by the speech provider once a request is accepted. */

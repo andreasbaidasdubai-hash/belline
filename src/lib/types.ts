@@ -1525,10 +1525,13 @@ export interface Call {
   callSid?: string;
   /**
    * Set when this `embed` call was the video receptionist rather than the bell
-   * (docs/video). Metered as web-voice minutes like the bell; kept out of the
-   * bell's daily ceiling, because video has its own.
+   * (docs/video). Metered against the voice-minute pool at
+   * VIDEO_VOICE_MINUTE_RATIO voice minutes per video minute (billing/usage.ts);
+   * kept out of the bell's daily ceiling, because video has its own.
    */
   video?: {
+    /** The call's raw video seconds, recorded when it ends, for cost reporting. */
+    seconds?: number;
     provider: "tavus" | "mock";
     /** Our session id. */
     sessionId: string;
