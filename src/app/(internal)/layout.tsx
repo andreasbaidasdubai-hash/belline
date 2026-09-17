@@ -67,6 +67,8 @@ export default async function InternalLayout({ children }: { children: React.Rea
     // Customers a person has to help: every one is a gap in self-serve, and
     // the minutes spent clearing them are the number to drive to zero.
     { href: "/sales/exceptions", label: "Exceptions" },
+    // Signups that look like a second free trial, and emails not confirmed.
+    { href: "/sales/abuse", label: "Abuse review" },
     { href: "/sales/activity", label: "Agent activity" },
   ];
 
