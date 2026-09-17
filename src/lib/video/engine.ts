@@ -322,8 +322,10 @@ export async function runVideoTurn(
   let spoken = "";
   let firstAt = -1;
   let endAfter: AgentEvent | null = null;
+  const kinds: Record<string, number> = {};
   try {
     for await (const event of agent.respond(userText)) {
+      kinds[event.type] = (kinds[event.type] ?? 0) + 1;
       if (signal.aborted) break;
       switch (event.type) {
         case "sentence": {
@@ -365,6 +367,10 @@ export async function runVideoTurn(
 
   if (spoken) call.transcript.push({ role: "agent", text: spoken, at: new Date().toISOString() });
   persist(call);
+  // Counts only: whether this turn said anything, and why not if it didn't.
+  console.log(
+    `[video] ${session.id} turn: said=${spoken.length} chars first=${firstAt}ms total=${Date.now() - startedAt}ms aborted=${signal.aborted} events=${JSON.stringify(kinds)} call=${call.id}`,
+  );
 
   if (endAfter && !signal.aborted) {
     setTimeout(() => void endVideoSession(session.id, "agent_ended", { by: "agent" }), speakingMs(spoken)).unref?.();
