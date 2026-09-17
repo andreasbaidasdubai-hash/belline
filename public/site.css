@@ -1207,13 +1207,14 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
  *
  * Only on screen when the video receptionist is switched on for our own venue
  * (site.js loads embed-video.js, which makes the bubble). The bubble takes the
- * corner the three floating buttons had, and they step aside: its one small
- * "Other ways to reach us" button opens the same three as a menu. A call grows
- * the same circle in place; there is no dock and no panel. */
+ * corner the three floating buttons had, at the call's own size from the first
+ * load, and they step aside: WhatsApp and the chat become the two round icons
+ * under Belle's face, and the bell has none, because voice is the face. A call
+ * happens in the same circle; there is no dock and no panel. Its size comes
+ * from embed-video.js (the call circle), not from here. */
 .video-bubble {
   right: 26px;
   bottom: calc(26px + env(safe-area-inset-bottom, 0px));
-  --bvb-size: 200px;
 }
 body.has-video-bubble .wa-fab,
 body.has-video-bubble .chat-fab,
@@ -1222,9 +1223,7 @@ body.has-video-bubble .bell-fab { display: none; }
   .video-bubble {
     right: 20px;
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-    --bvb-size: 136px;
   }
-  .video-bubble .bvb-talk { min-height: 40px; font-size: 13px; }
 }
 /* --- Das angedockte Gespräch ------------------------------------------------ */
 
@@ -2341,8 +2340,11 @@ h2.display {
 /* --- Hero ------------------------------------------------------------------ */
 /* No decorative dot grid above the headline: the owner asked for it gone. The
    hero opens straight on the headline and the example conversations. */
+/* The headline starts high: the eyebrow sits a short step under the header,
+   not a third of the way down the screen, and the copy is aligned to the top
+   of the card beside it rather than centred against it. */
 .hero {
-  padding: 96px 0 88px;
+  padding: 56px 0 88px;
   background: linear-gradient(180deg, #FFFFFF 0%, #FFFFFF 62%, var(--bl-blue-tint) 100%);
 }
 .hero-demo { gap: 56px; }
@@ -2352,37 +2354,27 @@ h2.display {
 
 .hero-demo {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
 }
 .hero-demo .cta-row { gap: 12px 14px; }
 .mark-ground { fill: var(--mark-ground); }
 .mark-glyph { fill: var(--mark-glyph); }
 
-/* The hero picture: the three conversations Belline has today and the
-   calendar the call's request lands in, on a two-column stage. Chat above
-   WhatsApp on the left; the call, set a little lower, above the calendar on
-   the right, joined by a short dashed line. Flat like every other card: a
-   border, no shadow. On a phone the four stack chat, call, calendar,
-   WhatsApp, so the call and its calendar stay together. */
+/* The hero picture: one card, one conversation at a time. The three
+   conversations Belline has today and the calendar a request lands in are
+   tabs of the same card (site.js), so the hero shows every channel by name
+   without four boxes competing with the headline. Belle's face is the bubble
+   in the corner, so the card leaves that corner free (below). Without
+   JavaScript the four simply stack. */
 .stage {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-areas:
-    "chat call"
-    "wa   call"
-    "wa   cal";
-  grid-template-rows: auto auto 1fr;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
-  width: 100%;
-  max-width: 680px;
-  justify-self: end;
+  width: 380px;
+  max-width: 100%;
 }
-.demo-chat { grid-area: chat; }
-.demo-call { grid-area: call; margin-top: 44px; }
-.demo-wa { grid-area: wa; }
-.stage .cal { grid-area: cal; }
 
 .demo-card,
 .stage .cal {
@@ -2648,43 +2640,87 @@ h2.display {
   .call-level i { animation: none; }
 }
 
+/* --- The card's tabs ----------------------------------------------------------
+   A segmented control on the card's top edge, and only the chosen panel under
+   it, at its own height (no empty space under a short conversation; beside
+   the taller headline column nothing on the page moves). Each panel's own
+   messages play again when it is chosen (unless motion is reduced), with
+   delays for one panel, not for four in a row. */
+.stage.is-tabbed {
+  gap: 0;
+  padding: 8px;
+  background: #FFFFFF;
+  border: 1px solid var(--card-line);
+  border-radius: calc(var(--card-radius) + 6px);
+  box-shadow: 0 24px 48px -32px rgba(29, 29, 31, 0.28);
+}
+.stage-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  margin: 0 0 8px;
+  border-radius: var(--bl-radius-pill);
+  background: var(--bl-surface);
+}
+.stage-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--bl-radius-pill);
+  background: transparent;
+  color: var(--bl-text-2);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.stage-tab:hover { color: var(--bl-ink-900); }
+.stage-tab[aria-selected="true"] {
+  background: #FFFFFF;
+  color: var(--bl-ink-900);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+.stage-tab:focus-visible { outline: 2px solid var(--bl-blue); outline-offset: 2px; }
+.stage.is-tabbed > figure {
+  border: 0;
+  border-radius: var(--card-radius);
+  animation: none;
+}
+.stage.is-tabbed > figure:not(.is-on) { display: none; }
+.stage.is-tabbed .cal::before { display: none; }
+.stage.is-tabbed .demo-head { border-bottom-color: var(--bl-rule-soft); }
+.stage.is-tabbed .cal-ev-new { animation-delay: 0.5s; }
+.stage.is-tabbed .cal-new-state { animation-delay: 1s; }
+.stage.is-tabbed .wa-thread .msg:nth-child(1) { animation-delay: 0.3s; }
+.stage.is-tabbed .wa-thread .msg:nth-child(2) { animation-delay: 0.9s; }
+@media (prefers-reduced-motion: reduce) {
+  .stage-tab { transition: none; }
+}
+
+/* --- Room for Belle ---------------------------------------------------------
+   Belle's bubble (or, with video off, the three floating buttons) sits in the
+   bottom right corner from the first paint, at the call's own size: 320 px of
+   face and a row of buttons under it, 26 px from the edge. On a wide screen
+   the card stops short of that column instead of disappearing under it: the
+   margin is the bubble's width, its edge offset and 28 px of air, less
+   whatever margin the page already has at that width (none left by 1920). */
 @media (min-width: 1101px) {
-  .hero-demo { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 48px; }
+  .hero-demo { gap: 44px; }
+  .stage { width: 350px; margin-right: max(0px, calc(374px - max(32px, (100vw - 1136px) / 2))); }
+  /* The headline column is narrower beside the card and the room for Belle:
+     a size that keeps "Hier geht immer jemand ran." to three lines at 1280. */
+  .hero-demo h1.display { font-size: clamp(2.55rem, 1rem + 4vw, 4.6rem); }
+}
+@media (min-width: 1440px) {
+  .stage { width: 400px; }
 }
 @media (max-width: 1100px) {
-  .hero-demo { grid-template-columns: minmax(0, 1fr); gap: 52px; }
-  .stage { justify-self: start; max-width: 720px; }
-}
-
-/* --- Platz für die Knöpfe ---------------------------------------------------
-   Die drei Knöpfe stehen vom ersten Augenblick an unten rechts. Sie schweben,
-   also schiebt kein Abstand unter dem Hero sie beiseite — der Hero ist
-   mehrere Bildschirme hoch, und was neben den Knöpfen liegt, ist auf jeder
-   Höhe eine Karte. Was hilft, ist Platz rechts: die Karten hören vor der
-   Spalte der Knöpfe auf, statt unter ihr zu verschwinden.
-
-   Gemessen bei 375, 414, 768, 1024 und 1440. Bei 1024 standen die Karten
-   ohnehin 38 px frei, das ist das Maß: rund 40 px Luft neben dem breitesten
-   Knopf, nicht mehr. */
-.stage { padding-right: 104px; }
-@media (max-width: 1100px) {
-  /* Einspaltig und linksbündig: die Karten laufen sonst bis an den Rand. */
-  .stage { padding-right: 76px; }
-}
-@media (max-width: 640px) {
-  /* Auf dem Telefon sind die Knöpfe rund und schmaler (60 px), und die
-     Karten brauchen jede Zeile, die sie kriegen können. */
-  .stage { padding-right: 68px; }
-}
-@media (max-width: 640px) {
-  .stage {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "chat" "call" "cal" "wa";
-    grid-template-rows: none;
-    gap: 16px;
-  }
-  .demo-call { margin-top: 0; }
-  .stage .cal::before { top: -17px; height: 16px; }
+  .hero-demo { grid-template-columns: minmax(0, 1fr); gap: 48px; }
+  .stage { width: 100%; max-width: 460px; justify-self: start; }
 }
 
 /* Three plain facts as a light strip, no numbers. */
@@ -3065,6 +3101,13 @@ footer a { color: var(--bl-ink-900); }
   .wrap { padding: 0 20px; }
   body { font-size: var(--bl-text-size); }
   .hero { padding: 20px 0 64px; }
+  /* On a phone the two buttons come straight under the headline, before the
+     paragraph: they stay above Belle's bubble in the corner on a short screen
+     (375x667), and they are what the headline is asking the visitor to do. */
+  .hero-copy { display: flex; flex-direction: column; align-items: flex-start; }
+  .hero .cta-row { order: 1; margin-top: 24px; }
+  .hero .lead { order: 2; margin-top: 24px; }
+  .hero-note { order: 3; }
   .top nav { background: #FFFFFF; }
   .top nav a { font-family: var(--bl-font-display); font-size: 1.3rem; font-weight: var(--bl-weight-display); color: var(--bl-ink-900); }
   .top nav .nav-cta { font-family: var(--bl-font-text); font-size: 1rem; font-weight: var(--bl-weight-button); color: #FFFFFF; }
@@ -3075,7 +3118,7 @@ footer a { color: var(--bl-ink-900); }
   .knows > div { padding: 24px 22px 26px; border-bottom: 1px solid var(--card-line); }
 }
 @media (max-width: 760px) {
-  .hero { padding-top: 48px; }
+  .hero { padding-top: 24px; }
   .plain-facts { margin-top: 48px; padding: 0 22px; }
   .plain-facts li,
   .plain-facts li:first-child,

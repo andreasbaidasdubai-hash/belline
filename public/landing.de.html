@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- translated-from: sha256 5de56f83bbdd0ce37fa8b616448c6e6bc90c289881d0a779888ab7711f26e477 -->
+<!-- translated-from: sha256 bb6aabd3483a60f883797fe4938f87baf157eae281e33c2172347b77c66a9439 -->
 <!--
   Die deutsche Startseite, für Deutschland, Österreich und die Schweiz.
 
@@ -154,12 +154,13 @@
     Der Hero: dieselben drei Gespräche und derselbe Kalender wie auf der
     englischen Seite, übersetzt und als übersetzte Beispiele gekennzeichnet,
     denn Belline selbst antwortet auf Englisch. Kein Gespräch endet mit einem
-    gebuchten Termin, und der Kalender trägt "Demnächst".
+    gebuchten Termin, und der Kalender trägt "Demnächst". Wie auf der
+    englischen Seite eine Karte mit Reitern (site.js), ein Gespräch zur Zeit.
   -->
   <section class="hero">
     <div class="wrap hero-in hero-demo">
       <div class="hero-copy">
-        <p class="eyebrow rise">KI-Empfang für Telefon und Chat</p>
+        <p class="eyebrow rise">KI-Empfang für Video, Telefon und Chat</p>
         <h1 class="display rise rise-1">Hier geht immer jemand ran.</h1>
         <p class="lead rise rise-2">
           Belline beantwortet die Anrufe, Website-Chats und WhatsApp-Nachrichten,
@@ -171,7 +172,7 @@
 
         <div class="cta-row rise rise-3">
           <a class="btn" href="#warteliste" data-cta="hero">Auf die Warteliste</a>
-          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belline sprechen</a>
+          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belle sprechen</a>
         </div>
 
         <p class="hero-note rise rise-4">
@@ -181,9 +182,9 @@
         </p>
       </div>
 
-      <div class="stage" role="group" aria-label="Drei Beispielgespräche, übersetzt, und ein Beispielkalender">
+      <div class="stage" role="group" aria-label="Drei Beispielgespräche, übersetzt, und ein Beispielkalender" data-tabs="Wo Belline antwortet">
         <!-- Website-Chat -->
-        <figure class="demo-card demo-chat">
+        <figure class="demo-card demo-chat" id="demo-chat" data-tab="Chat">
           <figcaption class="demo-head">
             <span class="demo-badge" aria-hidden="true">
               <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="24" class="mark-ground"/><g class="mark-glyph" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>
@@ -205,7 +206,7 @@
         </figure>
 
         <!-- Anruf -->
-        <figure class="demo-card demo-call">
+        <figure class="demo-card demo-call" id="demo-call" data-tab="Telefon">
           <figcaption class="demo-head demo-head-ink">
             <span class="demo-title">Anruf</span>
             <span class="demo-example">Beispiel, übersetzt</span>
@@ -237,7 +238,7 @@
         </figure>
 
         <!-- Der Kalender, in dem die Anfrage landet. Noch nicht live. -->
-        <figure class="cal">
+        <figure class="cal" id="demo-cal" data-tab="Kalender">
           <figcaption class="cal-head">
             <span class="cal-day">
               <span class="cal-dow">Freitag</span>
@@ -262,7 +263,7 @@
         </figure>
 
         <!-- WhatsApp, auf einer zweiten Nummer. Endet mit der Anfrage beim Team. -->
-        <figure class="demo-card demo-wa">
+        <figure class="demo-card demo-wa" id="demo-wa" data-tab="WhatsApp">
           <figcaption class="demo-head demo-head-wa">
             <span class="demo-wa-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path fill="currentColor" d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z"/></svg>
@@ -431,7 +432,7 @@
       </ul>
 
       <div class="cta-row">
-        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belline sprechen</a>
+        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belle sprechen</a>
       </div>
     </div>
   </section>
@@ -518,7 +519,7 @@
       <p class="stop-small">Noch nicht: Belline verschickt keine Bestätigungen oder Erinnerungen per SMS an Ihre Kunden.</p>
 
       <div class="cta-row">
-        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belline sprechen</a>
+        <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belle sprechen</a>
         <span class="cta-aside">Stellen Sie eine unbequeme Frage, auf Englisch.</span>
       </div>
     </div>
@@ -923,7 +924,7 @@
           <li>Bitten Sie darum, mit einer Person zu sprechen</li>
         </ul>
         <div class="cta-row">
-          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belline sprechen</a>
+          <a class="btn line" href="https://app.belline.ai/call?start=1" data-call>Mit Belle sprechen</a>
         </div>
         <p class="fine">
           Oder <a class="dial-inline" href="https://app.belline.ai/whatsapp">schreiben Sie Belle auf WhatsApp</a>,
@@ -949,7 +950,7 @@
       <span>Belline</span>
     </a>
     <p>
-      KI-Empfang für Telefon und Chat, für Unternehmen, die Anrufe, Nachrichten oder Buchungen erhalten.
+      KI-Empfang für Video, Telefon und Chat, für Unternehmen, die Anrufe, Nachrichten oder Buchungen erhalten.
       In Deutschland, Österreich und der Schweiz noch nicht verfügbar.<br>
       <a href="tel:+15717785920">+1 571 778 5920</a> (ein Anruf in die USA) ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·

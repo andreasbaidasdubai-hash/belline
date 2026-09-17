@@ -83,10 +83,9 @@ async function startCall(page: Page) {
   return body.session;
 }
 
-/** Captions are off until asked for: on, through the "…" menu. */
+/** Captions are off until asked for: on, with the small Captions toggle. */
 async function captionsOn(scope: Page | FrameLocator) {
-  await scope.getByRole("button", { name: "More options" }).click();
-  await scope.getByRole("menuitemcheckbox", { name: /Captions/ }).click();
+  await scope.getByRole("button", { name: "Captions" }).click();
 }
 function noHorizontalScroll(page: Page) {
   return page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
@@ -152,11 +151,11 @@ test("microphone accepted: the round call view, mute, captions, a lead through t
   expect(endBtn.y + endBtn.height).toBeLessThanOrEqual(viewport.height);
   const pairCentre = (mute.x + endBtn.x + endBtn.width) / 2;
   expect(Math.abs(pairCentre - viewport.width / 2)).toBeLessThanOrEqual(4);
-  await expect(page.getByRole("button", { name: "More options" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Captions" })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("button", { name: "Type instead" })).toBeVisible();
-  // Nothing else in the row: no captions or person buttons until the menu.
-  await expect(page.getByRole("button", { name: /captions/i })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Talk to a person" })).toHaveCount(0);
+  // Nothing else: no menu, and no "Talk to a person" (asked out loud, Belle takes a message or hands over).
+  await expect(page.getByRole("button", { name: "More options" })).toHaveCount(0);
+  await expect(page.getByText("Talk to a person")).toHaveCount(0);
   await expect(page.locator(".bv-caption")).toHaveCount(0);
   expect(await noHorizontalScroll(page)).toBe(true);
   await shot(page, info, "02-call-view");
@@ -168,7 +167,7 @@ test("microphone accepted: the round call view, mute, captions, a lead through t
   await page.getByRole("button", { name: "Unmute microphone" }).click();
 
   await captionsOn(page);
-  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Captions" })).toHaveAttribute("aria-pressed", "true");
   await page.getByLabel(/Say something/).fill("My name is Dana Reed, I run a salon called Glow Studio, email dana.video@glow.example");
   await page.getByRole("button", { name: "Say", exact: true }).click();
   await expect(page.locator(".bv-caption")).toHaveCount(1);
@@ -187,9 +186,8 @@ test("microphone accepted: the round call view, mute, captions, a lead through t
     })
     .toBe(true);
 
-  await page.getByRole("button", { name: "More options" }).click();
-  await expect(page.getByRole("menuitemcheckbox", { name: /Captions/ })).toHaveAttribute("aria-checked", "true");
-  await page.getByRole("menuitemcheckbox", { name: /Captions/ }).click();
+  await page.getByRole("button", { name: "Captions" }).click();
+  await expect(page.getByRole("button", { name: "Captions" })).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".bv-caption")).toHaveCount(0);
 
   await page.getByRole("button", { name: "End call" }).click();
@@ -204,7 +202,7 @@ test("the controls stay clear of each other at 320px", async ({ page }, info) =>
   await openPanel(page);
   await startCall(page);
   expect(await noHorizontalScroll(page)).toBe(true);
-  const boxes = await Promise.all(["Mute microphone", "End call", "More options"].map((name) => box(page.getByRole("button", { name }))));
+  const boxes = await Promise.all(["Mute microphone", "End call", "Captions"].map((name) => box(page.getByRole("button", { name }))));
   for (let i = 0; i < boxes.length; i++) {
     expect(boxes[i].x).toBeGreaterThanOrEqual(0);
     expect(boxes[i].x + boxes[i].width).toBeLessThanOrEqual(320);
@@ -292,13 +290,12 @@ test("switching to chat ends the call and opens the chat", async ({ page, baseUR
   await expectEnded(page, baseURL!, session);
 });
 
-test("talk to a person: the panel says what happens next", async ({ page }, info) => {
+test("no Talk to a person anywhere in the call: a person is asked for out loud", async ({ page }) => {
   await openPanel(page);
   await startCall(page);
-  await page.getByRole("button", { name: "More options" }).click();
-  await page.getByRole("menuitem", { name: "Talk to a person" }).click();
-  await expect(page.getByText(/will take your details so someone from the team can get back to you/)).toBeVisible();
-  await shot(page, info, "10-person");
+  await expect(page.getByRole("button", { name: "Captions" })).toBeVisible();
+  await expect(page.getByText("Talk to a person")).toHaveCount(0);
+  await expect(page.getByRole("menu")).toHaveCount(0);
   await page.getByRole("button", { name: "End call" }).click();
 });
 
@@ -377,13 +374,35 @@ async function blockAudio(context: BrowserContext) {
   });
 }
 
+/** At rest the bubble is the call circle's own size (about 320px, 240px on a phone), with Talk to Belle under it, all on screen. */
+async function expectBigBubble(page: Page, bubble: Locator) {
+  const viewport = page.viewportSize()!;
+  const circle = await box(bubble.locator(".bvb-circle"));
+  if (viewport.width <= 520) {
+    expect(circle.width).toBeGreaterThanOrEqual(228);
+    expect(circle.width).toBeLessThanOrEqual(252);
+  } else {
+    expect(circle.width).toBeGreaterThanOrEqual(296);
+    expect(circle.width).toBeLessThanOrEqual(330);
+  }
+  const talk = await box(bubble.getByRole("button", { name: "Talk to Belle", exact: true }));
+  expect(talk.y).toBeGreaterThanOrEqual(circle.y + circle.height);
+  const all = await box(bubble);
+  expect(all.x).toBeGreaterThanOrEqual(0);
+  expect(all.y).toBeGreaterThanOrEqual(0);
+  expect(all.x + all.width).toBeLessThanOrEqual(viewport.width);
+  expect(all.y + all.height).toBeLessThanOrEqual(viewport.height);
+  expect(await noHorizontalScroll(page)).toBe(true);
+}
+
 async function expectInCall(page: Page) {
   const bubble = page.locator(".bvb");
   await expect(bubble).toHaveAttribute("data-state", "call");
   const frame = bubbleFrame(page);
   await expect(frame.getByRole("button", { name: "End call" })).toBeVisible();
   await expect(frame.getByRole("button", { name: "Mute microphone" })).toBeVisible();
-  await expect(frame.getByRole("button", { name: "More options" })).toBeVisible();
+  await expect(frame.getByRole("button", { name: "Captions" })).toBeVisible();
+  await expect(frame.getByText("Talk to a person")).toHaveCount(0);
   await expect(frame.locator(".bv-status")).toHaveText(/Belle is (speaking|listening)/);
   // The call happens in the circle: no separate panel, no header.
   await expect(page.locator("iframe.belline-panel, .video-dock, .video-frame")).toHaveCount(0);
@@ -395,8 +414,8 @@ async function expectInCall(page: Page) {
   const circle = await box(bubble.locator(".bvb-circle"));
   const iframe = await box(bubble.locator("iframe.bvb-frame"));
   if (viewport.width <= 520) {
-    expect(circle.width).toBeGreaterThanOrEqual(236);
-    expect(circle.width).toBeLessThanOrEqual(262);
+    expect(circle.width).toBeGreaterThanOrEqual(228);
+    expect(circle.width).toBeLessThanOrEqual(252);
   } else {
     expect(circle.width).toBeGreaterThanOrEqual(296);
     expect(circle.width).toBeLessThanOrEqual(344);
@@ -411,11 +430,12 @@ async function expectInCall(page: Page) {
   expect(await noHorizontalScroll(page)).toBe(true);
 }
 
-test("on a venue's page: the bubble greets with no session, a tap grows it into the call, × ends it, and it stays small", async ({ page, context, baseURL }, info) => {
+test("on a venue's page: the bubble opens big with no session, the chat icon under it, a tap grows it into the call, × ends it, and only × makes it small", async ({ page, context, baseURL }, info) => {
   const server = await venueSite(baseURL!);
   test.skip(!server, "localhost:3000 is taken on this machine");
   const posts = countSessionPosts(context);
   try {
+    // A new browser context: a fresh load is the big bubble.
     await page.goto("http://localhost:3000/");
     const bubble = page.locator(".bvb");
     await expect(bubble).toBeVisible();
@@ -427,20 +447,16 @@ test("on a venue's page: the bubble greets with no session, a tap grows it into 
     else await expect(bubble.getByText("Hi, I'm Belle — tap to talk")).toBeVisible();
     await page.waitForTimeout(2500);
     expect(posts, "a live session was created on page load").toEqual([]);
+    await expectBigBubble(page, bubble);
 
-    // The launcher's own buttons fold into the one secondary button.
+    // The launcher's own buttons become the icons under the face: here the venue offers the chat.
     await expect(page.locator(".belline-fab").filter({ visible: true })).toHaveCount(0);
-    const more = bubble.getByRole("button", { name: "Other ways to reach us" });
-    await expect(more).toBeVisible();
-    const b = await box(bubble.locator(".bvb-circle"));
-    expect(b.x).toBeGreaterThanOrEqual(0);
-    expect(b.width).toBeGreaterThanOrEqual(viewport.width <= 520 ? 128 : 180);
-    expect(b.width).toBeLessThanOrEqual(viewport.width <= 520 ? 144 : 220);
-    expect(overlaps(await box(more), await box(bubble.getByRole("button", { name: "Talk to Belle", exact: true })))).toBe(false);
+    await expect(bubble.getByRole("button", { name: "Other ways to reach us" })).toHaveCount(0);
+    const chat = bubble.locator('.bvb-act[data-kind="chat"]');
+    await expect(chat).toBeVisible();
     await shot(page, info, "11-widget-bubble-on-load");
 
-    // One channel here (the chat), so the secondary button opens it directly.
-    await more.click();
+    await chat.click();
     await expect(page.locator("iframe.belline-panel")).toBeVisible();
     await page.getByRole("button", { name: "Close chat" }).click();
     await expect(page.locator("iframe.belline-panel")).toHaveCount(0);
@@ -454,40 +470,63 @@ test("on a venue's page: the bubble greets with no session, a tap grows it into 
     await expectInCall(page);
     await shot(page, info, "12-widget-call-view");
 
-    // × during the call: the session ends on the server and the bubble rests again.
+    // × during the call: the session ends on the server and the bubble rests again, big.
     await page.getByRole("button", { name: "Close video call" }).click();
     await expect(page.locator("iframe.bvb-frame")).toHaveCount(0);
     await expect(bubble).toHaveAttribute("data-state", "rest");
     await expectEnded(page, baseURL!, session);
 
-    // Met this session: small on the next page load, one tap from the greeting.
+    // Ending a call is not a dismissal: the next load is the big bubble again.
+    await page.reload();
+    await expect(page.locator(".bvb")).toHaveAttribute("data-state", "rest");
+    await expectBigBubble(page, page.locator(".bvb"));
+
+    // Only the × makes it small, and small it stays for this tab's session.
+    await page.getByRole("button", { name: "Close Belle's video greeting" }).click();
+    await expect(page.locator(".bvb")).toHaveAttribute("data-state", "mini");
     await page.reload();
     await expect(page.locator(".bvb")).toHaveAttribute("data-state", "mini");
     await shot(page, info, "13-widget-small");
     await page.locator(".bvb-circle").click();
     await expect(page.locator(".bvb")).toHaveAttribute("data-state", "rest");
-    await page.getByRole("button", { name: "Close Belle's video greeting" }).click();
-    await expect(page.locator(".bvb")).toHaveAttribute("data-state", "mini");
     expect(posts.length).toBe(1);
   } finally {
     server?.close();
   }
 });
 
-test("on belline.ai: one bubble instead of three buttons, the other ways in a menu, nothing over the hero, no session on load", async ({ page, context, baseURL }, info) => {
+test("on belline.ai: Belle's big bubble instead of three buttons, chat and WhatsApp ringing under it, no voice button, nothing over the hero, no session on load", async ({ page, context, baseURL }, info) => {
   const server = await landingSite(baseURL!);
   test.skip(!server, "localhost:4321 is taken on this machine");
   const posts = countSessionPosts(context);
   try {
+    // The ring is motion: this visitor has not asked for less of it.
+    await page.emulateMedia({ reducedMotion: "no-preference" });
     await page.goto("http://localhost:4321/");
     const bubble = page.locator(".video-bubble");
     await expect(bubble).toBeVisible();
     await expect(bubble).toHaveAttribute("data-state", "rest");
     await page.waitForTimeout(2500);
     expect(posts).toEqual([]);
+    await expectBigBubble(page, bubble);
 
-    // The three floating buttons have stepped aside for the bubble.
+    // The three floating buttons have stepped aside; the bell has no replacement, voice is the face.
     for (const fab of [".bell-fab", ".chat-fab", ".wa-fab"]) await expect(page.locator(fab)).toBeHidden();
+    await expect(page.getByRole("link", { name: /Speak to Belline/ }).filter({ visible: true })).toHaveCount(0);
+    await expect(bubble.getByRole("button", { name: "Other ways to reach us" })).toHaveCount(0);
+    const icons = bubble.locator(".bvb-act");
+    await expect(icons).toHaveCount(2);
+    await expect(bubble.getByRole("button", { name: "Chat with Belle" })).toHaveClass(/\bis-ringing\b/);
+    await expect(bubble.getByRole("button", { name: "WhatsApp Belle" })).toHaveClass(/\bis-ringing\b/);
+    // Round, under the face, beside Talk to Belle, clear of each other.
+    const circle = await box(bubble.locator(".bvb-circle"));
+    const talk = await box(bubble.getByRole("button", { name: "Talk to Belle", exact: true }));
+    for (const icon of [await box(icons.nth(0)), await box(icons.nth(1))]) {
+      expect(icon.y).toBeGreaterThanOrEqual(circle.y + circle.height);
+      expect(Math.abs(icon.width - icon.height)).toBeLessThanOrEqual(1);
+      expect(overlaps(icon, talk)).toBe(false);
+      expect(icon.x + icon.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    }
 
     // Nothing of the bubble covers the hero's buttons, the greeting line least of all.
     const ctas = [page.locator('.hero a[data-cta="hero"]'), page.locator(".hero a[data-call]")];
@@ -502,42 +541,31 @@ test("on belline.ai: one bubble instead of three buttons, the other ways in a me
       for (const h of heroBoxes) expect(overlaps(c, h), "the greeting line covers a hero button").toBe(false);
     }
     for (const h of heroBoxes) expect(overlaps(await box(bubble), h), "the bubble covers a hero button").toBe(false);
+    // On a wide screen the hero card stops short of Belle's corner.
+    if (viewport.width > 1100) expect(overlaps(await box(page.locator(".hero .stage")), circle), "the hero card runs under Belle").toBe(false);
     await shot(page, info, "14-site-rest");
 
-    // Other ways to reach us: Chat, WhatsApp, Voice call.
-    const more = bubble.getByRole("button", { name: "Other ways to reach us" });
-    await more.click();
-    await expect(more).toHaveAttribute("aria-expanded", "true");
-    const menu = bubble.getByRole("group", { name: "Other ways to reach us" });
-    await expect(menu.getByRole("button")).toHaveText(["Chat", "WhatsApp", "Voice call"]);
-    const m = await box(menu);
-    expect(m.x).toBeGreaterThanOrEqual(0);
-    expect(overlaps(m, await box(bubble.locator(".bvb-circle"))), "the menu covers the face").toBe(false);
-    await shot(page, info, "15-site-menu");
-    await page.keyboard.press("Escape");
-    await expect(menu).toBeHidden();
-    // Chat does what the chat button did, and the bubble steps out of its way.
-    await more.click();
-    await menu.getByRole("button", { name: "Chat" }).click();
+    // Chat does what the chat button did, the ring stops, and the bubble steps out of its way.
+    await bubble.getByRole("button", { name: "Chat with Belle" }).click();
     await expect(page.locator(".chat-dock")).toBeVisible();
     await expect(bubble).toBeHidden();
     await page.locator(".chat-dock .call-shut").click();
     await expect(bubble).toBeVisible();
+    await expect(bubble.locator(".bvb-act.is-ringing")).toHaveCount(0);
 
-    // The call, in the circle.
-    await bubble.getByRole("button", { name: "Talk to Belle", exact: true }).click();
+    // The hero's Talk to Belle starts the video call, in the circle (not the voice dock, not a page).
+    await page.locator(".hero a[data-call]").click();
     await expectInCall(page);
+    await expect(page.locator(".call-dock")).toHaveCount(0);
+    expect(page.url()).toBe("http://localhost:4321/");
     expect(posts.length).toBe(1);
     const frame = bubbleFrame(page);
     await expect(frame.getByRole("button", { name: "Type instead" })).toBeVisible();
     await page.waitForTimeout(GROW_SETTLE_MS);
     await shot(page, info, "16-site-in-call");
 
-    await frame.getByRole("button", { name: "More options" }).click();
-    await expect(frame.getByRole("menuitem", { name: "Talk to a person" })).toBeVisible();
-    await expect(frame.getByRole("menuitemcheckbox", { name: /Captions/ })).toHaveAttribute("aria-checked", "false");
-    await shot(page, info, "17-site-more-menu");
-    await frame.getByRole("menuitemcheckbox", { name: /Captions/ }).click();
+    await expect(frame.getByRole("button", { name: "Captions" })).toHaveAttribute("aria-pressed", "false");
+    await frame.getByRole("button", { name: "Captions" }).click();
     const line = frame.locator(".bv-caption");
     await expect(line).toHaveText(/^Belle: /);
     expect((await box(line)).height, "one line, not a box of text").toBeLessThanOrEqual(32);
@@ -549,6 +577,79 @@ test("on belline.ai: one bubble instead of three buttons, the other ways in a me
     await expect(page.locator("iframe.bvb-frame")).toHaveCount(0);
     await page.locator(".chat-dock .call-shut").click();
     await expect(bubble).toHaveAttribute("data-state", "rest");
+  } finally {
+    server?.close();
+  }
+});
+
+test("on belline.ai, on a phone: scrolling during a call tucks it into a small live face, a tap grows it back, and the call never reloads", async ({ page, context, baseURL }, info) => {
+  test.skip(info.project.name !== "iphone-390", "picture in picture is for a phone");
+  const server = await landingSite(baseURL!);
+  test.skip(!server, "localhost:4321 is taken on this machine");
+  const posts = countSessionPosts(context);
+  const loads: string[] = [];
+  page.on("framenavigated", (f) => {
+    if (f.url().includes(`/embed/${KEY}/video`)) loads.push(f.url());
+  });
+  try {
+    await page.goto("http://localhost:4321/");
+    const bubble = page.locator(".video-bubble");
+    await bubble.getByRole("button", { name: "Talk to Belle", exact: true }).click();
+    await expectInCall(page);
+    const inner = page.frames().find((f) => f.url().includes(`/embed/${KEY}/video`))!;
+    // A mark inside the call's page: a reload or a new frame would lose it.
+    await inner.evaluate(() => {
+      (window as unknown as { __callMark?: number }).__callMark = 42;
+    });
+    // The frame's own load (and any same-document URL updates) so far; nothing may be added below.
+    await page.waitForTimeout(500);
+    const loadsBefore = loads.length;
+    expect(loadsBefore).toBeGreaterThanOrEqual(1);
+
+    await page.evaluate(() => window.scrollBy(0, 600));
+    await expect(bubble).toHaveAttribute("data-pip", "on");
+    const face = page.locator(".bvb-pipface");
+    await expect(face).toBeVisible();
+    const small = await box(bubble.locator(".bvb-circle"));
+    const viewport = page.viewportSize()!;
+    expect(small.width).toBeLessThanOrEqual(110);
+    expect(small.x).toBeGreaterThanOrEqual(0);
+    expect(small.x + small.width).toBeLessThanOrEqual(viewport.width);
+    expect(small.y + small.height).toBeLessThanOrEqual(viewport.height - 40);
+    await expect(bubbleFrame(page).locator(".bv-status")).toHaveText(/Belle is (speaking|listening)/);
+    await page.waitForTimeout(300);
+    await shot(page, info, "20-site-pip");
+
+    // Drag it to the other side: it stays on screen.
+    const b = await box(face);
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(40, 200, { steps: 6 });
+    await page.mouse.up();
+    const moved = await box(bubble.locator(".bvb-circle"));
+    expect(moved.x).toBeLessThan(viewport.width / 2);
+    expect(moved.x).toBeGreaterThanOrEqual(0);
+    await expect(bubble).toHaveAttribute("data-pip", "on");
+
+    // Its tiny controls, by keyboard too.
+    await page.getByRole("button", { name: "Mute microphone" }).focus();
+    await expect(page.getByRole("button", { name: "Mute microphone" })).toBeVisible();
+    await page.getByRole("button", { name: "Mute microphone" }).click();
+    await expect(page.getByRole("button", { name: "Unmute microphone" })).toHaveAttribute("aria-pressed", "true");
+    await expect(bubbleFrame(page).getByRole("button", { name: "Unmute microphone" })).toBeVisible();
+    await page.getByRole("button", { name: "Unmute microphone" }).click();
+    await expect(bubbleFrame(page).getByRole("button", { name: "Mute microphone" })).toBeVisible();
+
+    // A tap grows it back to the call circle: same frame, same call, no second session.
+    await face.click();
+    await expect(bubble).toHaveAttribute("data-pip", "off");
+    await expectInCall(page);
+    const again = page.frames().find((f) => f.url().includes(`/embed/${KEY}/video`))!;
+    expect(await again.evaluate(() => (window as unknown as { __callMark?: number }).__callMark)).toBe(42);
+    expect(loads.length, "the call frame reloaded").toBe(loadsBefore);
+    expect(posts.length).toBe(1);
+    await page.getByRole("button", { name: "Close video call" }).click();
+    await expect(page.locator("iframe.bvb-frame")).toHaveCount(0);
   } finally {
     server?.close();
   }

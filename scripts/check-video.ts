@@ -969,7 +969,7 @@ console.log("\n  The greeting bubble (public/embed-video.js)");
  * run when told to. Anything it did not expect to be called is not here, so a
  * change that starts reaching for more of the browser fails loudly.
  */
-function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; storage?: Map<string, string> } = {}) {
+function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; narrow?: boolean; storage?: Map<string, string> } = {}) {
   type Node = {
     tagName: string;
     className: string;
@@ -1059,13 +1059,16 @@ function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; storage?:
   const body = make("body");
   const dock = make("div");
   body.appendChild(dock);
+  const docListeners: Record<string, ((e: unknown) => void)[]> = {};
   const doc = {
     head,
     body,
     createElement: make,
     getElementById: (id: string) => head.children.find((c) => c.id === id) ?? null,
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener: (type: string, fn: (e: unknown) => void) => void (docListeners[type] ??= []).push(fn),
+    removeEventListener: (type: string, fn: (e: unknown) => void) => {
+      docListeners[type] = (docListeners[type] ?? []).filter((f) => f !== fn);
+    },
   };
   const store = opts.storage ?? new Map<string, string>();
   const winListeners: Record<string, ((e: unknown) => void)[]> = {};
@@ -1080,8 +1083,9 @@ function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; storage?:
       setItem: (k: string, v: string) => void store.set(k, v),
       removeItem: (k: string) => void store.delete(k),
     },
-    matchMedia: (q: string) => ({ matches: Boolean(opts.reducedMotion && /reduced-motion/.test(q)) }),
+    matchMedia: (q: string) => ({ matches: Boolean((opts.reducedMotion && /reduced-motion/.test(q)) || (opts.narrow && /max-width/.test(q))) }),
     navigator: { connection: { saveData: Boolean(opts.saveData) } },
+    scrollY: 0,
     fetch: (url: string) => {
       fetched.push(url);
       return Promise.resolve(new Response("{}"));
@@ -1092,19 +1096,29 @@ function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; storage?:
   const all = (node: Node = body): Node[] => node.children.flatMap((c) => [c, ...all(c)]);
   const message = (e: unknown) => [...(winListeners.message ?? [])].forEach((fn) => fn(e));
   const envListeners = (type: string) => (winListeners[type] ?? []).length;
+  const scroll = (y: number) => {
+    env.scrollY = y;
+    [...(winListeners.scroll ?? [])].forEach((fn) => fn({}));
+  };
+  const docEvent = (type: string, e: unknown) => [...(docListeners[type] ?? [])].forEach((fn) => fn(e));
   const find = (pred: (n: Node) => boolean) => all().find(pred);
   const byClass = (cls: string) => find((n) => n.className.split(" ").includes(cls));
   const flush = () => {
     while (timers.length) timers.shift()!();
   };
-  return { env, dock, body, store, fetched, posted, find, byClass, flush, all, message, envListeners };
+  return { env, dock, body, store, fetched, posted, find, byClass, flush, all, message, envListeners, scroll, docEvent };
 }
 
 function loadBubble() {
   const sandbox: { window: Record<string, unknown> } = { window: {} };
   vm.runInNewContext(read("public/embed-video.js"), sandbox);
   return sandbox.window.BellineVideo as {
-    mount: (o: Record<string, unknown>) => { reopen(): void; state(): { bubble: boolean; mini: boolean; call: boolean; menu: boolean; dismissed: boolean } };
+    mount: (o: Record<string, unknown>) => {
+      reopen(): void;
+      openCall(): void;
+      pip(on: boolean): void;
+      state(): { bubble: boolean; mini: boolean; call: boolean; pip: boolean; ringing: boolean; hidden: boolean; dismissed: boolean };
+    };
     DISMISSED: string;
   };
 }
@@ -1181,51 +1195,71 @@ await test("no live session is created on load — a tap grows the same circle i
   assert.ok(page.find((n) => n.attrs["aria-label"] === "Close video call"));
   // The grow is a transform on the circle, switched off under reduced motion.
   assert.match(source, /\.bvb\.is-growing \.bvb-circle\{transition:transform/);
-  assert.match(source, /@media \(prefers-reduced-motion:reduce\)\{[^}]*\}\s*"?\s*\+?\s*"?\.bvb\.is-growing \.bvb-circle,\.bvb-frame,\.bvb-tags,\.bvb-shut\{transition:none\}\}/);
+  assert.match(source, /@media \(prefers-reduced-motion:reduce\)\{[^}]*\}\s*"?\s*\+?\s*"?\.bvb\.is-growing \.bvb-circle,\.bvb-frame,\.bvb-tags,\.bvb-shut\{transition:none\}/);
   assert.match(source, /if \(!before \|\| reducedMotion\(\)\) return;/);
   // And the frame only creates a session when it starts, which autostart does on mount.
   const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
   assert.match(panel, /if \(autostart\) void start\(\);/);
 });
 
-await test("other ways to reach us: one small button, a menu of the page's own channels, each doing what its button did", () => {
+await test("under the face: Talk to Belle and two round icons (chat, WhatsApp), no voice button, ringing until touched", () => {
   const page = fakePage();
   const ran: string[] = [];
-  const others = ["chat", "whatsapp", "voice"].map((kind) => ({ kind, label: kind, run: () => ran.push(kind) }));
-  mountBubble(page, {}, { others });
-  const more = page.find((n) => n.attrs["aria-label"] === "Other ways to reach us")!;
-  assert.ok(more, "the secondary button");
-  const menu = page.byClass("bvb-menu")!;
-  assert.equal(menu.hidden, true, "closed at rest");
-  // Only two buttons at rest: Talk to Belle and this one.
+  const actions = ["chat", "whatsapp", "voice"].map((kind) => ({ kind, label: `${kind} label`, run: () => ran.push(kind) }));
+  const { ctl } = mountBubble(page, {}, { actions, ring: true });
+  // One row: the primary button, then an icon per way in. Voice has none: on the web, voice is the face.
   const buttons = page.all(page.byClass("bvb-row")!).filter((n) => n.tagName === "BUTTON");
-  assert.deepEqual(buttons.map((b) => b.className), ["bvb-talk", "bvb-more"]);
-  more.click();
-  assert.equal(menu.hidden, false);
-  assert.equal(more.attrs["aria-expanded"], "true");
-  const items = menu.children.filter((n) => n.className === "bvb-item");
-  assert.deepEqual(items.map((i) => i.attrs["data-kind"]), ["chat", "whatsapp", "voice"]);
-  items[1].click();
-  assert.deepEqual(ran, ["whatsapp"]);
-  assert.equal(menu.hidden, true, "choosing closes the menu");
-  // One channel is not a menu: the button does it directly.
-  const single = fakePage();
-  const once: string[] = [];
-  mountBubble(single, {}, { others: [{ kind: "chat", label: "Chat", run: () => once.push("chat") }] });
-  single.find((n) => n.attrs["aria-label"] === "Other ways to reach us")!.click();
-  assert.deepEqual(once, ["chat"]);
-  // None: no button at all.
+  assert.deepEqual(buttons.map((b) => b.attrs["data-kind"] ?? b.className), ["bvb-talk", "chat", "whatsapp"]);
+  assert.deepEqual(buttons.slice(1).map((b) => b.attrs["aria-label"]), ["chat label", "whatsapp label"]);
+  assert.equal(page.byClass("bvb-more"), undefined, "no Other ways menu");
+  assert.equal(page.byClass("bvb-menu"), undefined);
+  // The ring, on the bell's own beat, until the visitor touches the bubble.
+  assert.ok(buttons.slice(1).every((b) => b.className === "bvb-act is-ringing"), "the icons are not ringing");
+  assert.equal(ctl.state().ringing, true);
+  const source = read("public/embed-video.js");
+  assert.match(source, /@keyframes bvb-bell-shake\{0%,27%,100%\{transform:rotate\(0deg\)\}2%\{transform:rotate\(-22deg\)\}/, "not the bell's shake");
+  assert.match(source, /@keyframes bvb-bell-ring\{0%\{transform:scale\(1\);opacity:\.55\}55%\{transform:scale\(1\.28\);opacity:0\}/, "not the bell's ring");
+  assert.match(source, /\.bvb-act\.is-ringing\{animation:bvb-bell-nudge 1\.5s ease-in-out infinite\}/);
+  assert.match(source, /@media \(prefers-reduced-motion:reduce\)\{[\s\S]*?\.bvb-act,\.bvb-act\.is-ringing,\.bvb-act\.is-ringing svg,\.bvb-act\.is-ringing::after\{animation:none!important/);
+  buttons[2].click();
+  assert.deepEqual(ran, ["whatsapp"], "each icon does what its button did");
+  assert.ok(buttons.slice(1).every((b) => b.className === "bvb-act"), "still ringing after a tap");
+  assert.equal(ctl.state().ringing, false);
+  // Never under reduced motion, and only where the host asks for it.
+  const still = fakePage({ reducedMotion: true });
+  assert.equal(mountBubble(still, {}, { actions, ring: true }).ctl.state().ringing, false);
+  const quiet = fakePage();
+  assert.equal(mountBubble(quiet, {}, { actions }).ctl.state().ringing, false);
+  // None offered: no icons at all.
   const none = fakePage();
   mountBubble(none);
-  assert.equal(none.byClass("bvb-more"), undefined);
-  // The hosts fold their buttons into it, only where video is on.
+  assert.equal(none.byClass("bvb-act"), undefined);
+  // The hosts: their floating buttons step aside for the bubble, only where video is on.
   assert.match(read("public/site.css"), /body\.has-video-bubble \.wa-fab,\s*body\.has-video-bubble \.chat-fab,\s*body\.has-video-bubble \.bell-fab \{ display: none; \}/);
-  assert.match(read("public/site.js"), /run: function \(\) \{ chatFab\.click\(\); \}/);
-  assert.match(read("public/site.js"), /run: function \(\) \{ waFab\.click\(\); \}/);
-  assert.match(read("public/site.js"), /run: function \(\) \{ bellFab\.click\(\); \}/);
+  const site = read("public/site.js");
+  assert.match(site, /label: SITE_DE \? "Mit Belle chatten" : "Chat with Belle", run: function \(\) \{ chatFab\.click\(\); \}/);
+  assert.match(site, /label: SITE_DE \? "Belle auf WhatsApp" : "WhatsApp Belle", run: function \(\) \{ waFab\.click\(\); \}/);
+  assert.equal(/bellFab/.test(site), false, "the bell is back beside the face");
+  assert.match(site, /ring: true,/);
   const embed = read("public/embed.js");
   assert.match(embed, /\.belline-dock\.belline-has-video \.belline-fab\{display:none\}/);
   assert.match(embed, /dock\.classList\.add\("belline-has-video"\)/);
+  assert.equal(/fabs\.voice/.test(embed.slice(embed.indexOf("function actions()"), embed.indexOf("function ready(api)", embed.indexOf("function actions()")))), false, "the widget's bell is an icon under the face");
+  assert.match(embed, /mountVideo\(cfg\.videoBubble \|\| \{\}, video, cfg\.ring === true\)/, "a venue's icons ring only where it chose ringing");
+});
+
+await test("every Talk to Belle on belline.ai starts the video call once the bubble is there, and the hero says so", () => {
+  const site = read("public/site.js");
+  const video = site.slice(site.indexOf("/* --- the video receptionist"), site.indexOf("/* --- monthly / annual"));
+  assert.match(video, /document\.addEventListener\(\s*"click",[\s\S]{0,300}closest\("\[data-call\]"\)[\s\S]{0,120}e\.preventDefault\(\);\s*e\.stopPropagation\(\);\s*ctl\.openCall\(\);[\s\S]{0,20}true\s*\)/);
+  for (const [file, label] of [["public/landing.html", "Talk to Belle"], ["public/landing.de.html", "Mit Belle sprechen"]]) {
+    const html = read(file);
+    const hero = html.slice(html.indexOf('<section class="hero">'), html.indexOf("</section>", html.indexOf('<section class="hero">')));
+    assert.match(hero, new RegExp(`<a class="btn line" href="https://app\\.belline\\.ai/call\\?start=1" data-call>${label}</a>`), `${file}: the hero button`);
+    assert.equal(/Speak to Belline<\/a>|Mit Belline sprechen<\/a>/.test(html.replace(/<a class="bell-fab"[\s\S]*?<\/a>/, "")), false, `${file}: an old button name is left`);
+  }
+  assert.match(read("public/landing.html"), /<p class="eyebrow rise">AI video, voice and chat reception<\/p>/);
+  assert.match(read("public/landing.de.html"), /<p class="eyebrow rise">KI-Empfang für Video, Telefon und Chat<\/p>/);
 });
 
 await test("close shrinks the bubble to a small face for the session; the face brings it back", () => {
@@ -1249,6 +1283,99 @@ await test("close shrinks the bubble to a small face for the session; the face b
   assert.equal(again.ctl.state().bubble, true);
   assert.equal(again.ctl.state().call, false, "the small face opens the greeting, not a call");
   assert.equal(storage.get(api.DISMISSED), undefined);
+});
+
+await test("a fresh load is always the big bubble: ending a call is not a dismissal, only the × is", () => {
+  // Found on belline.ai: after a call, the next load in the same tab was a 56px face,
+  // because closing the call wrote the dismissal to sessionStorage (which survives a reload).
+  const storage = new Map<string, string>();
+  const page = fakePage({ storage });
+  const api = loadBubble();
+  const { ctl } = mountBubble(page);
+  assert.equal(ctl.state().bubble, true, "a fresh load starts small");
+  page.byClass("bvb-talk")!.click();
+  page.find((n) => n.attrs["aria-label"] === "Close video call")!.click();
+  assert.equal(ctl.state().bubble, true, "back to the big bubble after the call");
+  assert.equal(storage.get(api.DISMISSED), undefined, "closing a call dismissed the greeting");
+  // The frame ending the call itself is not a dismissal either.
+  page.byClass("bvb-talk")!.click();
+  const frame = page.find((n) => n.tagName === "IFRAME" && !n.attrs["aria-hidden"])!;
+  page.message({ origin: "https://app.example", source: frame.contentWindow, data: { source: "belline-video", type: "ended" } });
+  assert.equal(storage.get(api.DISMISSED), undefined);
+  const reload = fakePage({ storage });
+  assert.equal(mountBubble(reload).ctl.state().bubble, true, "the next load was small");
+  assert.equal(reload.byClass("bvb")!.attrs["data-state"], "rest");
+  // The resting circle is the call's own size (about 320px, 240px on a phone), not a smaller greeting.
+  const source = read("public/embed-video.js");
+  assert.match(source, /--bvb-call:min\(320px,calc\(100vw - 48px\),calc\(100dvh - 250px\)\);--bvb-cur:var\(--bvb-size,var\(--bvb-call\)\)/);
+  assert.match(source, /@media \(max-width:520px\)\{\.bvb\{--bvb-call:min\(240px,calc\(100vw - 40px\),calc\(100dvh - 230px\)\)\}\}/);
+  assert.equal(/--bvb-size/.test(read("public/site.css")), false, "belline.ai shrinks the resting bubble again");
+  assert.equal(/--bvb-size/.test(read("public/embed.js")), false, "the widget shrinks the resting bubble again");
+  const closeCall = source.slice(source.indexOf("function closeCall("), source.indexOf("// --- picture in picture"));
+  assert.equal(/remember\(true\)/.test(closeCall), false, "closing a call remembers a dismissal again");
+});
+
+await test("picture in picture on a phone: scrolling or a tap outside tucks the same frame into a corner; a tap grows it back", () => {
+  const page = fakePage({ narrow: true });
+  const { ctl } = mountBubble(page);
+  // No call, no picture in picture: scrolling the page past a resting bubble changes nothing.
+  page.scroll(400);
+  assert.equal(ctl.state().pip, false);
+  page.byClass("bvb-talk")!.click();
+  const frame = page.find((n) => n.tagName === "IFRAME")!;
+  const root = page.byClass("bvb")!;
+  page.scroll(420);
+  assert.equal(ctl.state().pip, false, "a small scroll is not leaving");
+  page.scroll(520);
+  assert.equal(ctl.state().pip, true, "scrolling on did not tuck the call away");
+  assert.match(root.className, /\bis-pip\b/);
+  assert.equal(root.attrs["data-pip"], "on");
+  assert.equal(page.find((n) => n.tagName === "IFRAME"), frame, "the frame was replaced");
+  assert.equal(frame.parent, root, "the frame was moved in the page (that reloads it)");
+  assert.equal(page.all().filter((n) => n.tagName === "IFRAME").length, 1);
+  assert.equal(ctl.state().call, true, "the call dropped");
+  // A tap on the small face grows it back, same frame.
+  const face = page.byClass("bvb-pipface")!;
+  assert.match(face.attrs["aria-label"], /Tap to make it bigger/);
+  face.click();
+  assert.equal(ctl.state().pip, false);
+  assert.equal(frame.parent, root);
+  // A tap outside the call does it too; a tap inside does not.
+  page.docEvent("pointerdown", { target: frame });
+  assert.equal(ctl.state().pip, false);
+  page.docEvent("pointerdown", { target: page.body });
+  assert.equal(ctl.state().pip, true);
+  // The tiny controls: mute asks the frame, the frame answers; end ends the call.
+  const mute = page.find((n) => n.className === "bvb-pipbtn" && /mute/i.test(n.attrs["aria-label"] ?? ""))!;
+  assert.equal(mute.attrs["aria-label"], "Mute microphone");
+  mute.click();
+  assert.deepEqual(JSON.parse(JSON.stringify(page.posted.at(-1))), { source: "belline-host", type: "mute", muted: true });
+  page.message({ origin: "https://app.example", source: frame.contentWindow, data: { source: "belline-video", type: "muted", muted: true } });
+  assert.equal(mute.attrs["aria-pressed"], "true");
+  assert.equal(mute.attrs["aria-label"], "Unmute microphone");
+  page.find((n) => n.className === "bvb-pipbtn bvb-pipend")!.click();
+  assert.equal(ctl.state().call, false);
+  assert.equal(ctl.state().pip, false);
+  assert.equal(ctl.state().bubble, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(page.posted.at(-1))), { source: "belline-host", type: "end" });
+  assert.equal(page.envListeners("scroll"), 0, "the scroll listener outlived the call");
+  // On a wide screen the call stays where it is.
+  const wide = fakePage();
+  const desk = mountBubble(wide);
+  wide.byClass("bvb-talk")!.click();
+  wide.scroll(900);
+  wide.docEvent("pointerdown", { target: wide.body });
+  assert.equal(desk.ctl.state().pip, false);
+  // CSS only: fixed, clipped to the face, the frame never takes the taps meant for the page.
+  const source = read("public/embed-video.js");
+  assert.match(source, /\.bvb\.is-pip\{--bvb-cur:96px;position:fixed;/);
+  assert.match(source, /env\(safe-area-inset-bottom,0px\)/);
+  assert.match(source, /\.bvb\.is-pip \.bvb-frame\{clip-path:circle\(calc\(var\(--bvb-cur\) \/ 2\) at 50% calc\(var\(--bvb-cur\) \/ 2\)\);pointer-events:none/);
+  assert.match(source, /\.bvb\.is-pip:focus-within \.bvb-pipbar\{opacity:1;pointer-events:auto\}/, "the controls are not reachable by keyboard");
+  // And the frame hears the mute, from its parent only, and says when it changes.
+  const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
+  assert.match(panel, /e\.source !== window\.parent \|\| data\?\.source !== "belline-host" \|\| data\.type !== "mute"/);
+  assert.match(panel, /tellHost\(\{ type: "muted", muted: state\.muted \}\)/);
 });
 
 await test("closing during a call asks the frame to end the session, removes it, and the frame ends it on the server", async () => {
@@ -1302,15 +1429,17 @@ await test("closing during a call asks the frame to end the session, removes it,
   assert.equal(mockVideoRecord().ended.length, 1);
 });
 
-await test("the call view: two main controls and a small menu, captions off until asked, one caption line, and never silently mute", () => {
+await test("the call view: two main controls and a small Captions toggle, captions off until asked, one caption line, and never silently mute", () => {
   const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
   assert.equal(/className="bv-top"/.test(panel), false, "no header bar");
   assert.match(panel, /const \[showCaptions, setShowCaptions\] = useState\(false\);/);
-  for (const label of ['aria-label={state.muted ? "Unmute microphone" : "Mute microphone"}', 'aria-label="End call"', 'aria-label="More options"']) {
+  for (const label of ['aria-label={state.muted ? "Unmute microphone" : "Mute microphone"}', 'aria-label="End call"', 'aria-label="Captions"']) {
     assert.ok(panel.includes(label), label);
   }
-  assert.match(panel, /role="menuitem"[\s\S]{0,160}<PersonIcon \/>\s*<span>Talk to a person<\/span>/);
-  assert.match(panel, /role="menuitemcheckbox"\s*aria-checked=\{showCaptions\}/);
+  // No "Talk to a person" button: asked out loud, Belle takes a message or hands over. No menu of one.
+  assert.equal(/Talk to a person/.test(panel.replace(/\/\*[\s\S]*?\*\/|\{\/\*[\s\S]*?\*\/\}/g, "")), false, "the person button is back");
+  assert.equal(/role="menu"|More options/.test(panel), false, "a menu is back");
+  assert.match(panel, /aria-label="Captions"\s*aria-pressed=\{showCaptions\}/);
   assert.match(panel, /Type instead/);
   assert.match(panel, /Tap to hear \{agentName\}/);
   assert.match(panel, /html, body \{ background: transparent !important/);
@@ -1412,7 +1541,7 @@ await test("12. the mobile panel: full screen in the widget and on our site, saf
   assert.match(panel, /MOCK — not a live avatar/);
   // The bubble's call circle fits a phone, inside the safe area.
   const bubble = read("public/embed-video.js");
-  assert.match(bubble, /@media \(max-width:520px\)\{\.bvb\{--bvb-call:min\(252px,calc\(100vw - 40px\),calc\(100dvh - 230px\)\)\}\}/);
+  assert.match(bubble, /@media \(max-width:520px\)\{\.bvb\{--bvb-call:min\(240px,calc\(100vw - 40px\),calc\(100dvh - 230px\)\)\}\}/);
   assert.match(read("public/site.css"), /bottom: calc\(20px \+ env\(safe-area-inset-bottom, 0px\)\);/);
   // Daily is loaded on Start, never with the panel or the page.
   assert.equal(/from "@daily-co\/daily-js"/.test(panel), false);

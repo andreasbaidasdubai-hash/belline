@@ -407,8 +407,8 @@ await test("the floating buttons are visible from the first paint, and the hero 
     /IntersectionObserver[\s\S]{0,400}?\.hero\b|\.hero\b[\s\S]{0,400}?IntersectionObserver/,
     "the floating buttons are watching the hero again",
   );
-  // The room they are kept clear by. Without it they sit on the example cards.
-  assert.match(css, /\.stage\s*\{[^}]*padding-right/, "the hero stage no longer leaves room for the buttons");
+  // The room they are kept clear by (Belle's bubble at its call size, or the buttons). Without it they sit on the hero card.
+  assert.match(css, /\.stage\s*\{[^}]*margin-right: max\(0px, calc\(374px - max\(32px, \(100vw - 1136px\) \/ 2\)\)\)/, "the hero card no longer leaves room for Belle's bubble");
   // And the footer fix, which the buttons would otherwise cover at the end.
   assert.match(css, /@media \(max-width: 1100px\) \{ footer \{ padding-bottom/, "the footer no longer leaves room for the buttons");
 });
@@ -673,8 +673,11 @@ await test("the hero's calendar is marked coming soon, and no hero text says cal
   assert.equal((hero.match(/<span class="demo-example">Example conversation<\/span>/g) ?? []).length, 3, "the hero should show three labelled example conversations");
   assert.equal((hero.match(/<figure class="demo-card /g) ?? []).length, 3, "every hero conversation card should be labelled as an example");
   assert.equal((hero.match(/<span class="cal-sub">Example calendar<\/span>/g) ?? []).length, 1, "the hero should show one labelled example calendar");
-  assert.equal((hero.match(/<figure class="cal">/g) ?? []).length, 1);
+  assert.equal((hero.match(/<figure class="cal"[ >]/g) ?? []).length, 1);
   assert.doesNotMatch(hero, /class="scene"|class="snip"/, "the single call snippet is back beside the full call card");
+  // One card with a tab per piece (site.js builds the tabs from data-tab), in this order.
+  assert.match(hero, /<div class="stage"[^>]*\sdata-tabs="Where Belline answers"/, "the hero card lost its tabs");
+  assert.deepEqual([...hero.matchAll(/<figure [^>]*\bdata-tab="([^"]+)"/g)].map((m) => m[1]), ["Chat", "Phone", "Calendar", "WhatsApp"]);
 });
 
 await test("the hero's WhatsApp card is a live example conversation, not a not-live card", () => {
@@ -705,7 +708,7 @@ await test("trade pages link only to homepage sections that exist, and their foo
   const anchors = [...build.matchAll(/href="\/#([^"]+)"/g)].map((m) => m[1]);
   assert.ok(anchors.length > 0, "the trade-page template no longer links to any homepage section");
   for (const id of anchors) assert.ok(ids.has(id), `a trade page links to /#${id}, which the homepage does not have`);
-  assert.match(build, /AI voice and chat reception for UAE businesses that take calls, messages or bookings\./);
+  assert.match(build, /AI video, voice and chat reception for UAE businesses that take calls, messages or bookings\./);
   assert.doesNotMatch(build, /clinics, dental practices, salons, restaurants/, "the trade-page footer still names four trades");
 });
 

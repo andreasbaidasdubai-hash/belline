@@ -141,7 +141,8 @@ test("the German landing page has the same FAQ, calculator and hero cards as the
   for (const [re, what] of [
     [/<details>/g, "FAQ questions"],
     [/<figure class="demo-card /g, "hero conversations"],
-    [/<figure class="cal">/g, "hero calendars"],
+    [/<figure class="cal"[ >]/g, "hero calendars"],
+    [/<figure [^>]*\bdata-tab="[^"]+"/g, "hero card tabs"],
     [/<li class="step">/g, "steps"],
     [/<ul class="kinds"[\s\S]*?<\/ul>/g, "kinds lists"],
     [/<input name="(?:missed|share|value)"/g, "calculator inputs"],

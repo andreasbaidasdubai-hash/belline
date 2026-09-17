@@ -63,7 +63,7 @@
   var whatsappLabel = script.getAttribute("data-whatsapp-label") || "WhatsApp us";
   // The widget's own words, replaced by the venue's language from its config
   // (customer-copy.ts `embed.close_*`) once that arrives.
-  var STRINGS = { closeChat: "Close chat", closeCall: "Close call", closeVideo: "Close video call", otherWays: "Other ways to reach us" };
+  var STRINGS = { closeChat: "Close chat", closeCall: "Close call", closeVideo: "Close video call" };
   var attrSide = script.hasAttribute("data-side");
   var attrVoice = script.hasAttribute("data-label");
   var attrChat = script.hasAttribute("data-chat-label");
@@ -149,11 +149,11 @@
     // "Also speaks Deutsch": a small line under the buttons, in the venue's main language.
     ".belline-notice{font:12px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1D1D1F;" +
     "background:rgba(255,255,255,.92);padding:3px 9px;border-radius:999px;unicode-bidi:plaintext}" +
-    // Video on: the round bubble takes the dock, and the other buttons fold into
-    // its one "Other ways to reach us" menu. Their notice line stays under it.
-    ".belline-dock .bvb{--bvb-size:200px}.belline-dock .belline-fab[hidden]{display:none}" +
-    ".belline-dock.belline-has-video .belline-fab{display:none}" +
-    "@media (max-width:520px){.belline-dock .bvb{--bvb-size:136px}.belline-dock .bvb-talk{min-height:40px;font-size:13px}}";
+    // Video on: Belle's round bubble takes the dock at the call's own size, and the
+    // chat and WhatsApp buttons become the round icons under her face. Voice has
+    // no button of its own there: on the web, voice is the face. The notice line stays under it.
+    ".belline-dock .belline-fab[hidden]{display:none}" +
+    ".belline-dock.belline-has-video .belline-fab{display:none}";
 
   var style = document.createElement("style");
   style.textContent = css;
@@ -315,7 +315,6 @@
       if (cfg.strings.closeChat) STRINGS.closeChat = String(cfg.strings.closeChat);
       if (cfg.strings.closeCall) STRINGS.closeCall = String(cfg.strings.closeCall);
       if (cfg.strings.closeVideo) STRINGS.closeVideo = String(cfg.strings.closeVideo);
-      if (cfg.strings.otherWays) STRINGS.otherWays = String(cfg.strings.otherWays);
     }
     if (cfg.notice && !dock.querySelector(".belline-notice")) {
       var notice = document.createElement("div");
@@ -350,13 +349,13 @@
     }
     // Video, only where Belline has switched it on for this venue: a round
     // greeting bubble in the dock (embed-video.js, loaded now, after the page
-    // has painted), with the other buttons folded into its menu. The Video
-    // button is only the fallback if that script cannot load. No session
-    // exists until they tap. After WhatsApp, so every channel is in the menu.
+    // has painted), with the chat and WhatsApp as round icons under it. The
+    // Video button is only the fallback if that script cannot load. No session
+    // exists until they tap. After WhatsApp, so both icons are there.
     if (cfg.video === true && !fabs.video) {
       var video = fabFor("video", script.getAttribute("data-video-label") || "Video call", CAMERA, true);
       dock.insertBefore(video, fabs.chat || fabs.voice || null);
-      mountVideo(cfg.videoBubble || {}, video);
+      mountVideo(cfg.videoBubble || {}, video, cfg.ring === true);
     }
   }
 
@@ -474,23 +473,24 @@
   /**
    * The video bubble, where Belline has switched video on for this venue.
    *
-   * The bubble is the widget's front door: the face, "Talk to Belle", and one
-   * small secondary button whose menu holds whatever else this widget offers
-   * (WhatsApp, the chat, the bell), each doing exactly what its own button did.
-   * The call happens in the bubble itself (embed-video.js). Without video none
-   * of this runs and the widget is the one it always was.
+   * The bubble is the widget's front door, at the call's own size from the
+   * first load: the face, "Talk to Belle", and a round icon for the chat and
+   * for WhatsApp where the venue offers them, each doing exactly what its own
+   * button did, ringing only where the venue chose ringing. The bell has no
+   * icon: on the web, voice is the face. The call happens in the bubble itself
+   * (embed-video.js). Without video none of this runs and the widget is the
+   * one it always was.
    *
    * If embed-video.js cannot load, the buttons stay as they are and the Video
    * button opens the call panel directly instead.
    */
-  function mountVideo(bubbleCfg, videoFab) {
+  function mountVideo(bubbleCfg, videoFab, ringing) {
     videoFab.hidden = true;
 
-    function others() {
+    function actions() {
       var list = [];
       if (fabs.chat) list.push({ kind: "chat", label: fabs.chat.getAttribute("aria-label") || chatLabel, run: function () { fabs.chat.click(); } });
       if (fabs.whatsapp) list.push({ kind: "whatsapp", label: fabs.whatsapp.getAttribute("aria-label") || whatsappLabel, run: function () { fabs.whatsapp.click(); } });
-      if (fabs.voice) list.push({ kind: "voice", label: fabs.voice.getAttribute("aria-label") || voiceLabel, run: function () { fabs.voice.click(); } });
       return list;
     }
 
@@ -502,8 +502,9 @@
         key: key,
         hostOrigin: location.origin,
         side: side,
-        strings: { closeCall: STRINGS.closeVideo, otherWays: STRINGS.otherWays },
-        others: others,
+        strings: { closeCall: STRINGS.closeVideo },
+        actions: actions,
+        ring: ringing,
         place: function (bubble) {
           dock.insertBefore(bubble, dock.firstChild);
           dock.classList.add("belline-has-video");
