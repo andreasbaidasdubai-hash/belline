@@ -2543,14 +2543,45 @@ body:has(.callbar) {
 /* On Belline's public pages (checkout, /verify, /login): room at the end of the
    page so the last button can always be scrolled clear of the bell. */
 .belle-fab-spacer { height: 96px; }
-/* With the window open on a wide screen, the checkout steps left of it so no
-   field or button sits under it. Narrower than this the window overlays, as a
-   chat does, and closes with its own button or Escape. */
+/* With the window open, the checkout steps left of it so no field and no
+   button sits under it.
+   From 1300px there is room for the whole 880px page beside the window, so it
+   simply moves across. Between 761px and 1299px there is not, and the page
+   used to be left half-covered: there it gives up the gutter the window
+   stands in and narrows into what is left, stacking into one column (the
+   phone's order) as soon as two would be too tight to type in.
+   The gutter is the window's own offset, its width and a gap: 24 + 380 + 24
+   above 1024px, 16 + 380 + 16 below it, where the bell and window sit closer
+   to the edge. Narrower than 761px the checkout is already one column and the
+   window is the phone's full-screen sheet, which closes with its own button
+   or Escape. */
+.checkout { transition: margin 0.18s ease; }
 @media (min-width: 1300px) {
-  .checkout { transition: margin 0.18s ease; }
   html[data-belle-open] .checkout { margin-left: max(0px, calc((100vw - 420px - 880px) / 2)); margin-right: auto; }
 }
-@media (min-width: 1300px) and (prefers-reduced-motion: reduce) { .checkout { transition: none; } }
+@media (min-width: 761px) and (max-width: 1299px) {
+  html[data-belle-open] .checkout {
+    --belle-gutter: 428px;
+    --belle-space: calc(100vw - var(--belle-gutter));
+    --checkout-w: min(880px, calc(var(--belle-space) - 32px));
+    max-width: var(--checkout-w);
+    margin-left: max(16px, calc((var(--belle-space) - var(--checkout-w)) / 2));
+    margin-right: auto;
+  }
+}
+@media (min-width: 761px) and (max-width: 1023px) {
+  html[data-belle-open] .checkout { --belle-gutter: 412px; }
+}
+/* Too little left for the order and the form side by side: one column, as on a phone. */
+@media (min-width: 761px) and (max-width: 1079px) {
+  html[data-belle-open] .checkout {
+    grid-template-areas: "brand" "order" "act";
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px 0;
+  }
+  html[data-belle-open] .checkout-order { padding: 24px 20px; }
+}
+@media (prefers-reduced-motion: reduce) { .checkout { transition: none; } }
 
 /* Room for the bell, so it never sits on a page's own buttons: space below
    the last thing on the page, and a clear right-hand end on the bars that

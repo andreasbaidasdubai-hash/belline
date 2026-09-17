@@ -200,6 +200,34 @@ await test("closed, it is only the bell: no chat frame, no video, 'Questions? As
   assert.match(html, /Belle, Belline(&#x27;|')s AI assistant/);
 });
 
+await test("the open window never covers the checkout: the page steps left at every width above 760px", () => {
+  const css = source("src/app/globals.css");
+  // Above 1300px the whole 880px page fits beside the window and simply moves.
+  assert.match(css, /@media \(min-width: 1300px\) \{\s*html\[data-belle-open\] \.checkout \{ margin-left:/);
+  // 761–1299px: it gives up the gutter the window stands in and narrows into
+  // what is left — the gap the window keeps from the edge, 24px or 16px.
+  const narrow = css.slice(css.indexOf("@media (min-width: 761px) and (max-width: 1299px)"));
+  assert.match(narrow, /--belle-gutter: 428px;/);
+  assert.match(narrow, /--checkout-w: min\(880px, calc\(var\(--belle-space\) - 32px\)\);/);
+  assert.match(narrow, /max-width: var\(--checkout-w\);/);
+  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1023px\) \{\s*html\[data-belle-open\] \.checkout \{ --belle-gutter: 412px; \}/);
+  // Too little room for two columns: the phone's one-column order.
+  assert.match(css, /@media \(min-width: 761px\) and \(max-width: 1079px\)/);
+  // Only the margins move. A transitioned max-width never settles on a value
+  // built from 100vw, and the page stayed at its full width under the window.
+  assert.match(css, /\.checkout \{ transition: margin 0\.18s ease; \}/);
+
+  // The arithmetic the rules describe, at every width in the range: the page's
+  // right edge stays left of the window's left edge.
+  for (let vw = 761; vw <= 1299; vw++) {
+    const gutter = vw >= 1024 ? 428 : 412;
+    const width = Math.min(880, vw - gutter - 32);
+    const left = Math.max(16, (vw - gutter - width) / 2);
+    const windowLeft = vw - (vw >= 1024 ? 24 : 16) - Math.min(380, vw - 32);
+    assert.ok(left + width <= windowLeft, `at ${vw}px the checkout runs under Belle's window`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 head("Ask Belle in the dashboard: support mode");
 
