@@ -61,6 +61,7 @@ export default function BelleLauncher({
     } catch {
       /* storage is a convenience */
     }
+    return () => document.documentElement.removeAttribute("data-belle-open");
     // Once, on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -94,6 +95,8 @@ export default function BelleLauncher({
       setStarted(true);
     }
     setOpen(next);
+    // Lets a wide page step aside for the window instead of sitting under it (globals.css).
+    document.documentElement.toggleAttribute("data-belle-open", next);
     try {
       sessionStorage.setItem(STORAGE_KEY, next ? "open" : "closed");
     } catch {
