@@ -29,6 +29,8 @@ const env: Record<string, string> = {
   VIDEO_MAX_CONCURRENT_PER_VENUE: "20",
   VIDEO_MAX_SESSIONS_PER_DAY: "500",
   TAVUS_API_KEY: "",
+  // The face picker spec signs an owner up; the code is read from the stub outbox.
+  FLAG_EMAIL_TRANSACTIONAL: "on",
   NODE_OPTIONS: "--max-old-space-size=2048",
 };
 process.env.ZT_DATA_DIR = env.DATA_DIR;

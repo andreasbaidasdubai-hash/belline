@@ -105,7 +105,7 @@ export default function VideoLook({ locationId, agentName }: { locationId: strin
 
       <div className="vl-body">
         <div className="vl-preview" aria-label="Preview">
-          <div className={`vl-circle${showsBackground ? " has-bg" : ""}`} style={showsBackground ? { backgroundImage: `url(${background!.src})` } : undefined}>
+          <div className={`vl-circle${showsBackground ? ` has-bg tone-${background!.tone}` : ""}`} style={showsBackground ? { backgroundImage: `url(${background!.src})` } : undefined}>
             {face?.clipUrl && !still ? (
               <video key={face.id} src={face.clipUrl} poster={face.posterUrl || undefined} muted loop autoPlay playsInline aria-hidden="true" />
             ) : face?.posterUrl ? (
@@ -190,18 +190,19 @@ const CSS = `
 .vl { margin: 4px 0 18px; padding: 16px; border: 1px solid var(--bl-rule); border-radius: var(--bl-radius-card); background: var(--bl-ground); color: var(--bl-ink-900); font-family: var(--bl-font-text) }
 .vl-head h3 { margin: 0; font-size: 14px; font-weight: var(--bl-weight-heading) }
 .vl-head p { margin: 3px 0 14px; font-size: 12.5px; color: var(--bl-text-2) }
-.vl-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; align-items: start }
-.vl-preview { display: grid; justify-items: center; gap: 10px; position: sticky; top: 12px }
+.vl-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start }
+.vl-preview { display: grid; justify-items: center; gap: 10px }
 .vl-circle { position: relative; width: 180px; aspect-ratio: 1; border-radius: 50%; overflow: hidden; background: var(--bl-navy); background-size: cover; background-position: center;
   box-shadow: 0 0 0 3px var(--bl-ground), 0 0 0 4px var(--bl-blue-line), var(--bl-elev-float); display: grid; place-items: center }
 .vl-circle video, .vl-circle img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover }
 .vl-circle.has-bg video, .vl-circle.has-bg img { -webkit-mask-image: radial-gradient(circle at 50% 55%, #000 38%, transparent 66%); mask-image: radial-gradient(circle at 50% 55%, #000 38%, transparent 66%) }
 .vl-initial { font-family: var(--bl-font-display); font-size: 56px; font-weight: 600; color: var(--bl-on-navy) }
-.has-bg .vl-initial { color: var(--bl-ink-900) }
+.has-bg.tone-light .vl-initial { color: var(--bl-ink-900) }
 .vl-initial.small { font-size: 22px; color: var(--bl-accent-text) }
-.vl-caption { margin: 0; max-width: 200px; text-align: center; font-size: 12px; line-height: 1.4; color: var(--bl-text-2) }
+.vl-caption { margin: 0; max-width: 300px; text-align: center; font-size: 12px; line-height: 1.4; color: var(--bl-text-2) }
 .vl fieldset { border: 0; margin: 0 0 14px; padding: 0; min-width: 0 }
 .vl legend { font-size: 12px; font-weight: 600; letter-spacing: var(--bl-track-label); margin-bottom: 8px; padding: 0 }
+.vl label.vl-face, .vl label.vl-bg { text-transform: none; letter-spacing: normal; margin: 0; font-size: inherit; color: var(--bl-ink-900) }
 .vl input[type=radio] { position: absolute; opacity: 0; width: 1px; height: 1px }
 .vl-faces { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px }
 .vl-face { position: relative; display: grid; justify-items: center; gap: 4px; padding: 10px 6px 8px; border: 1px solid var(--bl-rule); border-radius: 12px; cursor: pointer; background: var(--bl-ground); text-align: center }
@@ -226,7 +227,6 @@ const CSS = `
 .vl-hint, .vl-note { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--bl-text-2) }
 @media (max-width: 640px) {
   .vl-body { grid-template-columns: minmax(0, 1fr) }
-  .vl-preview { position: static }
   .vl-faces { grid-template-columns: repeat(2, minmax(0, 1fr)) }
   .vl-bgs { grid-template-columns: repeat(3, minmax(0, 1fr)) }
 }
