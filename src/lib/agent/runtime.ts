@@ -316,6 +316,13 @@ export interface AgentSessionOptions {
    * every turn is as it was.
    */
   fastModel?: string;
+  /**
+   * Context about who is on the other end, written by the server — never by
+   * the visitor. Belline's personalised video demos put the prospect's
+   * researched facts here (sales/video-demo/context.ts). It goes in the
+   * volatile half of the prompt, so the venue's cached prompt is untouched.
+   */
+  briefing?: string;
 }
 
 export class AgentSession {
@@ -326,6 +333,7 @@ export class AgentSession {
   private readonly liveTransfer: boolean;
   private readonly conversationId?: string;
   private readonly fastModel?: string;
+  private readonly briefing?: string;
   /** Said by a fast pass this turn before it reached for a tool: the venue's model is told, once. */
   private alreadySaid: string | null = null;
   private messages: Anthropic.MessageParam[] = [];
@@ -352,6 +360,7 @@ export class AgentSession {
     this.conversationId = opts.conversationId;
     this.fastModel = opts.fastModel && opts.fastModel !== location.agent.model ? opts.fastModel : undefined;
     this.channel = opts.channel ?? "voice";
+    this.briefing = opts.briefing?.trim() || undefined;
     this.messages = opts.history ? [...opts.history] : [];
     this.tools = toolsFor(location, this.channel);
     if (opts.greeting) this.spokenGreeting = opts.greeting;
@@ -617,7 +626,7 @@ ${
             : ""
         }${
           guest ? `\n\n${guestBriefing(this.location, guest)}` : ""
-        }${languageNote ? `\n\n${languageNote}` : ""}${
+        }${this.briefing ? `\n\n${this.briefing}` : ""}${languageNote ? `\n\n${languageNote}` : ""}${
           // After a fast first pass handed this turn over (see `fastModel`).
           this.alreadySaid
             ? `\n\nIn this turn you have already said to the ${this.channel === "video" ? "visitor" : "caller"}: "${this.alreadySaid}" — carry on from there and do not say it again.`

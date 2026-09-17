@@ -79,6 +79,17 @@ type Props = {
   /** The face's muted preview (and its still), shown in the circle until the live face arrives. */
   previewClipUrl?: string;
   previewPosterUrl?: string;
+  /**
+   * Where the session, end, event and mock requests go. The widget's own by
+   * default; a personalised demo page (`/demo/v/<token>`) uses its link's.
+   */
+  apiBase?: string;
+  /** The intro's heading, text and Start label, where a page has its own words. */
+  introTitle?: string;
+  introBody?: string;
+  startLabel?: string;
+  /** Switching to chat is handled by the page (the demo page's own chat), not a navigation. */
+  onChat?: () => void;
 };
 
 type Session = CallSession & { maxCallSeconds: number; warnBeforeSeconds: number; captions: boolean; perception: boolean };
@@ -101,6 +112,11 @@ export default function VideoPanel({
   hostOrigin,
   previewClipUrl,
   previewPosterUrl,
+  apiBase,
+  introTitle,
+  introBody,
+  startLabel,
+  onChat,
 }: Props) {
   const [state, dispatch] = useReducer(reduce, INITIAL);
   const [now, setNow] = useState(() => Date.now());
@@ -125,7 +141,7 @@ export default function VideoPanel({
   const endingRef = useRef(false);
   const startButtonRef = useRef<HTMLButtonElement>(null);
 
-  const base = `/api/video/${encodeURIComponent(embedKey)}`;
+  const base = apiBase ?? `/api/video/${encodeURIComponent(embedKey)}`;
 
   /** A message for the page around the bubble, and only for the origin that framed us. */
   const tellHost = useCallback(
@@ -515,6 +531,12 @@ export default function VideoPanel({
   }
 
   async function switchTo(kind: "chat" | "voice") {
+    if (kind === "chat" && onChat) {
+      report("fallback_chat");
+      await end("switch_chat", { silent: true });
+      onChat();
+      return;
+    }
     const href = kind === "chat" ? chatHref : voiceHref;
     if (!href) return;
     report(kind === "chat" ? "fallback_chat" : "fallback_voice");
@@ -639,10 +661,10 @@ export default function VideoPanel({
         <div className="bv-panel">
           {state.phase === "intro" && (
             <>
-              <h1>Talk face to face with {agentName}</h1>
+              <h1>{introTitle ?? `Talk face to face with ${agentName}`}</h1>
               <p>
-                {agentName} is an AI concierge for {venueName}. When you start, your browser will ask to use your microphone so{" "}
-                {agentName} can hear you. Your camera stays off and the call isn&rsquo;t recorded.
+                {introBody ??
+                  `${agentName} is an AI concierge for ${venueName}. When you start, your browser will ask to use your microphone so ${agentName} can hear you. Your camera stays off and the call isn’t recorded.`}
               </p>
             </>
           )}
@@ -656,10 +678,10 @@ export default function VideoPanel({
           <div className="bv-actions">
             {canRetry && (
               <button ref={startButtonRef} type="button" className="bv-btn bv-primary" onClick={() => void start()}>
-                {state.phase === "intro" ? "Start video call" : state.phase === "ended" ? "Start again" : "Try again"}
+                {state.phase === "intro" ? (startLabel ?? "Start video call") : state.phase === "ended" ? "Start again" : "Try again"}
               </button>
             )}
-            {chatHref && (
+            {(chatHref || onChat) && (
               <button type="button" className="bv-btn" onClick={() => void switchTo("chat")}>
                 {bubble ? "Type instead" : "Chat instead"}
               </button>
@@ -714,7 +736,7 @@ export default function VideoPanel({
               </button>
             </div>
           </div>
-          {chatHref && (
+          {(chatHref || onChat) && (
             <button type="button" className="bv-link" onClick={() => void switchTo("chat")}>
               Type instead
             </button>
