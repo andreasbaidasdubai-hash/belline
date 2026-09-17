@@ -206,6 +206,41 @@ A camera requirement is **not documented**; `application.perception_unavailable`
 fires when "the participant's camera was off", which implies calls work without
 one. Belline sets `perception_model: "off"` and joins with the camera off.
 
+## Background (green screen)
+
+- `properties.apply_greenscreen`: "If true, the background will be replaced
+  with a greenscreen (RGB values: [0, 255, 155])."
+  — https://docs.tavus.io/api-reference/conversations/create-conversation
+- "Background customization is not currently available with Phoenix-4.5
+  faces"; the page suggests customising the green "on the frontend using
+  WebGL". No other background option is documented.
+  — https://docs.tavus.io/sections/conversational-video-interface/conversation/customizations/background-customizations
+- Belline sends `apply_greenscreen: true` only for a curated Phoenix-4 face with
+  a background chosen, and the panel checks the frame's corners for the green
+  before keying (a stream without it is shown as it is).
+
+## Faces for the picker
+
+- `GET /v2/faces` query `face_type` (`system` = stock), `face_ids` (comma
+  separated), `limit`, `page`, `verbose`, `model_name`; response `data[]` with
+  `face_id`, `face_name`, `default_voice_id`, `thumbnail_video_url`, `status`,
+  `face_type`, `model_name` (`phoenix-4.5`, `phoenix-4`, `phoenix-3`), and
+  `total_count`. — https://docs.tavus.io/api-reference/faces/list-faces ·
+  https://docs.tavus.io/api-reference/faces/get-face
+- Stock faces have a different id per Phoenix model, e.g. Ruby - Office:
+  Phoenix-4 `rcc28da86847`, Phoenix-4.5 `rf90eb925bd8`.
+  — https://docs.tavus.io/sections/faces/stock-face-model-map
+- `thumbnail_image_url` is not in the documented schema; Belline uses it only
+  when present.
+
+## Voices
+
+See [voice.md](voice.md): TTS layer precedence (`external_voice_id` >
+`voice_id` > face `default_voice_id`), public ElevenLabs/Cartesia voices need
+no key, Tavus Voices are Tavus-managed.
+— https://docs.tavus.io/sections/conversational-video-interface/pal/tts ·
+https://docs.tavus.io/sections/conversational-video-interface/voices
+
 ## Stock faces
 
 "100+ stock faces", `GET /v2/faces?face_type=system`.
