@@ -626,5 +626,50 @@ await test("the staff route refuses anyone who is not Belline staff", () => {
   assert.ok(!fs.existsSync(path.join(ROOT, "src/app/(internal)/sales/video-demos/page.tsx")));
 });
 
+// ---------------------------------------------------------------------------
+console.log("\n\x1b[1mThe email thumbnail\x1b[0m\n");
+
+await test("the poster is read server-side into the PNG: images only, capped, never outside public/", async () => {
+  const { posterDataUri } = await import("../src/lib/sales/video-demo/thumbnail");
+  assert.match((await posterDataUri("/video/backgrounds/warm-lounge.jpg")) ?? "", /^data:image\/jpeg;base64,\/9j\//);
+  assert.equal(await posterDataUri("/../package.json"), null, "a path outside public/");
+  assert.equal(await posterDataUri("/%2e%2e/package.json"), null);
+  assert.equal(await posterDataUri("http://insecure.example/a.jpg"), null, "not https");
+  assert.equal(await posterDataUri(""), null);
+  const jpeg = fs.readFileSync(path.join(ROOT, "public/video/backgrounds/warm-lounge.jpg"));
+  const answer = (body: Buffer | string, type: string, status = 200) => async () =>
+    new Response(typeof body === "string" ? body : new Blob([new Uint8Array(body)]), { status, headers: { "content-type": type } });
+  assert.match((await posterDataUri("https://cdn.example/face.jpg", { fetchImpl: answer(jpeg, "image/jpeg") })) ?? "", /^data:image\/jpeg;base64,/);
+  assert.equal(await posterDataUri("https://cdn.example/face.jpg", { fetchImpl: answer("<html>", "text/html") }), null, "not an image");
+  assert.equal(await posterDataUri("https://cdn.example/face.jpg", { fetchImpl: answer(jpeg, "image/jpeg", 404) }), null);
+  assert.equal(await posterDataUri("https://cdn.example/face.jpg", { fetchImpl: async () => { throw new Error("timeout"); } }), null);
+});
+
+await test("the thumbnail renders a PNG with the face or the blue circle, a drawn play button and no letter glyph", async () => {
+  const route = read("src/app/api/video-demo/[token]/thumbnail/route.tsx");
+  assert.match(route, /posterDataUri\(url\)/);
+  assert.match(route, /thumbnail_image_url|facePreview\(/);
+  assert.match(route, /<svg[\s\S]{0,120}<path d="M7 4\.5v15/);
+  assert.match(route, /A 2-minute personal demo for/);
+  assert.match(route, /Watch · Belle, Belline&apos;s AI receptionist/);
+  assert.ok(!/>B</.test(route), "the old letter mark is back");
+  (globalThis as { React?: unknown }).React ??= (await import("react")).default;
+  const thumbnail = await import("../src/app/api/video-demo/[token]/thumbnail/route");
+  freshStore();
+  const { token: t } = await makeLink();
+  for (const poster of [undefined, "/video/backgrounds/warm-lounge.jpg"]) {
+    if (poster) process.env.VIDEO_GREETING_POSTER_URL = poster;
+    try {
+      const res = await thumbnail.GET(new Request("http://localhost/x"), params(t));
+      assert.equal(res.status, 200);
+      assert.equal(res.headers.get("content-type"), "image/png");
+      const png = new Uint8Array(await res.arrayBuffer());
+      assert.deepEqual([...png.slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+    } finally {
+      delete process.env.VIDEO_GREETING_POSTER_URL;
+    }
+  }
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);
