@@ -31,8 +31,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
   const text = typeof body?.text === "string" ? body.text.trim().slice(0, 1000) : "";
   if (!text) return NextResponse.json({ error: "empty" }, { status: 400, headers: NO_STORE });
 
-  const origin = new URL(req.url).origin;
-  const tavusLike = new Request(`${origin}/api/video/llm/chat/completions`, {
+  // Handed straight to the handler, never fetched: the URL is only a label.
+  const tavusLike = new Request("http://mock.invalid/api/video/llm/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${session.llmToken}`, "content-type": "application/json" },
     body: JSON.stringify({
