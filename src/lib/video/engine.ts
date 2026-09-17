@@ -131,6 +131,13 @@ export async function handleChatCompletions(req: Request, env: Env = process.env
   const { session, location } = auth;
   const model = typeof body.model === "string" ? body.model.slice(0, 60) : "belline-receptionist";
   const userText = lastUserText(messages).replace(/\s+/g, " ").trim().slice(0, 2000);
+  // Shape only, never words: which roles arrived, how each carried its content,
+  // and whether a caller line was found. Enough to see a format mismatch.
+  console.log(
+    `[video] ${session.id} model request: stream=${String(body.stream)} messages=${messages
+      .map((m) => `${String(m?.role)}:${typeof m?.content === "string" ? `s${m.content.length}` : Array.isArray(m?.content) ? `a${m.content.length}` : typeof m?.content}`)
+      .join(",")} caller=${userText.length}`,
+  );
 
   // A model request means somebody is in the room and talking.
   markVideoJoined(session);
