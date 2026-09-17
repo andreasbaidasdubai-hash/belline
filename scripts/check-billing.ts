@@ -616,7 +616,8 @@ test("no shipped copy states a trial length other than the catalogue's", () => {
 
 test("the legal pages claim nothing that is not live", () => {
   // The privacy policy changed on the 16th: Vercel no longer hosts the website, Microsoft joined for Outlook, it names voicemail recordings left before Go live, and it says what the German pages' waitlist stores.
-  const updated: Record<string, string> = { "terms.html": "15 September 2026", "privacy.html": "16 September 2026" };
+  // And on the 17th: Tavus and Daily, for video calls on a website, which are not available yet.
+  const updated: Record<string, string> = { "terms.html": "15 September 2026", "privacy.html": "17 September 2026" };
   for (const file of ["terms.html", "privacy.html"]) {
     const html = publicPages.find((p) => p.file === file)!.html.replace(/<!--[\s\S]*?-->/g, "");
     assert.match(html, new RegExp(`Last updated ${updated[file]}`), `${file}: last-updated date`);
@@ -738,7 +739,7 @@ test("the German pages carry no not-yet feature in German, no per-minute rate, a
 });
 
 test("the German legal pages keep their dates and claim nothing that is not live, in German", () => {
-  const updated: Record<string, string> = { "terms.de.html": "15. September 2026", "privacy.de.html": "16. September 2026" };
+  const updated: Record<string, string> = { "terms.de.html": "15. September 2026", "privacy.de.html": "17. September 2026" };
   for (const file of ["terms.de.html", "privacy.de.html"]) {
     const english = file.replace(".de", "");
     const html = germanSource(file).replace(/<!--[\s\S]*?-->/g, "");
