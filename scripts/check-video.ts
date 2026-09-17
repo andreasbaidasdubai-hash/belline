@@ -817,6 +817,23 @@ await test("the video prompt: the same receptionist with a video medium block, A
   }
 });
 
+await test("a business in two languages: the video prompt gets the spoken language rules, not the written ones", async () => {
+  const conversationLanguageNote = (await import("../src/lib/agent/prompt")).conversationLanguageNote;
+  process.env.FLAG_LANGUAGE_DE = "on";
+  try {
+    const base = getLocation("loc_azure")!;
+    const both = { ...base, language: "en", languages: { main: "en", also: ["de"], pick: "auto" } } as typeof base;
+    const video = staticPrompt(both, "video");
+    assert.match(video, /every word you say is in whichever/);
+    assert.doesNotMatch(video, /every word you write is in whichever/);
+    assert.match(video, /The greeting was in English/);
+    assert.doesNotMatch(video, /Answer in the language of the .*latest message/);
+    assert.match(conversationLanguageNote(both, "de", "web_voice", "video"), /This call has settled on German/);
+  } finally {
+    delete process.env.FLAG_LANGUAGE_DE;
+  }
+});
+
 await test("Tavus's in-call events map to what the panel shows, once each", () => {
   const map = machine.createTavusMapper();
   const ev = (event_type: string, properties: Record<string, unknown> = {}) => map({ message_type: "conversation", event_type, conversation_id: "c", properties });

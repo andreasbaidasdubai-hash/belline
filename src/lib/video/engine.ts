@@ -226,7 +226,7 @@ function speakingMs(text: string): number {
 
 /** The guards the written channels run on a whole reply, run here on each clause. */
 export function guardVideoClause(location: Location, clause: string, call: Pick<Call, "toolCalls">, userText: string): string {
-  const language = answersIn(location);
+  const language = answersIn(location, { channel: "web_voice" });
   const requestsOnly = takesRequestsOnly(location);
   let out = clause;
   if (requestsOnly) {
@@ -239,7 +239,7 @@ export function guardVideoClause(location: Location, clause: string, call: Pick<
     const claim = checkRequestReply(out, language);
     if (!claim.ok) out = repairRequestReply(out, claim, language);
   }
-  return toSpoken(inHouseSpelling(location, out), language).text;
+  return toSpoken(inHouseSpelling(location, out, { channel: "web_voice" }), language).text;
 }
 
 /**
@@ -301,7 +301,7 @@ export async function runVideoTurn(
     const said = rule.then === "transfer" && rule.sayIfNoTransfer ? rule.sayIfNoTransfer : rule.say;
     call.authorityRuleId = rule.id;
     call.escalation ??= rule.reason;
-    emit(toSpoken(said, answersIn(location)).text);
+    emit(toSpoken(said, answersIn(location, { channel: "web_voice" })).text);
     call.transcript.push({ role: "agent", text: said, at: new Date().toISOString() });
     persist(call);
     setTimeout(() => void endVideoSession(session.id, "authority_rule", { by: "agent" }), speakingMs(said)).unref?.();

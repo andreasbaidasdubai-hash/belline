@@ -234,7 +234,8 @@ async function create(
       callbackUrl: `${config.publicOrigin}/api/video/webhook/${provider.name}?t=${encodeURIComponent(
         signVideoToken("webhook", sessionId, location.id, config.maxCallSeconds + 60 * 60, env),
       )}`,
-      euPolicy: answersIn(location, env) === "de",
+      // The languages registry takes a context, not the environment alone: the website voice channel's language.
+      euPolicy: answersIn(location, { env, channel: "web_voice" }) === "de",
       faceId: settings?.faceId,
       palId: settings?.palId,
     });

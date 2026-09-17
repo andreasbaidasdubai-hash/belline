@@ -260,7 +260,8 @@ export function languageBlock(location: Location, channel: AgentChannel, languag
   const { main, also, pick } = languagesFor(location, { channel: languageChannel });
   if (main === "en" && !also.length) return "";
   const t = terms(location);
-  const voice = channel === "voice";
+  // A video call is spoken too: the face says every word aloud.
+  const voice = channel !== "text";
   const nameOf = (code: VenueLanguage) => languageEntry(code).name;
 
   // One language that is not English: that language's block, whole.
@@ -303,7 +304,8 @@ function registerLines(location: Location, code: VenueLanguage, channel: AgentCh
   const register = languageEntry(code).prompt;
   if (!register) return [];
   const t = terms(location);
-  const voice = channel === "voice";
+  // A video call is spoken too: the face says every word aloud.
+  const voice = channel !== "text";
   const variant = variantOf(location, code).tag;
   const formality = formalityOf(location, code);
   return register.lines
@@ -335,7 +337,7 @@ export function conversationLanguageNote(
   const allowed = allowedLanguages(location, { channel: languageChannel });
   if (allowed.length < 2 || !current || !allowed.includes(current)) return "";
   const name = languageEntry(current).name;
-  return channel === "voice"
+  return channel !== "text"
     ? `This call has settled on ${name}: answer in ${name} from now on.`
     : `The latest message is in ${name}: answer it in ${name}.`;
 }
