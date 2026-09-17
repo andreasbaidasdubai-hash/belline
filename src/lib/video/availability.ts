@@ -1,0 +1,93 @@
+import type { Location } from "../types";
+import { flagState } from "../flags";
+import { listCalls } from "../store";
+import { dateIn, todayIn } from "../time";
+import { channelIncluded, serviceState } from "../billing/entitlement";
+import { isActivated } from "../onboarding/journey";
+import { videoConfig, missingVideoConfig, type VideoConfig } from "./config";
+import { readVideoControl } from "./control";
+
+/**
+ * May this venue offer the video receptionist, right now?
+ *
+ * Every condition has to hold, in this order, and the first that fails is the
+ * reason — which the sales console shows staff, and nobody else ever sees:
+ *
+ *   1. The `video.avatar` flag is on (explicit; needs Tavus's credentials unless
+ *      the mock was asked for, and the mock is refused in production).
+ *   2. The provider is fully configured.
+ *   3. Nobody at Belline has thrown the kill switch.
+ *   4. The venue is on the list — the environment's or the console's.
+ *   5. The venue's website widget is switched on.
+ *   6. The venue has gone live (a signed-in owner previews through the page).
+ *   7. The venue's plan includes the web voice button, and is answering.
+ *   8. Today's video sessions are under the ceiling.
+ *
+ * Deliberately not part of this: the bell's own daily ceiling. A busy day of
+ * spoken calls must not switch video off, and video must not use up the bell.
+ */
+
+type Env = Record<string, string | undefined>;
+
+export type VideoOffReason =
+  | "flag_off"
+  | "unsafe"
+  | "not_configured"
+  | "killed"
+  | "not_allowlisted"
+  | "widget_off"
+  | "not_live"
+  | "not_entitled"
+  | "daily_limit";
+
+export type VideoAvailability =
+  | { on: true; config: VideoConfig }
+  | { on: false; reason: VideoOffReason; missing?: string[]; message?: string };
+
+export function venueAllowlisted(location: Pick<Location, "id">, config: VideoConfig): boolean {
+  const entry = readVideoControl().venues[location.id];
+  if (entry) return entry.enabled;
+  return config.venues.includes(location.id);
+}
+
+export function videoSessionsToday(location: Location): number {
+  const today = todayIn(location.timezone);
+  return listCalls(location.id).filter((c) => c.video && dateIn(c.startedAt, location.timezone) === today).length;
+}
+
+export function videoAvailability(
+  location: Location,
+  opts: { env?: Env; skipLive?: boolean; skipDailyLimit?: boolean } = {},
+): VideoAvailability {
+  const env = opts.env ?? process.env;
+  const state = flagState("video.avatar", env);
+  if (!state.on) return { on: false, reason: state.reason === "unsafe" ? "unsafe" : "flag_off", missing: state.missing };
+
+  const config = videoConfig(env);
+  const missing = missingVideoConfig(config);
+  if (missing.length) return { on: false, reason: "not_configured", missing };
+
+  if (readVideoControl().killSwitch.on) return { on: false, reason: "killed" };
+  if (!venueAllowlisted(location, config)) return { on: false, reason: "not_allowlisted" };
+  if (!location.embed?.enabled) return { on: false, reason: "widget_off" };
+  if (!opts.skipLive && !isActivated(location)) return { on: false, reason: "not_live" };
+
+  if (!channelIncluded(location, "web_voice")) return { on: false, reason: "not_entitled" };
+  const service = serviceState(location, todayIn(location.timezone), { channel: "web_voice" });
+  if (!service.answering) return { on: false, reason: "not_entitled", message: service.callerMessage };
+
+  if (!opts.skipDailyLimit && videoSessionsToday(location) >= config.maxSessionsPerDay) {
+    return { on: false, reason: "daily_limit" };
+  }
+  return { on: true, config };
+}
+
+/** What the widget's public config says: offered or not, and nothing about why. */
+export function videoOffered(location: Location, env: Env = process.env): boolean {
+  try {
+    return videoAvailability(location, { env }).on;
+  } catch {
+    // A broken control file or a provider refusal hides a button, never a widget.
+    return false;
+  }
+}
