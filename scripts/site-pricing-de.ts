@@ -23,11 +23,18 @@
 
 import { TRIAL, annualMonthsSaved, annualPerMonth, offered, periodFee, priceOf, type Product } from "../src/lib/billing/plans";
 import { formatMoney, type Market } from "../src/lib/markets";
+import { cardParts, ratioText, sharedFeatures, videoMinutesOf } from "./site-pricing";
+
+/** The English videoLine, in German. */
+function videoLineDe(voiceMinutes: number, locale: GermanLocale): string {
+  return `Video-Empfang · ${countDe(videoMinutesOf(voiceMinutes), locale)} Videominuten (jede verbraucht ${ratioText("de")} Sprachminuten)`;
+}
 import {
   CONVERSATION_DEFINITION_DE,
   MINUTE_DEFINITION_DE,
   allowanceLinesDe,
   catalogueDe,
+  countDe,
   overLimitSentenceDe,
   trialSentenceDe,
   type GermanLocale,
@@ -46,24 +53,24 @@ function esc(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** Allowances, then "Alles aus Starter" and only what a plan adds — as the English cards do. */
-function cardLinesDe(product: Product, below: Product | undefined, locale: GermanLocale): string[] {
-  const live = (list: { text: string; status: string }[]) => list.filter((f) => f.status === "live").map((f) => f.text);
-  const allowances = live(allowanceLinesDe(product, locale));
-  const features = live(product.features);
-  if (!below) return [...allowances, ...features.map(catalogueDe)];
-  const inherited = new Set(live(below.features));
-  return [...allowances, `Alles aus ${below.name}`, ...features.filter((f) => !inherited.has(f)).map(catalogueDe)];
-}
+const liveTexts = (list: { text: string; status: string }[]) => list.filter((f) => f.status === "live").map((f) => f.text);
 
-function planCardDe(product: Product, below: Product | undefined, market: DachMarket): string {
+/** The same card as the English one (scripts/site-pricing.ts cardParts), in German. */
+function planCardDe(product: Product, below: Product | undefined, market: DachMarket, shared: string[]): string {
   const { locale } = GERMAN_PAGES[market];
   const money = (minor: number) => formatMoney(minor, market, locale);
   const monthly = priceOf(product.id, market);
   const best = Boolean(product.recommended);
-  const lines = cardLinesDe(product, below, locale)
-    .map((line) => `            <li>${esc(line)}</li>`)
-    .join("\n");
+  const parts = cardParts(
+    liveTexts(allowanceLinesDe(product, locale)),
+    Object.values(product.pools ?? {}).filter((n) => typeof n === "number").length,
+    liveTexts(product.features),
+    below && { name: below.name, features: liveTexts(below.features) },
+    shared,
+    (name) => `Alles aus ${name}`,
+    catalogueDe,
+  );
+  const differs = parts.differs.map((line) => `            <li>${esc(line)}</li>`).join("\n");
   return `        <div class="plan${best ? " is-best" : ""}">
           <div class="plan-tag"${best ? "" : ' aria-hidden="true"'}>${best ? "Empfohlen" : ""}</div>
           <h3>${esc(product.name)}</h3>
@@ -74,10 +81,15 @@ function planCardDe(product: Product, below: Product | undefined, market: DachMa
             <span class="billed" data-monthly="Monatliche Abrechnung, jederzeit kündbar."
                   data-annual="${money(periodFee([product.id], market, "annual"))} einmal jährlich abgerechnet.">Monatliche Abrechnung, jederzeit kündbar.</span>
           </div>
-          <ul>
-${lines}
+          <ul class="plan-allow">
+            <li class="allow-voice">${esc(parts.voice)}</li>
+            <li class="allow-video">${esc(videoLineDe(product.pools?.minutes ?? 0, locale))}</li>
+            <li class="allow-text">${esc(parts.text)}</li>
           </ul>
-          <a class="btn${best ? "" : " line"}" href="#warteliste" data-cta="plan-${product.id}">Auf die Warteliste</a>
+          <ul class="plan-diff">
+${differs}
+          </ul>
+          <a class="btn${best ? "" : " line"}" href="#warteliste" data-cta="plan-${product.id}" aria-label="${esc(product.name)}: auf die Warteliste">Auf die Warteliste</a>
         </div>`;
 }
 
@@ -93,21 +105,33 @@ export function renderPricingDe(market: DachMarket): string {
   if (plans.length === 0) throw new Error(`No plan is priced for ${market} in src/lib/billing/plans.ts.`);
   const saved = monthsSaved(market);
   const save = saved > 0 ? ` <span class="cycle-save">${saved} ${saved === 1 ? "Monat" : "Monate"} gratis</span>` : "";
+  const shared = sharedFeatures(plans);
 
   return `<!-- pricing:start — generated from src/lib/billing/plans.ts by scripts/site-pricing-de.ts. Change the catalogue, then run npm run pricing; do not edit by hand. -->
       <p class="market-note" data-market-note="${market}"><strong>Geplante Preise ${esc(page.forCountry)}</strong>, netto. Belline ist ${esc(page.inCountry)} noch nicht verfügbar, Sie können noch nichts kaufen. Bis zum Start können sich Preise und Konditionen ändern.</p>
-      <div class="cycle" role="group" aria-label="Abrechnungszeitraum">
-        <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monatlich</button>
-        <button type="button" class="cycle-opt" data-cycle="annual" aria-pressed="false">
-          Jährlich${save}
-        </button>
+      <div class="price-bar">
+        <p class="price-trial"><strong>Geplante Testphase:</strong> ${TRIAL.days} Tage, ${TRIAL.minutes} Sprach- oder ${videoMinutesOf(TRIAL.minutes)} Videominuten und ${TRIAL.conversations} Textgespräche. Keine Karte nötig.</p>
+        <div class="cycle" role="group" aria-label="Abrechnungszeitraum">
+          <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monatlich</button>
+          <button type="button" class="cycle-opt" data-cycle="annual" aria-pressed="false">
+            Jährlich${save}
+          </button>
+        </div>
       </div>
 
       <div class="market" data-market="${market}">
       <div class="plans">
-${plans.map((p, i) => planCardDe(p, plans[i - 1], market)).join("\n\n")}
+${plans.map((p, i) => planCardDe(p, plans[i - 1], market, shared)).join("\n\n")}
+      </div>
+      <div class="plan-shared">
+        <h3 class="plan-shared-h">In jedem Tarif enthalten</h3>
+        <ul>
+${shared.map((line) => `            <li>${esc(catalogueDe(line))}</li>`).join("\n")}
+        </ul>
       </div>
       </div>
+
+      <p class="price-tax">Alle Preise netto, zuzüglich MwSt., sofern anwendbar.</p>
 
       <p class="compare">Ein Telefonservice nimmt eine Nachricht auf. Belline beantwortet die Frage, nimmt die Details auf und sagt Ihrem Team, was als Nächstes zu tun ist.</p>
 
@@ -165,7 +189,13 @@ export function generatedPhrasesDe(market: DachMarket): Record<string, string> {
   const saved = monthsSaved(market);
   return {
     "trial-short": `Geplant: ${TRIAL.days} Tage kostenlos, ohne Karte.`,
+    "hero-reassure": `Geplant: ${TRIAL.days} Tage kostenlos · Keine Karte nötig · Tarife ab ${formatMoney(Math.min(...offered(market).map((p) => priceOf(p.id, market))), market, locale)} pro Monat`,
     "roi-detail": renderRoiDe(market).detail,
+    "video-ratio": `In jedem Tarif enthalten. Jede Videominute verbraucht ${ratioText("de")} Sprachminuten.`,
+    "faq-video": `Jede Videominute verbraucht ${ratioText("de")} der Sprachminuten Ihres Tarifs. Die Sprachminuten reichen so für bis zu ${offered(market)
+      .map((p) => `${countDe(videoMinutesOf(p.pools?.minutes ?? 0), locale)} Videominuten bei ${p.name}`)
+      .join(", ")
+      .replace(/, ([^,]*)$/, " und $1")}.`,
     "roi-currency": market === "CH" ? "CHF" : "€",
     "example-price": formatMoney(190 * 100, market, locale),
     "example-caller": EXAMPLE_CALLER[market],
@@ -182,6 +212,7 @@ export function generatedPhrasesDe(market: DachMarket): Record<string, string> {
 export const GENERATED_FAQ_DE: Record<string, string> = {
   "Was passiert, wenn unser Kontingent aufgebraucht ist?": "faq-allowance",
   "Sind wir vertraglich gebunden?": "faq-tied-in",
+  "Wie werden Videominuten gezählt?": "faq-video",
 };
 
 function applyGeneratedDe(html: string, market: DachMarket): string {

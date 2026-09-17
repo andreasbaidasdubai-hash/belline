@@ -389,14 +389,27 @@ const publicPages = fs
   .filter((f) => f.endsWith(".html"))
   .map((f) => ({ file: f, html: fs.readFileSync(path.join(ROOT, "public", f), "utf8") }));
 
-test("the generated pricing names the v2 plans, their stored annual prices, and Growth as most popular", () => {
+test("the generated pricing names the v2 plans, their stored annual prices, and Growth as recommended", () => {
   const html = renderPricing(["AE"]);
   for (const product of sellable("AE")) {
     assert.ok(html.includes(formatMoney(priceOf(product.id, "AE"), "AE")), `${product.name} monthly`);
     assert.ok(html.includes(`${formatMoney(periodFee([product.id], "AE", "annual"), "AE")} billed once a year`), `${product.name} annual`);
   }
-  assert.equal(html.match(/Most popular/g)?.length, 1);
+  // "Recommended", not "Most popular" (site review, 2026-09-17): a claim about other buyers is not ours to make.
+  assert.equal(html.match(/Recommended/g)?.length, 1);
+  assert.doesNotMatch(html, /Most popular/);
   assert.match(html, /is-best[\s\S]*?<h3>Growth<\/h3>/);
+  // Every card in the same order, so the prices line up: who it suits, price, voice, text, what differs, the button.
+  for (const card of html.match(/<div class="plan(?: is-best)?">[\s\S]*?<\/a>\n\s*<\/div>/g) ?? []) {
+    assert.match(card, /plan-sub[\s\S]*plan-price[\s\S]*allow-voice[\s\S]*allow-text[\s\S]*plan-diff[\s\S]*>Get started<\/a>/);
+  }
+  assert.match(html, /<h3 class="plan-shared-h">Included in every plan<\/h3>/);
+  assert.ok(html.includes(`<strong>Trial:</strong> ${TRIAL.days} days, ${TRIAL.minutes} voice or ${Math.floor(TRIAL.minutes / 2.5)} video minutes and ${TRIAL.conversations} text conversations.`));
+  // Video is in every plan, as whole video minutes the voice pool covers at 2.5 voice minutes each.
+  for (const product of sellable("AE")) {
+    assert.ok(html.includes(`Video receptionist · ${Math.floor((product.pools?.minutes ?? 0) / 2.5)} video minutes (each uses 2.5 voice minutes)`), `${product.name} video line`);
+  }
+  assert.match(html, /Prices exclude VAT where it applies\./);
 });
 
 test("the generated pricing reads its trial and allowances from the catalogue, and makes no old promise", () => {
@@ -674,7 +687,7 @@ test("German prices are the catalogue's, written the German way: 69 € and CHF 
       assert.ok(html.includes(`${formatMoney(periodFee([product.id], market, "annual"), market, locale)} einmal jährlich abgerechnet`), `${market} ${product.name} annual`);
       for (const line of de.publicLinesDe(product, locale)) assert.ok(html.includes(line.replace(/&/g, "&amp;")), `${market} ${product.id}: "${line}" is live but missing`);
     }
-    assert.equal(html.match(/Empfohlen/g)?.length, 1);
+    assert.equal(html.match(/>Empfohlen</g)?.length, 1);
     assert.doesNotMatch(html, /Most popular|Beliebt/, "a plan is called popular where nobody has bought one");
     assert.match(html, /is-best[\s\S]*?<h3>Growth<\/h3>/);
     assert.match(html, new RegExp(`data-market-note="${market}"><strong>Geplante Preise für`), `${market}: the prices are not labelled as planned`);

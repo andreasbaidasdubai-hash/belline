@@ -35,35 +35,90 @@ export { trialSentence };
 
 const APP = "https://app.belline.ai";
 
+/** Voice minutes one video minute uses (founder, 2026-09-17). */
+export const VIDEO_VOICE_MINUTE_RATIO = 2.5; // replaced by plans.ts export after merge
+
+/** Whole video minutes a voice allowance covers: the voice pool divided by the ratio, rounded down. */
+export function videoMinutesOf(voiceMinutes: number): number {
+  return Math.floor(voiceMinutes / VIDEO_VOICE_MINUTE_RATIO);
+}
+
+/** "2.5" in English, "2,5" in German. */
+export const ratioText = (lang: "en" | "de" = "en") => (lang === "de" ? String(VIDEO_VOICE_MINUTE_RATIO).replace(".", ",") : String(VIDEO_VOICE_MINUTE_RATIO));
+
+export function videoLine(voiceMinutes: number): string {
+  return `Video receptionist · ${videoMinutesOf(voiceMinutes)} video minutes (each uses ${ratioText()} voice minutes)`;
+}
+
+export function trialLine(): string {
+  return `${TRIAL.days} days, ${TRIAL.minutes} voice or ${videoMinutesOf(TRIAL.minutes)} video minutes and ${TRIAL.conversations} text conversations`;
+}
+
 function esc(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+const liveTexts = (list: { text: string; status: string }[]) => list.filter((f) => f.status === "live").map((f) => f.text);
+
 /**
- * The lines one plan's card shows.
- *
- * Its allowances, then — for every plan above the first — "Everything in
- * Starter" and only what it adds. A card that repeats the tier below it line
- * for line is a card nobody reads to the end.
+ * The features every plan on the page has, in the first plan's order. They
+ * are said once, under the cards ("Included in every plan"), so each card
+ * only has to say what makes it different.
  */
-function cardLines(product: Product, below: Product | undefined): string[] {
-  const live = (list: { text: string; status: string }[]) => list.filter((f) => f.status === "live").map((f) => f.text);
-  const allowances = live(allowanceFeatures(product));
-  const features = live(product.features);
-  if (!below) return [...allowances, ...features];
-  const inherited = new Set(live(below.features));
-  return [...allowances, `Everything in ${below.name}`, ...features.filter((f) => !inherited.has(f))];
+export function sharedFeatures(plans: Product[]): string[] {
+  if (plans.length === 0) return [];
+  return liveTexts(plans[0].features).filter((text) => plans.every((p) => liveTexts(p.features).includes(text)));
 }
 
-function planCard(product: Product, below: Product | undefined, market: Market): string {
+/**
+ * One card, in the order a buyer compares them: who it suits, the price, the
+ * voice allowance, the text allowance, then what sets it apart. The same
+ * number of rows on every card, so the prices line up (site.css, subgrid).
+ */
+export interface CardParts {
+  voice: string;
+  text: string;
+  /** Users, "Everything in Growth" where the plan below adds something, and the plan's own features. */
+  differs: string[];
+}
+
+/**
+ * The parts of one card from its allowance lines (pools first, then users, as
+ * `allowanceFeatures` and `allowanceLinesDe` list them) and its feature texts.
+ */
+export function cardParts(
+  allowances: string[],
+  poolCount: number,
+  features: string[],
+  below: { name: string; features: string[] } | undefined,
+  shared: string[],
+  everything: (name: string) => string,
+  translate: (text: string) => string = (t) => t,
+): CardParts {
+  const [voice = "", text = ""] = allowances.slice(0, poolCount);
+  const users = allowances.slice(poolCount);
+  const own = features.filter((f) => !shared.includes(f) && !(below?.features ?? []).includes(f)).map(translate);
+  const inheritsMore = Boolean(below && below.features.some((f) => !shared.includes(f)));
+  return { voice, text, differs: [...users, ...(inheritsMore ? [everything(below!.name)] : []), ...own] };
+}
+
+const poolCountOf = (product: Product) => Object.values(product.pools ?? {}).filter((n) => typeof n === "number").length;
+
+function planCard(product: Product, below: Product | undefined, market: Market, shared: string[]): string {
   const money = (minor: number) => formatMoney(minor, market);
   const monthly = priceOf(product.id, market);
   const best = Boolean(product.recommended);
-  const lines = cardLines(product, below)
-    .map((line) => `            <li>${esc(line)}</li>`)
-    .join("\n");
+  const parts = cardParts(
+    liveTexts(allowanceFeatures(product)),
+    poolCountOf(product),
+    liveTexts(product.features),
+    below && { name: below.name, features: liveTexts(below.features) },
+    shared,
+    (name) => `Everything in ${name}`,
+  );
+  const differs = parts.differs.map((line) => `            <li>${esc(line)}</li>`).join("\n");
   return `        <div class="plan${best ? " is-best" : ""}">
-          <div class="plan-tag"${best ? "" : ' aria-hidden="true"'}>${best ? "Most popular" : ""}</div>
+          <div class="plan-tag"${best ? "" : ' aria-hidden="true"'}>${best ? "Recommended" : ""}</div>
           <h3>${esc(product.name)}</h3>
           <p class="plan-sub">${esc(product.summary)}</p>
           <div class="plan-price">
@@ -72,21 +127,38 @@ function planCard(product: Product, below: Product | undefined, market: Market):
             <span class="billed" data-monthly="Billed monthly. Cancel anytime."
                   data-annual="${money(periodFee([product.id], market, "annual"))} billed once a year.">Billed monthly. Cancel anytime.</span>
           </div>
-          <ul>
-${lines}
+          <ul class="plan-allow">
+            <li class="allow-voice">${esc(parts.voice)}</li>
+            <li class="allow-video">${esc(videoLine(product.pools?.minutes ?? 0))}</li>
+            <li class="allow-text">${esc(parts.text)}</li>
           </ul>
-          <a class="btn${best ? "" : " line"}" href="${APP}/checkout?products=${product.id}&amp;market=${market}" data-cta="plan-${product.id}">Start free with ${esc(product.name)}</a>
+          <ul class="plan-diff">
+${differs}
+          </ul>
+          <a class="btn${best ? "" : " line"}" href="${APP}/checkout?products=${product.id}&amp;market=${market}" data-cta="plan-${product.id}" aria-label="Get started with ${esc(product.name)}">Get started</a>
         </div>`;
 }
 
-/** Everything one market's visitor sees. */
+/** Everything one market's visitor sees: the three cards, then what every plan includes. */
 export function renderMarket(market: Market, hidden = false): string {
   const plans = sellable(market);
+  const shared = sharedFeatures(plans);
   return `      <div class="market" data-market="${market}"${hidden ? " hidden" : ""}>
       <div class="plans">
-${plans.map((p, i) => planCard(p, plans[i - 1], market)).join("\n\n")}
+${plans.map((p, i) => planCard(p, plans[i - 1], market, shared)).join("\n\n")}
+      </div>
+      <div class="plan-shared">
+        <h3 class="plan-shared-h">Included in every plan</h3>
+        <ul>
+${shared.map((line) => `            <li>${esc(line)}</li>`).join("\n")}
+        </ul>
       </div>
       </div>`;
+}
+
+/** The lowest monthly price on the page, for the hero's reassurance line. */
+export function lowestMonthly(market: Market): string {
+  return formatMoney(Math.min(...sellable(market).map((p) => priceOf(p.id, market))), market);
 }
 
 /** The whole generated pricing block. */
@@ -109,14 +181,19 @@ ${markets.map((m, i) => `          <option value="${m}"${i === 0 ? " selected" :
   const save = saved > 0 ? ` <span class="cycle-save">${saved} month${saved === 1 ? "" : "s"} free</span>` : "";
 
   return `<!-- pricing:start — generated from src/lib/billing/plans.ts by scripts/site-pricing.ts. Change the catalogue, then run npm run pricing; do not edit by hand. -->
-${picker}      <div class="cycle" role="group" aria-label="Billing period">
-        <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monthly</button>
-        <button type="button" class="cycle-opt" data-cycle="annual" aria-pressed="false">
-          Annual${save}
-        </button>
+${picker}      <div class="price-bar">
+        <p class="price-trial"><strong>Trial:</strong> ${trialLine()}. No card required.</p>
+        <div class="cycle" role="group" aria-label="Billing period">
+          <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monthly</button>
+          <button type="button" class="cycle-opt" data-cycle="annual" aria-pressed="false">
+            Annual${save}
+          </button>
+        </div>
       </div>
 
 ${markets.map((m, i) => renderMarket(m, i > 0)).join("\n\n")}
+
+      <p class="price-tax">Prices exclude VAT where it applies.</p>
 
       <p class="compare">An answering service takes a message. Belline answers the question, takes the details and tells your team what to do next.</p>
 
@@ -186,6 +263,12 @@ export function generatedPhrases(market: Market = liveMarkets()[0] ?? "AE"): Rec
   const saved = Math.min(...sellable(market).map((p) => annualMonthsSaved([p.id], market)));
   return {
     "trial-short": `${TRIAL.days} days free, no card.`,
+    "hero-reassure": `${TRIAL.days} days free · No card required · Plans from ${lowestMonthly(market)}/month`,
+    "video-ratio": `Included in every plan. Each video minute uses ${ratioText()} voice minutes.`,
+    "faq-video": `Each video minute uses ${ratioText()} of your plan’s voice minutes, so a plan’s voice minutes cover up to ${sellable(market)
+      .map((p) => `${videoMinutesOf(p.pools?.minutes ?? 0)} video minutes on ${p.name}`)
+      .join(", ")
+      .replace(/, ([^,]*)$/, " and $1")}.`,
     "roi-detail": renderRoi(market).detail,
     "faq-allowance": overLimitSentence(),
     "faq-tied-in":
@@ -204,6 +287,7 @@ export function generatedPhrases(market: Market = liveMarkets()[0] ?? "AE"): Rec
 const GENERATED_FAQ: Record<string, string> = {
   "What happens if we use up our allowance?": "faq-allowance",
   "Are we tied in?": "faq-tied-in",
+  "How are video minutes counted?": "faq-video",
 };
 
 function applyGenerated(html: string): string {
