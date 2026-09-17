@@ -13,7 +13,7 @@ export async function signUpAndReview(page: Page, label: string) {
   await page.getByLabel("Your email").fill(email);
   await page.getByLabel("Choose a password").fill("Correct-Horse-Battery-9");
   await page.locator("#acceptTerms").check();
-  await page.getByRole("button", { name: "Start free trial" }).click();
+  await page.getByRole("button", { name: "Get started" }).click();
   await confirmEmail(page, email);
   await page.getByRole("button", { name: "Set it up by hand" }).first().click();
   await page.getByLabel("Address").fill("Shop 4, Jumeirah Beach Road, Dubai");

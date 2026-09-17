@@ -18,6 +18,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   TRIAL,
+  VIDEO_VOICE_MINUTE_RATIO,
+  videoMinutesFor,
   allowanceFeatures,
   annualMonthsSaved,
   annualPerMonth,
@@ -35,12 +37,12 @@ export { trialSentence };
 
 const APP = "https://app.belline.ai";
 
-/** Voice minutes one video minute uses (founder, 2026-09-17). */
-export const VIDEO_VOICE_MINUTE_RATIO = 2.5; // replaced by plans.ts export after merge
+/** Voice minutes one video minute uses: the catalogue's own setting (plans.ts). */
+export { VIDEO_VOICE_MINUTE_RATIO };
 
 /** Whole video minutes a voice allowance covers: the voice pool divided by the ratio, rounded down. */
 export function videoMinutesOf(voiceMinutes: number): number {
-  return Math.floor(voiceMinutes / VIDEO_VOICE_MINUTE_RATIO);
+  return videoMinutesFor(voiceMinutes);
 }
 
 /** "2.5" in English, "2,5" in German. */

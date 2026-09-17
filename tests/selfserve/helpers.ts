@@ -96,7 +96,7 @@ export const test = base.extend<{ aborted: Aborted[] }>({
 export { expect };
 
 /**
- * After "Start free trial": read the 6-digit code the stub mailer wrote to the
+ * After "Get started": read the 6-digit code the stub mailer wrote to the
  * run's outbox, type it on /verify, and land on setup. The config puts the
  * run's data directory in SELFSERVE_DATA_DIR (or ZT_DATA_DIR) and switches
  * email on against the outbox, so the code exists to be read.

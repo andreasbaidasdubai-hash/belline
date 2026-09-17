@@ -302,7 +302,7 @@ export default function CheckoutForm({
         disabled={busy}
         style={{ padding: "13px 16px", fontSize: 14.5, marginTop: 4 }}
       >
-        {busy ? "Setting you up…" : "Start free trial"}
+        {busy ? "Setting you up…" : "Get started"}
       </button>
 
       <p className="muted" style={{ fontSize: 10.5, margin: 0, textAlign: "center", lineHeight: 1.6 }}>

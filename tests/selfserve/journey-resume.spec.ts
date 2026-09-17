@@ -21,7 +21,7 @@ test("close at step five, sign in again, and land on step five", async ({ page, 
   await page.getByLabel("Your email").fill(email);
   await page.getByLabel("Choose a password").fill(password);
   await page.locator("#acceptTerms").check();
-  await page.getByRole("button", { name: "Start free trial" }).click();
+  await page.getByRole("button", { name: "Get started" }).click();
   await confirmEmail(page, email);
 
   await page.getByRole("button", { name: "Set it up by hand" }).first().click();

@@ -19,7 +19,7 @@ test("a failed import offers the form, and edited hours and prices survive a rel
   await page.getByLabel("Your email").fill(email);
   await page.getByLabel("Choose a password").fill("Correct-Horse-Battery-9");
   await page.locator("#acceptTerms").check();
-  await page.getByRole("button", { name: "Start free trial" }).click();
+  await page.getByRole("button", { name: "Get started" }).click();
   await confirmEmail(page, email);
 
   // Import failure: the mapped sentence and the button, never vendor text.

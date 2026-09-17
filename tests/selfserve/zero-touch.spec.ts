@@ -150,13 +150,13 @@ async function signUp(page: Page, j: Journey, opts: { name: string; email: strin
     await page.getByLabel("Your email").fill(opts.email);
     await page.getByLabel("Choose a password").fill("belline rocks");
     await page.locator("#acceptTerms").check();
-    await page.getByRole("button", { name: "Start free trial" }).click();
+    await page.getByRole("button", { name: "Get started" }).click();
     // The same rule the server applies, said before a round trip. (Next's route announcer is also an alert.)
     await expect(page.getByRole("alert").filter({ hasText: /common word|characters/ })).toBeVisible();
     await expect(page).toHaveURL(/\/checkout/);
 
     await page.getByLabel("Choose a password").fill(PASSWORD);
-    await page.getByRole("button", { name: "Start free trial" }).click();
+    await page.getByRole("button", { name: "Get started" }).click();
 
     // Added 2026-09-17: the email is confirmed before Belline does any paid work.
     // The code goes to the stub outbox, the same file the password reset below reads.
