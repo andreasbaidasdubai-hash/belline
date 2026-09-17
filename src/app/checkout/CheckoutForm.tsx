@@ -34,6 +34,7 @@ export default function CheckoutForm({
   market,
   markets,
   trade,
+  siteOrigin,
 }: {
   products: ProductId[];
   market: Market;
@@ -41,6 +42,8 @@ export default function CheckoutForm({
   markets: Market[];
   /** Preselected from the link's `?trade=`, or "" for nothing chosen. */
   trade: string;
+  /** Where the terms and privacy policy are, for this environment (lib/origin.ts). */
+  siteOrigin: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
@@ -130,20 +133,36 @@ export default function CheckoutForm({
         />
       </div>
 
-      <div>
-        <label htmlFor="market">Where is the business?</label>
-        {/*
-          The country, not the browser's clock: a UAE business set up from
-          Zurich still opens at nine in Dubai and is billed in dirhams.
-        */}
-        <select id="market" name="market" defaultValue={market} style={bad("market")}>
-          {markets.map((m) => (
-            <option key={m} value={m}>
-              {MARKETS[m].name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/*
+        The country, not the browser's clock: a UAE business set up from
+        Zurich still opens at nine in Dubai and is billed in dirhams.
+
+        A select with one option is a question with one answer. While only
+        one market is open it is said as a fact, and still sent as `market`.
+      */}
+      {markets.length > 1 ? (
+        <div>
+          <label htmlFor="market">Where is the business?</label>
+          <select id="market" name="market" defaultValue={market} style={bad("market")}>
+            {markets.map((m) => (
+              <option key={m} value={m}>
+                {MARKETS[m].name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div data-market-fixed>
+          <span id="market-label" className="label" style={{ display: "block", fontSize: 11, fontWeight: 600, letterSpacing: "0.045em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 7 }}>
+            Where the business is
+          </span>
+          <p aria-labelledby="market-label" style={{ margin: 0, fontSize: 14 }}>
+            {MARKETS[markets[0] ?? market].name}
+            <span className="muted" style={{ fontSize: 12 }}> · Belline is open to businesses here today</span>
+          </p>
+          <input type="hidden" name="market" value={markets[0] ?? market} />
+        </div>
+      )}
 
       <div>
         <label htmlFor="trade">What do you do?</label>
@@ -219,8 +238,8 @@ export default function CheckoutForm({
         <input id="acceptTerms" name="acceptTerms" type="checkbox" required style={{ width: "auto", marginTop: 2 }} />
         <label htmlFor="acceptTerms">
           I agree to the{" "}
-          <a href="https://belline.ai/terms" target="_blank" rel="noopener">Terms</a> and{" "}
-          <a href="https://belline.ai/privacy" target="_blank" rel="noopener">Privacy policy</a>.
+          <a href={`${siteOrigin}/terms`} target="_blank" rel="noopener">Terms</a> and{" "}
+          <a href={`${siteOrigin}/privacy`} target="_blank" rel="noopener">Privacy policy</a>.
         </label>
       </div>
 
@@ -287,7 +306,7 @@ export default function CheckoutForm({
       </button>
 
       <p className="muted" style={{ fontSize: 10.5, margin: 0, textAlign: "center", lineHeight: 1.6 }}>
-        No card. Next: confirm your email with the code we send, then paste your website and Belline reads your business off it.
+        No card. Next, confirm your email with the code we send.
       </p>
     </form>
   );

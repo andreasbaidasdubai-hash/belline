@@ -400,6 +400,131 @@ await test("an unconfigured Stripe is a supported state, not a crash", () => {
   if (had) process.env.STRIPE_SECRET_KEY = had;
 });
 
+console.log("\n\x1b[1mThe checkout page\x1b[0m\n");
+
+{
+  const React = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  // The app compiles JSX with the classic runtime outside Next.
+  (globalThis as { React?: unknown }).React = React;
+  const { default: Order } = await import("../src/app/checkout/Order");
+  const state = await import("../src/app/checkout/order-state");
+  const render = (props: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(
+      React.createElement(Order, {
+        market: "AE",
+        initial: ["v2_growth"],
+        initialCycle: "monthly",
+        signedIn: false,
+        venueName: "your venue",
+        stripe: false,
+        cancelled: false,
+        markets: ["AE"],
+        trade: "",
+        siteOrigin: "https://belline-staging.up.railway.app",
+        ...props,
+      } as never),
+    );
+  const pressed = (html: string) => /<button[^>]*aria-pressed="true"[^>]*>([^<]*)</.exec(html)?.[1] ?? "";
+
+  await test("?cycle=annual preselects annual on the page; anything else is monthly", () => {
+    assert.equal(state.cycleFromParam("annual"), "annual");
+    assert.equal(state.cycleFromParam(undefined), "monthly");
+    assert.equal(state.cycleFromParam("yearly"), "monthly");
+    assert.match(pressed(render({ initialCycle: state.cycleFromParam("annual") })), /^Annual/);
+    assert.equal(pressed(render()), "Monthly");
+    const page = fs.readFileSync(path.join(process.cwd(), "src/app/checkout/page.tsx"), "utf8");
+    assert.match(page, /cycleFromParam\(params\.cycle\)/, "the page does not read ?cycle= through cycleFromParam");
+  });
+
+  await test("editing the plan keeps the annual cycle, in the order and in the address bar", () => {
+    let order = state.initialOrder("v2_growth", "annual");
+    order = state.toggleEditing(order);
+    assert.equal(order.editing, true);
+    order = state.choosePlan(order, "v2_scale");
+    assert.deepEqual(order, { selected: "v2_scale", cycle: "annual", editing: false });
+    order = state.choosePlan(state.toggleEditing(order), "v2_starter");
+    assert.equal(order.cycle, "annual");
+    const search = new URLSearchParams(state.orderSearch("?cycle=annual&plan=starter&trade=salon", order));
+    assert.equal(search.get("cycle"), "annual");
+    assert.equal(search.get("products"), "v2_starter");
+    assert.equal(search.get("plan"), null);
+    assert.equal(search.get("trade"), "salon");
+    assert.equal(new URLSearchParams(state.orderSearch("?cycle=annual", state.chooseCycle(order, "monthly"))).get("cycle"), null);
+    const src = fs.readFileSync(path.join(process.cwd(), "src/app/checkout/Order.tsx"), "utf8");
+    assert.match(src, /choosePlan\(o, p\.id\)/, "Order.tsx picks a plan without choosePlan");
+  });
+
+  await test("the plan is a summary with Edit; the feature list is behind What's included", () => {
+    const html = render();
+    assert.match(html, /data-plan-summary/);
+    assert.match(html, /Belline Growth/);
+    assert.match(html, /aria-expanded="false"[^>]*>Edit</);
+    assert.doesNotMatch(html, /role="radiogroup"/, "the plan list is open before anybody asked to edit");
+    const details = /<details[^>]*>([\s\S]*?)<\/details>/.exec(html)?.[1] ?? "";
+    assert.match(details, /What(&#x27;|&rsquo;|’|')s included/);
+    assert.ok(details.includes("<li"), "the feature list is not inside the disclosure");
+    assert.equal((html.match(/<li/g) ?? []).length - (details.match(/<li/g) ?? []).length, 5, "features listed outside the disclosure");
+  });
+
+  await test("the trial allowance from the catalogue sits by Due today, with the VAT note from the terms", () => {
+    const html = render();
+    assert.equal(state.trialAllowance(TRIAL), `${TRIAL.days} days, ${TRIAL.minutes} voice minutes, ${TRIAL.conversations} text conversations`);
+    const due = html.indexOf("Due today");
+    const allowance = html.indexOf(state.trialAllowance(TRIAL));
+    assert.ok(due > 0 && allowance > due && allowance - due < 400, "the trial allowance is not beside Due today");
+    assert.match(html, /AED 0/);
+    const terms = fs.readFileSync(path.join(process.cwd(), "public/terms.html"), "utf8");
+    assert.ok(terms.includes(state.VAT_NOTE), "the VAT note says something the terms do not");
+    assert.ok(html.includes(state.VAT_NOTE));
+    assert.ok(render({ signedIn: true }).includes(state.VAT_NOTE));
+  });
+
+  await test("the account side says what follows, and nothing promises four things", () => {
+    const html = render();
+    assert.doesNotMatch(html, /Four things/i);
+    const steps = [...html.matchAll(/<li[^>]*><span[^>]*>([^<]+)<\/span>/g)].map((m) => m[1]);
+    assert.deepEqual(steps, ["Create your account", "Confirm your email", "Add your business", "Test Belle", "Go live"]);
+  });
+
+  await test("the primary button carries words, not a bell", () => {
+    const form = fs.readFileSync(path.join(process.cwd(), "src/app/checkout/CheckoutForm.tsx"), "utf8");
+    const at = form.indexOf('type="submit"');
+    const button = form.slice(form.lastIndexOf("<button", at), form.indexOf("</button>", at));
+    assert.doesNotMatch(button, /<svg|Bell|bell/);
+  });
+
+  await test("the checkout's own links follow the environment: staging links to staging", () => {
+    const html = render();
+    assert.doesNotMatch(html, /https:\/\/(app\.|www\.)?belline\.ai/);
+    for (const file of ["src/app/checkout/page.tsx", "src/app/checkout/CheckoutForm.tsx", "src/app/checkout/Order.tsx", "src/app/whatsapp/page.tsx", "src/app/not-found.tsx"]) {
+      const src = fs.readFileSync(path.join(process.cwd(), file), "utf8");
+      assert.doesNotMatch(src, /href="https:\/\/(app\.|www\.)?belline\.ai/, `${file} hard-codes a production link`);
+    }
+  });
+
+  await test("siteOrigin: belline.ai for production, the app's own origin anywhere else", async () => {
+    const { siteOrigin } = await import("../src/lib/origin");
+    const before = { a: process.env.PUBLIC_APP_URL, o: process.env.PUBLIC_ORIGIN };
+    try {
+      delete process.env.PUBLIC_APP_URL;
+      delete process.env.PUBLIC_ORIGIN;
+      assert.equal(siteOrigin(), "https://belline.ai");
+      process.env.PUBLIC_ORIGIN = "https://app.belline.ai";
+      assert.equal(siteOrigin(), "https://belline.ai");
+      process.env.PUBLIC_ORIGIN = "https://belline-staging.up.railway.app/";
+      assert.equal(siteOrigin(), "https://belline-staging.up.railway.app");
+      process.env.PUBLIC_ORIGIN = "http://localhost:3100";
+      assert.equal(siteOrigin(), "http://localhost:3100");
+    } finally {
+      if (before.a === undefined) delete process.env.PUBLIC_APP_URL;
+      else process.env.PUBLIC_APP_URL = before.a;
+      if (before.o === undefined) delete process.env.PUBLIC_ORIGIN;
+      else process.env.PUBLIC_ORIGIN = before.o;
+    }
+  });
+}
+
 console.log(
   failed === 0
     ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n`

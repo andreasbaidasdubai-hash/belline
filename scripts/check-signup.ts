@@ -310,6 +310,34 @@ await test("the terms checkbox is announced by what it agrees to, not by the wor
   assert.match(form, /id="acceptTerms"[^>]*type="checkbox"/, "the terms checkbox is gone or renamed");
 });
 
+await test("one open market is stated, not offered as a choice; two or more get the select", async () => {
+  const React = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  (globalThis as { React?: unknown }).React = React;
+  const { default: CheckoutForm } = await import("../src/app/checkout/CheckoutForm");
+  const { liveMarkets, MARKETS } = await import("../src/lib/markets");
+  const render = (markets: string[]) =>
+    renderToStaticMarkup(
+      React.createElement(CheckoutForm, { products: ["v2_starter"], market: "AE", markets, trade: "", siteOrigin: "https://belline.ai" } as never),
+    );
+
+  const live = liveMarkets();
+  const today = render(live);
+  if (live.length === 1) {
+    assert.doesNotMatch(today, /<select[^>]*id="market"/, "a single open market is still a select");
+    assert.match(today, /data-market-fixed/);
+    assert.ok(today.includes(MARKETS[live[0]].name), "the fixed market is not named");
+    assert.match(today, new RegExp(`<input type="hidden" name="market" value="${live[0]}"`), "the fixed market is not sent");
+  }
+  const one = render(["AE"]);
+  assert.doesNotMatch(one, /<select[^>]*id="market"/);
+  assert.match(one, /United Arab Emirates/);
+  const two = render(["AE", "GB"]);
+  assert.match(two, /<select[^>]*id="market"/, "two open markets get no select");
+  assert.doesNotMatch(two, /data-market-fixed/);
+  assert.match(one, /href="https:\/\/belline\.ai\/terms"/, "the terms link does not follow the site origin it is given");
+});
+
 const matrix: { market?: string; browserZone?: string; currency: string; timezone: string }[] = [
   { market: "AE", browserZone: "Asia/Dubai", currency: "AED", timezone: "Asia/Dubai" },
   { market: "AE", browserZone: "Europe/Zurich", currency: "AED", timezone: "Asia/Dubai" },

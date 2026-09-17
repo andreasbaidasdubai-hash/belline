@@ -14,3 +14,24 @@ export function appOrigin(): string {
     "",
   );
 }
+
+/**
+ * Where the marketing website is, for the app's links to the terms, the privacy
+ * policy, the logo and "chat with Belle".
+ *
+ * On production the app is `app.belline.ai` and the site is `belline.ai`. Every
+ * other environment — staging, a preview, a local server — has no second
+ * host: the same process serves the website by hostname (marketing.ts), so
+ * the site is the app's own origin. A hard-coded `https://belline.ai` there
+ * sent a staging tester to production halfway through a staging signup.
+ */
+export function siteOrigin(): string {
+  const app = appOrigin();
+  try {
+    const host = new URL(app).hostname.toLowerCase();
+    if (host === "belline.ai" || host.endsWith(".belline.ai")) return "https://belline.ai";
+  } catch {
+    return "https://belline.ai";
+  }
+  return app;
+}

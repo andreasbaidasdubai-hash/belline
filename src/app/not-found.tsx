@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { connection } from "next/server";
+import { siteOrigin } from "@/lib/origin";
 
 /**
  * The app's own 404.
@@ -7,7 +9,11 @@ import Link from "next/link";
  * bare black-on-white "This page could not be found" — the one screen in the
  * product that looked like somebody else's.
  */
-export default function NotFound() {
+export default async function NotFound() {
+  // Read at request time, not baked in at build: the image is built without
+  // the service's variables, and staging's 404 must not link to production.
+  await connection();
+  const site = siteOrigin();
   return (
     <main
       style={{
@@ -47,10 +53,10 @@ export default function NotFound() {
             Open the dashboard
           </Link>
           <a
-            href="https://belline.ai/"
+            href={`${site}/`}
             style={{ padding: "13px 22px", borderRadius: 999, border: "1px solid var(--bl-ink)", color: "var(--bl-ink)", textDecoration: "none", fontWeight: 600 }}
           >
-            belline.ai
+            {new URL(site).host}
           </a>
         </div>
       </div>
