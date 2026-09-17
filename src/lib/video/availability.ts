@@ -22,7 +22,9 @@ import { venueLook } from "./faces";
  *   5. The venue's website widget is switched on.
  *   6. The venue has gone live (a signed-in owner previews through the page).
  *   7. The venue's plan includes the web voice button, and is answering.
- *   8. Today's video sessions are under the ceiling.
+ *   8. Today's video sessions are under the ceiling: the website's, or for an
+ *      owner's support call from Ask Belle the support one, so neither can use
+ *      up the other.
  *
  * Deliberately not part of this: the bell's own daily ceiling. A busy day of
  * spoken calls must not switch video off, and video must not use up the bell.
@@ -52,14 +54,24 @@ export function venueAllowlisted(location: Pick<Location, "id">, config: VideoCo
   return config.venues.includes(location.id);
 }
 
-export function videoSessionsToday(location: Location): number {
+/** A website visitor's video call, or an owner's support call with Belle from the dashboard. */
+export type VideoSessionKind = "website" | "support";
+
+export function videoSessionsToday(location: Location, kind: VideoSessionKind = "website"): number {
   const today = todayIn(location.timezone);
-  return listCalls(location.id).filter((c) => c.video && dateIn(c.startedAt, location.timezone) === today).length;
+  return listCalls(location.id).filter(
+    (c) => c.video && Boolean(c.video.support) === (kind === "support") && dateIn(c.startedAt, location.timezone) === today,
+  ).length;
+}
+
+/** Today's ceiling for this kind of session. */
+export function dailyVideoLimit(config: VideoConfig, kind: VideoSessionKind = "website"): number {
+  return kind === "support" ? config.maxSupportSessionsPerDay : config.maxSessionsPerDay;
 }
 
 export function videoAvailability(
   location: Location,
-  opts: { env?: Env; skipLive?: boolean; skipDailyLimit?: boolean } = {},
+  opts: { env?: Env; skipLive?: boolean; skipDailyLimit?: boolean; kind?: VideoSessionKind } = {},
 ): VideoAvailability {
   const env = opts.env ?? process.env;
   const state = flagState("video.avatar", env);
@@ -78,7 +90,8 @@ export function videoAvailability(
   const service = serviceState(location, todayIn(location.timezone), { channel: "web_voice" });
   if (!service.answering) return { on: false, reason: "not_entitled", message: service.callerMessage };
 
-  if (!opts.skipDailyLimit && videoSessionsToday(location) >= config.maxSessionsPerDay) {
+  const kind = opts.kind ?? "website";
+  if (!opts.skipDailyLimit && videoSessionsToday(location, kind) >= dailyVideoLimit(config, kind)) {
     return { on: false, reason: "daily_limit" };
   }
   return { on: true, config };

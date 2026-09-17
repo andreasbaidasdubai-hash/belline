@@ -22,6 +22,8 @@ interface Line {
   content: string;
   help?: HelpCard;
   ticket?: string;
+  /** Buttons to dashboard pages Belle offered (link_to_page). */
+  links?: { href: string; label: string }[];
 }
 
 export function BelleChat({
@@ -33,6 +35,7 @@ export function BelleChat({
   /** Docked, the chat takes the height it is given instead of setting its own. */
   fill = false,
   inputRef,
+  handover = false,
 }: {
   locationId: string;
   step?: string;
@@ -42,6 +45,8 @@ export function BelleChat({
   onMissing?: (missing: string[]) => void;
   fill?: boolean;
   inputRef?: React.RefObject<HTMLInputElement | null>;
+  /** Offer "Talk to a person", which opens a ticket for the Belline team (api/belle/handover). */
+  handover?: boolean;
 }) {
   const [lines, setLines] = useState<Line[]>([{ role: "assistant", content: greeting }]);
   const [draft, setDraft] = useState(initialDraft ?? "");
@@ -65,15 +70,42 @@ export function BelleChat({
       const res = await fetch("/api/setup/assistant", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ locationId, step, messages: next.map(({ role, content }) => ({ role, content })) }),
+        body: JSON.stringify({ locationId, step, page: window.location.pathname, messages: next.map(({ role, content }) => ({ role, content })) }),
       });
-      const body = (await res.json().catch(() => ({}))) as { reply?: string; missing?: string[]; error?: string; help?: HelpCard; ticket?: string };
+      const body = (await res.json().catch(() => ({}))) as {
+        reply?: string;
+        missing?: string[];
+        error?: string;
+        help?: HelpCard;
+        ticket?: string;
+        links?: { href: string; label: string }[];
+      };
       if (!res.ok || !body.reply) {
         setError(body.error ?? "Belle could not answer just then.");
       } else {
-        setLines([...next, { role: "assistant", content: body.reply, help: body.help, ticket: body.ticket }]);
+        setLines([...next, { role: "assistant", content: body.reply, help: body.help, ticket: body.ticket, links: body.links }]);
         if (body.missing) onMissing?.(body.missing);
       }
+    } catch {
+      setError("Could not reach Belline. Check your connection.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function askForPerson() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/belle/handover", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ locationId, page: window.location.pathname, messages: lines.map(({ role, content }) => ({ role, content })) }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { reply?: string; ticket?: string; error?: string };
+      if (!res.ok || !body.reply) setError(body.error ?? "That didn't reach the team. Try again, or email hello@belline.ai.");
+      else setLines((prev) => [...prev, { role: "assistant", content: body.reply!, ticket: body.ticket }]);
     } catch {
       setError("Could not reach Belline. Check your connection.");
     } finally {
@@ -110,6 +142,15 @@ export function BelleChat({
               {line.ticket && (
                 <span style={{ display: "block", marginTop: 8, fontWeight: 600 }}>Ticket {line.ticket}</span>
               )}
+              {line.links && line.links.length > 0 && (
+                <span style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                  {line.links.map((l) => (
+                    <a key={l.href} href={l.href} className="btn btn-accent" style={{ display: "inline-block" }}>
+                      {l.label}
+                    </a>
+                  ))}
+                </span>
+              )}
               {line.help && (
                 <span style={{ display: "block", marginTop: 10 }}>
                   <a href={line.help.fix} className="btn btn-accent" style={{ display: "inline-block" }}>
@@ -124,6 +165,13 @@ export function BelleChat({
         <div ref={end} />
       </div>
       {error && <p role="alert" style={{ margin: "0 18px 8px", fontSize: 12.5, color: "var(--bad)" }}>{error}</p>}
+      {handover && (
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "0 12px 6px" }}>
+          <button type="button" className="btn btn-row" disabled={busy} onClick={() => void askForPerson()}>
+            Talk to a person
+          </button>
+        </div>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -135,7 +183,7 @@ export function BelleChat({
           ref={inputRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="e.g. We're open 9 to 8, Saturday to Thursday"
+          placeholder={handover ? "Ask anything, or tell Belle what to change" : "e.g. We're open 9 to 8, Saturday to Thursday"}
           aria-label="Your answer"
           maxLength={2000}
           style={{ flex: 1, minWidth: 0 }}

@@ -1537,6 +1537,11 @@ export interface Call {
     sessionId: string;
     /** The provider's conversation id, once it has one. */
     conversationId?: string;
+    /**
+     * An owner's support call with Belle from the dashboard (belle/support.ts):
+     * on Belline's own venue, counted against VIDEO_SUPPORT_MAX_SESSIONS_PER_DAY.
+     */
+    support?: boolean;
     /** Why it ended, in the provider's words or ours. Never shown to a visitor. */
     endReason?: string;
   };

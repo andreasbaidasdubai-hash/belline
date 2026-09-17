@@ -17,6 +17,8 @@ import { factsFrom, journey, recordStep, type Journey, type StepId } from "./jou
 import { applyRules } from "./rules";
 import { checkInstall } from "./platform";
 import { HELP_ARTICLES, articleFor, articleForStep } from "./help";
+import { pageLink } from "../belle/knowledge";
+import { supportSystem } from "../belle/support";
 
 /**
  * Setting a venue up by talking to Belle.
@@ -55,6 +57,8 @@ export interface SetupToolResult {
   missing?: string[];
   /** Set when a ticket was opened for the Belline team. */
   ticket?: string;
+  /** A dashboard page to show as a button (link_to_page). Only pages in the knowledge base's guide. */
+  link?: { href: string; label: string };
 }
 
 export interface SetupMessage {
@@ -295,6 +299,12 @@ export const SETUP_TOOLS: Anthropic.Tool[] = [
     name: "help_article",
     description: `The help article for a topic. Topics: ${HELP_ARTICLES.map((a) => a.id).join(", ")}.`,
     input_schema: { type: "object", properties: { topic: { type: "string" } }, required: ["topic"] },
+  },
+  {
+    name: "link_to_page",
+    description:
+      "Show the owner a button to a page of their dashboard, e.g. /calendars, /channels/phone, /billing, /team, /venue, or a setup step like /setup/phone. Only pages named in the knowledge base. It navigates nothing by itself.",
+    input_schema: { type: "object", properties: { href: { type: "string" } }, required: ["href"] },
   },
   {
     name: "open_exception",
@@ -618,6 +628,13 @@ export function executeSetupTool(
     case "check_widget_install":
       return { ok: false, say: "Checking a website needs a moment; try again." };
 
+    case "link_to_page": {
+      // Navigation only, and only to pages the knowledge base describes.
+      const link = pageLink(input.href);
+      if (!link) return { ok: false, say: "No such page. Use one of the pages in the knowledge base's dashboard menu or setup steps." };
+      return { ok: true, link, say: `A button to ${link.href} is shown under your reply. Mention it in a few words.` };
+    }
+
     default:
       return { ok: false, say: `No such tool: ${name}` };
   }
@@ -728,6 +745,8 @@ export interface SetupTurn {
   missing: string[];
   help?: HelpCard;
   ticket?: string;
+  /** Buttons to dashboard pages Belle offered this turn. */
+  links?: { href: string; label: string }[];
 }
 
 /**
@@ -741,7 +760,17 @@ export async function runSetupTurn(
   locationId: string,
   by: By,
   history: SetupMessage[],
-  opts: { model?: SetupModel | null; step?: StepId } = {},
+  opts: {
+    model?: SetupModel | null;
+    step?: StepId;
+    /**
+     * The tenant of the person asking. Their account data is given to Belle
+     * only when the venue is theirs (belle/support.ts accountFacts).
+     */
+    viewerTenantId?: string;
+    /** The dashboard path Ask Belle is open on, as a hint from the page guide. */
+    page?: string;
+  } = {},
 ): Promise<SetupTurn> {
   const location = getLocation(locationId);
   if (!location) return { reply: "I could not find that venue.", missing: [] };
@@ -781,6 +810,8 @@ export async function runSetupTurn(
 
   const messages: Anthropic.MessageParam[] = history.slice(-30).map((m) => ({ role: m.role, content: m.content }));
   let ticket: string | undefined;
+  const links: { href: string; label: string }[] = [];
+  const withLinks = () => (links.length ? { links } : {});
 
   for (let round = 0; round < 6; round++) {
     const venue = getLocation(locationId)!;
@@ -795,7 +826,9 @@ export async function runSetupTurn(
       "Only open_exception for the kinds it lists; never promise a person otherwise, and never invent a ticket number. " +
       (askedForPerson ? "The owner has just asked for a person, once. Help with what they are stuck on, and say that if they still want a person they can ask again. " : "") +
       "When nothing is missing, say the next steps are to add the chat and voice button to their website (the Website chat step) and to forward their phone line (the Phone & WhatsApp step).\n\n" +
-      `${context(venue, j)}\n\nStill missing: ${missing().join(", ") || "nothing"}\n\nWhat is saved now:\n${summary(venue)}`;
+      `${context(venue, j)}\n\nStill missing: ${missing().join(", ") || "nothing"}\n\nWhat is saved now:\n${summary(venue)}\n\n` +
+      // Support mode: Belline's knowledge base, and the owner's own account when it is theirs.
+      supportSystem(venue, opts.viewerTenantId ?? "", { page: opts.page });
 
     const response = await model({
       model: "claude-sonnet-5",
@@ -812,7 +845,7 @@ export async function runSetupTurn(
         .map((b) => b.text ?? "")
         .join("\n")
         .trim();
-      return { reply: reply || "Done. What next?", missing: missing(), ...(ticket ? { ticket } : {}) };
+      return { reply: reply || "Done. What next?", missing: missing(), ...(ticket ? { ticket } : {}), ...withLinks() };
     }
 
     messages.push({
@@ -829,10 +862,11 @@ export async function runSetupTurn(
     for (const use of toolUses) {
       const out = await runSetupTool(locationId, by, use.name ?? "", (use.input ?? {}) as Record<string, unknown>, history);
       if (out.ticket) ticket = out.ticket;
+      if (out.link && !links.some((l) => l.href === out.link!.href)) links.push(out.link);
       results.push({ type: "tool_result", tool_use_id: use.id ?? "", content: JSON.stringify(out) });
     }
     messages.push({ role: "user", content: results });
   }
 
-  return { reply: "I've saved what you told me. What else should I set up?", missing: missing(), ...(ticket ? { ticket } : {}) };
+  return { reply: "I've saved what you told me. What else should I set up?", missing: missing(), ...(ticket ? { ticket } : {}), ...withLinks() };
 }

@@ -44,6 +44,8 @@ export default function BelleDock({
   step,
   greeting,
   storageKey = "belline.setup.belle-dock",
+  faceUrl,
+  video = false,
   children,
 }: {
   locationId: string;
@@ -52,9 +54,17 @@ export default function BelleDock({
   greeting: string;
   /** Setup and the dashboard remember open or closed separately. */
   storageKey?: string;
+  /** Belle's face preview (Belline's own video face), else the bell. */
+  faceUrl?: string;
+  /** Offer "Talk to Belle on video": only while support video is available. */
+  video?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  // Chat, or the video page framed in its place. The video page asks for a
+  // press on Start before any session exists.
+  const [view, setView] = useState<"chat" | "video">("chat");
+  const [faceFailed, setFaceFailed] = useState(false);
   const [phone, setPhone] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -145,21 +155,40 @@ export default function BelleDock({
         onKeyDown={trapTab}
       >
         <div className="belle-pop-head">
-          <div style={{ minWidth: 0 }}>
-            <h2 id="belle-pop-title" style={{ margin: 0, fontSize: 15 }}>
-              Ask Belle
-            </h2>
-            <p className="muted" style={{ margin: "2px 0 0", fontSize: 12 }}>
-              {step ? "About this step." : "About setting up and changing Belline."} She saves what you tell her.
-            </p>
+          <div style={{ minWidth: 0, display: "flex", gap: 10, alignItems: "center" }}>
+            {faceUrl && !faceFailed && (
+              // Decorative: her name is beside it.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="belle-face belle-face-lg" src={faceUrl} alt="" onError={() => setFaceFailed(true)} />
+            )}
+            <div style={{ minWidth: 0 }}>
+              <h2 id="belle-pop-title" style={{ margin: 0, fontSize: 15 }}>
+                Ask Belle
+              </h2>
+              <p className="muted" style={{ margin: "2px 0 0", fontSize: 12 }}>
+                Belle, Belline&apos;s AI assistant. {step ? "About this step, or anything else." : "Your account, setup, or anything about Belline."}
+              </p>
+            </div>
           </div>
-          <button type="button" className="belle-pop-close" aria-label="Close Ask Belle" onClick={() => set(false, "toggle")}>
-            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-              <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flex: "none" }}>
+            {video && (
+              <button type="button" className="btn btn-row" onClick={() => setView(view === "chat" ? "video" : "chat")}>
+                {view === "chat" ? "Talk on video" : "Back to chat"}
+              </button>
+            )}
+            <button type="button" className="belle-pop-close" aria-label="Close Ask Belle" onClick={() => set(false, "toggle")}>
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
         </div>
-        <BelleChat fill locationId={locationId} step={step} greeting={greeting} inputRef={inputRef} />
+        <div hidden={view !== "chat"} style={{ display: view === "chat" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0 }}>
+          <BelleChat fill handover locationId={locationId} step={step} greeting={greeting} inputRef={inputRef} />
+        </div>
+        {video && view === "video" && (
+          <iframe title="Talk to Belle on video" src="/embed/belle/video" className="belle-launch-frame" allow="camera; microphone; autoplay" />
+        )}
       </div>
       {/* The bell stays while the window is open, as its toggle: the window sits
           above it, never on it. On a phone the window covers the whole screen,
@@ -172,11 +201,16 @@ export default function BelleDock({
         aria-controls="belle-pop"
         onClick={() => set(!open, open ? "toggle" : "panel")}
       >
-        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
-          <circle cx="24" cy="9.5" r="3.5" fill="currentColor" />
-          <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor" />
-          <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor" />
-        </svg>
+        {faceUrl && !faceFailed ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="belle-face" src={faceUrl} alt="" onError={() => setFaceFailed(true)} />
+        ) : (
+          <svg viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
+            <circle cx="24" cy="9.5" r="3.5" fill="currentColor" />
+            <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor" />
+            <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor" />
+          </svg>
+        )}
         <span className="belle-fab-say">Ask Belle</span>
       </button>
     </div>

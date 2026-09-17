@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import { CODE_MINUTES, needsEmailVerification, verifyMode } from "@/lib/email-verify";
 import VerifyForm from "./VerifyForm";
+import BelleForVisitors from "@/components/BelleForVisitors";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
   const mode = verifyMode();
 
   return (
+    <>
     <main className="auth-shell">
       <div className="auth-card">
         <div className="auth-brand">
@@ -55,5 +57,8 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
         </p>
       </div>
     </main>
+    {/* "I didn't get the code": Belle, told this is the confirm-your-email page. */}
+    <BelleForVisitors page="verify" />
+    </>
   );
 }

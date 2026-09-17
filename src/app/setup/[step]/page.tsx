@@ -35,6 +35,8 @@ import type { Location } from "@/lib/types";
 import { SCENARIO_ORDER, scenarioTitle } from "@/lib/onboarding/selftest";
 import { selftestAvailable, testsPassed, testsStale } from "@/lib/onboarding/selftest-state";
 import BelleDock from "../BelleDock";
+import { belleFaceUrl, supportVideoOn } from "@/lib/belle/identity";
+import { onViewAs } from "@/lib/belle/server";
 import SetupWizard from "../SetupWizard";
 import SelftestPanel from "../SelftestPanel";
 import { LinkSection, PhoneSection, WebsiteSection, WhatsAppSection } from "@/app/(app)/channels/sections";
@@ -614,7 +616,8 @@ export default async function SetupStepPage({
         {/* No "Ask Belle" here: the floating bell (BelleDock) is the one way in. */}
       </header>
 
-      <BelleDock locationId={venue.id} step={step.id} greeting={setupGreeting(venue, step.id)}>
+      {/* Not while Belline staff view this as the customer: that view is read-only, and Belle saves. */}
+      <MaybeBelle hidden={await onViewAs()} locationId={venue.id} step={step.id} greeting={setupGreeting(venue, step.id)}>
         <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 112px" }}>
           <Rail j={j} active={step} />
           <main style={{ minWidth: 0, maxWidth: 720 }}>
@@ -637,7 +640,17 @@ export default async function SetupStepPage({
             ))}
           </main>
         </div>
-      </BelleDock>
+      </MaybeBelle>
     </div>
+  );
+}
+
+/** Ask Belle around a setup step, or the step alone on a read-only view. */
+function MaybeBelle({ hidden, children, ...props }: { hidden: boolean; locationId: string; step: string; greeting: string; children: React.ReactNode }) {
+  if (hidden) return <>{children}</>;
+  return (
+    <BelleDock {...props} faceUrl={belleFaceUrl()} video={supportVideoOn()}>
+      {children}
+    </BelleDock>
   );
 }

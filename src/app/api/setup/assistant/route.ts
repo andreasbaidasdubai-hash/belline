@@ -6,6 +6,7 @@ import { runSetupTurn, type SetupMessage } from "@/lib/onboarding/assistant";
 import { isStepId } from "@/lib/onboarding/journey";
 import { paidWorkRefusal } from "@/lib/abuse/gate";
 import { getLocation } from "@/lib/store";
+import { onViewAs } from "@/lib/belle/server";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +22,10 @@ export async function POST(req: Request) {
   const auth = await requireApiUser();
   if (auth.response) return auth.response;
   const user = auth.user;
+  // Belline staff viewing a dashboard as the customer: read-only, and Belle saves.
+  if (await onViewAs()) return NextResponse.json({ error: "Read-only view: Belle is not available here." }, { status: 403 });
 
-  let body: { locationId?: unknown; messages?: unknown; step?: unknown };
+  let body: { locationId?: unknown; messages?: unknown; step?: unknown; page?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -31,7 +34,7 @@ export async function POST(req: Request) {
 
   const locationId =
     (typeof body.locationId === "string" && body.locationId) || listLocationsFor(user.tenantId)[0]?.id || "";
-  if (!locationId || !canEditAgent(user, locationId)) {
+  if (!locationId || !canEditAgent(user, locationId) || getLocation(locationId)?.tenantId !== user.tenantId) {
     return NextResponse.json({ error: "Not your venue." }, { status: 403 });
   }
   // Belle is a model call: not before the owner's email is confirmed.
@@ -59,7 +62,9 @@ export async function POST(req: Request) {
   try {
     // The setup step Belle was opened from, so her fallback help is for that step.
     const step = typeof body.step === "string" && isStepId(body.step) ? body.step : undefined;
-    const result = await runSetupTurn(locationId, { id: user.id, name: user.name }, messages, { step });
+    // The owner's own tenant, so Belle may read their account; the dashboard page, as a hint from the page guide.
+    const page = typeof body.page === "string" ? body.page.slice(0, 200) : undefined;
+    const result = await runSetupTurn(locationId, { id: user.id, name: user.name }, messages, { step, viewerTenantId: user.tenantId, page });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error("[setup assistant]", err);

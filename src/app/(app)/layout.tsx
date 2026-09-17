@@ -3,10 +3,12 @@ import Brand from "@/components/Brand";
 import BackToSetup from "@/components/BackToSetup";
 import { navFor } from "@/lib/nav";
 import { requireUser } from "@/lib/auth-server";
-import { canEditAgent, canSeeLocation } from "@/lib/auth";
+import { canSeeLocation } from "@/lib/auth";
 import { listLocations, listLocationsFor } from "@/lib/store";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import BelleDock from "@/app/setup/BelleDock";
+import { belleFaceUrl, dashboardBelleVenue, supportVideoOn } from "@/lib/belle/identity";
+import { onViewAs } from "@/lib/belle/server";
 import { attentionFor } from "@/lib/attention";
 import { recallSummary } from "@/lib/booking/recall";
 import SignOutButton from "@/components/SignOutButton";
@@ -55,8 +57,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const groups = [shape.diary, shape.staff].filter((g) => g !== null);
 
   // The venue Belle works on, as /setup/assistant chooses it: this account's
-  // own, and only one this person may change. Nobody else gets the bell.
-  const belleVenue = listLocationsFor(user.tenantId).find((l) => canEditAgent(user, l.id));
+  // own, and only one this person may change. Nobody else gets the bell, and
+  // nobody on a read-only view-as session: Belle saves, opens tickets and
+  // starts video, and a view can do none of them (belle/identity.ts).
+  const belleVenue = (await onViewAs()) ? undefined : dashboardBelleVenue(user, listLocationsFor(user.tenantId), null);
 
   const content = (
     <main className="content">
@@ -114,7 +118,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
 
       {belleVenue ? (
-        <BelleDock locationId={belleVenue.id} greeting={setupGreeting(belleVenue)} storageKey="belline.app.belle-dock">
+        <BelleDock
+          locationId={belleVenue.id}
+          greeting={setupGreeting(belleVenue)}
+          storageKey="belline.app.belle-dock"
+          faceUrl={belleFaceUrl()}
+          video={supportVideoOn()}
+        >
           {content}
         </BelleDock>
       ) : (

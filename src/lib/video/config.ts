@@ -53,6 +53,13 @@ export interface VideoConfig {
   /** A visitor who never joins the room is let go of after this. */
   joinTimeoutSeconds: number;
   maxSessionsPerDay: number;
+  /**
+   * Owners talking to Belle on video from the dashboard's Ask Belle
+   * (VIDEO_SUPPORT_MAX_SESSIONS_PER_DAY, default 100). Belline's own support
+   * budget: run on Belline's venue, counted apart from its website sessions,
+   * and never against the customer's allowance.
+   */
+  maxSupportSessionsPerDay: number;
   maxConcurrentPerVenue: number;
   /** The bubble's muted greeting clip and its poster, for every venue without its own. */
   greetingClipUrl: string;
@@ -106,6 +113,7 @@ export function videoConfig(env: Env = process.env): VideoConfig {
     warnBeforeSeconds: Math.min(num(env.VIDEO_WARN_BEFORE_SECONDS, 30, 5, 300), Math.floor(maxCallSeconds / 2)),
     joinTimeoutSeconds: num(env.VIDEO_JOIN_TIMEOUT_SECONDS, 60, 15, 300),
     maxSessionsPerDay: num(env.VIDEO_MAX_SESSIONS_PER_DAY, 20, 1, 1000),
+    maxSupportSessionsPerDay: num(env.VIDEO_SUPPORT_MAX_SESSIONS_PER_DAY, 100, 1, 5000),
     maxConcurrentPerVenue: num(env.VIDEO_MAX_CONCURRENT_PER_VENUE, 2, 1, 50),
     greetingClipUrl: httpsOrPath(env.VIDEO_GREETING_CLIP_URL),
     greetingPosterUrl: httpsOrPath(env.VIDEO_GREETING_POSTER_URL),
