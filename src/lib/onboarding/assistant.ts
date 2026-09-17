@@ -19,6 +19,7 @@ import { checkInstall } from "./platform";
 import { HELP_ARTICLES, articleFor, articleForStep } from "./help";
 import { pageLink } from "../belle/knowledge";
 import { supportSystem } from "../belle/support";
+import { stubSupportModel } from "../belle/stub";
 
 /**
  * Setting a venue up by talking to Belle.
@@ -795,7 +796,8 @@ export async function runSetupTurn(
 
   // Tests inject a model; otherwise the real one, only when it is switched on
   // and never under stubs, where the fetch guard would stop it anyway.
-  const model = opts.model !== undefined ? opts.model : flag("import.model") && !flag("stubs") ? anthropicSetupModel : null;
+  // Under the stubs, a scripted stand-in that answers account questions from the prompt (belle/stub.ts).
+  const model = opts.model !== undefined ? opts.model : flag("stubs") ? stubSupportModel : flag("import.model") ? anthropicSetupModel : null;
 
   if (!model) {
     raiseException("model:setup_assistant_off", "setup assistant used without a model switched on");
