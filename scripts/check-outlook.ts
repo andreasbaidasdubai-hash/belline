@@ -1284,7 +1284,14 @@ await test("the server swaps the copy and the strip's Outlook tag as it serves t
   const get = (url: string) => {
     let body = "";
     const res = { writeHead: () => res, end: (b?: Buffer | string) => void (body = b ? String(b) : "") };
-    assert.ok(serveMarketing({ method: "GET", url } as never, res as never), `${url} was not served`);
+    // A whole request, headers and all: serveMarketing reads the Host to decide
+    // the X-Robots-Tag (marketing.ts, indexableRequest), so a stub without them
+    // throws before it ever swaps a word. `belline.ai` is the host that serves
+    // the built site in production.
+    assert.ok(
+      serveMarketing({ method: "GET", url, headers: { host: "belline.ai" } } as never, res as never),
+      `${url} was not served`,
+    );
     return body;
   };
   process.chdir(dir);

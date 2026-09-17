@@ -1117,7 +1117,11 @@ await test("the server swaps the copy as it serves the built site, by the flag i
   const get = (url: string) => {
     let body = "";
     const res = { writeHead: () => res, end: (b?: Buffer | string) => void (body = b ? String(b) : "") };
-    const served = serveMarketing({ method: "GET", url } as never, res as never);
+    // A whole request, headers and all: serveMarketing reads the Host to decide
+    // the X-Robots-Tag (marketing.ts, indexableRequest), so a stub without them
+    // throws before it ever swaps a word. `belline.ai` is the host that serves
+    // the built site in production.
+    const served = serveMarketing({ method: "GET", url, headers: { host: "belline.ai" } } as never, res as never);
     assert.ok(served, `${url} was not served`);
     return body;
   };
