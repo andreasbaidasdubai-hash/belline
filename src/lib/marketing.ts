@@ -97,6 +97,58 @@ export function pointAtThisApp(html: string, env: Record<string, string | undefi
   return html.split(PRODUCTION_APP).join(own);
 }
 
+/** The only hostnames a search engine should ever index. */
+const PRODUCTION_HOSTS = new Set(["belline.ai", "www.belline.ai", "app.belline.ai"]);
+
+function isBellineHost(host: string): boolean {
+  return host === "belline.ai" || host.endsWith(".belline.ai");
+}
+
+/**
+ * Whether a response to this request may be indexed.
+ *
+ * Staging and every preview host serve the same pages as production, and a
+ * search engine that finds them files a second copy of the site under a
+ * railway.app address — with sign-up links that create accounts on staging.
+ * So only a request addressed to one of production's own hostnames, served by
+ * a process whose own origin is production's, is indexable. The same
+ * own-origin test `pointAtThisApp` uses: a staging server reached with a
+ * forged `Host: belline.ai` is still staging.
+ */
+export function indexableRequest(host: string | undefined, env: Record<string, string | undefined> = process.env): boolean {
+  const name = (host ?? "").split(":")[0].trim().toLowerCase();
+  if (!PRODUCTION_HOSTS.has(name)) return false;
+  const own = (env.PUBLIC_APP_URL || env.PUBLIC_ORIGIN || "").replace(/\/+$/, "");
+  if (!own) return true;
+  try {
+    return isBellineHost(new URL(own).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+export const NOINDEX_HEADER = "noindex, nofollow";
+export const NOINDEX_ROBOTS_TXT = "User-agent: *\nDisallow: /\n";
+
+/**
+ * Keep a non-production host out of search, for every response the process
+ * sends: the marketing files, Next's pages, the API. Called first thing in
+ * server.ts. Returns true when it answered the request itself — `robots.txt`
+ * on such a host says "Disallow: /" whichever of the two would have served it.
+ * On production it does nothing at all.
+ */
+export function applyIndexing(req: IncomingMessage, res: ServerResponse, env: Record<string, string | undefined> = process.env): boolean {
+  if (indexableRequest(req.headers.host, env)) return false;
+  res.setHeader("X-Robots-Tag", NOINDEX_HEADER);
+  const pathname = (req.url ?? "/").split("?")[0];
+  if (pathname === "/robots.txt" && (req.method === "GET" || req.method === "HEAD")) {
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=300" });
+    res.end(req.method === "HEAD" ? undefined : NOINDEX_ROBOTS_TXT);
+    return true;
+  }
+  return false;
+}
+
 /**
  * The German pages the build writes (scripts/site-locale.ts): /de-de, /de-at
  * and /de-ch, each with its landing page and two legal pages, rendered from
@@ -166,6 +218,7 @@ export function serveMarketing(req: IncomingMessage, res: ServerResponse): boole
       "Cache-Control": cacheFor(ext),
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "strict-origin-when-cross-origin",
+      ...(indexableRequest(req.headers.host) ? {} : { "X-Robots-Tag": NOINDEX_HEADER }),
     });
     if (req.method === "HEAD") {
       res.end();
