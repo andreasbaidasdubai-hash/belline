@@ -20,6 +20,7 @@ import { passwordProblem, tradeFromParam, tradeLabel, verticalForTrade } from ".
 import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
 import { copy } from "../customer-copy";
+import { defaultLanguageFor } from "../language";
 import { MENU_QUESTION, type Confirmed, type CurrentVenue } from "./review";
 import { serviceLengthsRequired, takesRequestsOnly } from "../booking/destination";
 
@@ -173,8 +174,11 @@ export function blankVenue(input: SignupInput, tenantId: string, businessId: str
     // From the market, never guessed from the timezone: every Europe/* zone
     // used to get pounds, including a UAE business set up from Zurich.
     currency: defaults.currency,
-    // English until the owner chooses otherwise on the agent page. See language.ts.
-    language: "en",
+    // The country's own language, answered only once it can be (language.ts
+    // decides that per call); English everywhere else. The owner changes it in
+    // their language settings.
+    language: defaultLanguageFor({ market: defaults.market }),
+    languages: { main: defaultLanguageFor({ market: defaults.market }), also: [], pick: "auto" },
     hours: everyDay(9 * 60, 18 * 60),
     closures: [],
     subscription: trialSubscription(timezone, input.products, input.market),

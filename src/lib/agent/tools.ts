@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { Booking, Call, Location, Slot } from "../types";
+import type { Booking, Call, Location, Slot, VenueLanguage } from "../types";
 import { confirmationMessage, describeBooking } from "../booking";
 import {
   providerFor,
@@ -19,7 +19,8 @@ import { depositWording, horizonDays } from "../booking/policy";
 import { depositsReady, requestDeposit } from "../billing/deposits";
 import { sendBookingEmail } from "../booking/manage";
 import { usesStaffDiary } from "../verticals";
-import { getBooking, listBookings } from "../store";
+import { allowedLanguages, answersIn } from "../language";
+import { getBooking, listBookings, saveBooking } from "../store";
 import {
   daysBetween,
   isValidDate,
@@ -53,6 +54,8 @@ export interface ToolContext {
   callerNumber?: string;
   /** A real phone call that can be put through to the venue's transfer number. */
   liveTransfer?: boolean;
+  /** The language the conversation has settled on, where the business speaks several. Bookings made remember it. */
+  language?: VenueLanguage | null;
 }
 
 export interface ToolOutcome {
@@ -657,6 +660,15 @@ export async function executeTool(
       }
 
       ctx.call.bookingId = result.booking.id;
+
+      // A guest who booked in the business's other language gets their
+      // confirmation, reminder and emails in it. Only a language the business
+      // speaks, and only when it is not the main one, so every other booking
+      // is stored exactly as before.
+      if (!result.duplicate && ctx.language && ctx.language !== answersIn(location) && allowedLanguages(location).includes(ctx.language)) {
+        result.booking = { ...result.booking, language: ctx.language };
+        saveBooking(result.booking);
+      }
 
       // This booking already existed — a retry, or a caller going round the
       // houses and asking for the same thing twice. Confirm what they have

@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { fill, type MANAGE_KEYS } from "@/lib/customer-copy";
+import { languageEntry, type LanguageCode } from "@/config/languages";
 
 type Slot = { date: string; startMin: number; staffName?: string };
 
 const clock = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-const day = (d: string, language: "en" | "de" = "en") =>
-  new Date(`${d}T12:00:00Z`).toLocaleDateString(language === "de" ? "de-DE" : "en-GB", {
+const day = (d: string, language: LanguageCode = "en") =>
+  new Date(`${d}T12:00:00Z`).toLocaleDateString(languageEntry(language).locale, {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -42,7 +43,7 @@ export default function ManageBooking({
   phone: string;
   venueName: string;
   /** The venue's language, for dates. The words themselves arrive in `copy`. */
-  language?: "en" | "de";
+  language?: LanguageCode;
   /** This page's lines in the guest's language, from customer-copy.ts. */
   copy: Record<(typeof MANAGE_KEYS)[number], string>;
 }) {

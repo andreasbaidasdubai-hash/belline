@@ -3,6 +3,7 @@ import type { GoogleLink } from "./integrations/google";
 import type { OutlookLink } from "./integrations/outlook";
 import type { BillingCycle, LegacyPlanId, ProductId } from "./billing/plans";
 import type { Market } from "./markets";
+import type { LanguageChannel, LanguageCode } from "../config/languages";
 
 // Domain model.
 //
@@ -26,8 +27,28 @@ import type { Market } from "./markets";
  */
 export type Vertical = "restaurant" | "salon" | "clinic";
 
-/** A language Belline can answer a venue's customers in. See language.ts. */
-export type VenueLanguage = "en" | "de";
+/** A language in the registry (config/languages.ts). Whether it can be used is language.ts's call. */
+export type VenueLanguage = LanguageCode;
+
+/**
+ * The languages a business answers in: a main one, up to two more, and how
+ * a call picks between them. See language.ts, which is the only reader.
+ */
+export interface VenueLanguages {
+  main: VenueLanguage;
+  /** At most MAX_ALSO_LANGUAGES, never the main one. */
+  also: VenueLanguage[];
+  /**
+   * `auto`: greet in the main language and follow the customer into another
+   * chosen one. `ask`: phone and website voice only — the greeting offers each
+   * language first. Chat is always `auto`.
+   */
+  pick: "auto" | "ask";
+  /** A main language for one channel, where it differs from the business's. */
+  channels?: Partial<Record<LanguageChannel, VenueLanguage>>;
+  /** A form of address per language, where the registry offers a choice ("du" rather than "Sie"). */
+  formality?: Partial<Record<VenueLanguage, string>>;
+}
 
 /** Minutes from local midnight, e.g. 19 * 60 + 30 === 1170 for 19:30. */
 export type Minutes = number;
@@ -159,13 +180,17 @@ export interface Location {
   address: string;
   currency: string;
   /**
-   * The language customers are answered in: calls, the website button, web
-   * chat, WhatsApp and every system message they see. "en" unless the owner
-   * chose otherwise, and German only counts while the `language.de` flag is
-   * on — read it through language.ts `answersIn`, never directly. Absent on
-   * venues saved before it existed; seed.ts `ensureLanguage` fills "en".
+   * The language customers were answered in before `languages` existed. Kept
+   * equal to `languages.main` on every save, for anything still reading it.
+   * Read neither directly: language.ts `answersIn` is the one answer.
    */
   language?: VenueLanguage;
+  /**
+   * The languages customers are answered in: calls, the website button, web
+   * chat, WhatsApp and every system message they see. Absent on venues saved
+   * before it existed; seed.ts `ensureLanguage` fills it from `language`.
+   */
+  languages?: VenueLanguages;
   hours: WeeklyHours;
   /** Dates the venue is fully closed (holidays, private hire). */
   closures: DateStr[];
@@ -1211,6 +1236,12 @@ export interface Booking {
   };
   /** The text the day before. Set before sending, so it can never go twice. */
   reminder?: { sentAt?: string; failedAt?: string; reason?: string };
+  /**
+   * The language the guest booked in, where it was not the business's main
+   * one: their confirmation, reminder, emails and manage page follow it.
+   * Read through language.ts `answersIn(location, { current })`.
+   */
+  language?: VenueLanguage;
   /** Set when it was cancelled inside the venue's own cancellation window. */
   lateCancel?: boolean;
   cancelledAt?: string;

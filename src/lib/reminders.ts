@@ -2,7 +2,7 @@ import type { Booking, Location } from "./types";
 import { getBooking, getTenant, listBookings, listLocations, saveBooking } from "./store";
 import { sendSms, smsEnabled } from "./providers/sms";
 import { serviceState } from "./billing/entitlement";
-import { dateToGerman, dateToSpoken, minutesToGerman, minutesToSpoken, todayIn } from "./time";
+import { dateWrittenIn, minutesToSpokenIn, todayIn } from "./time";
 import { answersIn, inHouseSpelling } from "./language";
 import { copy } from "./customer-copy";
 
@@ -97,11 +97,13 @@ export function dueReminders(location: Location, bookings: Booking[], now: numbe
 }
 
 export function reminderMessage(location: Location, booking: Booking): string {
-  const language = answersIn(location);
-  const when =
-    language === "de"
-      ? copy("de", "booking.when", { date: dateToGerman(booking.date, location.timezone), time: minutesToGerman(booking.startMin) })
-      : copy("en", "booking.when", { date: dateToSpoken(booking.date, location.timezone), time: minutesToSpoken(booking.startMin) });
+  // The language the guest booked in, where it was another the business speaks.
+  const ctx = { current: booking.language };
+  const language = answersIn(location, ctx);
+  const when = copy(language, "booking.when", {
+    date: dateWrittenIn(language, booking.date, location.timezone),
+    time: minutesToSpokenIn(language, booking.startMin),
+  });
   const what =
     booking.vertical === "restaurant"
       ? copy(language, "booking.table", { n: booking.partySize ?? "" }).trim()
@@ -123,6 +125,7 @@ export function reminderMessage(location: Location, booking: Booking): string {
   return inHouseSpelling(
     location,
     copy(language, "booking.reminder_text", { name: location.name, what, when, ref: booking.ref, change, deposit }),
+    ctx,
   );
 }
 

@@ -1,14 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream";
-import type { Call, Location, ToolTrace } from "../types";
-import { callContext, staticPrompt, type AgentChannel } from "./prompt";
+import type { Call, Location, ToolTrace, VenueLanguage } from "../types";
+import { callContext, conversationLanguageNote, staticPrompt, type AgentChannel } from "./prompt";
 import { executeTool, toolsFor } from "./tools";
 import { findAvailability } from "../booking";
 import { guestBriefing, recallGuest } from "../guests";
 import { usesStaffDiary } from "../verticals";
 import { minutesToSpoken, parseClock, todayIn } from "../time";
 import { costChannelOf, meterModel } from "../billing/cost";
-import { answersIn, lineFor } from "../language";
+import { answersIn, languageChannelOf, lineFor, type LanguageChannel } from "../language";
 import { copy } from "../customer-copy";
 
 /**
@@ -154,7 +154,7 @@ function hasApiKey(): boolean {
  * record, which would land in the call log and count against the demo's
  * daily cap, merely to ask what the greeting says.
  */
-export function greetingFor(location: Location, callerNumber?: string): string {
+export function greetingFor(location: Location, callerNumber?: string, channel?: LanguageChannel): string {
   const agent = location.agent;
   const guest = callerNumber ? recallGuest(location, callerNumber) : null;
 
@@ -168,21 +168,22 @@ export function greetingFor(location: Location, callerNumber?: string): string {
   // On a public demo line the disclosure belongs in the first breath, not
   // somewhere the caller has to ask for it.
   const disclosure = location.demo?.enabled ? location.demo.disclosure.trim() : "";
-  return disclosure ? `${disclosure} ${localGreeting(location, base)}` : localGreeting(location, base);
+  return disclosure ? `${disclosure} ${localGreeting(location, base, channel)}` : localGreeting(location, base, channel);
 }
 
 /**
- * A German venue still on the English opening line every venue starts with.
+ * A venue answered in another language, still on the English opening line
+ * every venue starts with.
  *
  * The owner who switches the language and never touches the greeting would
  * otherwise have German callers welcomed in English, then answered in German.
  * Only that exact line is swapped; a greeting the owner wrote is theirs, in
  * whatever language they wrote it.
  */
-function localGreeting(location: Location, greeting: string): string {
-  if (answersIn(location) !== "de") return greeting;
+function localGreeting(location: Location, greeting: string, channel?: LanguageChannel): string {
+  if (answersIn(location, { channel }) === "en") return greeting;
   return greeting === copy("en", "greeting.default", { name: location.name.trim() })
-    ? lineFor(location, "greeting.default", { name: location.name.trim() })
+    ? lineFor(location, "greeting.default", { name: location.name.trim() }, { channel })
     : greeting;
 }
 
@@ -295,6 +296,8 @@ export class AgentSession {
   private resume: Resume | null = null;
   /** What was actually said on pickup — the model must not repeat it. */
   private spokenGreeting: string | null = null;
+  /** The language this conversation has settled on, where the business speaks several. */
+  private conversationLanguage: VenueLanguage | null = null;
 
   constructor(location: Location, call: Call, opts: AgentSessionOptions = {}) {
     this.location = location;
@@ -326,8 +329,26 @@ export class AgentSession {
    * second in the whole call.
    */
   greeting(): string {
-    this.spokenGreeting = greetingFor(this.location, this.callerNumber);
+    this.spokenGreeting = greetingFor(this.location, this.callerNumber, languageChannelOf(this.call.channel));
     return this.spokenGreeting;
+  }
+
+  /** The whole opening, where more than the greeting was said (ask mode offers each language). */
+  setSpokenGreeting(said: string): void {
+    this.spokenGreeting = said;
+  }
+
+  /**
+   * The language the conversation is in, once known: the model is told in the
+   * volatile half of its prompt, and the tools and system lines follow it.
+   */
+  setLanguage(language: VenueLanguage | null): void {
+    this.conversationLanguage = language;
+  }
+
+  /** Where the business sets a language per channel, this conversation's channel. */
+  private get languageChannel(): LanguageChannel {
+    return languageChannelOf(this.call.channel);
   }
 
   get isEnded(): boolean {
@@ -399,7 +420,7 @@ export class AgentSession {
           const outcome = await executeTool(
             use.name,
             use.input as Record<string, unknown>,
-            { location: this.location, call: this.call, callerNumber: this.callerNumber, liveTransfer: this.liveTransfer },
+            { location: this.location, call: this.call, callerNumber: this.callerNumber, liveTransfer: this.liveTransfer, language: this.conversationLanguage },
           );
           results.push({
             type: "tool_result",
@@ -515,11 +536,12 @@ export class AgentSession {
     const guest = this.callerNumber
       ? recallGuest(this.location, this.callerNumber)
       : null;
+    const languageNote = conversationLanguageNote(this.location, this.conversationLanguage, this.languageChannel, this.channel);
 
     return [
       {
         type: "text",
-        text: staticPrompt(this.location, this.channel),
+        text: staticPrompt(this.location, this.channel, this.languageChannel),
         // Everything before this point is identical on every turn of every
         // call at this venue, so it is served from cache from turn two on.
         //
@@ -549,7 +571,7 @@ ${
             : ""
         }${
           guest ? `\n\n${guestBriefing(this.location, guest)}` : ""
-        }`,
+        }${languageNote ? `\n\n${languageNote}` : ""}`,
       },
     ];
   }
@@ -685,7 +707,7 @@ ${
         outcome = await executeTool(
           use.name,
           use.input as Record<string, unknown>,
-          { location: this.location, call: this.call, callerNumber: this.callerNumber, liveTransfer: this.liveTransfer },
+          { location: this.location, call: this.call, callerNumber: this.callerNumber, liveTransfer: this.liveTransfer, language: this.conversationLanguage },
         );
       } catch (err) {
         ok = false;
@@ -782,7 +804,7 @@ ${
         if (message.stop_reason === "refusal") {
           yield {
             type: "sentence",
-            text: lineFor(this.location, "agent.refusal"),
+            text: lineFor(this.location, "agent.refusal", {}, { channel: this.languageChannel, current: this.conversationLanguage }),
           };
           break;
         }
@@ -822,7 +844,7 @@ ${
       yield { type: "error", message };
       yield {
         type: "sentence",
-        text: lineFor(this.location, "agent.dropped"),
+        text: lineFor(this.location, "agent.dropped", {}, { channel: this.languageChannel, current: this.conversationLanguage }),
       };
     }
 

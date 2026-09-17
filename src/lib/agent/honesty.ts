@@ -1,6 +1,7 @@
 import type { Location, Minutes, Slot, ToolTrace, VenueLanguage } from "../types";
 import { minutesToClock } from "../time";
 import { copy } from "../customer-copy";
+import { HONESTY_PHRASES, type HonestyPhrases } from "./guard-phrases";
 
 /**
  * Did it say a time that nothing came back with?
@@ -26,6 +27,29 @@ import { copy } from "../customer-copy";
  * is its own decision about what counts as a false positive.
  */
 
+/**
+ * The languages a guard reads: one, or a business's whole set. The first is
+ * the language any words the guard writes back are in. English is always read.
+ */
+export type GuardLanguages = VenueLanguage | readonly VenueLanguage[];
+
+function listOf(languages: GuardLanguages): readonly VenueLanguage[] {
+  return typeof languages === "string" ? [languages] : languages.length ? languages : ["en"];
+}
+
+/** The language a repair writes in. */
+function saysIn(languages: GuardLanguages): VenueLanguage {
+  return listOf(languages)[0];
+}
+
+/** The phrases of every language read besides English. */
+function extrasOf(languages: GuardLanguages): HonestyPhrases[] {
+  return [...new Set(listOf(languages))].flatMap((l) => {
+    const phrases = l === "en" ? undefined : HONESTY_PHRASES[l];
+    return phrases ? [phrases] : [];
+  });
+}
+
 /** Which tools produce times a reply is allowed to quote. */
 const SOURCES = new Set([
   "check_availability",
@@ -47,13 +71,13 @@ const SOURCES = new Set([
  * misread them onto a calendar, and adding them here would mean parsing
  * English numbers to guard a channel that has a different failure mode.
  */
-export function timesIn(text: string, language: VenueLanguage = "en"): Minutes[] {
+export function timesIn(text: string, language: GuardLanguages = "en"): Minutes[] {
   const found: Minutes[] = [];
 
-  // "17 Uhr", "9 Uhr" — German's bare hour, which needs no meridiem to be a
-  // time: "Uhr" says so. "14.30 Uhr" is already caught below as 14.30.
-  if (language === "de") {
-    for (const m of text.matchAll(/(?<![:.\d])\b(\d{1,2})\s*Uhr\b/gi)) {
+  // "17 Uhr", "9 Uhr" — a bare hour that a language's own word marks as a
+  // time, needing no meridiem. "14.30 Uhr" is already caught below as 14.30.
+  for (const word of new Set(extrasOf(language).flatMap((p) => (p.hourWord ? [p.hourWord] : [])))) {
+    for (const m of text.matchAll(new RegExp(String.raw`(?<![:.\d])\b(\d{1,2})\s*${word}\b`, "gi"))) {
       const hour = Number(m[1]);
       if (hour <= 24) found.push((hour % 24) * 60);
     }
@@ -215,88 +239,6 @@ const OFFER_EXTRA = String.raw`earliest|latest|slot|come (?:in|by) at|see you at
 const OFFER = new RegExp(String.raw`\b(?:${OFFER_CORE})\b`, "i");
 const OFFER_WIDE = new RegExp(String.raw`\b(?:${OFFER_CORE}|${OFFER_EXTRA})\b`, "i");
 
-// ---------------------------------------------------------------------------
-// The same guards, in German
-// ---------------------------------------------------------------------------
-
-/**
- * German is not a way round any of this.
- *
- * A German venue is guarded by the English patterns *and* these — a reply can
- * mix the two, and "I have 18:00" is as much an invention in a German thread.
- * The words are the same moves in German clothes: "ich hätte", "wie wäre es
- * mit", "da ist noch frei", "ich kann Sie um … eintragen". Boundaries are
- * written with `\p{L}` rather than `\b`, which knows nothing of ä, ö, ü or ß
- * and would never find "Öffnungszeiten" at all.
- *
- * English venues never read this section: their guards are the ones above,
- * byte for byte.
- */
-// "Wir haben bis 18 Uhr geöffnet" is how German states opening hours, so "wir
-// haben" only counts when the sentence is not about being open.
-const DE_OFFER_CORE = String.raw`ich habe|ich hätte|(?:wir haben|haben wir)(?![^.!?]*(?:geöffnet|offen|geschlossen|Ruhetag|Öffnungszeit))|wir hätten|hätte ich|hätten wir|habe ich|es gibt|gibt es|frei|verfügbar|wie wäre es mit|wie wäre|was halten Sie von|passt (?:Ihnen|es Ihnen|das)|würde (?:Ihnen )?(?:das )?passen|(?:kann|könnte) (?:ich )?(?:Ihnen|Sie)|anbieten|einschieben|dazwischenschieben|eintragen|einplanen|reinnehmen|dazunehmen|vormerken`;
-const DE_OFFER_EXTRA = String.raw`frühestens|spätestens|frühester|spätester|frühestmöglich|kommen Sie (?:gern |gerne )?(?:um|vorbei)|sehen uns um|reservieren`;
-
-const L = String.raw`\p{L}\p{N}_`;
-const OFFER_DE = new RegExp(String.raw`(?<![${L}])(?:${OFFER_CORE}|${DE_OFFER_CORE})(?![${L}])`, "iu");
-const OFFER_WIDE_DE = new RegExp(
-  String.raw`(?<![${L}])(?:${OFFER_CORE}|${OFFER_EXTRA}|${DE_OFFER_CORE}|${DE_OFFER_EXTRA})(?![${L}])`,
-  "iu",
-);
-
-const NOT_OFFERING_DE = new RegExp(
-  String.raw`(?<![${L}])(?:nicht|kein|keine|keinen|keinem|keiner|nie|niemals|ob|nichts|leider nicht|unmöglich)(?![${L}])`,
-  "iu",
-);
-
-const HOURS_WORDS_DE = new RegExp(
-  String.raw`(?<![${L}])(?:geöffnet|öffnen|öffnet|offen|Öffnungszeit(?:en)?|schließen|schließt|geschlossen|schliessen|schliesst|Ruhetag|bis|letzte (?:Bestellung|Buchung|Annahme|Behandlung)|Annahmeschluss|Küchenschluss)(?![${L}])`,
-  "iu",
-);
-
-/**
- * Words that tell somebody in German they hold a booking. See CLAIM.
- *
- * "Bestätigt" is a participle and a present tense at once — "Sie sind
- * bestätigt" claims a booking, "das Team bestätigt Ihnen den Termin" promises
- * one — so the participles only count with the auxiliary that makes them a
- * fact ("ist", "sind", "habe … eingetragen"), or alone as the whole reply
- * ("Gebucht!"). A negation inside the claim ("ist nichts gebucht") unmakes it.
- */
-const PARTICIPLES_DE = String.raw`bestätigt|gebucht|reserviert|eingetragen|vorgemerkt`;
-const CLAIM_DE = new RegExp(
-  String.raw`(?<![${L}])(?:(?:ist|sind|wurde|wurden|habe|haben|hat)(?![${L}])[^.!?]{0,60}?(?<![${L}])(?:${PARTICIPLES_DE})|^\s*(?:${PARTICIPLES_DE})|fest eingeplant|bis dann|bis (?:morgen|bald|später|nachher|Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag)|wir sehen uns|wir freuen uns auf (?:Sie|Ihren Besuch|Ihr Kommen)|alles erledigt|ist erledigt|ist fix|steht fest)(?![${L}])`,
-  "giu",
-);
-
-/**
- * What undoes a German claim from inside it, between the auxiliary and the
- * participle: "ist noch nicht gebucht", "ist beim Team, und sobald es bestätigt".
- */
-const UNMADE_DE = new RegExp(
-  String.raw`(?<![${L}])(?:nicht|nichts|kein|keine|keinen|sobald|wenn|falls|sofern|bevor|erst|wird|werden)(?![${L}])`,
-  "iu",
-);
-
-/** What makes a German claim word future or conditional: "sobald es bestätigt ist". */
-const HEDGE_DE = new RegExp(
-  String.raw`(?<![${L}])(?:wird|werden|würde|sobald|wenn|falls|sofern|nicht|nichts|noch|kein|keine|bevor|erst|muss|müsste|soll|sollte|kann|könnte)(?![${L}])`,
-  "iu",
-);
-
-/**
- * The patterns one language's guard reads. German reads its own and English's.
- *
- * `negated` is German's negation, read across the whole clause rather than only
- * before the offer word: German puts "nicht" after the verb — "ich kann Sie um
- * 18 Uhr leider nicht eintragen" — where the English rule would never see it.
- */
-function patterns(language: VenueLanguage) {
-  return language === "de"
-    ? { offer: OFFER_DE, offerWide: OFFER_WIDE_DE, notOffering: [NOT_OFFERING], negated: NOT_OFFERING_DE, hours: [HOURS_WORDS, HOURS_WORDS_DE] }
-    : { offer: OFFER, offerWide: OFFER_WIDE, notOffering: [NOT_OFFERING], negated: null, hours: [HOURS_WORDS] };
-}
-
 /**
  * A refusal is not an offer. "I can't say whether 8:00 is free" contains the
  * word that makes an offer and is the opposite of one, so only the words before
@@ -306,6 +248,73 @@ function patterns(language: VenueLanguage) {
  */
 const NOT_OFFERING =
   /\b(can'?t|cannot|can not|don'?t|do not|won'?t|will not|never|not|no|unable|whether|nothing|isn'?t|aren'?t|hasn'?t|haven'?t)\b|n't\b/i;
+
+// ---------------------------------------------------------------------------
+// The same guards, in every other language a business speaks
+// ---------------------------------------------------------------------------
+
+/**
+ * Another language is not a way round any of this.
+ *
+ * A business answering in German is guarded by the English patterns *and* the
+ * German ones from guard-phrases.ts — a reply can mix the two, and "I have
+ * 18:00" is as much an invention in a German thread. Boundaries are written
+ * with `\p{L}` rather than `\b`, which knows nothing of ä, ö, ü or ß and would
+ * never find "Öffnungszeiten" at all.
+ *
+ * English-only businesses never reach this section: their guards are the ones
+ * above, byte for byte.
+ */
+const L = String.raw`\p{L}\p{N}_`;
+const bounded = (source: string, flags: string) => new RegExp(String.raw`(?<![${L}])(?:${source})(?![${L}])`, flags);
+
+interface Patterns {
+  offer: RegExp;
+  offerWide: RegExp;
+  notOffering: RegExp[];
+  /** A negation anywhere in the clause, for languages that put it after the verb. */
+  negated: RegExp | null;
+  hours: RegExp[];
+  /** Judge offers clause by clause, so a negation in one half cannot excuse the other. */
+  byClause: boolean;
+  claims: { claim: RegExp; unmade: RegExp; hedge: RegExp }[];
+  joiners: string[];
+}
+
+const ENGLISH: Patterns = {
+  offer: OFFER,
+  offerWide: OFFER_WIDE,
+  notOffering: [NOT_OFFERING],
+  negated: null,
+  hours: [HOURS_WORDS],
+  byClause: false,
+  claims: [],
+  joiners: [],
+};
+
+const compiled = new Map<string, Patterns>();
+
+/** The patterns a guard reads for these languages: English's, and every other one's alongside. */
+function patterns(languages: GuardLanguages): Patterns {
+  const extras = extrasOf(languages);
+  if (!extras.length) return ENGLISH;
+  const key = [...new Set(listOf(languages))].filter((l) => l !== "en").sort().join(",");
+  const hit = compiled.get(key);
+  if (hit) return hit;
+  const any = (pick: (p: HonestyPhrases) => string) => extras.map(pick).join("|");
+  const made: Patterns = {
+    offer: bounded(`${OFFER_CORE}|${any((p) => p.offerCore)}`, "iu"),
+    offerWide: bounded(`${OFFER_CORE}|${OFFER_EXTRA}|${any((p) => p.offerCore)}|${any((p) => p.offerExtra)}`, "iu"),
+    notOffering: [NOT_OFFERING],
+    negated: bounded(any((p) => p.negation), "iu"),
+    hours: [HOURS_WORDS, bounded(any((p) => p.hours), "iu")],
+    byClause: true,
+    claims: extras.map((p) => ({ claim: bounded(p.claim, "giu"), unmade: bounded(p.unmade, "iu"), hedge: bounded(p.hedge, "iu") })),
+    joiners: [...new Set(extras.flatMap((p) => p.clauseJoiners))],
+  };
+  compiled.set(key, made);
+  return made;
+}
 
 function framesAnOffer(
   clause: string,
@@ -337,12 +346,9 @@ function sentencesOf(text: string): string[] {
  * repair may cut on. The separators come back in the result, so a reply nothing
  * was cut from is returned byte for byte.
  */
-function clausesOf(text: string, language: VenueLanguage = "en"): { text: string; sep: string }[] {
-  const parts = text.split(
-    language === "de"
-      ? /((?<=[.!?])\s+|\s*[—–;:]\s+|,\s+(?=(?:but|so|though|although|however|aber|also|doch|jedoch|allerdings)\b))/
-      : /((?<=[.!?])\s+|\s*[—–;:]\s+|,\s+(?=(?:but|so|though|although|however)\b))/,
-  );
+function clausesOf(text: string, language: GuardLanguages = "en"): { text: string; sep: string }[] {
+  const joiners = ["but", "so", "though", "although", "however", ...patterns(language).joiners].join("|");
+  const parts = text.split(new RegExp(String.raw`((?<=[.!?])\s+|\s*[—–;:]\s+|,\s+(?=(?:${joiners})\b))`));
   const out: { text: string; sep: string }[] = [];
   for (let i = 0; i < parts.length; i += 2) {
     if (parts[i]?.trim()) out.push({ text: parts[i], sep: i === 0 ? "" : parts[i - 1] ?? " " });
@@ -363,18 +369,19 @@ export function checkTimes(
    * passes, "7 PM is free" does not.
    */
   said?: Set<Minutes>,
-  /** The venue's, from language.ts `answersIn`. German reads the German patterns as well. */
-  language: VenueLanguage = "en",
+  /** The business's languages, from language.ts `allowedLanguages`. Each is read alongside English. */
+  language: GuardLanguages = "en",
 ): HonestyVerdict {
   const offered = timesOffered(traces);
   const invented = new Set<Minutes>();
   const p = patterns(language);
   for (const sentence of sentencesOf(reply)) {
     const aboutHours = p.hours.some((re) => re.test(sentence));
-    // German judges the offer clause by clause: its negation is read across a
-    // whole clause, and "um 19 Uhr sind wir nicht mehr offen, aber ich hätte 18
-    // Uhr" must not let the "nicht" of the first half excuse the second.
-    const parts = language === "de" ? clausesOf(sentence, language).map((c) => c.text) : [sentence];
+    // Another language judges the offer clause by clause: German reads its
+    // negation across a whole clause, and "um 19 Uhr sind wir nicht mehr offen,
+    // aber ich hätte 18 Uhr" must not let the "nicht" of the first half excuse
+    // the second.
+    const parts = p.byClause ? clausesOf(sentence, language).map((c) => c.text) : [sentence];
     for (const part of parts) {
       // An opening time offered as a slot is an invention even at the venue that
       // opens then: "we're closed by then, but I could fit you in at 6:00" is a
@@ -419,11 +426,11 @@ export function repairReply(
    * knowledge of a book Belline cannot see. That is what the repair sent to a
    * request-only venue before this flag existed.
    */
-  opts: { requestsOnly?: boolean; language?: VenueLanguage } = {},
+  opts: { requestsOnly?: boolean; language?: GuardLanguages } = {},
 ): string {
   if (verdict.ok) return reply;
   const language = opts.language ?? "en";
-  const noSlot = copy(language, "guard.request_no_slot");
+  const noSlot = copy(saysIn(language), "guard.request_no_slot");
   const invented = new Set(verdict.invented);
   const kept = sentencesOf(reply).filter((s) => !timesIn(s, language).some((t) => invented.has(t)));
   if (!kept.length) return opts.requestsOnly ? noSlot : honestAlternative(verdict, undefined, language);
@@ -432,7 +439,7 @@ export function repairReply(
     ? noSlot
     : verdict.offered.length
       ? honestAlternative(verdict, undefined, language)
-      : copy(language, "guard.which_day");
+      : copy(saysIn(language), "guard.which_day");
   return `${kept.join(" ")} ${follow}`;
 }
 
@@ -463,23 +470,25 @@ export interface ClaimVerdict {
   claims: string[];
 }
 
-function claimsIn(sentence: string, language: VenueLanguage = "en"): string[] {
+function claimsIn(sentence: string, language: GuardLanguages = "en"): string[] {
   const found: string[] = [];
+  const { claims } = patterns(language);
+  const hedged = (before: string) => HEDGE.test(before) || claims.some((c) => c.hedge.test(before));
   for (const m of sentence.matchAll(CLAIM)) {
-    const before = sentence.slice(0, m.index);
-    if (!HEDGE.test(before) && !(language === "de" && HEDGE_DE.test(before))) found.push(m[0].toLowerCase());
+    if (!hedged(sentence.slice(0, m.index))) found.push(m[0].toLowerCase());
   }
-  if (language === "de") {
-    for (const m of sentence.matchAll(CLAIM_DE)) {
-      const before = sentence.slice(0, m.index);
-      if (HEDGE_DE.test(before) || HEDGE.test(before) || UNMADE_DE.test(m[0])) continue;
+  // Each other language's claims, unmade by its own words inside them ("ist
+  // nichts gebucht") and hedged by any language's words before them.
+  for (const { claim, unmade } of claims) {
+    for (const m of sentence.matchAll(claim)) {
+      if (hedged(sentence.slice(0, m.index)) || unmade.test(m[0])) continue;
       found.push(m[0].toLowerCase());
     }
   }
   return found;
 }
 
-export function checkRequestReply(reply: string, language: VenueLanguage = "en"): ClaimVerdict {
+export function checkRequestReply(reply: string, language: GuardLanguages = "en"): ClaimVerdict {
   const claims = sentencesOf(reply).flatMap((s) => claimsIn(s, language));
   return { ok: claims.length === 0, claims: [...new Set(claims)] };
 }
@@ -487,10 +496,10 @@ export function checkRequestReply(reply: string, language: VenueLanguage = "en")
 export const REQUEST_HANDOVER = copy("en", "guard.request_handover");
 
 /** The reply with every sentence that claimed a booking taken out, ending on the honest line. */
-export function repairRequestReply(reply: string, verdict: ClaimVerdict, language: VenueLanguage = "en"): string {
+export function repairRequestReply(reply: string, verdict: ClaimVerdict, language: GuardLanguages = "en"): string {
   if (verdict.ok) return reply;
   const kept = sentencesOf(reply).filter((s) => claimsIn(s, language).length === 0);
-  return [...kept, copy(language, "guard.request_handover")].join(" ");
+  return [...kept, copy(saysIn(language), "guard.request_handover")].join(" ");
 }
 
 /**
@@ -520,7 +529,7 @@ export interface SlotVerdict {
  * Stating the opening hours is untouched — those sentences frame no offer — and
  * so is repeating the time the customer asked for.
  */
-export function checkSlotOffers(reply: string, language: VenueLanguage = "en"): SlotVerdict {
+export function checkSlotOffers(reply: string, language: GuardLanguages = "en"): SlotVerdict {
   const p = patterns(language);
   const offers = clausesOf(reply, language)
     .map((c) => c.text.trim())
@@ -529,9 +538,9 @@ export function checkSlotOffers(reply: string, language: VenueLanguage = "en"): 
 }
 
 /** The reply with the offered slots cut out and everything else left standing. */
-export function repairSlotOffers(reply: string, verdict: SlotVerdict, language: VenueLanguage = "en"): string {
+export function repairSlotOffers(reply: string, verdict: SlotVerdict, language: GuardLanguages = "en"): string {
   if (verdict.ok) return reply;
-  const noSlot = copy(language, "guard.request_no_slot");
+  const noSlot = copy(saysIn(language), "guard.request_no_slot");
   const offers = new Set(verdict.offers);
   let out = "";
   let cut = false;
@@ -563,10 +572,12 @@ function endStop(text: string): string {
  * call costs a second and might invent a different set. This is the same
  * pattern as the tools themselves, where a failure carries its own recovery.
  */
-export function honestAlternative(verdict: HonestyVerdict, slots?: Slot[], language: VenueLanguage = "en"): string {
+export function honestAlternative(verdict: HonestyVerdict, slots?: Slot[], languages: GuardLanguages = "en"): string {
+  const language = saysIn(languages);
+  const format = language === "en" ? undefined : HONESTY_PHRASES[language]?.timeFormat;
   const times = (slots?.length ? slots.map((s) => s.startMin) : verdict.offered)
     .slice(0, 3)
-    .map((m) => (language === "de" ? `${minutesToClock(m)} Uhr` : minutesToClock(m)));
+    .map((m) => (format ? format.replace("{time}", minutesToClock(m)) : minutesToClock(m)));
 
   if (!times.length) {
     // A dead end is its own failure. The first version of this line said there

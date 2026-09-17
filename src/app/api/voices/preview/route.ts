@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getLocation } from "@/lib/store";
 import { requireApiUser } from "@/lib/auth-server";
-import { speak, ttsEnabled } from "@/lib/providers/tts";
-import { languageChoiceOpen } from "@/lib/language";
+import { speak, ttsEnabled, ttsLanguageCodeOf } from "@/lib/providers/tts";
+import { languageUsable, parseLanguage } from "@/lib/language";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     voiceSpeed?: number;
     locationId?: string;
     text?: string;
-    /** The language being chosen on the agent page, which may not be saved yet. */
+    /** The business's main language, so the preview is pinned the way a call is. */
     language?: string;
   };
   const voiceId = body.voiceId?.trim();
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       modelId: body.voiceModel?.trim() || location?.agent.voiceModel,
       speed: body.voiceSpeed ?? location?.agent.voiceSpeed,
       format: "mp3_44100_128",
-      ...(body.language === "de" && languageChoiceOpen() ? { languageCode: "de" as const } : {}),
+      ...(previewLanguageCode(body.language) ? { languageCode: previewLanguageCode(body.language) } : {}),
     })) {
       chunks.push(chunk);
     }
@@ -74,4 +74,10 @@ export async function POST(request: Request) {
       { status: 502 },
     );
   }
+}
+
+/** The ElevenLabs language code for a usable language other than English, or nothing. */
+function previewLanguageCode(raw: unknown): string | undefined {
+  const code = parseLanguage(raw);
+  return code && code !== "en" && languageUsable(code) ? ttsLanguageCodeOf(code) : undefined;
 }

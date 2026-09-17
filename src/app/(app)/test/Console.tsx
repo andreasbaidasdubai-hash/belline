@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ToolTrace } from "@/lib/types";
 import { fill, type CALL_KEYS } from "@/lib/customer-copy";
+import type { LanguageCode } from "@/config/languages";
 
 type CallKey = (typeof CALL_KEYS)[number];
 
@@ -211,8 +212,8 @@ export default function Console({
    * switched on.
    */
   chatHref?: string;
-  /** The venue's language, on a customer's call button. Set with `copy` for German. */
-  language?: "en" | "de";
+  /** The venue's language, on a customer's call button. Set with `copy` for any language but English. */
+  language?: LanguageCode;
   /** The call button's lines in the visitor's language, from customer-copy.ts. Absent keeps the English below. */
   copy?: Record<CallKey, string>;
 }) {

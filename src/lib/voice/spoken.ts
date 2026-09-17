@@ -21,6 +21,14 @@
 import type { VenueLanguage } from "../types";
 import { carriesDetailDe, toSpokenGerman } from "./spoken-de";
 
+/**
+ * Each language's own spoken layer, where its numbers are said differently
+ * from English's. A language without one is read by the English layer.
+ */
+const SPOKEN_LAYERS: Partial<Record<VenueLanguage, { toSpoken: (text: string) => string; carriesDetail: (text: string) => boolean }>> = {
+  de: { toSpoken: toSpokenGerman, carriesDetail: carriesDetailDe },
+};
+
 export interface SpokenFragment {
   /** What the voice should say. */
   text: string;
@@ -186,8 +194,9 @@ function carriesDetail(text: string): boolean {
  * German numbers are said differently and have to be written out as words.
  */
 export function toSpoken(text: string, language: VenueLanguage = "en"): SpokenFragment {
-  if (language === "de") {
-    return { text: toSpokenGerman(text), speed: carriesDetailDe(text) ? PACE_CAREFUL : PACE_TALK };
+  const layer = language === "en" ? undefined : SPOKEN_LAYERS[language];
+  if (layer) {
+    return { text: layer.toSpoken(text), speed: layer.carriesDetail(text) ? PACE_CAREFUL : PACE_TALK };
   }
   let out = text;
 

@@ -43,12 +43,12 @@ export async function POST(request: Request) {
 
   // The action request's answer is what the caller hears last; the status
   // callback's answer is ignored by Twilio.
-  const german = location ? answersIn(location) === "de" : false;
+  const language = location ? answersIn(location, { channel: "phone" }) : "en";
   return new Response(
     action
       ? `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  ${german ? sayTwiml("de", copy("de", "voicemail.thanks")) : `<Say voice="Polly.Joanna">${VOICEMAIL_THANKS}</Say>`}
+  ${language !== "en" ? sayTwiml(language, copy(language, "voicemail.thanks")) : `<Say voice="Polly.Joanna">${VOICEMAIL_THANKS}</Say>`}
   <Hangup/>
 </Response>`
       : `<?xml version="1.0" encoding="UTF-8"?>

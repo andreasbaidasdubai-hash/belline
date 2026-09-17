@@ -58,6 +58,9 @@
   var voiceLabel = script.getAttribute("data-label") || "Talk to us";
   var chatLabel = script.getAttribute("data-chat-label") || "Chat with us";
   var whatsappLabel = script.getAttribute("data-whatsapp-label") || "WhatsApp us";
+  // The widget's own words, replaced by the venue's language from its config
+  // (customer-copy.ts `embed.close_*`) once that arrives.
+  var STRINGS = { closeChat: "Close chat", closeCall: "Close call" };
   var attrSide = script.hasAttribute("data-side");
   var attrVoice = script.hasAttribute("data-label");
   var attrChat = script.hasAttribute("data-chat-label");
@@ -101,7 +104,10 @@
     ".belline-dock{bottom:18px;right:18px}.belline-dock.belline-left{left:18px}" +
     ".belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
     ".belline-fab span{display:none}}" +
-    "@media (prefers-reduced-motion:reduce){.belline-fab{transition:none}}";
+    "@media (prefers-reduced-motion:reduce){.belline-fab{transition:none}}" +
+    // "Also speaks Deutsch": a small line under the buttons, in the venue's main language.
+    ".belline-notice{font:12px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1B2735;" +
+    "background:rgba(255,255,255,.92);padding:3px 9px;border-radius:999px;unicode-bidi:plaintext}";
 
   var style = document.createElement("style");
   style.textContent = css;
@@ -209,6 +215,18 @@
     }
     if (!attrVoice) relabel("voice", cfg.voiceLabel);
     if (!attrChat) relabel("chat", cfg.chatLabel);
+    if (cfg.strings && typeof cfg.strings === "object") {
+      if (cfg.strings.closeChat) STRINGS.closeChat = String(cfg.strings.closeChat);
+      if (cfg.strings.closeCall) STRINGS.closeCall = String(cfg.strings.closeCall);
+    }
+    if (cfg.notice && !dock.querySelector(".belline-notice")) {
+      var notice = document.createElement("div");
+      notice.className = "belline-notice";
+      notice.textContent = String(cfg.notice);
+      if (cfg.lang) notice.lang = String(cfg.lang);
+      notice.dir = cfg.dir === "rtl" ? "rtl" : "auto";
+      dock.appendChild(notice);
+    }
     if (cfg.accent && cfg.accentText) {
       dock.style.setProperty("--belline-accent", cfg.accent);
       dock.style.setProperty("--belline-accent-text", cfg.accentText);
@@ -296,7 +314,7 @@
     shut = document.createElement("button");
     shut.type = "button";
     shut.className = "belline-shut";
-    shut.setAttribute("aria-label", kind === "chat" ? "Close chat" : "Close call");
+    shut.setAttribute("aria-label", kind === "chat" ? STRINGS.closeChat : STRINGS.closeCall);
     shut.textContent = "×";
     position(shut);
     shut.addEventListener("click", close);

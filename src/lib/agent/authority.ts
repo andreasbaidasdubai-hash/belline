@@ -1,6 +1,7 @@
-import type { Location, Vertical } from "../types";
-import { answersIn } from "../language";
-import { copy, type CopyKey } from "../customer-copy";
+import type { Location, VenueLanguage, Vertical } from "../types";
+import { allowedLanguages, answersIn } from "../language";
+import { copy } from "../customer-copy";
+import { AUTHORITY_PHRASES } from "./guard-phrases";
 
 /**
  * What Belline is allowed to do about a thing a caller just said.
@@ -220,172 +221,35 @@ const RULES: Record<Vertical, AuthorityRule[]> = {
 };
 
 // ---------------------------------------------------------------------------
-// German
+// Every other language a business speaks
 // ---------------------------------------------------------------------------
 
 /**
- * The same rules, as German callers put it.
+ * The same rules, as callers put them in another language: the phrases live in
+ * guard-phrases.ts, written folded (lower case, ä as ae) because the recogniser
+ * and a person typing on a phone do not agree about umlauts.
  *
- * Not a translation of the phrases above but of the situations: "ich kriege
- * keine Luft", "die Blutung hört nicht auf", "ist das normal?". Written folded —
- * lower case, ä as ae, ß as ss — because the recogniser and a person typing on
- * a phone do not agree about umlauts, and the text is folded the same way
- * before it is compared.
- *
- * A German venue is protected by these *and* the English lists, so a caller
- * who switches language mid-sentence is still caught. The words said back are
- * German, from customer-copy.ts, with 112 as the emergency number: it reaches
- * the emergency services in Germany, Austria and Switzerland alike.
+ * A business is protected by the English lists *and* those of every language
+ * it answers in, so a caller who switches language mid-sentence is still
+ * caught. The words said back are in the conversation's language, from
+ * customer-copy.ts — for German, with 112 as the emergency number.
  */
-const EMERGENCY_SYMPTOMS_DE = [
-  "brustschmerz",
-  "schmerzen in der brust",
-  "brust tut weh",
-  "brust ist eng",
-  "engegefuehl in der brust",
-  "druck auf der brust",
-  "keine luft",
-  "atemnot",
-  "kann nicht atmen",
-  "schwer atmen",
-  "blutet stark",
-  "starke blutung",
-  "hoert nicht auf zu bluten",
-  "blutung hoert nicht auf",
-  "ohnmaechtig",
-  "bewusstlos",
-  "zusammengebrochen",
-  "umgekippt",
-  "kollabiert",
-  "verwaschene sprache",
-  "gesicht haengt",
-  "halbseitig taub",
-  "allergische reaktion",
-  "anaphyla",
-  "hals schwillt zu",
-  "zunge schwillt",
-  "ueberdosis",
-  "zu viele tabletten",
-];
-
-const HAPPENING_NOW_DE = [
-  "jetzt",
-  "gerade",
-  "sofort",
-  "akut",
-  "seit",
-  "heute",
-  "ploetzlich",
-  "auf einmal",
-  "hilfe",
-  "kann nicht",
-  "ist",
-  "bin",
-  "habe",
-  "hab ",
-  "fuehle",
-  "angefangen",
-  "kriege",
-  "bekomme",
-  "hoert nicht auf",
-  "immer noch",
-];
-
-const CLINICAL_QUESTION_DE = [
-  "ist das normal",
-  "ist das schlimm",
-  "ist das gefaehrlich",
-  "muss ich mir sorgen",
-  "sollte ich mir sorgen",
-  "mache mir sorgen",
-  "ist es entzuendet",
-  "ist das entzuendet",
-  "was koennte das sein",
-  "was meinen sie was",
-  "glauben sie dass",
-  "denken sie dass",
-  "soll ich nehmen",
-  "kann ich nehmen",
-  "darf ich nehmen",
-  "soll ich ein",
-  "wie viel soll ich",
-  "wieviel soll ich",
-  "doppelte dosis",
-  "statt antibiotik",
-  "diagnos",
-];
-
-const CLINICAL_CONTEXT_DE = [
-  "schmerz",
-  "tut weh",
-  "geschwollen",
-  "schwellung",
-  "blutet",
-  "blutung",
-  "entzuend",
-  "infekt",
-  "symptom",
-  "knoten",
-  "beule",
-  "ausschlag",
-  "fieber",
-  "temperatur",
-  "medikament",
-  "tablette",
-  "antibiotik",
-  "schmerzmittel",
-  "ibuprofen",
-  "paracetamol",
-  "rezept",
-  "operation",
-  "fuellung",
-  "gezogen",
-  "faeden",
-  "naht",
-  "wunde",
-  "behandlung",
-  "eingriff",
-];
-
-/** Which German line each rule says, by id. */
-const SAYS_DE: Record<string, { say: CopyKey; sayIfNoTransfer?: CopyKey }> = {
-  "medical-emergency": { say: "authority.emergency" },
-  "clinical-advice": { say: "authority.clinical" },
-  "adverse-reaction": { say: "authority.reaction", sayIfNoTransfer: "authority.reaction_no_transfer" },
-};
-
-/** The German phrase groups for each rule, by id. Same shape as `requires`. */
-const REQUIRES_DE: Record<string, string[][]> = {
-  "medical-emergency": [EMERGENCY_SYMPTOMS_DE, HAPPENING_NOW_DE],
-  "clinical-advice": [CLINICAL_QUESTION_DE, CLINICAL_CONTEXT_DE],
-  "adverse-reaction": [
-    ["reaktion", "verbrannt", "verbrennung", "blasen", "geschwollen", "schwellung", "ausschlag", "kopfhaut", "brennt", "juckt"],
-    ["behandlung", "farbe", "faerb", "blondier", "bleach", "peeling", "laser", "waxing", "wachs", "nach dem", "nach der", "seit dem", "seit der"],
-  ],
-};
-
-/** A rule as a German venue says it: the same rule, German words. */
-function inGerman(rule: AuthorityRule): AuthorityRule {
-  const says = SAYS_DE[rule.id];
+function inLanguage(rule: AuthorityRule, language: VenueLanguage): AuthorityRule {
+  if (language === "en") return rule;
+  const says = AUTHORITY_PHRASES[language]?.says[rule.id];
   if (!says) return rule;
   return {
     ...rule,
-    say: copy("de", says.say),
-    ...(says.sayIfNoTransfer ? { sayIfNoTransfer: copy("de", says.sayIfNoTransfer) } : {}),
+    say: copy(language, says.say),
+    ...(says.sayIfNoTransfer ? { sayIfNoTransfer: copy(language, says.sayIfNoTransfer) } : {}),
   };
 }
 
-/** Lower case, umlauts and ß spelled out, punctuation gone: how the German lists are written. */
-function foldGerman(said: string): string {
-  const folded = said
-    .toLowerCase()
-    .replace(/ä/g, "ae")
-    .replace(/ö/g, "oe")
-    .replace(/ü/g, "ue")
-    .replace(/ß/g, "ss")
-    .replace(/[^a-z0-9'\s]/g, " ")
-    .replace(/\s+/g, " ");
-  return ` ${folded} `;
+/** Lower case, the language's letters folded, punctuation gone: how its lists are written. */
+function fold(said: string, pairs: readonly (readonly [string, string])[]): string {
+  let folded = said.toLowerCase();
+  for (const [from, to] of pairs) folded = folded.split(from).join(to);
+  return ` ${folded.replace(/[^a-z0-9'\s]/g, " ").replace(/\s+/g, " ")} `;
 }
 
 export interface Assessment {
@@ -393,7 +257,7 @@ export interface Assessment {
   rule: AuthorityRule;
 }
 
-function hasAny(haystack: string, needles: string[]): boolean {
+function hasAny(haystack: string, needles: readonly string[]): boolean {
   return needles.some((n) => haystack.includes(n));
 }
 
@@ -404,23 +268,29 @@ function hasAny(haystack: string, needles: string[]): boolean {
  * "the model's judgement applies", which is the overwhelming majority of
  * turns. Nothing here tries to classify a booking or a question; that is what
  * the model is for.
+ *
+ * `current` is the conversation's language, when it has settled on one: the
+ * words said back are in it. Otherwise the business's main language.
  */
-export function assessAuthority(location: Location, said: string): Assessment | null {
+export function assessAuthority(location: Location, said: string, current?: VenueLanguage | null): Assessment | null {
   const text = ` ${said.toLowerCase().replace(/[^a-z0-9'\s]/g, " ").replace(/\s+/g, " ")} `;
-  const german = answersIn(location) === "de";
+  const reads = allowedLanguages(location);
+  const says = answersIn(location, { current });
 
   for (const rule of RULES[location.vertical] ?? []) {
     if (rule.requires.every((group) => hasAny(text, group))) {
-      return { disposition: "escalate", rule: german ? inGerman(rule) : rule };
+      return { disposition: "escalate", rule: inLanguage(rule, says) };
     }
   }
 
-  if (german) {
-    const folded = foldGerman(said);
+  for (const language of reads) {
+    const phrases = language === "en" ? undefined : AUTHORITY_PHRASES[language];
+    if (!phrases) continue;
+    const folded = fold(said, phrases.fold);
     for (const rule of RULES[location.vertical] ?? []) {
-      const requires = REQUIRES_DE[rule.id];
+      const requires = phrases.requires[rule.id];
       if (requires?.every((group) => hasAny(folded, group))) {
-        return { disposition: "escalate", rule: inGerman(rule) };
+        return { disposition: "escalate", rule: inLanguage(rule, says) };
       }
     }
   }
@@ -430,5 +300,6 @@ export function assessAuthority(location: Location, said: string): Assessment | 
 /** Every rule a venue is currently protected by — for the dashboard, and for procurement. */
 export function authorityRules(location: Location): AuthorityRule[] {
   const rules = RULES[location.vertical] ?? [];
-  return answersIn(location) === "de" ? rules.map(inGerman) : rules;
+  const main = answersIn(location);
+  return main === "en" ? rules : rules.map((rule) => inLanguage(rule, main));
 }

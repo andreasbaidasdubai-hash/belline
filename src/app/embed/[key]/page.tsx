@@ -89,8 +89,10 @@ export default async function EmbedPage({
       minimal
       auto
       logoUrl={location.logoUrl}
-      // The visitor's words, for a German venue. English keeps Console's own.
-      {...(answersIn(location) === "de" ? { language: "de" as const, copy: copyTable("de", CALL_KEYS) } : {})}
+      // The visitor's words, for a venue not answered in English. English keeps Console's own.
+      {...(answersIn(location, { channel: "web_voice" }) !== "en"
+        ? { language: answersIn(location, { channel: "web_voice" }), copy: copyTable(answersIn(location, { channel: "web_voice" }), CALL_KEYS) }
+        : {})}
       // The 2-in-1, offered only where the venue switched both on. The framing
       // origin has to ride along: the middleware builds frame-ancestors from
       // it on every response, and without it the browser refuses the page.

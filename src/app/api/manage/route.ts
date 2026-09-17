@@ -40,8 +40,9 @@ export async function POST(request: Request) {
   const location = booking ? getLocation(booking.locationId) : undefined;
   if (!booking || !location) return NextResponse.json({ error: copy("en", "manage.link_invalid") }, { status: 404 });
   // The guest's language from here on: every error below is shown on their page.
-  const language = answersIn(location);
-  const t = (key: CopyKey, vars?: Record<string, string | number>) => lineFor(location, key, vars);
+  const ctx = { current: booking.language };
+  const language = answersIn(location, ctx);
+  const t = (key: CopyKey, vars?: Record<string, string | number>) => lineFor(location, key, vars, ctx);
   if (limited(booking.id)) return NextResponse.json({ error: t("manage.too_many") }, { status: 429 });
 
   const state = manageable(location, booking, Date.now(), language);
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       lateCancel: Boolean(cancelled.lateCancel),
-      notice: cancelled.lateCancel ? inHouseSpelling(location, lateCancelNotice(location, language) ?? "") || null : null,
+      notice: cancelled.lateCancel ? inHouseSpelling(location, lateCancelNotice(location, language) ?? "", ctx) || null : null,
     });
   }
 
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
     const result = modifyBooking(location, booking, { date: body.date, startMin: body.startMin });
     if (!result.ok) {
       // The engine's reasons are written in English for the agent to rephrase.
-      // A German guest is told the one thing that matters in their own language.
+      // Any other guest is told the one thing that matters in their own language.
       const detail = language === "en" ? result.detail : undefined;
       return NextResponse.json({ error: detail ?? t("manage.no_longer_free") }, { status: 409 });
     }

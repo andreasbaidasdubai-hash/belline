@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { AgentConfig, Location, User, Vertical } from "./types";
+import { isPlainEnglish } from "./language";
 import { getLocation, upsertLocation, id } from "./store";
 import { bellineNumberOf, sameNumber } from "./telephony/number";
 
@@ -83,6 +84,8 @@ export interface BrainSnapshot {
      * snapshot — and its digest — is what it was before languages existed.
      */
     language?: Location["language"];
+    /** Present only where a business is not plain English, for the same reason. */
+    languages?: Location["languages"];
   };
   agent: AgentConfig;
   restaurant?: Location["restaurant"];
@@ -106,6 +109,7 @@ export function snapshotOf(location: Location): BrainSnapshot {
       hours: location.hours,
       closures: location.closures,
       ...(location.language && location.language !== "en" ? { language: location.language } : {}),
+      ...(location.languages && !isPlainEnglish(location.languages) ? { languages: location.languages } : {}),
     },
     agent: location.agent,
     restaurant: location.restaurant,
@@ -280,6 +284,7 @@ export function revertTo(
     hours: target.snapshot.company.hours,
     closures: target.snapshot.company.closures,
     language: target.snapshot.company.language ?? "en",
+    languages: target.snapshot.company.languages ?? { main: target.snapshot.company.language ?? "en", also: [], pick: "auto" },
     agent: target.snapshot.agent,
     restaurant: target.snapshot.restaurant,
     salon: target.snapshot.salon,

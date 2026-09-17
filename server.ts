@@ -21,6 +21,7 @@ import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { meterTts } from "./src/lib/billing/cost";
 import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voice/session";
+import { allowedLanguages } from "./src/lib/language";
 import { ensureOwnWhatsAppAccount, ensureTwilioSandboxAccount } from "./src/lib/whatsapp";
 import { BrowserTransport, TwilioTransport, publicEvent } from "./src/lib/voice/transports";
 import { sendDueReminders } from "./src/lib/reminders";
@@ -480,7 +481,8 @@ async function warmGreetings(): Promise<void> {
         // Cold, the first one arrives too late to be worth saying and is
         // dropped — which is safe, and is also silence on the first turn of
         // the first call after a deploy, the one turn this is all for.
-        for (const clip of acknowledgementClips(location, format)) {
+        // In every language the business answers in: a call can settle on any of them.
+        for (const clip of acknowledgementClips(location, format, allowedLanguages(location))) {
           const { text: line, ...params } = clip;
           await speakClip(line, { ...params, onBilled });
         }

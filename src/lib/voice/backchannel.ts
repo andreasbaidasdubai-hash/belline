@@ -1,3 +1,6 @@
+import type { VenueLanguage } from "../types";
+import { BACKCHANNEL_PHRASES } from "../agent/guard-phrases";
+
 /**
  * "Mm-hmm" is not an interruption.
  *
@@ -36,23 +39,6 @@ const BACKCHANNELS = new Set([
   "thanks", "thank you", "cheers",
 ]);
 
-/**
- * The same, as German callers make them.
- *
- * "Ja", "genau", "mhm", "okay", "ah ja", "ähm". Deepgram's German model writes
- * the hesitation sounds with their umlauts, so the list keeps them; a caller
- * saying "ja, genau" over a read-back of their booking is agreeing, not
- * interrupting. English's own list still applies — "okay" and "mhm" cross the
- * border unchanged, and a German caller says "sorry" and "perfect" too.
- */
-const BACKCHANNELS_DE = new Set([
-  "ja", "ja ja", "jaja", "jo", "jup", "jep", "jawohl", "genau", "ja genau", "genau genau",
-  "mhm", "mhmm", "mm", "hm", "hmm", "aha", "ah", "ah ja", "ach so", "achso", "ach ja", "ah okay", "ah ok",
-  "okay", "ok", "okay okay", "alles klar", "klar", "gut", "gut gut", "sehr gut", "super", "prima", "perfekt", "wunderbar",
-  "stimmt", "richtig", "verstehe", "ich verstehe", "verstanden", "in ordnung", "passt", "passt gut", "gern", "gerne",
-  "ähm", "äh", "öhm", "hmhm", "danke", "danke schön", "dankeschön", "vielen dank", "ja danke",
-]);
-
 /** The longest a backchannel ever is. Past this, somebody is talking. */
 const MAX_WORDS = 3;
 
@@ -63,8 +49,12 @@ const MAX_WORDS = 3;
  * backchannel mid-sentence and an answer straight after a question, and only
  * the caller of this function knows which of those just happened.
  */
-export function isBackchannel(text: string, language: "en" | "de" = "en"): boolean {
-  if (language === "de") return isGermanBackchannel(text) || isBackchannel(text);
+export function isBackchannel(text: string, language: VenueLanguage | readonly VenueLanguage[] = "en"): boolean {
+  // Another language's listening noises count as well as English's: "okay" and
+  // "mhm" cross every border, and a German caller says "sorry" and "perfect" too.
+  for (const code of typeof language === "string" ? [language] : language) {
+    if (code !== "en" && isListedBackchannel(text, BACKCHANNEL_PHRASES[code])) return true;
+  }
 
   const normal = text
     .toLowerCase()
@@ -80,19 +70,20 @@ export function isBackchannel(text: string, language: "en" | "de" = "en"): boole
   return BACKCHANNELS.has(normal);
 }
 
-function isGermanBackchannel(text: string): boolean {
+function isListedBackchannel(text: string, phrases: readonly string[] | undefined): boolean {
+  if (!phrases) return false;
   const normal = text
     .toLowerCase()
     .replace(/[-']/g, " ")
-    // Letters with their umlauts: stripping to a-z would make "ähm" into "hm"
+    // Letters of every alphabet: stripping to a-z would make "ähm" into "hm"
     // by accident and "schön" into "schn".
-    .replace(/[^a-zäöüß\s]/g, "")
+    .replace(/[^\p{L}\s]/gu, "")
     .replace(/\s+/g, " ")
     .trim();
 
   if (!normal) return false;
   if (normal.split(" ").length > MAX_WORDS) return false;
-  return BACKCHANNELS_DE.has(normal);
+  return phrases.includes(normal);
 }
 
 /**

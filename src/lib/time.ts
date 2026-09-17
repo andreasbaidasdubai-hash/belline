@@ -1,4 +1,4 @@
-import type { DateStr, Minutes } from "./types";
+import type { DateStr, Minutes, VenueLanguage } from "./types";
 
 const DAY_NAMES = [
   "Sunday",
@@ -205,4 +205,23 @@ export function minutesToGerman(m: Minutes): string {
   const h = Math.floor(m / 60) % 24;
   const min = m % 60;
   return min === 0 ? `${h} Uhr` : `${h}:${String(min).padStart(2, "0")} Uhr`;
+}
+
+/**
+ * A booking's day and time as a language writes them in a confirmation, a
+ * reminder or on the manage page. English is "Friday 12 September" and "7:30
+ * PM"; German "Freitag, 12. September" and "19:30 Uhr". A language without its
+ * own forms is written the English way.
+ */
+const WRITTEN: Partial<Record<VenueLanguage, { date: (date: DateStr, timezone?: string) => string; time: (m: Minutes) => string }>> = {
+  en: { date: dateToSpoken, time: minutesToSpoken },
+  de: { date: dateToGerman, time: minutesToGerman },
+};
+
+export function dateWrittenIn(language: VenueLanguage, date: DateStr, timezone?: string): string {
+  return (WRITTEN[language] ?? WRITTEN.en!).date(date, timezone);
+}
+
+export function minutesToSpokenIn(language: VenueLanguage, m: Minutes): string {
+  return (WRITTEN[language] ?? WRITTEN.en!).time(m);
 }

@@ -10,6 +10,8 @@
  * a config field rather than a constant. See `VOICE_MODELS`.
  */
 
+import { languageEntry, type LanguageCode, type LanguageVariant } from "../../config/languages";
+
 /**
  * The models worth offering. Anything slower than turbo makes the caller wait
  * through a silence they read as "it didn't hear me", which costs more than
@@ -70,21 +72,31 @@ function takesContext(model: string): boolean {
 const TAKES_LANGUAGE_CODE = new Set(["eleven_flash_v2_5", "eleven_turbo_v2_5", "eleven_v3_conversational"]);
 
 /**
- * The voice a German venue speaks in, when it has not chosen one.
+ * The voice a venue speaks a language in, when it has not chosen one.
  *
- * ElevenLabs has no stock voice that is verified as native German, and a voice
- * library voice only works on an account that has added it — so there is no
- * id that is safe to hard-code for everyone. `ELEVENLABS_VOICE_ID_DE` names the
- * German voice added to Belline's account; a German venue still on the house
- * English voice speaks in that one instead. Unset, it keeps its voice, which
- * speaks German on every model above with an accent. The owner can always
- * choose: the agent page lists the voices verified for German first.
+ * ElevenLabs has no stock voice verified as native German, and a voice library
+ * voice only works on an account that has added it — so there is no id that is
+ * safe to hard-code for everyone. The registry names, per regional variant, the
+ * env var holding the voice added to Belline's account (`ELEVENLABS_VOICE_ID_DE`
+ * for German); a venue still on the house English voice speaks that language in
+ * that voice instead. Unset, it keeps its voice, which speaks German on every
+ * model above with an accent. English always keeps the voice the venue chose.
  */
-export function voiceIdFor(agent: { voiceId: string }, language: "en" | "de", env: Record<string, string | undefined> = process.env): string {
-  if (language !== "de") return agent.voiceId;
-  const german = env.ELEVENLABS_VOICE_ID_DE?.trim();
+export function voiceIdFor(
+  agent: { voiceId: string },
+  language: LanguageCode,
+  env: Record<string, string | undefined> = process.env,
+  variant: LanguageVariant = languageEntry(language).variants[0],
+): string {
+  if (language === "en") return agent.voiceId;
+  const own = variant.voiceEnv ? env[variant.voiceEnv]?.trim() : undefined;
   const house = new Set([HOUSE_VOICE_ID, env.ELEVENLABS_VOICE_ID?.trim()].filter(Boolean));
-  return german && house.has(agent.voiceId) ? german : agent.voiceId;
+  return own && house.has(agent.voiceId) ? own : agent.voiceId;
+}
+
+/** The `language_code` pinned for a language, or nothing (English, and anything without one). */
+export function ttsLanguageCodeOf(language: LanguageCode): string | undefined {
+  return languageEntry(language).tts?.languageCode;
 }
 
 /** The English voice every venue starts with (onboarding/index.ts). */
@@ -163,12 +175,12 @@ export interface SpeakOptions {
    * count is the billed figure — `previous_text` is context and not charged.
    */
   onBilled?: (chars: number, model: string) => void;
-  /** The language to pin, for a venue answered in German. Absent is English, sent as nothing. */
-  languageCode?: "de";
+  /** The language to pin (ISO 639-1), for a venue not answered in English. Absent is English, sent as nothing. */
+  languageCode?: string;
 }
 
 /**
- * The request ElevenLabs is sent, without the key. Exported so check:german can
+ * The request ElevenLabs is sent, without the key. Exported so check:languages can
  * pin what a German venue asks for without a network call.
  */
 export function ttsRequest(text: string, opts: SpeakOptions): { url: string; body: Record<string, unknown> } {

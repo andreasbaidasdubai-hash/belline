@@ -5,7 +5,6 @@ import { speechKeyterms } from "@/lib/verticals";
 import { transcribeClip } from "@/lib/providers/stt";
 import { meterClip } from "@/lib/billing/cost";
 import { widgetOpenFor } from "@/lib/embed-preview";
-import { answersIn } from "@/lib/language";
 import { sttLanguageOf } from "@/lib/voice/session";
 
 export const dynamic = "force-dynamic";
@@ -51,8 +50,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
     // voice note about "the terrace" is not written down as something else.
     transcribeClip(audio, type, {
       keyterms: speechKeyterms(visitor.location),
-      // A German venue's visitors speak German, Swiss venues' Swiss German.
-      ...(answersIn(visitor.location) === "en" ? {} : { language: sttLanguageOf(visitor.location) }),
+      // The business's language for website chat — German, Swiss German, or
+      // several at once. English asks exactly what it always did.
+      ...(sttLanguageOf(visitor.location, "web_chat") === "en" ? {} : { language: sttLanguageOf(visitor.location, "web_chat") }),
     }),
   );
 

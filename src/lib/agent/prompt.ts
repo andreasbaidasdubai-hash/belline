@@ -1,9 +1,10 @@
-import type { Location } from "../types";
+import type { Location, VenueLanguage } from "../types";
 import { isRestaurant, terms } from "../verticals";
 import { minutesToClock, todayIn, nowMinutesIn, dateToSpoken } from "../time";
 import { bookingLinkOf, takesRequestsOnly } from "../booking/destination";
 import { requestRulesOf } from "../booking/requests";
-import { answersIn, localeOf } from "../language";
+import { allowedLanguages, formalityOf, languagesFor, variantOf, type LanguageChannel } from "../language";
+import { languageEntry } from "../../config/languages";
 
 /**
  * A clinic's rule about medical detail. In the prompt for every clinic,
@@ -204,7 +205,7 @@ export const AI_DISCLOSURE = (location: Location) =>
   `If anyone asks whether you are a person, a robot or an AI, say plainly that you are ${location.agent.displayName}, the AI assistant for ${location.name}, then carry on helping. Never claim or imply that you are a person.`;
 
 /**
- * Answering in German.
+ * Answering in another language, or in several.
  *
  * One block added to the same prompt, not a translation of it. The rules a
  * receptionist follows — only what this prompt says, never an invented time,
@@ -215,44 +216,98 @@ export const AI_DISCLOSURE = (location: Location) =>
  * is which language, which register, and which of the English examples above
  * do not carry over (times, references, openers).
  *
- * Empty for every venue not answered in German, so an English prompt is the
- * same bytes it always was.
+ * The language-specific part of it — register, formats, examples — is data,
+ * in config/languages.ts. A business answering in one language that is not
+ * English gets that language's block whole, exactly as German venues always
+ * did. One answering in several gets the switching rules and a section per
+ * language. Empty for every English-only business, so an English prompt is
+ * the same bytes it always was.
  */
-export function languageBlock(location: Location, channel: AgentChannel): string {
-  if (answersIn(location) !== "de") return "";
-  const swiss = localeOf(location) === "de-CH";
+export function languageBlock(location: Location, channel: AgentChannel, languageChannel?: LanguageChannel): string {
+  const { main, also, pick } = languagesFor(location, { channel: languageChannel });
+  if (main === "en" && !also.length) return "";
   const t = terms(location);
   const voice = channel === "voice";
+  const nameOf = (code: VenueLanguage) => languageEntry(code).name;
+
+  // One language that is not English: that language's block, whole.
+  if (!also.length) {
+    const register = languageEntry(main).prompt;
+    if (!register) return "";
+    return `\n\n${[`# Language: ${register.heading}`, ...registerLines(location, main, channel, true), voice ? register.onlyLanguage.voice : register.onlyLanguage.text].join("\n")}`;
+  }
+
+  const all = [main, ...also];
+  const listed = (codes: VenueLanguage[]) =>
+    codes.length === 1 ? nameOf(codes[0]) : `${codes.slice(0, -1).map(nameOf).join(", ")} and ${nameOf(codes[codes.length - 1])}`;
   const lines = [
-    `# Language: German`,
-    `Everyone who gets in touch with ${location.name} is answered in German. Every word you ${voice ? "say" : "write"} is German, even though these instructions are in English: the English examples above show the manner, not the words.`,
+    `# Languages`,
+    `${location.name} answers in ${nameOf(main)}, and also in ${listed(also)}. These instructions are in English; every word you ${voice ? "say" : "write"} is in whichever of those languages the ${t.guest} is using.`,
     "",
-    `- Always the formal "Sie", never "du" — even if the ${t.guest} says "du" — unless a house rule below says otherwise.`,
-    `- Natural front-desk German: short, warm and polite without being stiff. "Gern", "Einen Moment", "Das passt", "Sehr gern". Never translated English — not "Absolut!", not "Das ist eine großartige Frage".`,
-    ...(swiss ? [`- ${location.name} is in Switzerland. Write "ss", never "ß" ("Strasse", "grüssen"), and prices in Franken.`] : []),
     ...(voice
-      ? [
-          `- Write times as digits with "Uhr": "14:30 Uhr", "9 Uhr". The voice reads them out properly. Never "halb drei", and never AM or PM.`,
-          `- Dates as "Donnerstag, 17. September". Prices as "69 Euro" or "45 Franken".`,
-          `- Write a booking reference as it is, "R7K2". It is spelled out letter by letter for the caller automatically.`,
-          `- By the time your reply plays, the caller has already heard "Gerne", "Alles klar", "Genau" or "Einen Moment". Never open with those, nor with "Natürlich" or "Selbstverständlich".`,
-        ]
+      ? pick === "ask"
+        ? [`- The greeting offered ${listed(all)}. Carry on in whichever the caller chooses — by speaking it or by naming it — and stay in it.`]
+        : [
+            `- The greeting was in ${nameOf(main)}. The moment the caller speaks ${listed(also)}, answer in that language, and stay in it for the rest of the call.`,
+          ]
       : [
-          `- Times on the 24-hour clock, "14:30 Uhr", never AM or PM. Dates as "Donnerstag, 17. September". Prices as "69 €" or "CHF 45".`,
-          `- "Guten Tag – wie kann ich Ihnen helfen?" is the whole greeting.`,
+          `- Answer in the language of the ${t.guest}'s latest message when it is ${listed(all)}, and switch the moment they switch. Otherwise answer in ${nameOf(main)}.`,
         ]),
-    `- If anyone asks whether you are a person, a robot or an AI, say plainly that you are the AI assistant for ${location.name} ("Ich bin die KI-Assistenz von ${location.name}"), then carry on helping. Never claim to be a person.`,
-    `- Every rule above applies unchanged in German. Answer only from what this prompt says about ${location.name}. Never invent a price, a time, availability or a policy. Take requests and messages with the tools as described. "Gebucht", "bestätigt", "reserviert", "eingetragen" and "bis dann" tell someone they hold a booking, exactly as their English equivalents do, and follow the same rules.`,
-    `- Tools stay exactly as specified: tool names and fields are not translated, dates are YYYY-MM-DD and times HH:MM. Pass services and people by the ids and names in this prompt, even when the ${t.guest} says them differently in German.`,
-    ...(location.vertical === "clinic" ? [`- The emergency number in Germany, Austria and Switzerland is 112.`] : []),
-    voice
-      ? `- This line listens for German. If a caller cannot carry on in German, say once, in simple English, that the team will call them back, take their name and number with take_message, and close politely. Do not try to hold the conversation in another language.`
-      : `- If someone writes to you in English, answer in English for the rest of the conversation. In any other language, answer in German and offer English in one short sentence.`,
+    `- If someone uses any other language, carry on in ${nameOf(main)} and say once, in one short sentence, that you can speak ${all.map((c) => languageEntry(c).nativeName).join(", ")}. Do not try to hold the conversation in another language.`,
+    ...(voice ? [`- When the call has settled on a language, the note at the end of these instructions says which. Follow it.`] : []),
+    `- Every rule above applies unchanged in every language. Tools stay exactly as specified: tool names and fields are not translated, dates are YYYY-MM-DD and times HH:MM.`,
   ];
+  for (const code of all) {
+    const register = languageEntry(code).prompt;
+    if (!register) continue;
+    lines.push("", `## When answering in ${register.heading}`, ...registerLines(location, code, channel, false));
+  }
   return `\n\n${lines.join("\n")}`;
 }
 
-export function staticPrompt(location: Location, channel: AgentChannel = "voice"): string {
+/** A language's register lines for this business and channel, placeholders filled. */
+function registerLines(location: Location, code: VenueLanguage, channel: AgentChannel, only: boolean): string[] {
+  const register = languageEntry(code).prompt;
+  if (!register) return [];
+  const t = terms(location);
+  const voice = channel === "voice";
+  const variant = variantOf(location, code).tag;
+  const formality = formalityOf(location, code);
+  return register.lines
+    .filter(({ when }) => {
+      if (!when) return true;
+      if (when === "voice") return voice;
+      if (when === "text") return !voice;
+      if (when === "clinic") return location.vertical === "clinic";
+      if (when.startsWith("variant:")) return when.slice("variant:".length) === variant;
+      if (when.startsWith("formality:")) return when.slice("formality:".length) === formality;
+      return false;
+    })
+    .map(({ text }) =>
+      text.replace(/\{(name|guest|verb)\}/g, (_, k: string) => (k === "name" ? location.name : k === "guest" ? t.guest : voice ? "say" : "write")),
+    );
+}
+
+/**
+ * The note that tells the model which language a call has settled on. In the
+ * volatile half of the system prompt, so the cached half is the same on every
+ * call. Empty where there is nothing to choose between.
+ */
+export function conversationLanguageNote(
+  location: Location,
+  current: VenueLanguage | null,
+  languageChannel?: LanguageChannel,
+  channel: AgentChannel = "voice",
+): string {
+  const allowed = allowedLanguages(location, { channel: languageChannel });
+  if (allowed.length < 2 || !current || !allowed.includes(current)) return "";
+  const name = languageEntry(current).name;
+  return channel === "voice"
+    ? `This call has settled on ${name}: answer in ${name} from now on.`
+    : `The latest message is in ${name}: answer it in ${name}.`;
+}
+
+export function staticPrompt(location: Location, channel: AgentChannel = "voice", languageChannel?: LanguageChannel): string {
   const a = location.agent;
   const t = terms(location);
   // Belline's own line sells Belline and books nothing: no diary, no booking
@@ -324,7 +379,7 @@ ${a.persona}
 
 ${AI_DISCLOSURE(location)}
 
-${medium}${languageBlock(location, channel)}
+${medium}${languageBlock(location, channel, languageChannel)}
 
 ${bookingRules}${bookingRulesRest}# House rules you must follow
 ${[...a.policies, ...(requestsOnly ? rules.neverSay.map((s) => `Never say: ${s}`) : [])].map((p) => `- ${p}`).join("\n")}${

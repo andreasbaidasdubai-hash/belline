@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import PhoneField, { type PhoneFieldHandle } from "@/components/PhoneField";
 import { readStoredPhone } from "@/lib/phone";
 import type { AgentConfig, VenueLanguage } from "@/lib/types";
-import { LANGUAGES } from "@/lib/customer-copy";
 import {
   VOICE_MODELS,
   DEFAULT_VOICE_MODEL,
@@ -61,17 +60,20 @@ export default function AgentEditor({
   country = "AE",
   initialLanguage = "en",
   languageOpen = false,
+  languageSettings,
 }: {
   locationId: string;
   initial: AgentConfig;
   /** The business's own market (ISO), for the transfer number's country picker. */
   country?: string;
-  /** What the venue has saved. See language.ts. */
+  /** The business's main language, for listing the voices that speak it first. See language.ts. */
   initialLanguage?: VenueLanguage;
-  /** Whether the `language.de` flag lets an owner choose. Off, the picker is not shown. */
+  /** Whether any language but English can be chosen on this deployment. */
   languageOpen?: boolean;
+  /** The languages panel (LanguageSettings.tsx), which saves itself. */
+  languageSettings?: React.ReactNode;
 }) {
-  const [language, setLanguage] = useState<VenueLanguage>(initialLanguage);
+  const language = initialLanguage;
   const transfer = useRef<PhoneFieldHandle | null>(null);
   const [saveError, setSaveError] = useState<{ message: string; field?: string } | null>(null);
   const initialTransfer = readStoredPhone(initial.transferNumber, country).e164 ?? (initial.transferNumber ?? "");
@@ -82,7 +84,7 @@ export default function AgentEditor({
   // Whether anything differs from what was loaded. The Save button was three
   // and a half thousand pixels below the first field with no sign that leaving
   // would lose the edit.
-  const dirty = JSON.stringify(agent) !== JSON.stringify(initial) || language !== initialLanguage;
+  const dirty = JSON.stringify(agent) !== JSON.stringify(initial);
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [voiceNote, setVoiceNote] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -179,7 +181,7 @@ export default function AgentEditor({
       const res = await fetch("/api/agent", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locationId, agent, ...(languageOpen ? { language } : {}) }),
+        body: JSON.stringify({ locationId, agent }),
       });
       if (res.ok) {
         setSaved(true);
@@ -202,27 +204,7 @@ export default function AgentEditor({
           <input value={agent.displayName} onChange={(e) => set("displayName", e.target.value)} />
         </Field>
 
-        {languageOpen && (
-          <Field
-            label="Language customers are answered in"
-            hint="Calls, the website button, chat, WhatsApp, and the texts and emails customers get. Your dashboard stays in English. Write the opening line below in the same language."
-          >
-            <select
-              aria-label="Language customers are answered in"
-              value={language}
-              onChange={(e) => {
-                setLanguage(e.target.value === "de" ? "de" : "en");
-                setSaved(false);
-              }}
-            >
-              {LANGUAGES.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-        )}
+        {languageSettings}
 
         <Field
           label="Opening line"

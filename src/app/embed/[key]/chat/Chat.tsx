@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fill, type CHAT_KEYS } from "@/lib/customer-copy";
+import { languageEntry, type LanguageCode } from "@/config/languages";
 
 type ChatKey = (typeof CHAT_KEYS)[number];
 
@@ -78,6 +79,7 @@ export default function Chat({
   voiceHref,
   language = "en",
   copy,
+  notice,
 }: {
   embedKey: string;
   freshToken: string;
@@ -85,7 +87,9 @@ export default function Chat({
   agentName: string;
   voiceHref?: string;
   /** The venue's language. Set with `copy` for a venue not answered in English. */
-  language?: "en" | "de";
+  language?: LanguageCode;
+  /** "Also speaks Deutsch", in the main language, where the business answers in more than one. */
+  notice?: string;
   /**
    * This panel's lines in the visitor's language, from customer-copy.ts. Absent
    * for English, which keeps the lines written below.
@@ -392,7 +396,11 @@ export default function Chat({
   const withPerson = status === "HUMAN_ACTIVE";
 
   return (
-    <div className="bl-wrap" lang={language === "en" ? undefined : language}>
+    <div
+      className="bl-wrap"
+      lang={language === "en" ? undefined : language}
+      dir={languageEntry(language).dir === "rtl" ? "rtl" : undefined}
+    >
       <style>{CSS}</style>
 
       <header>
@@ -416,6 +424,12 @@ export default function Chat({
                 ? tx("chat.passing", "Passing you to the team")
                 : tx("chat.replies", `${agentName} · replies in seconds`, { agent: agentName })}
           </em>
+          {/* Each language name as its speakers write it, so an Arabic name lays out right to left inside an English line. */}
+          {notice && (
+            <small className="bl-languages" dir="auto">
+              {notice}
+            </small>
+          )}
         </span>
         {voiceHref && (
           <a className="bl-swap" href={voiceHref}>
@@ -674,6 +688,7 @@ body { background: #FFFFFF }
 .bl-who strong { font-weight: 600; font-size: 14.5px; letter-spacing: -.01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .bl-who em { font-style: normal; font-size: 12.5px; color: #5B6472 }
+.bl-languages { font-size: 11.5px; color: #5B6472; unicode-bidi: plaintext }
 .bl-swap {
   margin-left: auto; flex: none; color: #1A4FD6; text-decoration: none;
   font-size: 12.5px; padding: 6px 11px; border-radius: 999px;
