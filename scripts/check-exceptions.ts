@@ -196,7 +196,8 @@ await test("the setup step shows the owner's open ticket", () => {
 console.log("\n\x1b[1mWhere rows come from\x1b[0m\n");
 
 await test("Go live without a number opens pool_empty; a handoff on Belline's own line opens handoff_requested", () => {
-  assert.match(source("src/app/(app)/golive/page.tsx"), /kind: "pool_empty"/);
+  // The phone section Channels, Phone and the setup step render (was /golive).
+  assert.match(source("src/app/(app)/channels/sections.tsx"), /kind: "pool_empty"/);
   const respond = source("src/lib/reception/respond.ts");
   assert.match(respond, /location\.tenantId === BELLINE_TENANT_ID[\s\S]{0,200}kind: "handoff_requested"/);
 });

@@ -5,7 +5,7 @@ import type { SelftestResult } from "@/lib/types";
 import { SkipLink } from "./StepActions";
 
 /**
- * Step 7: the automatic checks.
+ * The checks step: the automatic checks.
  *
  * One button, then a row per check. While they run every row says so; when
  * they finish each shows a tick, or the question, Belline's exact reply, the
