@@ -30,7 +30,7 @@ const env: Record<string, string> = {
   // and a server that dies mid-request looks like a product bug from the test.
   // Asking for more than the machine can commit fails the same way, so this is
   // a ceiling a laptop with a couple of gigabytes free can actually give.
-  NODE_OPTIONS: "--max-old-space-size=2048",
+  NODE_OPTIONS: "--max-old-space-size=3072",
 };
 process.env.ZT_DATA_DIR = env.DATA_DIR;
 fs.mkdirSync(env.DATA_DIR, { recursive: true });
