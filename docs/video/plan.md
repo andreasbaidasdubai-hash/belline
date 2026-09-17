@@ -91,6 +91,15 @@ speaks.
 8. Gate, typecheck, `next build`, manual QA screenshots, `README.md`,
    `privacy-review.md`.
 
+## Revision (founder, same day): the greeting bubble
+
+The entry point became a round bubble that opens on page load with a muted,
+looping greeting clip (or poster or placeholder) and a caption, and becomes the
+round call view on a tap. A live session still starts only on the tap. The
+clip is generated once by an owner-run script against Tavus's video
+generation API; `VIDEO_GREETING_CLIP_URL` / `VIDEO_GREETING_POSTER_URL` (or
+a venue setting) point at it.
+
 ## Out of scope for the prototype
 
 Per-venue faces and PALs beyond one default (the settings shape exists),

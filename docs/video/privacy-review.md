@@ -25,6 +25,13 @@ the room. Daily's SDK bundles error reporting (`@sentry/browser` is a
 dependency). **Review:** whether Daily's client telemetry sends anything about
 the visitor, and whether it can be disabled.
 
+**The greeting bubble** sends nothing about the visitor anywhere: it plays a
+pre-made clip from Belline's own host (or the venue's configured URL) and makes
+no request to Tavus, Daily or the session route until the visitor taps. The
+dismissal is kept in `sessionStorage` only. **Review:** a clip on a
+third-party CDN would let that CDN see page views; prefer serving it from
+`public/video`.
+
 ## 2. Retention at Tavus — decide and configure
 
 - **Transcripts:** Tavus stores a conversation transcript and returns it in

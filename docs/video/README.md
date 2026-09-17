@@ -14,9 +14,25 @@ Off everywhere by default. Hidden in production until approved.
 
 ## How it works
 
+**The greeting bubble.** When video is on for a venue, a round bubble opens on
+page load at the top of the launcher stack (`public/embed-video.js`, loaded
+by `embed.js` / `site.js` only when the widget config says `video: true`).
+It plays the venue's short greeting clip **muted, looping, inline**, loaded
+after first paint over a poster, captioned *"Hi, I'm Belle, the AI concierge.
+Tap to talk."*, with an "AI concierge" label. Reduced motion or Data Saver: the
+poster, no video. No clip: a lettered placeholder (plus "MOCK — not a live
+avatar" in mock mode). **Nothing live exists yet**: no session, no microphone,
+no Daily. A tap on the bubble or "Talk to Belle" opens the round call view
+(`/embed/<key>/video?autostart=1`), which asks for the microphone and only
+then creates the Tavus session. The × dismisses the bubble for the browser
+session (sessionStorage); a Video button in the stack brings it back. Closing
+during a call posts an end to the frame, then removes it; the frame's unload
+beacon is the backstop.
+
 ```
-visitor ─ embed.js / site.js ─ iframe /embed/<key>/video ─ VideoPanel
-   Start ─► microphone ─► POST /api/video/<key>/session ─► Tavus: PAL + conversation
+visitor ─ embed.js / site.js ─ embed-video.js bubble (muted clip, no session)
+   tap ─► iframe /embed/<key>/video?autostart=1 ─ VideoPanel
+   microphone ─► POST /api/video/<key>/session ─► Tavus: PAL + conversation
    panel joins the Daily room (daily-js, loaded on Start) ◄── room URL + meeting token
    Tavus ─► POST /api/video/llm/chat/completions (SSE) ─► Belline's receptionist
    Tavus ─► POST /api/video/webhook/tavus?t=… (joined, shutdown, transcript)
@@ -54,7 +70,9 @@ layer → SSE. Time to first token is recorded per turn.
 | `src/lib/video/metrics.ts` | Timings to the event table and an in-memory list |
 | `src/lib/video/client/machine.ts` | Panel state machine, Tavus event mapping (pure) |
 | `src/lib/video/client/calls.ts` | Daily call (lazy `daily-js`) and mock call adapters |
-| `src/app/embed/[key]/video/` | The panel page and `VideoPanel.tsx` |
+| `public/embed-video.js` | The greeting bubble and the call frame it opens (no SDK, no session) |
+| `scripts/video-greeting-clip.ts` | Owner-run: generates the greeting clip with Tavus (`npm run video:clip`) |
+| `src/app/embed/[key]/video/` | The round call view page and `VideoPanel.tsx` |
 | `src/app/api/video/…` | session start/end/handover, event, mock relay, webhook, LLM |
 | `src/app/(internal)/sales/video/`, `src/app/api/sales/video/` | Staff console |
 | `public/embed.js`, `public/site.js`, `public/site.css` | Launcher hooks |
@@ -92,6 +110,8 @@ All placeholders are in `.env.example`.
 | `VIDEO_TAVUS_SPECULATIVE` | optional | `on` enables Tavus `speculative_inference` (off: a half-heard sentence must not run a booking) |
 | `VIDEO_TAVUS_TEST_MODE` | optional | `on`: free, unjoinable conversations — credential check only |
 | `VIDEO_TAVUS_DELETE_AFTER_END` | optional | `on`: hard-delete each conversation at Tavus when it ends |
+| `VIDEO_GREETING_CLIP_URL` | optional | The bubble's muted greeting clip (https, or a path on the app). Per venue: `greetingClipUrl` in `video.json` |
+| `VIDEO_GREETING_POSTER_URL` | optional | Its poster image (shown first, and instead of the clip under reduced motion / Data Saver) |
 
 Missing credentials disable video quietly: no button, and the panel page and
 session route answer with a readable refusal plus Chat and Voice.
@@ -119,14 +139,21 @@ session route answer with a readable refusal plus Chat and Voice.
 6. **Secret.** Generate 48 random characters for **`VIDEO_LLM_SECRET`**.
 7. **(Shared mode only)** set the template PAL's LLM API key to a random value,
    put the same value in `VIDEO_LLM_SHARED_KEY`, and `VIDEO_TAVUS_PAL_MODE=shared`.
-8. **Optional credential check:** `VIDEO_TAVUS_TEST_MODE=on` for one start — Tavus
+8. **Greeting clip (once, costs credits).** From a machine with the key:
+   `node --import tsx --env-file=.env scripts/video-greeting-clip.ts --agent Belle --business Belline --yes --download public/video`.
+   It calls `POST /v2/videos` with `replica_id` = the face and the greeting script, polls
+   `GET /v2/videos/{id}` until `ready`, and saves `greeting-rf90eb925bd8.mp4` and `.jpg`.
+   Re-encode the mp4 small (a few hundred KB, a few seconds), commit it under `public/video/`,
+   and set `VIDEO_GREETING_CLIP_URL=/video/greeting-rf90eb925bd8.mp4` and
+   `VIDEO_GREETING_POSTER_URL=/video/greeting-rf90eb925bd8.jpg`. Without them the bubble shows a placeholder.
+9. **Optional credential check:** `VIDEO_TAVUS_TEST_MODE=on` for one start — Tavus
    creates a free conversation you cannot join; turn it off again.
 
 ## Local testing (mock, no keys)
 
 ```powershell
 $env:DATABASE_URL = $null
-node --import tsx scripts/check-video.ts                       # 23 cases
+node --import tsx scripts/check-video.ts                       # 29 cases
 npx playwright test --config playwright.video.config.ts        # panel e2e, mock
 ```
 
@@ -196,34 +223,47 @@ configured, and shown as medians in the sales console.
 - Sessions live in one process; a restart ends them (as for voice calls).
 - Speculative inference is off, which costs some latency.
 - Perception and camera are not built (by design for the prototype).
+- The greeting clip is a pre-rendered video, not the live avatar; the live face
+  appears only after the tap. On iOS the first tap may need a second one to hear
+  sound ("Tap to hear Belle"), because the tap happened in the host page and the
+  audio plays in the frame.
+- The widget config is cached up to 60 s, so turning video off can leave a
+  bubble visible for a minute; a tap then gets a readable refusal, not a session.
 
 ## Owner test script (staging, 20 minutes)
 
 1. **Wiring.** Sales console → Video: flag on, provider `tavus`, no missing
-   config, `loc_belline` listed. Open belline.ai staging: a round camera button
-   above the stack. (If the model route logs 401s, Tavus is not sending the
-   token as Bearer — tell engineering.)
-2. **Start.** Click it → intro text → **Start video call** → allow the mic.
-   Time to a face on screen and the greeting ("Hi, I'm Belle, the AI concierge
-   for Belline…"). Console shows *Room created*, *First frame*, *First words*.
-3. **Visual realism and lip-sync.** Watch the mouth on long sentences, numbers
+   config, `loc_belline` listed. (If the model route logs 401s, Tavus is not
+   sending the token as Bearer — tell engineering.)
+2. **Bubble on load.** Open belline.ai staging in a fresh private window: the
+   round bubble greets above the buttons with the muted clip (or poster) and
+   the caption. Nothing to hear yet. In Tavus's dashboard, **no new
+   conversation** has appeared from loading the page; reload a few times: still
+   none. Check it lines up with WhatsApp / Write / Speak and nothing overlaps.
+3. **Dismiss.** Press ×: gone, and a Video button takes its place; open another
+   page on the site: no bubble. The Video button brings it back.
+4. **Start.** Tap the bubble → the round call view → allow the mic. Time to a
+   live face and the greeting ("Hi, I'm Belle, the AI concierge for Belline…").
+   Console shows *Room created*, *First frame*, *First words*. Press × mid-call
+   once: the Tavus conversation ends within seconds.
+5. **Visual realism and lip-sync.** Watch the mouth on long sentences, numbers
    and names. Note any drift or frozen frames.
-4. **Latency.** Ask five short questions; count seconds from when you stop
+6. **Latency.** Ask five short questions; count seconds from when you stop
    speaking to the first word. Compare with the console's *Model: first words*.
-5. **Interruptions.** Talk over Belle mid-sentence twice. She should stop and
+7. **Interruptions.** Talk over Belle mid-sentence twice. She should stop and
    answer the new thing without repeating herself.
-6. **FAQ accuracy.** Ask the price, the trial, what Belline does, and one thing
+8. **FAQ accuracy.** Ask the price, the trial, what Belline does, and one thing
    not in its knowledge — she must say she doesn't know and offer a person.
-7. **Honesty.** Ask "Are you a real person?" — she must say she is an AI.
-8. **Booking/lead behaviour.** Say you run a salon, give a name and email. She
+9. **Honesty.** Ask "Are you a real person?" — she must say she is an AI.
+10. **Booking/lead behaviour.** Say you run a salon, give a name and email. She
    should read details back and confirm before saving; check Sales → Enquiries
    for the lead.
-9. **Talk to a person.** Press the button: Belle asks for details; the call
+11. **Talk to a person.** Press the button: Belle asks for details; the call
    appears for follow-up.
-10. **Limits.** Stay on until the warning banner, then the automatic end.
-11. **Mobile.** iPhone Safari and Android Chrome: open, Start (audio must play
-    without a second tap), mute, rotate to landscape, lock the phone for 10 s,
+12. **Limits.** Stay on until the warning banner, then the automatic end.
+13. **Mobile.** iPhone Safari and Android Chrome: the bubble (~128px) clear of the
+    buttons and the home bar; tap it (note whether sound needed "Tap to hear Belle"), mute, rotate to landscape, lock the phone for 10 s,
     end. No horizontal scrolling; buttons clear of the browser bars.
-12. **Kill switch.** During a call press *Turn video off everywhere now*: the call
+14. **Kill switch.** During a call press *Turn video off everywhere now*: the call
     ends politely within a turn and the button disappears within a minute.
-13. **Tavus dashboard.** No leftover `belline-vs_*` PALs; conversations ended.
+15. **Tavus dashboard.** No leftover `belline-vs_*` PALs; conversations ended.
