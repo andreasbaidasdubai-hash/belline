@@ -873,6 +873,18 @@ function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; storage?:
     parent: Node | null;
     listeners: Record<string, ((e?: unknown) => void)[]>;
     style: Record<string, string>;
+    setAttribute(k: string, v: string): void;
+    removeAttribute(k: string): void;
+    getAttribute(k: string): string | null;
+    appendChild(child: Node): Node;
+    insertBefore(child: Node, ref: Node | null): Node;
+    remove(): void;
+    addEventListener(type: string, fn: (e?: unknown) => void): void;
+    removeEventListener(type: string, fn: (e?: unknown) => void): void;
+    click(): void;
+    focus(): void;
+    play(): Promise<void>;
+    pause(): void;
     [k: string]: unknown;
   };
   const fetched: string[] = [];
@@ -987,11 +999,11 @@ function mountBubble(page: ReturnType<typeof fakePage>, config: Record<string, u
     origin: "https://app.example",
     key: "be_site",
     hostOrigin: "https://venue.example",
-    place: (bubble: unknown) => (page.dock as { appendChild(n: unknown): void }).appendChild(bubble),
+    place: (bubble: unknown) => page.dock.appendChild(bubble as Parameters<typeof page.dock.appendChild>[0]),
     placeCall: (frame: unknown, shut: unknown) => {
       calls.frames.push(frame);
-      (page.body as { appendChild(n: unknown): void }).appendChild(frame);
-      (page.body as { appendChild(n: unknown): void }).appendChild(shut);
+      page.body.appendChild(frame as Parameters<typeof page.body.appendChild>[0]);
+      page.body.appendChild(shut as Parameters<typeof page.body.appendChild>[0]);
     },
     onCallClosed: () => calls.closed++,
   });
