@@ -21,7 +21,8 @@ import { readVideoControl } from "./control";
 import { recordVideoMetric } from "./metrics";
 import { endVideoSession, getVideoSession, markVideoJoined, type VideoSession } from "./sessions";
 import { stubVideoAgent, type VideoAgent } from "./stub-agent";
-import { contentText, tokenFromSystemMessages, verifyVideoToken } from "./tokens";
+import { contentText, tokenFromSystemMessages, venuePalKey, verifyVideoToken } from "./tokens";
+import { markSharedContextBroken } from "./shared-pal";
 
 /**
  * Belline's receptionist, as the video provider's language model.
@@ -76,6 +77,15 @@ function sameSecret(a: string, b: string): boolean {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
+/** Which venue's shared PAL a key belongs to, among the PALs Belline has made. */
+function venueOfPalKey(credential: string, env: Env): string | null {
+  for (const record of Object.keys(readVideoControl().pals)) {
+    const [locationId, faceId] = record.split("|");
+    if (locationId && faceId && sameSecret(credential, venuePalKey(locationId, faceId, env))) return locationId;
+  }
+  return null;
+}
+
 function lastUserText(messages: ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]?.role === "user") return contentText(messages[i].content);
@@ -92,11 +102,28 @@ export function authoriseVideoLlm(
   const credential = credentialOf(req);
   // Per-session PAL: the credential is the token.
   let claim = verifyVideoToken(credential, "llm", env);
-  // Shared PAL: a static key, and the token from a system message — never from
-  // anything the visitor said.
-  const shared = (env.VIDEO_LLM_SHARED_KEY ?? "").trim();
-  if (!claim && shared && credential && sameSecret(credential, shared)) {
-    claim = verifyVideoToken(tokenFromSystemMessages(messages), "llm", env);
+  // A venue's shared PAL: the credential is that venue's derived key, and the
+  // token comes from a system message — never from anything the visitor said.
+  // Both must name the same venue, and the session's own face: a validly signed
+  // token for another venue's session, arriving through this venue's PAL, is
+  // refused exactly as a forged one is.
+  if (!claim && credential.startsWith("bvk1_")) {
+    const token = tokenFromSystemMessages(messages);
+    const tokenClaim = verifyVideoToken(token, "llm", env);
+    const target = tokenClaim ? getVideoSession(tokenClaim.sessionId) : undefined;
+    if (
+      tokenClaim &&
+      target?.faceId &&
+      target.locationId === tokenClaim.locationId &&
+      sameSecret(credential, venuePalKey(tokenClaim.locationId, target.faceId, env))
+    ) {
+      claim = tokenClaim;
+    } else if (!token) {
+      // A real venue key with no token anywhere in the system messages: Tavus
+      // did not put `conversational_context` where the shared mode needs it.
+      const venue = venueOfPalKey(credential, env);
+      if (venue) markSharedContextBroken(venue);
+    }
   }
   if (!claim) return { ok: false, response: openAiError(401, "Not authorised.", "authentication_error") };
 

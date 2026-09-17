@@ -13,6 +13,11 @@ import type { VideoProviderName } from "./types";
 
 type Env = Record<string, string | undefined>;
 
+/**
+ * `shared` (default): one PAL per venue and face, created once by Belline and
+ * reused; the session token rides in `conversational_context`. `per_session`:
+ * a PAL made and deleted around every call (slower start; the rollback).
+ */
 export type PalMode = "per_session" | "shared";
 
 export interface VideoConfig {
@@ -21,7 +26,7 @@ export interface VideoConfig {
     apiKey: string;
     /** The stock face, e.g. rf90eb925bd8. Goes in `face_id`. */
     faceId: string;
-    /** A PAL to copy voice and turn-taking from, or to use as-is in shared mode. */
+    /** A PAL to copy voice and turn-taking from. Never used as-is: Belline makes its own PALs. */
     palId: string;
     palMode: PalMode;
     apiBase: string;
@@ -31,6 +36,13 @@ export interface VideoConfig {
     speculative: boolean;
     /** Hard-delete the conversation at Tavus when it ends (its transcript with it). */
     deleteAfterEnd: boolean;
+    /**
+     * Option (b) of the voice plan (docs/video/voice.md): make the face speak
+     * with a public ElevenLabs or Cartesia voice through the PAL's documented
+     * `layers.tts.tts_engine` + `external_voice_id`. Unset: the template PAL's
+     * voice, or the face's own `default_voice_id`.
+     */
+    externalVoice: { engine: "elevenlabs" | "cartesia"; voiceId: string } | null;
   };
   /** Signs the per-session tokens. */
   llmSecret: string;
@@ -65,6 +77,13 @@ function on(raw: string | undefined): boolean {
   return ["on", "1", "true", "yes"].includes((raw ?? "").trim().toLowerCase());
 }
 
+function externalVoice(env: Env): VideoConfig["tavus"]["externalVoice"] {
+  const engine = (env.VIDEO_TAVUS_TTS_ENGINE ?? "").trim().toLowerCase();
+  const voiceId = (env.VIDEO_TAVUS_EXTERNAL_VOICE_ID ?? "").trim();
+  if ((engine !== "elevenlabs" && engine !== "cartesia") || !/^[A-Za-z0-9-]{8,64}$/.test(voiceId)) return null;
+  return { engine, voiceId };
+}
+
 export function videoConfig(env: Env = process.env): VideoConfig {
   const provider: VideoProviderName = (env.VIDEO_AVATAR_PROVIDER ?? "").trim().toLowerCase() === "mock" ? "mock" : "tavus";
   const maxCallSeconds = num(env.VIDEO_MAX_CALL_SECONDS, 300, 30, 1800);
@@ -74,11 +93,12 @@ export function videoConfig(env: Env = process.env): VideoConfig {
       apiKey: (env.TAVUS_API_KEY ?? "").trim(),
       faceId: (env.TAVUS_FACE_ID ?? "").trim(),
       palId: (env.TAVUS_PAL_ID ?? "").trim(),
-      palMode: (env.VIDEO_TAVUS_PAL_MODE ?? "").trim().toLowerCase() === "shared" ? "shared" : "per_session",
+      palMode: (env.VIDEO_TAVUS_PAL_MODE ?? "").trim().toLowerCase() === "per_session" ? "per_session" : "shared",
       apiBase: (env.TAVUS_API_BASE ?? "https://tavusapi.com").trim().replace(/\/+$/, ""),
       testMode: on(env.VIDEO_TAVUS_TEST_MODE),
       speculative: on(env.VIDEO_TAVUS_SPECULATIVE),
       deleteAfterEnd: on(env.VIDEO_TAVUS_DELETE_AFTER_END),
+      externalVoice: externalVoice(env),
     },
     llmSecret: (env.VIDEO_LLM_SECRET ?? "").trim(),
     publicOrigin: (env.VIDEO_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN ?? "https://app.belline.ai").trim().replace(/\/+$/, ""),
@@ -103,7 +123,6 @@ export function missingVideoConfig(config: VideoConfig): string[] {
   if (!config.tavus.apiKey) missing.push("TAVUS_API_KEY");
   if (!config.tavus.faceId) missing.push("TAVUS_FACE_ID");
   if (!config.llmSecret) missing.push("VIDEO_LLM_SECRET");
-  if (config.tavus.palMode === "shared" && !config.tavus.palId) missing.push("TAVUS_PAL_ID");
   if (!/^https:\/\//.test(config.publicOrigin)) missing.push("VIDEO_PUBLIC_ORIGIN (https)");
   return missing;
 }

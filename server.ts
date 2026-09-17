@@ -72,6 +72,14 @@ if (stubsRequested()) {
 }
 const reconciled = reconcileStaleCalls();
 void warmGreetings();
+// The video receptionist's shared PALs, made before the first visitor taps
+// (lib/video/prewarm.ts). Skipped unless video is on and uses Tavus.
+void import("./src/lib/video/prewarm")
+  .then(({ prewarmAllowlistedVenues }) => prewarmAllowlistedVenues())
+  .then((warmed) => {
+    if (Object.keys(warmed).length) console.log(`[video] shared PALs at boot: ${JSON.stringify(warmed)}`);
+  })
+  .catch(() => undefined);
 // Our own WhatsApp number, connected the moment its credentials exist. Logged
 // either way, because "is Belle on WhatsApp yet?" should be answerable from
 // the boot log without opening Meta's console.

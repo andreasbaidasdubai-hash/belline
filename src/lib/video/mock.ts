@@ -87,6 +87,9 @@ export class MockVideoProvider implements VideoAvatarProvider {
       conversationId: `mock_${crypto.randomBytes(6).toString("hex")}`,
       roomUrl: `${MOCK_ROOM_PREFIX}${input.sessionId}`,
       meetingToken: `mock-meeting-${crypto.randomBytes(8).toString("hex")}`,
+      faceId: input.faceId,
+      // The mock's stand-in face is drawn on green when asked (client/calls.ts).
+      greenscreen: Boolean(input.greenscreen),
     };
   }
 

@@ -4,6 +4,7 @@ import { isBellineStaff } from "@/lib/auth";
 import { getLocation } from "@/lib/store";
 import { readVideoControl, setKillSwitch, setVenueVideo } from "@/lib/video/control";
 import { endAllVideoSessions, endVideoSession, liveVideoSessions } from "@/lib/video/sessions";
+import { prewarmVideoVenueSoon } from "@/lib/video/prewarm";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,9 @@ export async function POST(request: Request) {
       setVenueVideo(locationId, body.action === "allow", by);
       if (body.action === "disallow") {
         await Promise.all(liveVideoSessions(locationId).map((s) => endVideoSession(s.id, "disallowed", { by: "staff" })));
+      } else {
+        // Its shared PAL, made now rather than in the first visitor's call.
+        prewarmVideoVenueSoon({ id: locationId });
       }
       return NextResponse.json({ ok: true, venue: readVideoControl().venues[locationId] });
     }

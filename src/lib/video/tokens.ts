@@ -90,6 +90,18 @@ export function verifyVideoToken(
   return { purpose, sessionId, locationId, expiresAt };
 }
 
+/**
+ * The static `api_key` of a venue's shared PAL: derived, never stored.
+ *
+ * One per venue and face, so the key a model request arrives with names the
+ * venue whose PAL sent it. A session token for venue B arriving through venue
+ * A's PAL is refused even though both are validly signed — the key and the
+ * token must agree on the venue (engine.ts `authoriseVideoLlm`).
+ */
+export function venuePalKey(locationId: string, faceId: string, env: Env = process.env): string {
+  return `bvk1_${crypto.createHmac("sha256", videoSecret(env)).update(`venue-pal.${locationId}.${faceId}`).digest("base64url")}`;
+}
+
 /** Where a shared-PAL deployment puts the token: a line in `conversational_context`. */
 export const CONTEXT_TOKEN_LABEL = "belline-session";
 

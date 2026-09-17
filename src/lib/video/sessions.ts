@@ -11,6 +11,8 @@ import { answersIn } from "../language";
 import { videoAvailability, type VideoOffReason } from "./availability";
 import type { VideoConfig } from "./config";
 import { venueVideoSettings } from "./control";
+import { videoBackground } from "./backgrounds";
+import { venueLook } from "./faces";
 import { recordVideoMetric } from "./metrics";
 import { videoProvider } from "./provider";
 import { signVideoToken } from "./tokens";
@@ -62,6 +64,10 @@ export interface VideoSession {
   endReason?: string;
   conversationId?: string;
   ephemeralPalId?: string;
+  /** The face this call shows, and whether its green is replaced in the panel. */
+  faceId?: string;
+  greenscreen?: boolean;
+  backgroundId?: string;
   roomUrl?: string;
   meetingToken?: string;
   /** For the provider's model requests. Never sent to the browser. */
@@ -92,6 +98,8 @@ export interface ClientSession {
   captions: boolean;
   perception: boolean;
   greeting: string;
+  /** Replace the stream's green with this picture (a path on this app). Absent: show the stream as it is. */
+  background?: { id: string; src: string; tone: "light" | "dark" };
 }
 
 export type StartResult =
@@ -205,6 +213,7 @@ async function create(
   saveCall(call);
 
   const settings = venueVideoSettings(location.id);
+  const look = venueLook(settings, config);
   const tokenTtl = config.maxCallSeconds + 15 * 60;
   const session: VideoSession = {
     id: sessionId,
@@ -221,6 +230,9 @@ async function create(
     maxCallSeconds: config.maxCallSeconds,
     warnBeforeSeconds: config.warnBeforeSeconds,
     timers: [],
+    faceId: look.faceId,
+    greenscreen: look.greenscreen,
+    backgroundId: look.background.id,
   };
   reg.sessions.set(sessionId, session);
   recordVideoMetric(location, { name: "session_create_started", sessionId });
@@ -228,6 +240,7 @@ async function create(
   try {
     const created = await provider.createSession({
       sessionId,
+      locationId: location.id,
       businessName: location.name,
       agentName: location.agent.displayName,
       greeting: session.greeting,
@@ -242,8 +255,9 @@ async function create(
       )}`,
       // The languages registry takes a context, not the environment alone: the website voice channel's language.
       euPolicy: answersIn(location, { env, channel: "web_voice" }) === "de",
-      faceId: settings?.faceId,
+      faceId: look.faceId,
       palId: settings?.palId,
+      greenscreen: look.greenscreen,
     });
 
     if ((session.status as VideoSession["status"]) === "ended") {
@@ -258,6 +272,9 @@ async function create(
     session.ephemeralPalId = created.ephemeralPalId;
     session.roomUrl = created.roomUrl;
     session.meetingToken = created.meetingToken;
+    // What the provider actually did, when it says: one that gave no green
+    // screen leaves the panel showing the stream as it is.
+    if (created.greenscreen === false) session.greenscreen = false;
     call.video = { ...call.video, conversationId: created.conversationId };
     saveCall(call);
 
@@ -269,7 +286,10 @@ async function create(
     );
     session.timers.forEach((t) => (t as { unref?: () => void }).unref?.());
 
-    recordVideoMetric(location, { name: "session_created", sessionId, ms: Date.now() - startedAt });
+    const createMs = Date.now() - startedAt;
+    recordVideoMetric(location, { name: "session_created", sessionId, ms: createMs });
+    // The start, by how the PAL was had: a kept shared PAL, one made now, or one per call.
+    recordVideoMetric(location, { name: "session_create_ms", sessionId, ms: createMs, detail: created.pal ?? provider.name });
     return { ok: true, session, client: clientPayload(session, config, provider), reused: false };
   } catch (err) {
     const retryable = err instanceof VideoProviderError ? err.retryable : true;
@@ -294,6 +314,7 @@ async function create(
 }
 
 function clientPayload(session: VideoSession, _config: VideoConfig, provider: VideoAvatarProvider): ClientSession {
+  const background = videoBackground(session.backgroundId);
   return {
     sessionId: session.id,
     provider: session.provider,
@@ -306,6 +327,7 @@ function clientPayload(session: VideoSession, _config: VideoConfig, provider: Vi
     captions: provider.capabilities.captions,
     perception: false,
     greeting: session.greeting,
+    ...(session.greenscreen && background?.src ? { background: { id: background.id, src: background.src, tone: background.tone } } : {}),
   };
 }
 

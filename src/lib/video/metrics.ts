@@ -31,6 +31,8 @@ export const CLIENT_METRICS = [
 export const SERVER_METRICS = [
   "session_create_started",
   "session_created",
+  /** The same timing, with how the PAL was had in `detail`: shared_warm, shared_cold, per_session. */
+  "session_create_ms",
   "session_create_failed",
   "llm_first_token",
   "booking_or_lead",
