@@ -438,9 +438,12 @@ await test("the public phone menu takes keyboard focus in, and Escape gives it b
 await test("the call and chat docks move focus to their close button when they open", () => {
   const js = fs.readFileSync(path.join(process.cwd(), "public", "site.js"), "utf8");
   const opens = js.split("document.body.appendChild(dock);").slice(1);
-  // The third is the video dock (docs/video), made only when video is on for our venue.
-  assert.equal(opens.length, 3, "expected the call dock, the chat dock and the video dock");
+  assert.equal(opens.length, 2, "expected the call dock and the chat dock");
   for (const after of opens) assert.match(after.slice(0, 200), /shut\.focus\(\)/, "a dock opened without moving focus into it");
+  // Video has no dock: the call grows inside Belle's bubble (embed-video.js), which moves focus to its own ×.
+  const bubble = fs.readFileSync(path.join(process.cwd(), "public", "embed-video.js"), "utf8");
+  const openCall = bubble.slice(bubble.indexOf("function openCall()"), bubble.indexOf("function markReady("));
+  assert.match(openCall, /state\.shut\.focus\(\)/, "the video call opened without moving focus to its close button");
 });
 
 await test("the widget's close button says what it closes and takes focus on opening", () => {
