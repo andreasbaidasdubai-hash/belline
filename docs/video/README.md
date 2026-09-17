@@ -24,10 +24,15 @@ poster, no video. No clip: a lettered placeholder (plus "MOCK — not a live
 avatar" in mock mode). **Nothing live exists yet**: no session, no microphone,
 no Daily. A tap on the bubble or "Talk to Belle" opens the round call view
 (`/embed/<key>/video?autostart=1`), which asks for the microphone and only
-then creates the Tavus session. The × dismisses the bubble for the browser
-session (sessionStorage); a Video button in the stack brings it back. Closing
-during a call posts an end to the frame, then removes it; the frame's unload
-beacon is the backstop.
+then creates the Tavus session. The resting bubble is the call circle's own
+size on every fresh load (about 320px, 240px on a phone), with "Talk to Belle"
+and round chat and WhatsApp icons under it (no voice icon: on the web, voice
+is the face). Only the × shrinks it to a small face, for the tab's session
+(sessionStorage); ending a call does not. Closing during a call posts an end
+to the frame, then removes it; the frame's unload beacon is the backstop. On a
+phone, scrolling or tapping outside during a call tucks the same frame into a
+small draggable face in a corner (CSS only, so the call never reloads); a tap
+grows it back.
 
 ```
 visitor ─ embed.js / site.js ─ embed-video.js bubble (muted clip, no session)

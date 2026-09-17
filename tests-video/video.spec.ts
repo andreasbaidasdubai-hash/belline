@@ -601,7 +601,10 @@ test("on belline.ai, on a phone: scrolling during a call tucks it into a small l
     await inner.evaluate(() => {
       (window as unknown as { __callMark?: number }).__callMark = 42;
     });
-    expect(loads.length).toBe(1);
+    // The frame's own load (and any same-document URL updates) so far; nothing may be added below.
+    await page.waitForTimeout(500);
+    const loadsBefore = loads.length;
+    expect(loadsBefore).toBeGreaterThanOrEqual(1);
 
     await page.evaluate(() => window.scrollBy(0, 600));
     await expect(bubble).toHaveAttribute("data-pip", "on");
@@ -643,7 +646,7 @@ test("on belline.ai, on a phone: scrolling during a call tucks it into a small l
     await expectInCall(page);
     const again = page.frames().find((f) => f.url().includes(`/embed/${KEY}/video`))!;
     expect(await again.evaluate(() => (window as unknown as { __callMark?: number }).__callMark)).toBe(42);
-    expect(loads.length, "the call frame reloaded").toBe(1);
+    expect(loads.length, "the call frame reloaded").toBe(loadsBefore);
     expect(posts.length).toBe(1);
     await page.getByRole("button", { name: "Close video call" }).click();
     await expect(page.locator("iframe.bvb-frame")).toHaveCount(0);
