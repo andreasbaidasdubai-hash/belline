@@ -29,6 +29,8 @@ export interface VideoConfig {
     testMode: boolean;
     /** Tavus's `speculative_inference`. Off: a half-heard sentence must not run a booking. */
     speculative: boolean;
+    /** Hard-delete the conversation at Tavus when it ends (its transcript with it). */
+    deleteAfterEnd: boolean;
   };
   /** Signs the per-session tokens. */
   llmSecret: string;
@@ -67,6 +69,7 @@ export function videoConfig(env: Env = process.env): VideoConfig {
       apiBase: (env.TAVUS_API_BASE ?? "https://tavusapi.com").trim().replace(/\/+$/, ""),
       testMode: on(env.VIDEO_TAVUS_TEST_MODE),
       speculative: on(env.VIDEO_TAVUS_SPECULATIVE),
+      deleteAfterEnd: on(env.VIDEO_TAVUS_DELETE_AFTER_END),
     },
     llmSecret: (env.VIDEO_LLM_SECRET ?? "").trim(),
     publicOrigin: (env.VIDEO_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN ?? "https://app.belline.ai").trim().replace(/\/+$/, ""),

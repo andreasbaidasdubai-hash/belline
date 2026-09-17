@@ -446,6 +446,13 @@ await test("7. end cleans up on both sides, once: provider told, PAL deleted, ca
     assert.equal(await sessions.endVideoSession(session.id, "again", { by: "visitor" }), false);
     const ends = fake.calls.filter((c) => c.url.endsWith("/end")).length;
     assert.equal(ends, 1, "the provider is told once");
+    assert.equal(fake.calls.some((c) => c.method === "DELETE" && c.url.includes("/v2/conversations/")), false, "Tavus's transcript is kept unless asked");
+
+    // With VIDEO_TAVUS_DELETE_AFTER_END=on, the conversation is hard-deleted too.
+    const deleting = fakeTavus(tavusHappyPath);
+    const withDelete = new TavusProvider(videoConfig({ ...process.env, VIDEO_TAVUS_DELETE_AFTER_END: "on" }), deleting.fetchImpl);
+    await withDelete.endSession({ conversationId: "c_9", ephemeralPalId: "p_9" });
+    assert.ok(deleting.calls.some((c) => c.method === "DELETE" && c.url.endsWith("/v2/conversations/c_9?hard=true")));
   } finally {
     restore();
   }

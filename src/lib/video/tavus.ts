@@ -127,6 +127,13 @@ export class TavusProvider implements VideoAvatarProvider {
     if (input.ephemeralPalId) {
       await this.deletePal(input.ephemeralPalId).catch((err) => (failure ??= err));
     }
+    // Belline keeps its own transcript, so Tavus's copy can go with the call
+    // when the owner has chosen that (docs/video/privacy-review.md).
+    if (this.config.tavus.deleteAfterEnd) {
+      await this.call("DELETE", `/v2/conversations/${encodeURIComponent(input.conversationId)}?hard=true`).catch((err) => {
+        if (!(err instanceof VideoProviderError && err.status === 404)) failure ??= err;
+      });
+    }
     if (failure) throw failure;
   }
 
