@@ -104,7 +104,7 @@ export function BelleChat({
         body: JSON.stringify({ locationId, page: window.location.pathname, messages: lines.map(({ role, content }) => ({ role, content })) }),
       });
       const body = (await res.json().catch(() => ({}))) as { reply?: string; ticket?: string; error?: string };
-      if (!res.ok || !body.reply) setError(body.error ?? "That didn't reach the team. Try again, or email hello@belline.ai.");
+      if (!res.ok || !body.reply) setError(body.error ?? "That didn't reach the team. Try again in a moment.");
       else setLines((prev) => [...prev, { role: "assistant", content: body.reply!, ticket: body.ticket }]);
     } catch {
       setError("Could not reach Belline. Check your connection.");

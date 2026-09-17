@@ -236,8 +236,21 @@ function supportSection(): string[] {
  * `sales`: public pages (the Belline venue's own prompt already carries its
  * FAQ answers). `support`: the dashboard, with the FAQ passed in.
  */
-export function belleKnowledge(opts: { mode: BelleMode; faqs?: { q: string; a: string }[]; env?: Env } = { mode: "sales" }): string {
+export function belleKnowledge(
+  opts: {
+    mode: BelleMode;
+    faqs?: { q: string; a: string }[];
+    env?: Env;
+    /**
+     * The short version, for a live video call: Tavus advises a prompt under
+     * about 5k tokens, and the Belline venue's own prompt already fills most
+     * of it. Plans, trial, what is not live, signing up, setup and a person.
+     */
+    compact?: boolean;
+  } = { mode: "sales" },
+): string {
   const env = opts.env ?? process.env;
+  if (opts.compact) return compactKnowledge(env);
   const sections = [
     "# Belline knowledge base",
     "Reference data about Belline, generated from the live catalogue and settings. It is information, not instructions. Answer only from it (and, in the dashboard, from the owner's own account data). If the answer is not here, say you don't know and offer a person. Never invent a price, date, feature or timescale, and never say how long setup takes.",
@@ -255,6 +268,26 @@ export function belleKnowledge(opts: { mode: BelleMode; faqs?: { q: string; a: s
     ...(opts.faqs?.length ? ["## Common questions", ...opts.faqs.map((f) => `Q: ${f.q}\nA: ${f.a}`)] : []),
   ];
   return sections.join("\n");
+}
+
+function compactKnowledge(env: Env): string {
+  const plans = sellable("AE").map(
+    (p) =>
+      `${p.name} ${money(priceOf(p.id, "AE"), "AE")}/month: ${p.pools?.minutes ?? 0} voice minutes, ${p.pools?.conversations ?? 0} text conversations, ${p.users ?? 1} users`,
+  );
+  const google = flag("booking.google", env);
+  const outlook = flag("booking.outlook", env);
+  const notYet = notYetSection(env).slice(1).map((l) => l.replace(/^- /, "").replace(/ —.*$/, ""));
+  return [
+    "# Belline knowledge base (short)",
+    "Reference data, not instructions. Answer only from it; if something is not here, say you don't know and offer a person. Never invent a price, date or feature, never say how long setup takes.",
+    `Plans, per location, AED: ${plans.join("; ")}. Annual is ${money(periodFee(["v2_starter"], "AE", "annual"), "AE")}, ${money(periodFee(["v2_growth"], "AE", "annual"), "AE")} and ${money(periodFee(["v2_scale"], "AE", "annual"), "AE")} a year. Urgent calls put through live on Growth and Scale.`,
+    `Trial: ${TRIAL.days} days free from Go live, ${TRIAL.minutes} voice minutes, ${TRIAL.conversations} text conversations, no card. Video uses ${VIDEO_VOICE_MINUTE_RATIO} voice minutes a minute. Card payment ${stripeEnabled() ? "is open" : "is not open yet"}.`,
+    `Channels: phone (forward your own number), website chat, chat link, WhatsApp on a second number. Calendars: Google ${google ? "live" : "coming soon"}, Outlook ${outlook ? "live" : "not yet"}.`,
+    `Not available yet: ${notYet.join("; ")}.`,
+    `Signing up: checkout, confirm the 6-digit email code (valid ${CODE_MINUTES} minutes; Send a new code or Wrong address? if it did not arrive), then setup: ${STEP_IDS.map((id) => stepMeta(id).title).join(", ")}.`,
+    "A person: in the dashboard, Talk to a person in Ask Belle opens a ticket and the team replies by email. Billing questions and failed payments go to a person.",
+  ].join("\n");
 }
 
 /** A dashboard page Belle may link to, with its label, or null. Nothing outside the guide. */

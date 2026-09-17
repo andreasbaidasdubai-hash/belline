@@ -46,6 +46,7 @@ export default function BelleDock({
   storageKey = "belline.setup.belle-dock",
   faceUrl,
   video = false,
+  off = false,
   children,
 }: {
   locationId: string;
@@ -58,6 +59,8 @@ export default function BelleDock({
   faceUrl?: string;
   /** Offer "Talk to Belle on video": only while support video is available. */
   video?: boolean;
+  /** No Belle at all, only the page: Belline staff viewing it as the customer, read-only. */
+  off?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -138,6 +141,8 @@ export default function BelleDock({
     }
   }
 
+  if (off) return <div className="belle-host">{children}</div>;
+
   return (
     <div className="belle-host">
       {children}
@@ -184,7 +189,7 @@ export default function BelleDock({
           </div>
         </div>
         <div hidden={view !== "chat"} style={{ display: view === "chat" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0 }}>
-          <BelleChat fill handover locationId={locationId} step={step} greeting={greeting} inputRef={inputRef} />
+          <BelleChat fill locationId={locationId} step={step} greeting={greeting} inputRef={inputRef} handover />
         </div>
         {video && view === "video" && (
           <iframe title="Talk to Belle on video" src="/embed/belle/video" className="belle-launch-frame" allow="camera; microphone; autoplay" />

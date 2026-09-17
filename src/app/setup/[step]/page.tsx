@@ -617,7 +617,7 @@ export default async function SetupStepPage({
       </header>
 
       {/* Not while Belline staff view this as the customer: that view is read-only, and Belle saves. */}
-      <MaybeBelle hidden={await onViewAs()} locationId={venue.id} step={step.id} greeting={setupGreeting(venue, step.id)}>
+      <BelleDock locationId={venue.id} step={step.id} greeting={setupGreeting(venue, step.id)} off={await onViewAs()} faceUrl={belleFaceUrl()} video={supportVideoOn()}>
         <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 112px" }}>
           <Rail j={j} active={step} />
           <main style={{ minWidth: 0, maxWidth: 720 }}>
@@ -640,17 +640,7 @@ export default async function SetupStepPage({
             ))}
           </main>
         </div>
-      </MaybeBelle>
+      </BelleDock>
     </div>
-  );
-}
-
-/** Ask Belle around a setup step, or the step alone on a read-only view. */
-function MaybeBelle({ hidden, children, ...props }: { hidden: boolean; locationId: string; step: string; greeting: string; children: React.ReactNode }) {
-  if (hidden) return <>{children}</>;
-  return (
-    <BelleDock {...props} faceUrl={belleFaceUrl()} video={supportVideoOn()}>
-      {children}
-    </BelleDock>
   );
 }

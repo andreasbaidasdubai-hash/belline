@@ -104,6 +104,8 @@ await test("a price change in the catalogue reaches the knowledge base and Belli
   } finally {
     growth.prices.AE = before;
   }
+  // The short version a video call gets follows it too.
+  assert.match(knowledge.belleKnowledge({ mode: "sales", compact: true }), new RegExp(`Growth ${plans.money(before!, "AE")}/month`));
   // The trial, the video ratio and the packs are the catalogue's too.
   assert.ok(kb.includes(`${plans.TRIAL.days} days, ${plans.TRIAL.minutes} voice minutes and ${plans.TRIAL.conversations} text conversations`));
   assert.ok(kb.includes(`uses ${plans.VIDEO_VOICE_MINUTE_RATIO} voice minutes`));
@@ -333,8 +335,9 @@ await test("a view-as session gets no Ask Belle, and every Belle route refuses i
   assert.equal(identity.dashboardBelleVenue(alpha.user, venues, normal)?.id, alpha.location.id);
   assert.equal(identity.dashboardBelleVenue(alpha.user, venues, view), undefined);
   assert.equal(identity.dashboardBelleVenue(alpha.user, listLocationsFor(bravo.user.tenantId), normal), undefined, "Belle offered on another tenant's venue");
-  assert.match(source("src/app/(app)/layout.tsx"), /\(await onViewAs\(\)\) \? undefined : dashboardBelleVenue/);
-  assert.match(source("src/app/setup/[step]/page.tsx"), /<MaybeBelle hidden=\{await onViewAs\(\)\}/);
+  assert.match(source("src/app/(app)/layout.tsx"), /\(await onViewAs\(\)\) \? undefined : listLocationsFor\(user\.tenantId\)\.find/);
+  assert.match(source("src/app/setup/[step]/page.tsx"), /<BelleDock [^>]*off=\{await onViewAs\(\)\}/);
+  assert.match(source("src/app/setup/BelleDock.tsx"), /if \(off\) return <div className="belle-host">\{children\}<\/div>;/);
   assert.match(source("src/lib/belle/server.ts"), /if \(isViewAs\(session\)\)/);
   assert.match(source("src/app/api/setup/assistant/route.ts"), /if \(await onViewAs\(\)\) return/);
   assert.match(source("src/app/embed/belle/video/page.tsx"), /if \(await onViewAs\(\)\) notFound\(\)/);

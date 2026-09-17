@@ -444,7 +444,7 @@ ${a.faqs.map((f) => `Q: ${f.q}\nA: ${f.a}`).join("\n\n")}
 ${
     // Belline's own line reads the one knowledge base every Belle reads
     // (belle/knowledge.ts), generated from the catalogue and the flags.
-    selling ? `${belleKnowledge({ mode: "sales" })}\n\n` : ""
+    selling ? `${belleKnowledge({ mode: "sales", compact: channel === "video" })}\n\n` : ""
   }${CLOSING[channel](Boolean(location.agent.transferNumber))}${
     location.demo?.enabled && !selling
       ? `
