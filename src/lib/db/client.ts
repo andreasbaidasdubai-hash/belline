@@ -1,6 +1,26 @@
 import pg from "pg";
 
 import { checkDbRefusal } from "./guard";
+import { ReadOnlyError, readOnlyContext } from "../staff/readonly";
+
+/**
+ * Statements a read-only request (staff viewing as a customer, see
+ * staff/readonly.ts) may run. Anything else is refused before it reaches
+ * Postgres.
+ */
+const READ_STATEMENT = /^\s*(?:select|with|show|explain)\b/i;
+const WRITE_WORD = /\b(?:insert|update|delete|truncate|alter|drop|create)\b/i;
+
+export function isReadStatement(text: string): boolean {
+  return READ_STATEMENT.test(text) && !WRITE_WORD.test(text.replace(/'[^']*'/g, ""));
+}
+
+function assertReadable(text: string): void {
+  const context = readOnlyContext();
+  if (context && !isReadStatement(text)) {
+    throw new ReadOnlyError(context);
+  }
+}
 
 /**
  * Postgres.
@@ -96,6 +116,7 @@ export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   params: unknown[] = [],
 ): Promise<T[]> {
+  assertReadable(text);
   const started = Date.now();
   const result = await pool().query<T>(text, params as never[]);
   const ms = Date.now() - started;
@@ -122,6 +143,9 @@ export async function one<T extends pg.QueryResultRow = pg.QueryResultRow>(
  * causes. Half of any of those is worse than none.
  */
 export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
+  // A transaction exists to write. None is opened on a read-only request.
+  const context = readOnlyContext();
+  if (context) throw new ReadOnlyError(context);
   const client = await pool().connect();
   try {
     await client.query("begin");

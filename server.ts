@@ -32,6 +32,8 @@ import { runWhatsAppChecks } from "./src/lib/whatsapp-selfserve";
 import { PEER_HEADER } from "./src/lib/onboarding/limit";
 import { sweepTrialEnds } from "./src/lib/billing/trial-end";
 import { retryPendingAlerts } from "./src/lib/billing/usage-policy";
+import { VIEW_AS_EXIT_PATH, decideViewAs, isViewAsSession } from "./src/lib/staff/view-as";
+import { runReadOnly } from "./src/lib/staff/readonly";
 
 /**
  * Custom server.
@@ -166,7 +168,30 @@ const server = createServer((req, res) => {
   // marketing.ts — anything that is not `app.` is the website, and a request
   // it does not recognise falls through to Next rather than 404ing.
   if (marketingReady && isMarketingHost(req.headers.host) && serveMarketing(req, res)) return;
-  handle(req, res, parse(req.url ?? "/", true));
+  const parsed = parse(req.url ?? "/", true);
+  // "View as customer" (lib/staff/view-as.ts): staff looking at a customer's
+  // dashboard as its owner. Every request on such a session is decided here,
+  // before Next: anything that is not a read is refused, and the reads run
+  // with every store and database write refused too.
+  const view = decideViewAs(sessionIdFromCookieHeader(req.headers.cookie), req.method, parsed.pathname ?? "/");
+  if (view.kind === "expired") {
+    res.writeHead(303, { Location: VIEW_AS_EXIT_PATH });
+    res.end();
+    return;
+  }
+  if (view.kind === "refuse") {
+    res.writeHead(view.status, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: view.error, readOnly: true }));
+    return;
+  }
+  if (view.kind === "read_only") {
+    void runReadOnly(
+      { reason: "viewing as a customer", staffUserId: view.grant.staffUserId, tenantId: view.grant.tenantId },
+      () => handle(req, res, parsed),
+    );
+    return;
+  }
+  handle(req, res, parsed);
 });
 
 const browserWss = new WebSocketServer({ noServer: true });
@@ -226,7 +251,14 @@ server.on("upgrade", (req, socket, head) => {
   if (pathname === "/ws/voice") {
     // The test console starts real, metered calls. Anyone who can open this
     // socket can spend money, so it needs the same session as the dashboard.
-    const user = userForSession(sessionIdFromCookieHeader(req.headers.cookie));
+    const sessionId = sessionIdFromCookieHeader(req.headers.cookie);
+    // A read-only view of a customer's dashboard never starts a call.
+    if (isViewAsSession(sessionId)) {
+      socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    const user = userForSession(sessionId);
     if (!user) {
       socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       socket.destroy();

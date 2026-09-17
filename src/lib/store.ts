@@ -10,12 +10,15 @@ import type {
   PoolNumber,
   Session,
   SupportException,
+  LeadCrmRow,
+  StaffAuditRow,
   Tenant,
   User,
   WaitlistEntry,
 } from "./types";
 import type { Lead } from "./leads";
 import type { CostEvent } from "./billing/cost";
+import { assertWritable, readOnlyContext } from "./staff/readonly";
 
 /**
  * File-backed store.
@@ -58,6 +61,10 @@ interface Db {
   oauthStates: OAuthStateRow[];
   /** What the signup abuse screening noticed, for staff review. See abuse/review.ts. */
   abuse: AbuseRecord[];
+  /** What Belline staff changed from the staff console. See staff/audit.ts. */
+  staffAudit: StaffAuditRow[];
+  /** The staff CRM's owner, next step, notes and events per lead. See staff/leads.ts. */
+  leadCrm: LeadCrmRow[];
 }
 
 /**
@@ -89,6 +96,8 @@ export interface StripeEventRow {
 const STRIPE_EVENTS_KEPT = 5000;
 
 const EMPTY: Db = {
+  staffAudit: [],
+  leadCrm: [],
   abuse: [],
   oauthStates: [],
   stripeEvents: [],
@@ -192,6 +201,8 @@ function load(): Db {
  * for this product.
  */
 function persist(key: keyof Db): void {
+  // Every mutator asks first; this is the backstop for one that forgot.
+  assertWritable();
   const db = load();
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const file = path.join(DATA_DIR, `${key}.json`);
@@ -278,6 +289,7 @@ export function getTenant(tenantId: string): Tenant | undefined {
 }
 
 export function saveTenant(tenant: Tenant): Tenant {
+  assertWritable();
   const db = load();
   const i = db.tenants.findIndex((t) => t.id === tenant.id);
   if (i >= 0) db.tenants[i] = tenant;
@@ -291,6 +303,7 @@ export function saveTenant(tenant: Tenant): Tenant {
  * way (onboarding/index.ts), before anybody could have used the account.
  */
 export function removeTenant(tenantId: string): void {
+  assertWritable();
   const db = load();
   db.tenants = db.tenants.filter((t) => t.id !== tenantId);
   persist("tenants");
@@ -298,6 +311,7 @@ export function removeTenant(tenantId: string): void {
 
 /** As `removeTenant`: only for rolling back a failed signup. */
 export function removeBusiness(businessId: string): void {
+  assertWritable();
   const db = load();
   db.businesses = db.businesses.filter((b) => b.id !== businessId);
   persist("businesses");
@@ -320,6 +334,7 @@ export function getBusiness(tenantId: string, businessId: string): Business | un
 }
 
 export function saveBusiness(business: Business): Business {
+  assertWritable();
   const db = load();
   const i = db.businesses.findIndex((b) => b.id === business.id);
   if (i >= 0) db.businesses[i] = business;
@@ -375,6 +390,7 @@ export function listLocations(opts?: { includeInternal?: boolean; includeArchive
  * by accident.
  */
 export function removeLocation(locationId: string): void {
+  assertWritable();
   const db = load();
   db.locations = db.locations.filter((l) => l.id !== locationId);
   persist("locations");
@@ -386,6 +402,7 @@ export function getLocation(locationId: string): Location | undefined {
 }
 
 export function upsertLocation(location: Location): Location {
+  assertWritable();
   const db = load();
   const idx = db.locations.findIndex((l) => l.id === location.id);
   if (idx === -1) db.locations.push(location);
@@ -431,6 +448,7 @@ export function findBookingsByPhone(locationId: string, phone: string): Booking[
 }
 
 export function saveBooking(booking: Booking): Booking {
+  assertWritable();
   const db = load();
   const idx = db.bookings.findIndex((b) => b.id === booking.id);
   if (idx === -1) db.bookings.push(booking);
@@ -462,6 +480,7 @@ export function getWaitlistEntry(id: string): WaitlistEntry | undefined {
 }
 
 export function saveWaitlistEntry(entry: WaitlistEntry): WaitlistEntry {
+  assertWritable();
   const db = load();
   const idx = db.waitlist.findIndex((w) => w.id === entry.id);
   if (idx === -1) db.waitlist.push(entry);
@@ -497,6 +516,7 @@ export function getCall(callId: string): Call | undefined {
 }
 
 export function saveCall(call: Call): Call {
+  assertWritable();
   const db = load();
   const idx = db.calls.findIndex((c) => c.id === call.id);
   if (idx === -1) db.calls.unshift(call);
@@ -523,6 +543,7 @@ export function listPoolRows(): PoolNumber[] {
  * the same process can never see the same free number. See telephony/pool.ts.
  */
 export function mutatePool<T>(fn: (rows: PoolNumber[]) => T): T {
+  assertWritable();
   const db = load();
   const out = fn(db.numberPool);
   persist("numberPool");
@@ -536,6 +557,7 @@ export function stripeEventSeen(id: string): StripeEventRow | undefined {
 }
 
 export function recordStripeEvent(row: StripeEventRow): void {
+  assertWritable();
   const db = load();
   if (db.stripeEvents.some((e) => e.id === row.id)) return;
   db.stripeEvents.push(row);
@@ -551,6 +573,7 @@ export function listOAuthStates(): OAuthStateRow[] {
 
 /** Change the pending connections in one synchronous step; see `mutatePool`. */
 export function mutateOAuthStates<T>(fn: (rows: OAuthStateRow[]) => { rows: OAuthStateRow[]; out: T }): T {
+  assertWritable();
   const db = load();
   const { rows, out } = fn(db.oauthStates);
   db.oauthStates = rows;
@@ -565,6 +588,7 @@ export function listAbuseRows(): AbuseRecord[] {
 }
 
 export function saveAbuseRow(row: AbuseRecord): AbuseRecord {
+  assertWritable();
   const db = load();
   const i = db.abuse.findIndex((r) => r.id === row.id);
   if (i >= 0) db.abuse[i] = row;
@@ -578,6 +602,7 @@ export function listExceptionRows(): SupportException[] {
 }
 
 export function saveExceptionRow(row: SupportException): SupportException {
+  assertWritable();
   const db = load();
   const idx = db.exceptions.findIndex((e) => e.id === row.id);
   if (idx === -1) db.exceptions.push(row);
@@ -590,6 +615,7 @@ export function saveExceptionRow(row: SupportException): SupportException {
 
 /** Append a batch of cost events. One write for the batch; see billing/cost.ts. */
 export function appendCosts(events: CostEvent[]): void {
+  assertWritable();
   if (!events.length) return;
   const db = load();
   db.costs.push(...events);
@@ -624,6 +650,7 @@ export function getLead(leadId: string): Lead | undefined {
 }
 
 export function saveLead(lead: Lead): Lead {
+  assertWritable();
   const db = load();
   const idx = db.leads.findIndex((l) => l.id === lead.id);
   if (idx === -1) db.leads.unshift(lead);
@@ -660,6 +687,7 @@ export function findUserByEmail(email: string): User | undefined {
 }
 
 export function saveUser(user: User): User {
+  assertWritable();
   const db = load();
   const idx = db.users.findIndex((u) => u.id === user.id);
   if (idx === -1) db.users.push(user);
@@ -669,6 +697,7 @@ export function saveUser(user: User): User {
 }
 
 export function deleteUser(userId: string): void {
+  assertWritable();
   const db = load();
   db.users = db.users.filter((u) => u.id !== userId);
   db.sessions = db.sessions.filter((s) => s.userId !== userId);
@@ -681,6 +710,7 @@ export function getSession(sessionId: string): Session | undefined {
 }
 
 export function saveSession(session: Session): Session {
+  assertWritable();
   const db = load();
   const idx = db.sessions.findIndex((s) => s.id === session.id);
   if (idx === -1) db.sessions.push(session);
@@ -691,6 +721,9 @@ export function saveSession(session: Session): Session {
 
 /** Drop one session, or every session belonging to a user. */
 export function deleteSessions(where: { sessionId?: string; userId?: string }): void {
+  // Housekeeping on a read-only request (an expired session noticed while
+  // viewing as a customer) is skipped, never an error.
+  if (readOnlyContext()) return;
   const db = load();
   const before = db.sessions.length;
   db.sessions = db.sessions.filter(
@@ -705,6 +738,7 @@ export function deleteSessions(where: { sessionId?: string; userId?: string }): 
 
 /** Housekeeping: expired sessions are dead weight and a small liability. */
 export function pruneSessions(): number {
+  if (readOnlyContext()) return 0;
   const db = load();
   const now = new Date().toISOString();
   const before = db.sessions.length;
@@ -714,6 +748,38 @@ export function pruneSessions(): number {
     return before - db.sessions.length;
   }
   return 0;
+}
+
+// --- staff console ---------------------------------------------------------
+
+export function listStaffAuditRows(): StaffAuditRow[] {
+  return load().staffAudit;
+}
+
+export function appendStaffAudit(row: StaffAuditRow): StaffAuditRow {
+  assertWritable();
+  const db = load();
+  db.staffAudit.push(row);
+  persist("staffAudit");
+  return row;
+}
+
+export function getLeadCrm(id: string): LeadCrmRow | undefined {
+  return load().leadCrm.find((r) => r.id === id);
+}
+
+export function listLeadCrm(): LeadCrmRow[] {
+  return load().leadCrm;
+}
+
+export function saveLeadCrm(row: LeadCrmRow): LeadCrmRow {
+  assertWritable();
+  const db = load();
+  const i = db.leadCrm.findIndex((r) => r.id === row.id);
+  if (i >= 0) db.leadCrm[i] = row;
+  else db.leadCrm.push(row);
+  persist("leadCrm");
+  return row;
 }
 
 /** True when the store has never been seeded. */
@@ -727,6 +793,7 @@ export function hasNoUsers(): boolean {
 }
 
 export function replaceAll(db: Partial<Db>): void {
+  assertWritable();
   const current = load();
   for (const key of Object.keys(db) as (keyof Db)[]) {
     current[key] = db[key] as never;

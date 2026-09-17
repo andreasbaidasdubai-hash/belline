@@ -220,7 +220,9 @@ function recordLead(input: Record<string, unknown>, ctx: ToolContext) {
     const kept = previous.notes.split("\n").find((line) => line.startsWith("Booking system:"));
     if (kept) lead.notes = `${lead.notes}\n${kept}`;
   }
-  saveLead(previous ? { ...previous, ...Object.fromEntries(Object.entries(lead).filter(([, v]) => v)), id: previous.id, createdAt: previous.createdAt } as Lead : lead);
+  // The stage is staff's to move: a second call to this tool must not put a
+  // lead somebody already contacted back to New.
+  saveLead(previous ? { ...previous, ...Object.fromEntries(Object.entries(lead).filter(([, v]) => v)), id: previous.id, createdAt: previous.createdAt, status: previous.status } as Lead : lead);
   if (input.stage === "wants_person") flag(ctx, `Wants a person: ${business}`);
   return { saved: true };
 }
