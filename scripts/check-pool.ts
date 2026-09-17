@@ -246,8 +246,9 @@ await test("Virgin Mobile appears only with its flag, and unverified codes say s
   assert.ok(DIAGNOSIS.length >= 3);
 });
 
-await test("the Go live page renders no placeholder, links every code and offers 'Get my number' only with the pool on", () => {
-  const page = source("src/app/(app)/golive/page.tsx");
+await test("the phone section renders no placeholder, links every code and offers 'Get my number' only with the pool on", () => {
+  // The phone section Channels → Phone and the setup step both render.
+  const page = source("src/app/(app)/channels/sections.tsx");
   const phone = source("src/app/(app)/golive/PhoneSetup.tsx");
   assert.ok(!/<your Belline number>/.test(page + phone), "placeholder text is still rendered");
   assert.ok(!/mailto:|hello@/.test(page + phone));
@@ -365,12 +366,15 @@ await test("a number staff set by hand, or one our own venues always had, is Bel
   assert.doesNotMatch(reader, /\.phone\b|listPoolRows|onboarding/);
 });
 
-await test("the channels step, Go live and Belle read only the Belline number", () => {
+await test("the phone step, the Phone tab and Belle read only the Belline number", () => {
   const step = source("src/app/setup/[step]/page.tsx");
-  assert.doesNotMatch(step, /forwards the calls you miss to \$\{venue\.phone\}/, "the channels card still forwards to venue.phone");
-  assert.match(step, /const belline = bellineNumberOf\(venue\)/);
-  assert.match(step, /Your Belline number is being prepared/);
-  assert.match(source("src/app/(app)/golive/page.tsx"), /const number = bellineNumberOf\(location\)/);
+  assert.doesNotMatch(step, /forwards the calls you miss to \$\{venue\.phone\}/, "the phone step still forwards to venue.phone");
+  // Both render the one phone section, which reads the Belline number and nothing else.
+  assert.match(step, /<PhoneSection location=\{venue\}/);
+  const section = source("src/app/(app)/channels/sections.tsx");
+  assert.match(section, /const number = bellineNumberOf\(location\)/);
+  assert.doesNotMatch(section, /businessPhone/);
+  assert.match(source("src/app/(app)/golive/PhoneSetup.tsx"), /being prepared/);
   assert.match(source("src/lib/onboarding/assistant.ts"), /const number = bellineNumberOf\(location\)/);
   assert.match(source("src/lib/telephony/verify.ts"), /bellineNumberOf\(location\)/);
 });

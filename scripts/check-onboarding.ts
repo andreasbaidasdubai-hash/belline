@@ -702,26 +702,27 @@ await test("every code says in plain words what dialling it does, and that the o
   assert.deepEqual(forwardingCodes(""), []);
 });
 
-await test("the phone is plainly optional, with a way to skip it on the channels step and the forwarding page", () => {
+await test("the phone is plainly optional, with a way to skip it on the phone step and the Phone tab", () => {
   const read = (...p: string[]) => fs.readFileSync(path.join(process.cwd(), ...p), "utf8");
   const phone = read("src", "app", "(app)", "golive", "PhoneSetup.tsx");
-  const golive = read("src", "app", "(app)", "golive", "page.tsx");
+  // The phone section both the setup step and Channels → Phone render (2026-09-17).
+  const section = read("src", "app", "(app)", "channels", "sections.tsx");
+  const tab = read("src", "app", "(app)", "channels", "phone", "page.tsx");
   const step = read("src", "app", "setup", "[step]", "page.tsx");
   assert.match(PHONE_OPTIONAL, /optional/);
-  // The forwarding page explains the codes where they appear, and each row says what it does.
+  // The forwarding section explains the codes where they appear, and each row says what it does.
   assert.match(phone, /\{codesExplained\}/);
   assert.match(phone, /\{code\.meaning\}/);
-  assert.match(golive, /codesExplained=\{CODES_EXPLAINED\}/);
+  assert.match(section, /codesExplained=\{CODES_EXPLAINED\}/);
   // A visible skip, with and without a number yet.
   assert.match(phone, /Skip the phone for now/);
   assert.equal(phone.split("{skip}").length - 1, 2, "the skip is not shown in both the no-number and the number states");
-  assert.match(golive, /skipHref=\{from === "setup" \? "\/website\?from=setup"/);
-  assert.match(golive, /optional \? "optional" : "to do"/);
-  // The channels step leads with either way in, never with forwarding as the one thing to do.
+  assert.match(step, /<PhoneSection location=\{venue\} skipHref=\{next\} \/>/);
+  assert.match(tab, /<PhoneSection location=\{location\} skipHref=\{`\/channels\/website\?loc=\$\{location\.id\}`\} \/>/);
+  // The phone step leads with any way in, never with forwarding as the one thing to do.
   assert.doesNotMatch(step, /Set up call forwarding/);
-  assert.match(step, /One is enough to go live/);
+  assert.match(step, /Any one of these is enough to go live, and so is the website chat/);
   assert.match(step, /Your phone line \(optional\)/);
-  assert.match(step, /Skip the phone for now/);
   assert.doesNotMatch(step, /Waiting for the test call/);
   // Belle says the same.
   // A Belline number assigned: its own field, never the business's phone.
@@ -747,12 +748,14 @@ await test("the owner's own number on the rules step is not Belline's: Belle giv
 
 console.log("\n\x1b[1mSetup copy the founder read\x1b[0m\n");
 
-await test("Skip the phone for now and Add it to my website are real buttons, not links inside a sentence", () => {
+await test("Skip the phone for now is a real button, and the website chat is set up in the step itself", () => {
   const step = fs.readFileSync(path.join(process.cwd(), "src", "app", "setup", "[step]", "page.tsx"), "utf8");
-  assert.match(step, /className="btn" style=\{action\} data-testid="skip-phone">\s*Skip the phone for now/);
-  assert.match(step, /className="btn btn-accent" style=\{action\} data-testid="add-to-website">\s*Add it to my website/);
+  const phone = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "golive", "PhoneSetup.tsx"), "utf8");
+  assert.match(phone, /<Link href=\{skipHref\} className="btn"[^>]*>\s*Skip the phone for now/);
+  // No link out to the dashboard and back: the widget editor is on the step.
+  assert.match(step, /<WebsiteSection location=\{venue\} \/>/);
+  assert.doesNotMatch(step, /\/website\?from=setup|\/golive\?from=setup|\/integrations\?from=setup/);
   assert.doesNotMatch(step, /one line of code\. <Link href="\/website\?from=setup">Add it to my website<\/Link>/);
-  assert.doesNotMatch(step, /\{PHONE_OPTIONAL\}\{" "\}\s*<Link href="\/website\?from=setup">Skip the phone for now<\/Link>/);
 });
 
 await test("the booking option says what it means: the team confirms each booking, with no walk-ins", () => {
@@ -775,8 +778,10 @@ await test("WhatsApp is offered as it is today: set up with us on a second numbe
   const card = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "integrations", "WhatsAppCard.tsx"), "utf8");
   const assisted = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "integrations", "WhatsAppAssisted.tsx"), "utf8");
   assert.doesNotMatch(step, /whatsapp\.state === "soon" \? "Coming soon"/);
-  assert.match(step, /WhatsApp works today on a second number/);
-  assert.match(step, /<WhatsAppAssisted /);
+  // The step renders the WhatsApp card itself, which says it works today and offers setting it up with us.
+  assert.match(step, /<WhatsAppSection location=\{venue\}/);
+  assert.match(step, /Going live does not wait for it\./);
+  assert.match(card, /WhatsApp works today: Belline answers a second WhatsApp number/);
   assert.match(card, /soon: \["Available — set up with us"/);
   assert.match(card, /<WhatsAppAssisted /);
   assert.match(assisted, /Set it up with us/);

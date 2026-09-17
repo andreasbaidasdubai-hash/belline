@@ -478,9 +478,9 @@ console.log("\n\x1b[1mKnowing it is installed\x1b[0m\n");
     assert.equal(fresh().onboarding?.channels.web?.lastCheckAt, later.toISOString());
   });
 
-  await test("detection completes the phone-and-website step without any conversation", () => {
+  await test("detection completes the website chat step without any conversation", () => {
     const steps = journey(fresh()).steps;
-    assert.equal(steps.find((s) => s.id === "channels")!.done, true);
+    assert.equal(steps.find((s) => s.id === "website")!.done, true);
   });
 
   await test("a switched-off widget is not detected, even from its own site", () => {
@@ -528,7 +528,8 @@ console.log("\n\x1b[1mKnowing it is installed\x1b[0m\n");
   });
 
   await test("the install panel and the header follow the save, not the server's snapshot of the page", () => {
-    const page = source("src/app/(app)/website/page.tsx");
+    // The section both the Channels tab and the setup step render.
+    const page = source("src/app/(app)/channels/sections.tsx");
     const editor = source("src/app/(app)/website/WidgetEditor.tsx");
 
     // The defect this pins: the panel that watches for the widget appearing

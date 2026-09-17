@@ -1187,8 +1187,10 @@ await test("the bookings step, integrations, channels and requests pages read th
   assert.match(integrations, /\{outlookOn \? \(/);
   assert.match(integrations, /OUTLOOK_ADMIN_APPROVAL_TEXT/);
   assert.match(integrations, /endpoint="\/api\/integrations\/microsoft"/);
+  // The calendar left Channels on 2026-09-17: it is where bookings go, not a way in.
   const channels = source("src/app/(app)/channels/page.tsx");
-  assert.match(channels, /const outlookOn = flag\("booking\.outlook"\);[\s\S]{0,200}!outlookOn \? "soon"/);
+  // The calendar left Channels on 2026-09-17: it is where bookings go, not a way in.
+  assert.doesNotMatch(channels, /Outlook/);
   assert.match(source("src/app/(app)/requests/page.tsx"), /outlookUsable\(location\)/);
   for (const file of ["src/app/setup/[step]/page.tsx", "src/app/(app)/channels/page.tsx", "src/app/(app)/calendars/page.tsx"]) {
     const text = source(file);

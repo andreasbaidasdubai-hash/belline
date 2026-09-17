@@ -163,11 +163,14 @@ await test("the Calendars page is for owners and managers, with the notices, sec
   assert.match(source("src/app/(app)/calendars/DestinationSwitch.tsx"), /\/api\/setup\/journey[\s\S]{0,200}action: "destination"/);
 });
 
-await test("the Integrations page keeps only WhatsApp", () => {
-  const page = source("src/app/(app)/integrations/page.tsx");
-  assert.match(page, /<WhatsAppCard/);
-  for (const gone of ["Google", "Outlook", "RemindersForm", "Deposits", "PARTNER_GATED", "Fresha", "integrationErrorText"]) {
-    assert.ok(!page.includes(gone), `${gone} is still on the integrations page`);
+await test("the Integrations page is gone: calendars at /calendars, WhatsApp under Channels", () => {
+  // 2026-09-17: the last thing on it, the WhatsApp card, moved to Channels → WhatsApp.
+  assert.ok(!fs.existsSync(path.join(ROOT, "src", "app", "(app)", "integrations", "page.tsx")), "the integrations page is still there");
+  assert.match(source("next.config.mjs"), /source: "\/integrations", destination: "\/calendars"/);
+  assert.match(source("src/app/(app)/channels/sections.tsx"), /<WhatsAppCard/);
+  const whatsapp = source("src/app/(app)/channels/whatsapp/page.tsx");
+  for (const gone of ["Google", "Outlook", "RemindersForm", "Deposits", "PARTNER_GATED", "Fresha"]) {
+    assert.ok(!whatsapp.includes(gone), `${gone} is on the WhatsApp tab`);
   }
 });
 

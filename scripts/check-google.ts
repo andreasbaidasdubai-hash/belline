@@ -1145,7 +1145,9 @@ await test("the server swaps the copy as it serves the built site, by the flag i
 await test("in the app, the destination step, integrations and channels read the flag, never fixed copy", () => {
   const setup = source("src/app/setup/[step]/page.tsx");
   assert.match(setup, /function googleCard\(venue: Location\): DestinationOption \{[\s\S]{0,120}if \(!flag\("booking\.google"\)\) \{\s*return \{ id: "google", title, state: "soon"/);
-  assert.match(source("src/app/(app)/channels/page.tsx"), /const googleOn = flag\("booking\.google"\);[\s\S]{0,200}!googleOn \? "soon"/);
+  // The calendar left Channels on 2026-09-17: it is where bookings go, not a way in.
+  assert.doesNotMatch(source("src/app/(app)/channels/page.tsx"), /Google Calendar/);
+  assert.match(source("src/app/(app)/calendars/page.tsx"), /const googleOn = flag\("booking\.google"\);/);
   assert.match(source("src/app/(app)/calendars/page.tsx"), /\{googleOn \? \(/);
   // Nowhere in the app is Google "coming soon" in fixed text outside a flag branch.
   for (const file of ["src/app/setup/[step]/page.tsx", "src/app/(app)/channels/page.tsx", "src/app/(app)/calendars/page.tsx"]) {

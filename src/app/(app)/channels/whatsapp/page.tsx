@@ -12,7 +12,7 @@ export const metadata = { title: "WhatsApp" };
 /**
  * WhatsApp, the second-number way: the venue keeps its own WhatsApp untouched
  * and Belline answers a number registered for it. It used to sit on the
- * Integrations page between reminder texts and Google Calendar, which is not
+ * Integrations page between reminder texts and the calendars, which is not
  * where anybody looks for a way customers reach them.
  */
 export default async function WhatsAppPage({ searchParams }: { searchParams: Promise<{ loc?: string }> }) {

@@ -101,7 +101,7 @@ await test("the system prompt carries the journey: current step and what blocks 
   const model = fakeModel([text("Hello")]);
   await quiet(() => runSetupTurn(salon.id, salon.by, [{ role: "user", content: "Where am I?" }], { model: model.call }));
   const system = String((model.calls[0] as { system?: unknown }).system);
-  assert.match(system, /Current step: \d+ of 9/);
+  assert.match(system, /Current step: \d+ of 10/);
   assert.match(system, /Blocking Go live:/);
 });
 
@@ -196,10 +196,10 @@ await test("the fallback gives the next step, its button and its article, with n
 });
 
 await test("with a step given, the card is for that step", () => {
-  const card = helpCard(getLocation(salon.id)!, undefined, "channels");
-  assert.match(card.title, /Phone and website/);
+  const card = helpCard(getLocation(salon.id)!, undefined, "website");
+  assert.match(card.title, /Website chat/);
   assert.ok(card.article && /forward|chat|number/i.test(card.article.body));
-  assert.match(setupGreeting(getLocation(salon.id)!, "channels"), /Phone and website/);
+  assert.match(setupGreeting(getLocation(salon.id)!, "phone"), /Phone & WhatsApp/);
 });
 
 await test("without a model, asking for a person once says to ask again; twice opens the ticket", async () => {

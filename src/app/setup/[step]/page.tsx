@@ -427,7 +427,7 @@ function Body({
             chat link once you make it, and WhatsApp once it is connected. Nothing answers customers until you go live.
           </p>
           {cont}
-          <h2 style={{ fontSize: 17, fontWeight: 600, margin: "26px 0 10px" }}>Your phone line</h2>
+          <h2 style={{ fontSize: 17, fontWeight: 600, margin: "26px 0 10px" }}>Your phone line (optional)</h2>
           <PhoneSection location={venue} skipHref={next} />
           <h2 style={{ fontSize: 17, fontWeight: 600, margin: "26px 0 10px" }}>A chat link, no website needed</h2>
           <LinkSection location={venue} live={statuses.link.state === "live"} />
@@ -505,7 +505,16 @@ function Body({
           ) : (
             blocker && <p style={lede}>{blocker.label}.</p>
           )}
-          {main}
+          {j.canGoLive || !blocker ? (
+            main
+          ) : (
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {main}
+              <Link href={`/setup/assistant?step=${blocker.step}`} className="btn" style={{ padding: "12px 18px" }}>
+                Ask Belle
+              </Link>
+            </div>
+          )}
           <ChannelList statuses={statuses} />
           {/* The button again at the bottom, only when it is a link: two Go live
               buttons on one screen would be one too many to trust. */}
