@@ -1095,6 +1095,43 @@ await test("the app's server re-applies the strip and the Google lines from its 
   assert.match(exampleOf(pageWithFlags("index.html", off, { FLAG_STUBS: "on", FLAG_BOOKING_GOOGLE: "on" }).toString("utf8")), /Coming soon: books into your calendar/);
 });
 
+await test("the hero names the languages Belle answers in for the page's country, from the registry and the flags, and no longer says 'Keep your number'", async () => {
+  const { applySiteFlags, heroLanguages, heroLanguagesText, GERMAN_LANGUAGE_NAMES } = await import("../src/lib/site-flags");
+  const { LANGUAGE_REGISTRY } = await import("../src/config/languages");
+  const { pageWithFlags } = await import("../src/lib/marketing");
+  const DE_ON = { FLAG_LANGUAGE_DE: "on" };
+  const langsOf = (html: string) => /<span class="hero-langs" data-langs>([^<]*)<\/span>/.exec(heroOf(html))?.[1];
+  // Every language has a German name, so a new live one cannot leave the German line blank.
+  for (const l of LANGUAGE_REGISTRY) assert.ok(GERMAN_LANGUAGE_NAMES[l.code], `${l.code} has no German name`);
+  for (const file of ["landing.html", "landing.de.html"]) {
+    const raw = fs.readFileSync(path.join(process.cwd(), "public", file), "utf8");
+    assert.doesNotMatch(heroOf(raw), /Keep your number|Ihre Nummer bleibt/, `${file}: the hero still says keep your number`);
+    assert.equal(applySiteFlags(file, raw, {}), raw, `${file}: the committed page is not the flag-off render`);
+  }
+  // The UAE page: English while Arabic is a planned slot (no guards, no customer lines), whatever flags are on.
+  assert.equal(LANGUAGE_REGISTRY.find((l) => l.code === "ar")!.status, "planned");
+  assert.deepEqual(heroLanguages("AE", "en", {}), ["en"]);
+  assert.equal(heroLanguagesText("AE", "en", DE_ON), "Answers in English.");
+  assert.equal(langsOf(visibleHtml("landing.html")), "Answers in English.");
+  // The German pages: German only while language.de is on, as the server serves them, both ways and Swiss spelling included.
+  assert.equal(heroLanguagesText("DE", "de", {}), "Belline antwortet derzeit auf Englisch.");
+  assert.equal(heroLanguagesText("DE", "de", DE_ON), "Belline antwortet auf Deutsch und Englisch.");
+  for (const slug of ["de-de", "de-at", "de-ch"]) {
+    const off = builtGerman.get(`off ${slug}`)!;
+    assert.equal(langsOf(off), "Belline antwortet derzeit auf Englisch.", slug);
+    const on = pageWithFlags(`${slug}/index.html`, Buffer.from(off), DE_ON).toString("utf8");
+    assert.equal(langsOf(on), "Belline antwortet auf Deutsch und Englisch.", slug);
+    assert.equal(langsOf(pageWithFlags(`${slug}/index.html`, Buffer.from(on), {}).toString("utf8")), "Belline antwortet derzeit auf Englisch.", slug);
+    // A test harness never tells the public German works.
+    assert.equal(langsOf(pageWithFlags(`${slug}/index.html`, Buffer.from(off), { FLAG_STUBS: "on" }).toString("utf8")), "Belline antwortet derzeit auf Englisch.", slug);
+  }
+  // Arabic, the day it is live and selectable (ar-AE is its UAE variant): the line is written from the list, nobody edits the page.
+  const { languagesLine } = await import("../src/lib/site-flags");
+  assert.ok(LANGUAGE_REGISTRY.find((l) => l.code === "ar")!.variants.some((v) => v.tag === "ar-AE"));
+  assert.equal(languagesLine(["en", "ar"], "en"), "Answers in English and Arabic.");
+  assert.equal(languagesLine(["de", "en", "fr"], "de"), "Belline antwortet auf Deutsch, Englisch und Französisch.");
+});
+
 await test("video.avatar: the committed pages say nothing about video; the flag-on build and the app's server lead with it, both ways", async () => {
   const { pageWithFlags } = await import("../src/lib/marketing");
   const off = built("off");
@@ -1785,17 +1822,47 @@ head("Belle's chat on belline.ai: who she is, and what to ask");
       assert.notEqual(body.live, false, "Belline's own widget is not live, so this proves nothing");
       assert.equal(body.whatsappLink, null, "the WhatsApp icon would show with no connected number");
       const src = fs.readFileSync(path.join(process.cwd(), "src", "app", "api", "embed", "[key]", "config", "route.ts"), "utf8");
-      assert.match(src, /const link = connectedWhatsAppLink\(account\);/);
-      assert.doesNotMatch(src, /whatsappLink\(/, "the route still falls back to the environment's number");
+      assert.match(src, /const link = venueWhatsAppLink\(location, account\);/);
+      assert.doesNotMatch(src, /[^e]WhatsAppLink\(|whatsappLink\(/, "the route still falls back to the environment's number");
     } finally {
       if (had === undefined) delete process.env.WHATSAPP_NUMBER;
       else process.env.WHATSAPP_NUMBER = had;
     }
   });
 
+  await test("SITE_WHATSAPP_NUMBER links belline.ai's own WhatsApp without a local connection, and no customer venue's", async () => {
+    const { venueWhatsAppLink } = await import("../src/lib/embed");
+    const site = { id: "loc_belline", embed: { key: "be_belline_site" } };
+    const env = { SITE_WHATSAPP_NUMBER: "+971 50 123 4567" };
+    const connected = { phoneE164: "+971509999999", status: "active", channel: "whatsapp" };
+    assert.equal(venueWhatsAppLink(site, null, env), "https://wa.me/971501234567");
+    assert.equal(venueWhatsAppLink(site, connected, env), "https://wa.me/971509999999", "a connected number comes first");
+    assert.equal(venueWhatsAppLink(site, null, {}), null);
+    assert.equal(venueWhatsAppLink(site, null, { SITE_WHATSAPP_NUMBER: "0501234567" }), null, "not E.164");
+    // Customers still need their own connected, active number.
+    assert.equal(venueWhatsAppLink({ id: "loc_salon", embed: { key: "be_salon" } }, null, env), null);
+    assert.equal(venueWhatsAppLink({ id: "loc_salon", embed: { key: "be_belline_site" } }, null, env), null);
+    assert.equal(venueWhatsAppLink({ id: "loc_belline", embed: { key: "be_other" } }, null, env), null);
+    assert.equal(venueWhatsAppLink({ id: "loc_salon", embed: { key: "be_salon" } }, { ...connected, status: "paused" }, env), null);
+    // Through the route belline.ai's widget fetches.
+    const had = process.env.SITE_WHATSAPP_NUMBER;
+    process.env.SITE_WHATSAPP_NUMBER = "+971501234567";
+    try {
+      const { GET } = await import("../src/app/api/embed/[key]/config/route");
+      const res = await GET(new Request("http://localhost/api/embed/be_belline_site/config"), { params: Promise.resolve({ key: "be_belline_site" }) });
+      const body = (await res.json()) as { whatsappLink?: string | null };
+      assert.equal(body.whatsappLink, "https://wa.me/971501234567");
+      const page = fs.readFileSync(path.join(process.cwd(), "src", "app", "whatsapp", "page.tsx"), "utf8");
+      assert.match(page, /venueWhatsAppLink\(venue, account\)/, "/whatsapp and the widget config disagree");
+    } finally {
+      if (had === undefined) delete process.env.SITE_WHATSAPP_NUMBER;
+      else process.env.SITE_WHATSAPP_NUMBER = had;
+    }
+  });
+
   await test("/whatsapp without a connection explains and offers the chat and getting started, not a dead end", () => {
     const src = fs.readFileSync(path.join(process.cwd(), "src", "app", "whatsapp", "page.tsx"), "utf8");
-    assert.match(src, /connectedWhatsAppLink\(account\)/, "the page decides on something other than a real connection");
+    assert.match(src, /venueWhatsAppLink\(venue, account\)/, "the page decides on something other than a real connection");
     assert.doesNotMatch(src, /whatsappConfigured\(/);
     assert.match(src, /\$\{site\}\/\?chat=1/);
     assert.match(src, /href="\/checkout"/);

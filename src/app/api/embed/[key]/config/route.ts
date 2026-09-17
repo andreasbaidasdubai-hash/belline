@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { seedIfEmpty } from "@/lib/seed";
 import { listLocations } from "@/lib/store";
-import { connectedWhatsAppLink, widgetConfig } from "@/lib/embed";
+import { venueWhatsAppLink, widgetConfig } from "@/lib/embed";
 import { answersIn, languageNotice } from "@/lib/language";
 import { venueWhatsApp } from "@/lib/whatsapp";
 import { isActivated } from "@/lib/onboarding/journey";
@@ -43,8 +43,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   }
 
   // A real, active connection or nothing: the site hides the WhatsApp icon on null.
+  // Belline's own site alone may use its public number (SITE_WHATSAPP_NUMBER), answered by production Belle.
   const account = await venueWhatsApp(location).catch(() => null);
-  const link = connectedWhatsAppLink(account);
+  const link = venueWhatsAppLink(location, account);
 
   // `video` says only whether to show it (lib/video/availability.ts); the bubble's
   // clip, poster and agent name come with it, and only then.

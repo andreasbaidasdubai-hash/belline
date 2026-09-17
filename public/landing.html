@@ -139,21 +139,22 @@
 
   <!--
     The hero (site review, 2026-09-17). The claim on the left, and ONE
-    demonstration on the right: Belle, Belline's AI receptionist, on video.
-    The video receptionist is the product the founder leads with, included in
-    every plan; each video minute uses 2.5 voice minutes (generated from the
-    ratio in scripts/site-pricing.ts).
+    demonstration on the right: Belle, Belline's AI receptionist. Every video
+    claim here follows video.avatar (src/lib/site-flags.ts); this file is the
+    flag-off page.
 
     In the markup the face is a still placeholder and its button is "Talk to
     Belle": an ordinary link to the voice call, true with JavaScript off and
     with video switched off. When our venue's widget config says video is on,
-    site.js puts Belle's real bubble (embed-video.js) into the slot on a wide
-    screen, relabels the button "Try Belle on video", and keeps a compact
-    launcher in the corner for when the hero has scrolled away. On a phone the
-    face stays here and the launcher is the only floating thing.
+    site.js puts Belle's real bubble (embed-video.js) into the slot, large, on
+    every screen (on a phone straight under the headline and the pills). The
+    face is then the button; the heading, paragraph and button under it go,
+    leaving her icons and the included line. × makes her a small floating
+    face for the session.
 
-    The capability row's last item follows the calendar flags
-    (src/lib/site-flags.ts): "Takes booking requests" until a calendar books.
+    The capability row's last item follows the calendar flags, and the
+    language line is written from the language registry and its flags
+    (src/lib/site-flags.ts): English until another language is live here.
   -->
   <section class="hero">
     <div class="wrap hero-in hero-demo">
@@ -178,7 +179,7 @@
 
         <p class="hero-note rise rise-4">
           <span class="gen" data-gen="hero-reassure">30 days free · No card required · Plans from AED 249/month</span>
-          <span class="hero-note-more">Keep your number. Answers in English.</span>
+          <span class="hero-note-more"><span class="hero-langs" data-langs>Answers in English.</span></span>
         </p>
       </div>
 

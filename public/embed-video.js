@@ -117,6 +117,8 @@
     // One row under the face: the primary button, then the round icons.
     ".bvb-row{position:relative;display:flex;align-items:center;gap:8px;margin-top:14px}" +
     ".bvb-mock~.bvb-row{margin-top:20px}" +
+    // A host whose face is the only way to talk (belline.ai): the icons alone, centred.
+    ".bvb-row.is-icons{justify-content:center}" +
     ".bvb-talk{flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:center;min-height:48px;padding:0 12px;margin:0;" +
     "border:0;border-radius:999px;cursor:pointer;font:inherit;font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" +
     "background:" + BLUE + ";color:#FFFFFF;box-shadow:" + FLOAT + "}" +
@@ -334,7 +336,7 @@
             ? agent + ", AI concierge, on a video call"
             : mode === "mini"
               ? "Video call with " + agent + ", the AI concierge"
-              : "Talk to " + agent + ", the AI concierge, on a video call",
+              : words.face || "Talk to " + agent + ", the AI concierge, on a video call",
         );
       }
     }
@@ -397,10 +399,15 @@
       caption.setAttribute("aria-hidden", "true");
 
       var row = el("div", "bvb-row");
-      var talk = el("button", "bvb-talk", words.talk || "Talk to " + agent);
-      talk.type = "button";
-      talk.addEventListener("click", openCall);
-      row.appendChild(talk);
+      // A host may leave the button out (`talkButton: false`) where the face says it all: tapping it starts the call.
+      if (opts.talkButton === false) {
+        row.className = "bvb-row is-icons";
+      } else {
+        var talk = el("button", "bvb-talk", words.talk || "Talk to " + agent);
+        talk.type = "button";
+        talk.addEventListener("click", openCall);
+        row.appendChild(talk);
+      }
 
       actions().forEach(function (o) {
         var act = el("button", "bvb-act");
@@ -843,14 +850,15 @@
       }
       state.pipArmY = scrollY();
       setMode(state.mode === "call" && state.call ? "call" : state.mode);
+      // Before focus moves: a host may first put the grown call where the visitor is (belline.ai floats it).
+      if (opts.onPip) opts.onPip(false);
       if (!quiet) {
         try {
-          state.shut.focus();
+          state.shut.focus({ preventScroll: true });
         } catch (e) {
           /* focus is a nicety */
         }
       }
-      if (opts.onPip) opts.onPip(false);
     }
 
     function setMuted(muted) {

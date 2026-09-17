@@ -1,6 +1,71 @@
+import { LANGUAGE_REGISTRY, type LanguageCode } from "../config/languages";
 import { flag, type FlagName } from "./flags";
+import { selectableLanguages } from "./language";
 
 type Env = Record<string, string | undefined>;
+
+/** Each language's name in German, for the German pages' language line. */
+export const GERMAN_LANGUAGE_NAMES: Record<LanguageCode, string> = {
+  en: "Englisch",
+  de: "Deutsch",
+  fr: "Französisch",
+  es: "Spanisch",
+  ar: "Arabisch",
+  pt: "Portugiesisch",
+  it: "Italienisch",
+  nl: "Niederländisch",
+  tr: "Türkisch",
+};
+
+/**
+ * The languages Belle answers in on a page for this country ("AE", "DE",
+ * "AT", "CH"), as the registry and the flags say now: every selectable
+ * language (live, its flag on, its customer lines and guards complete,
+ * lib/language.ts) that is English, the fallback everywhere, or that has a
+ * variant for the country (ar-AE, de-CH, fr-CH). The page's own language
+ * first. Arabic is a planned slot today, so the UAE page says English until
+ * Arabic is live, and then says both without anybody editing it.
+ */
+export function heroLanguages(country: string, pageLanguage: "en" | "de", env: Env = process.env): LanguageCode[] {
+  const codes = selectableLanguages(publicEnv(env))
+    .filter((l) => l.code === "en" || l.variants.some((v) => v.tag.split("-")[1] === country))
+    .map((l) => l.code as LanguageCode);
+  return [...codes.filter((c) => c === pageLanguage), ...codes.filter((c) => c !== pageLanguage)];
+}
+
+const listed = (names: string[], and: string) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} ${and} ${names[names.length - 1]}`);
+
+/** The line for these languages, in the page's own language: "Answers in English and Arabic." */
+export function languagesLine(codes: readonly LanguageCode[], pageLanguage: "en" | "de"): string {
+  if (pageLanguage === "en") {
+    const names = codes.map((c) => LANGUAGE_REGISTRY.find((l) => l.code === c)!.name);
+    return `Answers in ${listed(names, "and")}.`;
+  }
+  const names = codes.map((c) => GERMAN_LANGUAGE_NAMES[c]);
+  return names.length === 1 ? `Belline antwortet derzeit auf ${names[0]}.` : `Belline antwortet auf ${listed(names, "und")}.`;
+}
+
+/** "Answers in English." / "Belline antwortet auf Deutsch und Englisch.", as the registry and the flags say now. */
+export function heroLanguagesText(country: string, pageLanguage: "en" | "de", env: Env = process.env): string {
+  return languagesLine(heroLanguages(country, pageLanguage, env), pageLanguage);
+}
+
+const HERO_LANGUAGES = /(<span class="hero-langs" data-langs>)[^<]*(<\/span>)/g;
+
+/**
+ * The hero's language line (`<span class="hero-langs" data-langs>`), written
+ * from `heroLanguagesText` for the page's own country, read from its
+ * `<html lang>` (the English page is the UAE's). Applied with the flag copy, at
+ * build time and as the app's server serves, so `language.de` decides it the
+ * same way `booking.google` decides the calendar lines.
+ */
+export function applyHeroLanguages(html: string, env: Env = process.env): string {
+  const tag = /<html lang="([a-z]{2})(?:-([A-Z]{2}))?"/.exec(html);
+  const pageLanguage = tag?.[1] === "de" ? "de" : "en";
+  const country = tag?.[2] ?? (pageLanguage === "de" ? "DE" : "AE");
+  const text = heroLanguagesText(country, pageLanguage, env);
+  return html.replace(HERO_LANGUAGES, (_m, open: string, close: string) => `${open}${text}${close}`);
+}
 
 /**
  * The public website's copy for capabilities behind a flag.
@@ -334,6 +399,7 @@ export function applySiteFlags(file: string, html: string, env: Env = process.en
   const flags = Object.entries(SITE_FLAG_COPY) as [FlagName, SiteSwap[]][];
   let out =
     file === "landing.html" ? applyCalendarPricing(html, env) : file === "landing.de.html" ? applyCalendarPricing(html, env, "de") : html;
+  if (file === "landing.html" || file === "landing.de.html") out = applyHeroLanguages(out, env);
   // Back to the page as written: last flag first, each swap in reverse.
   for (const [, swaps] of [...flags].reverse()) {
     for (const s of [...swaps].reverse()) if (s.file === file) out = swap(out, spelling(s.on), spelling(s.off));

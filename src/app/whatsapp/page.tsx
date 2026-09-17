@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { connectedWhatsAppLink } from "@/lib/embed";
+import { venueWhatsAppLink } from "@/lib/embed";
 import { siteOrigin } from "@/lib/origin";
 import { seedIfEmpty } from "@/lib/seed";
 import { BELLINE_LOCATION_ID } from "@/lib/seed-belline";
@@ -33,7 +33,8 @@ export default async function WhatsAppPage() {
   seedIfEmpty();
   const venue = getLocation(BELLINE_LOCATION_ID);
   const account = venue ? await venueWhatsApp(venue).catch(() => null) : null;
-  const link = connectedWhatsAppLink(account);
+  // The same test as the widget config: a connected number, or the site's public one (SITE_WHATSAPP_NUMBER).
+  const link = venue ? venueWhatsAppLink(venue, account) : null;
   if (link) {
     redirect(`${link}?text=${encodeURIComponent("Hi Belle")}`);
   }

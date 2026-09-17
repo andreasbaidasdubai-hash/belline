@@ -48,7 +48,7 @@ test("an owner picks the video face and background, with a live preview, and it 
   await page.getByLabel("Your email").fill(email);
   await page.getByLabel("Choose a password").fill("Correct-Horse-Battery-9");
   await page.locator("#acceptTerms").check();
-  await page.getByRole("button", { name: "Start free trial" }).click();
+  await page.getByRole("button", { name: "Get started" }).click();
   await confirmEmail(page, email);
 
   const locations = JSON.parse(fs.readFileSync(path.join(DATA, "locations.json"), "utf8")) as { id: string; name: string }[];

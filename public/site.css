@@ -3512,9 +3512,40 @@ footer a { color: var(--bl-ink-900); }
   .hv-slot { padding-top: 0; }
   .hero-video.has-bubble .hv-slot { min-height: 0; }
 }
+/* With Belle's bubble in the slot (site.js), the face is the button: under it
+   only her icons and the included line. × makes her small for the session:
+   the demonstration goes, and the small face floats in the corner. */
+.hero-video.has-bubble .hv-head,
+.hero-video.has-bubble .hv-text { display: none; }
+.hero-video.is-small { display: none; }
+.video-bubble .bvb-circle { cursor: pointer; }
+.video-bubble.is-call .bvb-circle { cursor: default; }
+@media (max-width: 900px) {
+  /* A phone, on load: Belle large in the first screen, straight under the
+     headline and the pills, then the button, the paragraph and the notes. */
+  .hero-demo.has-video-hero { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+  .hero-demo.has-video-hero .hero-copy { display: contents; }
+  .hero-demo.has-video-hero .hero-video { order: 1; margin-top: 10px; }
+  .hero-demo.has-video-hero .cta-row { order: 2; margin-top: 22px; }
+  .hero-demo.has-video-hero .lead { order: 3; }
+  .hero-demo.has-video-hero .hero-note { order: 4; }
+  .hero-demo.has-video-hero .hero-video { gap: 6px; }
+  /* Tighter pills, so they take two rows rather than three and Belle's icons stay in the first screen. */
+  .hero-demo.has-video-hero .hero-can { gap: 6px; margin-top: 18px; }
+  .hero-demo.has-video-hero .hero-can li { padding: 5px 11px 5px 9px; gap: 7px; font-size: 0.84rem; }
+  /* Room above the face for "Hi, I'm Belle — tap to talk", which a phone shows too. */
+  .hero-video.has-bubble .hv-slot { padding-top: 42px; }
+  .video-bubble:not(.is-call):not(.is-mini) .bvb-caption { display: block; bottom: calc(100% + 10px); }
+  .video-bubble .bvb-row { margin-top: 12px; }
+  .hero-video.has-bubble .hv-early { font-size: 0.78rem; }
+}
+/* A short phone (375x667): a little smaller, so the face, her icons and the included line all fit the first screen. */
+@media (max-width: 520px) and (max-height: 720px) {
+  .video-bubble.bvb:not(.is-call) { --bvb-call: min(214px, calc(100vw - 40px)); }
+}
 
 /* --- What Belline does: four entries, video first ------------------------- */
-#channels .channels-4 > li:first-child { border-color: var(--bl-blue); box-shadow: inset 0 0 0 1px var(--bl-blue); }
+#channels .channels-4:not(.channels-3) > li:first-child { border-color: var(--bl-blue); box-shadow: inset 0 0 0 1px var(--bl-blue); }
 
 /* --- Who it is for: three use cases, then the rest ------------------------- */
 #for .uses {
@@ -3727,58 +3758,53 @@ footer a { color: var(--bl-ink-900); }
 .wa-fab::after { animation-iteration-count: 3; }
 .wa-fab[hidden] { display: none !important; }
 
-/* --- Belle's launcher -------------------------------------------------------
-   With video on, the corner holds this and nothing bigger at rest: a 40 px
-   face and "Talk to Belle · video", about 56 px tall, 24 px from the edges,
-   with the chat (and WhatsApp, only when a number is connected) beside it.
-   site.js shows it once the hero's face is out of view (at once on a phone),
-   and moves it out of the way wherever it would cover a price, a plan or a
-   button. */
+/* --- Belle's small face -----------------------------------------------------
+   With video on, this is all that ever floats at rest: Belle's round face,
+   64 px, bottom right, with the chat (and WhatsApp, only when the config names
+   a number) beside it. site.js shows it after × (for the session), and while
+   the hero's face is out of view; never while the big face is on screen. It
+   moves out of the way wherever it would cover a price, a plan or a button.
+   Tapping the face starts the video call in the big circle. */
 .video-launcher {
   position: fixed;
   z-index: 40;
   right: 24px;
   bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   display: flex;
+  flex-direction: row-reverse;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   transition: transform 0.22s ease, opacity 0.22s ease;
 }
 .video-launcher[hidden] { display: none; }
 .video-launcher.is-away { transform: translateY(calc(100% + 32px)); opacity: 0; pointer-events: none; }
 .vl-main {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  height: 56px;
-  padding: 0 18px 0 8px;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  flex: none;
+  padding: 0;
   border: 0;
-  border-radius: var(--bl-radius-pill);
-  background: var(--bl-blue);
-  color: #FFFFFF;
-  font: inherit;
-  font-size: 0.95rem;
-  font-weight: 600;
-  white-space: nowrap;
+  border-radius: 50%;
+  background: transparent;
   cursor: pointer;
-  box-shadow: 0 0 0 3px #FFFFFF, 0 12px 32px -16px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 3px #FFFFFF, 0 12px 32px -16px rgba(0, 0, 0, 0.45);
 }
-.vl-main:hover { background: var(--bl-blue-hover); }
 .vl-face {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  flex: none;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   overflow: hidden;
   background: radial-gradient(circle at 50% 38%, var(--bl-navy-card), var(--bl-navy) 72%);
   background-size: cover;
   background-position: center;
-  box-shadow: 0 0 0 2px #FFFFFF;
 }
-.vl-face svg { width: 20px; height: 20px; }
+.vl-face svg { width: 30px; height: 30px; }
 .vl-face.has-poster svg { display: none; }
+.vl-main:hover .vl-face { filter: brightness(1.06); }
 .vl-act {
   position: relative;
   isolation: isolate;
@@ -3796,33 +3822,18 @@ footer a { color: var(--bl-ink-900); }
   box-shadow: 0 0 0 3px #FFFFFF, 0 12px 32px -16px rgba(0, 0, 0, 0.3);
 }
 .vl-act svg { width: 22px; height: 22px; }
-.vl-act::after { content: ""; position: absolute; inset: 0; border-radius: inherit; border: 2px solid var(--bl-blue); opacity: 0; pointer-events: none; z-index: -1; }
-.vl-act.is-ringing { animation: bell-nudge 1.5s ease-in-out 3; }
-.vl-act.is-ringing::after { animation: bell-ring 1.5s ease-out 3; }
-.vl-act.is-ringing + .vl-act.is-ringing,
-.vl-act.is-ringing + .vl-act.is-ringing::after { animation-delay: 0.5s; }
 .vl-main:focus-visible,
 .vl-act:focus-visible { outline: 2px solid var(--bl-blue); outline-offset: 3px; }
 @media (max-width: 900px) {
-  .video-launcher { right: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
-  .vl-main { font-size: 0.9rem; padding-right: 14px; }
+  .video-launcher { right: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
   .vl-act { width: 44px; height: 44px; }
-}
-@media (max-width: 360px) {
-  .vl-say { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .vl-main { padding: 0 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .video-launcher { transition: none; }
-  .vl-act.is-ringing,
-  .vl-act.is-ringing::after { animation: none; }
 }
-/* The launcher tucked into the margin: the face alone, 56 px, where the pill
-   would cover content. The words stay for a screen reader. */
+/* Tucked into the margin where the icons would cover content: the face alone. */
 .video-launcher.is-tucked { right: 12px; }
 .video-launcher.is-tucked .vl-act { display: none; }
-.video-launcher.is-tucked .vl-main { width: 56px; padding: 0; justify-content: center; }
-.video-launcher.is-tucked .vl-say { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* No entrance animation on Belle's column: an element with a transform
    animation contains fixed descendants, and the call that floats in the corner
    would float inside the hero instead. */

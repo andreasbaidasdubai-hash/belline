@@ -3,19 +3,21 @@ import http from "node:http";
 import path from "node:path";
 import { expect, test as base, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { blockExternal } from "../tests/selfserve/helpers";
+import { applySiteFlags } from "../src/lib/site-flags";
 
 /**
  * belline.ai after the site review (2026-09-17), against the mock video provider:
  *
  * - choosing Annual in the pricing carries `cycle=annual` into every checkout link;
- * - Belle never covers the page: on a wide screen she rests in the hero and a
- *   compact launcher takes the corner once the hero has scrolled away; on a
- *   phone the launcher is there from the start; neither sits on the pricing,
- *   at 1280 or at 390;
- * - WhatsApp is offered only when the widget config names a connected number.
+ * - Belle is large in the hero on load, on a phone too (within the first
+ *   screen, at 390x844 and 375x667); × makes her a small face bottom right for
+ *   the session; the small face never floats over the big one, nor over the
+ *   pricing;
+ * - WhatsApp is offered only when the widget config names a number.
  *
- * Screenshots (desktop hero, desktop pricing, phone hero, phone pricing) go
- * to SITE_SHOTS_DIR when it is set.
+ * The pages are served as the app's server serves them with video.avatar on
+ * (src/lib/site-flags.ts). Screenshots (desktop hero, phone hero, phone after
+ * ×) go to SITE_SHOTS_DIR when it is set.
  *
  *   npx playwright test --config playwright.video.config.ts tests-video/site-review.spec.ts
  */
@@ -24,6 +26,8 @@ const KEY = "be_belline_site";
 const ROOT = process.cwd();
 const SHOTS = process.env.SITE_SHOTS_DIR;
 const SITE = "http://localhost:4321";
+/** The flag as staging has it, for the pages' own copy. */
+const VIDEO_ON = { FLAG_VIDEO_AVATAR: "on", TAVUS_API_KEY: "x", TAVUS_FACE_ID: "x", VIDEO_LLM_SECRET: "x".repeat(40) };
 
 const test = base.extend<{ aborted: unknown }>({
   aborted: [
@@ -52,6 +56,7 @@ function landingSite(appOrigin: string): Promise<http.Server | null> {
       const ext = path.extname(file);
       let body: Buffer | string = fs.readFileSync(file);
       if (ext === ".html" || ext === ".js") body = body.toString("utf8").split("https://app.belline.ai").join(appOrigin);
+      if (ext === ".html") body = applySiteFlags(rel, body as string, VIDEO_ON);
       res.writeHead(200, { "content-type": types[ext] ?? "application/octet-stream" });
       res.end(body);
     });
@@ -122,134 +127,199 @@ test("choosing Annual carries cycle=annual into every plan and Get started link,
   }
 });
 
-test("Belle never covers the page: she rests in the hero (a launcher on a phone), and nothing floats over the pricing", async ({ page, baseURL }) => {
+/** The launcher never sits on the big face, and nothing of Belle covers the pricing, scrolling the whole page. */
+async function expectNothingCovered(page: Page) {
+  const viewport = page.viewportSize()!;
+  const bubble = page.locator(".video-bubble");
+  const launcher = page.locator(".video-launcher");
+  const content = page.locator("#price .sec-head, #price .price-bar, #price .plans, #price .plan-shared, #price .price-tax, #price .compare, #price .terms, #price .btn");
+  const end = await page.evaluate(() => document.querySelector("#price")!.getBoundingClientRect().bottom + window.scrollY);
+  for (let y = 0; y <= end; y += Math.round(viewport.height / 3)) {
+    await page.evaluate((to) => window.scrollTo(0, to), y);
+    await page.waitForTimeout(300);
+    if (!(await launcher.isVisible()) || /is-away/.test((await launcher.getAttribute("class")) ?? "")) continue;
+    const l = await box(launcher);
+    if (await bubble.isVisible()) {
+      const face = await bubble.locator(".bvb-circle").boundingBox();
+      if (face && face.y + face.height > 0 && face.y < viewport.height) expect(overlaps(l, face), `at scroll ${y}, the small face floats over Belle's big face`).toBe(false);
+    }
+    for (let i = 0; i < (await content.count()); i++) {
+      const c = await content.nth(i).boundingBox();
+      if (!c || c.width === 0) continue;
+      expect(overlaps(l, c), `at scroll ${y}, the small face covers pricing content`).toBe(false);
+    }
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
+
+test("Belle is large in the hero on load, on a phone within the first screen, and the small face never floats over her", async ({ page, baseURL }, info) => {
   const server = await landingSite(baseURL!);
   test.skip(!server, "localhost:4321 is taken on this machine");
   try {
-    await withConfig(page, { whatsappLink: null });
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.goto(`${SITE}/`);
-    const viewport = page.viewportSize()!;
-    const wide = viewport.width > 900;
-    const bubble = page.locator(".video-bubble");
-    const launcher = page.locator(".video-launcher");
-    await expect(bubble).toHaveAttribute("data-state", "rest");
-
-    if (wide) {
+    const sizes = info.project.name === "iphone-390" ? [{ width: 390, height: 844 }, { width: 375, height: 667 }] : [page.viewportSize()!];
+    for (const size of sizes) {
+      await page.setViewportSize(size);
+      await withConfig(page, { whatsappLink: "https://wa.me/971501234567" });
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      await page.goto(`${SITE}/`);
+      const wide = size.width > 900;
+      const bubble = page.locator(".video-bubble");
+      const launcher = page.locator(".video-launcher");
+      await expect(bubble).toHaveAttribute("data-state", "rest");
       await expect(bubble).toBeVisible();
       await expect(launcher).toBeHidden();
-      await expect(page.locator(".hero-video.has-bubble")).toBeVisible();
-      await shot(page, "desktop-hero");
-    } else {
-      await expect(bubble).toBeHidden();
-      await expect(launcher).toBeVisible();
-    }
+      expect(await bubble.evaluate((b) => Boolean(b.closest(".hero-video")) && getComputedStyle(b).position !== "fixed")).toBe(true);
 
-    // The launcher: a 40px face and "Talk to Belle · video", about 56px tall, 20-24px from the edges.
-    if (!wide) {
-      const main = await box(launcher.getByRole("button", { name: "Talk to Belle · video" }));
-      expect(main.height).toBeGreaterThanOrEqual(52);
-      expect(main.height).toBeLessThanOrEqual(60);
-      const all = await box(launcher);
-      expect(viewport.width - (all.x + all.width)).toBeGreaterThanOrEqual(18);
-      expect(viewport.width - (all.x + all.width)).toBeLessThanOrEqual(26);
-      expect(viewport.height - (all.y + all.height)).toBeGreaterThanOrEqual(18);
-      const face = await box(launcher.locator(".vl-face"));
-      expect(Math.round(face.width)).toBe(40);
-      await shot(page, "mobile-hero");
-    }
-
-    // Past the hero on a wide screen, the corner holds the launcher and the big bubble is not over anything.
-    if (wide) {
-      await page.evaluate(() => window.scrollTo(0, document.querySelector("#channels")!.getBoundingClientRect().top + window.scrollY));
-      await expect(launcher).toBeVisible();
-      await expect(launcher).not.toHaveClass(/is-away/);
-      expect(await bubble.evaluate((b) => getComputedStyle(b).position)).not.toBe("fixed");
-    }
-
-    // Through the whole pricing section, nothing of Belle overlaps its content or its buttons.
-    const content = page.locator("#price .sec-head, #price .price-bar, #price .plans, #price .plan-shared, #price .price-tax, #price .compare, #price .terms, #price .btn");
-    const top = await page.evaluate(() => document.querySelector("#price")!.getBoundingClientRect().top + window.scrollY);
-    const height = await page.evaluate(() => document.querySelector("#price")!.getBoundingClientRect().height);
-    let sawTucked = false;
-    for (let y = top - viewport.height; y <= top + height; y += Math.round(viewport.height / 3)) {
-      await page.evaluate((to) => window.scrollTo(0, to), Math.max(0, y));
-      await page.waitForTimeout(350);
-      const floating = [launcher, bubble];
-      for (const thing of floating) {
-        if (!(await thing.isVisible())) continue;
-        if (thing === launcher && /is-away/.test((await thing.getAttribute("class")) ?? "")) continue;
-        const b = await box(thing);
-        if (b.y > viewport.height || b.y + b.height < 0) continue;
-        for (let i = 0; i < (await content.count()); i++) {
-          const c = await content.nth(i).boundingBox();
-          if (!c || c.width === 0) continue;
-          expect(overlaps(b, c), `at scroll ${y}, ${thing === launcher ? "the launcher" : "the bubble"} covers pricing content`).toBe(false);
-        }
-        if (thing === launcher && /is-tucked/.test((await thing.getAttribute("class")) ?? "")) sawTucked = true;
+      // Under the face: the round chat and WhatsApp icons, and the small included line. No button, no heading, no paragraph.
+      const face = bubble.getByRole("button", { name: "Talk to Belle on video", exact: true });
+      await expect(face).toHaveCSS("cursor", "pointer");
+      await expect(bubble.locator(".bvb-talk")).toHaveCount(0);
+      await expect(page.getByText("Try Belle on video")).toHaveCount(0);
+      await expect(page.locator(".hero-video .hv-title")).toBeHidden();
+      await expect(page.locator(".hero-video .hv-text")).toBeHidden();
+      await expect(page.locator(".hero-video .hv-cta")).toBeHidden();
+      await expect(bubble.locator(".bvb-act")).toHaveCount(2);
+      await expect(page.locator(".hero-video .hv-early")).toHaveText("Included in every plan. Each video minute uses 2.5 voice minutes.");
+      await expect(page.locator(".hero-video .hv-early")).toBeVisible();
+      await expect(bubble.locator(".bvb-caption")).toBeVisible();
+      await expect(bubble.locator(".bvb-caption")).toHaveText("Hi, I'm Belle — tap to talk");
+      // As the page loads, before any scrolling.
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      const circle = await box(bubble.locator(".bvb-circle"));
+      if (wide) {
+        expect(circle.width).toBeGreaterThanOrEqual(296);
+        await shot(page, "desktop-hero");
+      } else {
+        // Large, within the first screen with her icons and the included line: under the headline and the pills, before the paragraph.
+        // About 220-240px: 240 on a 390x844 phone, a little less on a short one (375x667) so her icons and the line fit too.
+        expect(circle.width).toBeGreaterThanOrEqual(210);
+        expect(circle.width).toBeLessThanOrEqual(252);
+        expect(circle.y).toBeGreaterThanOrEqual(0);
+        const icons = await box(bubble.locator(".bvb-row"));
+        const line = await box(page.locator(".hero-video .hv-early"));
+        expect(icons.y + icons.height, "Belle's icons are below the first screen").toBeLessThanOrEqual(size.height);
+        expect(line.y + line.height, "the included line is below the first screen").toBeLessThanOrEqual(size.height);
+        const pills = await box(page.locator(".hero-can"));
+        const lead = await box(page.locator(".hero .lead"));
+        expect((await box(bubble.locator(".bvb-caption"))).y).toBeGreaterThanOrEqual(pills.y + pills.height);
+        expect(lead.y).toBeGreaterThan(circle.y + circle.height);
+        expect((await box(page.locator(".hero h1"))).y).toBeLessThan(circle.y);
+        await shot(page, `mobile-hero-${size.width}x${size.height}`);
       }
+
+      // Keyboard: the face takes focus and shows a ring.
+      await face.focus();
+      await page.keyboard.press("Shift+Tab");
+      await page.keyboard.press("Tab");
+      expect(await face.evaluate((el) => document.activeElement === el && getComputedStyle(el).outlineStyle !== "none")).toBe(true);
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      // Scrolling the whole page: the small face shows only once the big one is out of view, and covers nothing.
+      await expectNothingCovered(page);
+      if (wide) {
+        await page.evaluate(() => window.scrollTo(0, document.querySelector("#channels")!.getBoundingClientRect().top + window.scrollY));
+        await expect(launcher).toBeVisible();
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await expect(launcher).toBeHidden();
+      }
+
+      // ×: Belle becomes the small face, bottom right, with the chat and WhatsApp, for the session.
+      await bubble.getByRole("button", { name: "Close Belle's video greeting" }).click();
+      await expect(page.locator(".hero-video")).toBeHidden();
+      await expect(launcher).toBeVisible();
+      const small = await box(launcher.getByRole("button", { name: "Talk to Belle on video" }));
+      expect(Math.round(small.width)).toBe(64);
+      expect(Math.round(small.height)).toBe(64);
+      expect(size.width - (small.x + small.width)).toBeLessThanOrEqual(26);
+      expect(size.height - (small.y + small.height)).toBeLessThanOrEqual(26);
+      await expect(launcher.locator(".vl-act")).toHaveCount(2);
+      await expect(launcher.locator('[data-kind="whatsapp"]')).toHaveAttribute("aria-label", "WhatsApp Belle");
+      if (!wide) await shot(page, `mobile-after-close-${size.width}x${size.height}`);
+      // Still small after a reload in the same session.
+      await page.reload();
+      await expect(launcher).toBeVisible();
+      await expect(page.locator(".hero-video")).toBeHidden();
+
+      // The small face starts the call in the big circle; when it ends she is small again.
+      await launcher.getByRole("button", { name: "Talk to Belle on video" }).click();
+      await expect(bubble).toHaveAttribute("data-state", "call");
+      await expect(bubble).toBeVisible();
+      await expect(launcher).toBeHidden();
+      // Grown from the small face (the circle animates to the call's size).
+      await expect.poll(async () => (await box(bubble.locator(".bvb-circle"))).width).toBeGreaterThanOrEqual(228);
+      const call = await box(bubble.locator(".bvb-circle"));
+      expect(call.x + call.width).toBeLessThanOrEqual(size.width);
+      await page.getByRole("button", { name: "Close video call" }).click();
+      await expect(page.locator("iframe.bvb-frame")).toHaveCount(0);
+      await expect(launcher).toBeVisible();
+      await expect(page.locator(".hero-video")).toBeHidden();
+
+      // A fresh session: large again.
+      await page.evaluate(() => sessionStorage.clear());
     }
-    void sawTucked;
-
-    // A screenshot with the plans in view and the launcher where it may be.
-    await page.evaluate(() => window.scrollTo(0, document.querySelector("#price .plans")!.getBoundingClientRect().top + window.scrollY - 140));
-    await page.waitForTimeout(400);
-    await shot(page, wide ? "desktop-pricing" : "mobile-pricing");
-
-    // The launcher starts the call in the big circle, and comes back when it ends.
-    await page.evaluate(() => window.scrollTo(0, document.querySelector("#how")!.getBoundingClientRect().top + window.scrollY));
-    await expect(launcher).toBeVisible();
-    await expect(launcher).not.toHaveClass(/is-away/);
-    await launcher.getByRole("button", { name: "Talk to Belle · video" }).click();
-    await expect(bubble).toHaveAttribute("data-state", "call");
-    // Floating in the corner, where the visitor is: the page did not jump back to the hero.
-    const scrolled = await page.evaluate(() => window.scrollY);
-    expect(scrolled).toBeGreaterThan(viewport.height);
-    expect(await bubble.evaluate((b) => b.getBoundingClientRect().bottom <= window.innerHeight)).toBe(true);
-    await expect(bubble).toBeVisible();
-    await expect(launcher).toBeHidden();
-    const circle = await box(bubble.locator(".bvb-circle"));
-    expect(circle.width).toBeGreaterThanOrEqual(228);
-    expect(circle.x + circle.width).toBeLessThanOrEqual(viewport.width);
-    await page.getByRole("button", { name: "Close video call" }).click();
-    await expect(page.locator("iframe.bvb-frame")).toHaveCount(0);
-    await expect(launcher).toBeVisible();
-    expect(await page.evaluate(() => window.scrollY)).toBe(scrolled);
-    if (!wide) await expect(bubble).toBeHidden();
   } finally {
     server?.close();
   }
 });
 
-test("WhatsApp is offered only when the widget config names a connected number", async ({ page, baseURL }) => {
+test("a call started from the hero grows where Belle is, and the small face stays away while she is on screen", async ({ page, baseURL }) => {
   const server = await landingSite(baseURL!);
   test.skip(!server, "localhost:4321 is taken on this machine");
   try {
-    const wide = page.viewportSize()!.width > 900;
-    const beside = () => (wide ? page.locator(".video-bubble .bvb-act") : page.locator(".video-launcher .vl-act"));
+    await withConfig(page, { whatsappLink: null });
+    await page.goto(`${SITE}/`);
+    const bubble = page.locator(".video-bubble");
+    const launcher = page.locator(".video-launcher");
+    await expect(bubble).toHaveAttribute("data-state", "rest");
+    await bubble.getByRole("button", { name: "Talk to Belle on video", exact: true }).click();
+    await expect(bubble).toHaveAttribute("data-state", "call");
+    expect(await bubble.evaluate((b) => b.classList.contains("vb-float"))).toBe(false);
+    await expect(launcher).toBeHidden();
+    await page.getByRole("button", { name: "Close video call" }).click();
+    await expect(page.locator("iframe.bvb-frame")).toHaveCount(0);
+    await expect(bubble).toHaveAttribute("data-state", "rest");
+    await expect(bubble).toBeVisible();
+    await expect(launcher).toBeHidden();
+  } finally {
+    server?.close();
+  }
+});
 
-    // Not connected: no WhatsApp beside Belle, and no floating WhatsApp button.
+test("WhatsApp is offered only when the widget config names a number, beside Belle and on the small face", async ({ page, baseURL }) => {
+  const server = await landingSite(baseURL!);
+  test.skip(!server, "localhost:4321 is taken on this machine");
+  try {
+    // No number: no WhatsApp beside Belle, and no floating WhatsApp button.
     await withConfig(page, { whatsappLink: null });
     await page.goto(`${SITE}/`);
     await expect(page.locator(".video-bubble")).toHaveAttribute("data-state", "rest");
-    await expect(page.locator(wide ? '.video-bubble .bvb-act[data-kind="chat"]' : '.video-launcher .vl-act[data-kind="chat"]')).toHaveCount(1);
-    await expect(beside()).toHaveCount(1);
+    await expect(page.locator('.video-bubble .bvb-act[data-kind="chat"]')).toHaveCount(1);
+    await expect(page.locator(".video-bubble .bvb-act")).toHaveCount(1);
     await expect(page.locator('[data-kind="whatsapp"]')).toHaveCount(0);
     await expect(page.locator(".wa-fab")).toBeHidden();
 
-    // Video off and still not connected: the floating buttons are back, WhatsApp still is not.
+    // Video off and no number: the floating buttons are back, WhatsApp still is not.
     await withConfig(page, { whatsappLink: null, video: false });
     await page.goto(`${SITE}/`);
     await expect(page.locator(".chat-fab")).toBeVisible();
     await page.waitForTimeout(800);
     await expect(page.locator(".wa-fab")).toBeHidden();
 
-    // Connected: WhatsApp is there, beside Belle.
-    await withConfig(page, { whatsappLink: "https://wa.me/15551234567?text=Hi%20Belle" });
+    // Video off with a number (belline.ai's own, SITE_WHATSAPP_NUMBER): the floating button goes straight to it.
+    await withConfig(page, { whatsappLink: "https://wa.me/971501234567", video: false });
+    await page.goto(`${SITE}/`);
+    await expect(page.locator(".wa-fab")).toBeVisible();
+    await expect(page.locator(".wa-fab")).toHaveAttribute("href", "https://wa.me/971501234567");
+
+    // A number: WhatsApp beside Belle, and on the small face after ×.
+    await withConfig(page, { whatsappLink: "https://wa.me/971501234567" });
     await page.goto(`${SITE}/`);
     await expect(page.locator(".video-bubble")).toHaveAttribute("data-state", "rest");
-    await expect(beside()).toHaveCount(2);
-    await expect(page.locator(wide ? '.video-bubble [data-kind="whatsapp"]' : '.video-launcher [data-kind="whatsapp"]')).toHaveAttribute("aria-label", "WhatsApp Belle");
+    await expect(page.locator(".video-bubble .bvb-act")).toHaveCount(2);
+    await expect(page.locator('.video-bubble [data-kind="whatsapp"]')).toHaveAttribute("aria-label", "WhatsApp Belle");
+    await page.getByRole("button", { name: "Close Belle's video greeting" }).click();
+    await expect(page.locator('.video-launcher [data-kind="whatsapp"]')).toBeVisible();
+    await page.evaluate(() => sessionStorage.clear());
   } finally {
     server?.close();
   }

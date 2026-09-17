@@ -654,22 +654,27 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
    or a poster; no session, no microphone) and, on a tap, grows it into the
    call itself.
 
-   Where she sits (site review, 2026-09-17). Nothing floats over the page at
-   rest:
-   - On a wide screen her bubble is the hero's demonstration: it goes into the
-     hero's face slot, in the flow of the page, with "Try Belle on video" and
-     the round chat (and WhatsApp) icons under it.
-   - Once that face is out of view, and on a phone from the start, the corner
-     holds only a compact launcher: a 40 px face, "Talk to Belle · video", and
-     the same icons. It steps out of the way wherever it would cover the
-     pricing or a button.
-   - A call always happens in the big circle. Started while the hero is out of
-     view (or on a phone), the circle floats in the corner for the call, and
-     picture in picture stays as embed-video.js builds it. When the call ends
-     she goes back to the hero, or out of sight on a phone.
+   Where she sits (founder, 2026-09-17: Belle is large on load, and only × makes
+   her small):
+   - On every screen her bubble is the hero's demonstration, in the flow of the
+     page, at the call's own size (about 320 px; 240 px on a phone, where it
+     comes straight under the headline and the pills). Under the face: "Hi, I'm
+     Belle — tap to talk" above it, the round chat and WhatsApp icons, and the
+     small included line. There is no button to start the call: the face is
+     the button ("Talk to Belle on video").
+   - × makes her small for the session: the hero's demonstration goes, and a
+     64 px face with the same icons floats bottom right.
+   - The same small face floats while the hero's face is out of view. It is
+     never shown while the hero's face is on screen, and it steps out of the
+     way wherever it would cover the pricing or a button.
+   - A call always happens in the big circle: in the hero when her face is on
+     screen, otherwise floating in the corner (picture in picture stays as
+     embed-video.js builds it). When the call ends she goes back to where she
+     was: the hero, or the small face after ×.
 
-   WhatsApp is offered only while the config names a connected number
-   (`whatsappLink`): otherwise the floating WhatsApp button goes too.
+   WhatsApp is offered only while the config names a link (`whatsappLink`: a
+   connected number, or belline.ai's public one, SITE_WHATSAPP_NUMBER), and it
+   opens that link.
 
    With video off, or if embed-video.js never arrives, the three floating
    buttons stay and every "Talk to Belle" rings Belline's voice call. */
@@ -686,20 +691,19 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   var bubble = null;
   var launcher = null;
   var waFab = document.querySelector(".wa-fab");
-  /** The config's WhatsApp link, or null while no number is connected. */
+  /** The config's WhatsApp link, or null while there is no number to offer. */
   var waLink = null;
   var figure = document.querySelector("[data-hero-video]");
   var slot = figure ? figure.querySelector("[data-video-slot]") : null;
-  var wide = window.matchMedia("(min-width: 901px)");
-  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var heroDemo = figure ? figure.closest(".hero-demo") : null;
   var docked = false;
   var inCall = false;
   var faceInView = true;
   var poster = "";
 
   var WORDS = SITE_DE
-    ? { pill: "Mit Belle sprechen · Video", tryVideo: "Belle per Video ausprobieren", region: "Belle, KI-Empfang" }
-    : { pill: "Talk to Belle · video", tryVideo: "Try Belle on video", region: "Belle, AI receptionist" };
+    ? { face: "Mit Belle per Video sprechen", caption: "Hallo, ich bin Belle — zum Sprechen tippen", region: "Belle, KI-Empfang" }
+    : { face: "Talk to Belle on video", caption: "Hi, I'm Belle — tap to talk", region: "Belle, AI receptionist" };
 
   var MARK =
     '<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="#2997FF" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>';
@@ -710,16 +714,25 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z" fill="currentColor"/></svg>',
   };
 
-  // Until the config says a number is connected, there is no WhatsApp to offer.
+  // Until the config names a number, there is no WhatsApp to offer.
   if (waFab) waFab.hidden = true;
 
   function actions() {
     var list = [];
     // Chat first: the quiet way in for somebody who cannot talk out loud now.
     list.push({ kind: "chat", label: SITE_DE ? "Mit Belle chatten" : "Chat with Belle", run: function () { chatFab.click(); } });
-    // WhatsApp only while the config names a connected number.
+    // WhatsApp only while the config names a number.
     if (waFab && waLink) list.push({ kind: "whatsapp", label: SITE_DE ? "Belle auf WhatsApp" : "WhatsApp Belle", run: function () { waFab.click(); } });
     return list;
+  }
+
+  /** The floating WhatsApp button, straight to the number the config names. */
+  function offerWhatsApp() {
+    if (!waFab || !waLink) return;
+    waFab.setAttribute("href", waLink);
+    waFab.setAttribute("target", "_blank");
+    waFab.setAttribute("rel", "noopener");
+    waFab.hidden = false;
   }
 
   function cssUrl(url) {
@@ -728,6 +741,11 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
 
   function inHero() {
     return Boolean(figure && figure.classList.contains("has-bubble"));
+  }
+
+  /** × was pressed in this tab's session: Belle is the small face. */
+  function small() {
+    return Boolean(ctl && ctl.state().dismissed);
   }
 
   /** Is the whole resting bubble on screen, so a call can grow where it is? */
@@ -741,17 +759,30 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     bubble = root;
     root.classList.add("video-bubble");
     document.body.classList.add("has-video-bubble");
-    if (slot && wide.matches) {
+    if (slot) {
       slot.appendChild(root);
       figure.classList.add("has-bubble");
+      if (heroDemo) heroDemo.classList.add("has-video-hero");
     } else {
-      // A phone never shows the big bubble at rest: it waits, out of sight, for a call.
       root.classList.add("vb-parked");
       document.body.appendChild(root);
     }
+    // Made small earlier in this session: the small face, not the hero.
+    if (root.getAttribute("data-state") === "mini") shrink();
   }
 
-  // --- the launcher ----------------------------------------------------------
+  /** The hero's demonstration goes, and the small face takes the corner. */
+  function shrink() {
+    if (!bubble) return;
+    bubble.classList.add("vb-parked");
+    // Out of the hero (at rest, so nothing reloads): a call from the small face floats in the corner.
+    document.body.appendChild(bubble);
+    if (figure) figure.classList.remove("has-bubble");
+    if (figure) figure.classList.add("is-small");
+    if (heroDemo) heroDemo.classList.remove("has-video-hero");
+  }
+
+  // --- the small face --------------------------------------------------------
 
   function buildLauncher() {
     launcher = document.createElement("div");
@@ -763,6 +794,8 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     var main = document.createElement("button");
     main.type = "button";
     main.className = "vl-main";
+    main.setAttribute("aria-label", WORDS.face);
+    main.title = WORDS.face;
     var face = document.createElement("span");
     face.className = "vl-face";
     face.setAttribute("aria-hidden", "true");
@@ -771,11 +804,7 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       face.style.backgroundImage = cssUrl(poster);
       face.classList.add("has-poster");
     }
-    var say = document.createElement("span");
-    say.className = "vl-say";
-    say.textContent = WORDS.pill;
     main.appendChild(face);
-    main.appendChild(say);
     main.addEventListener("click", startCall);
     launcher.appendChild(main);
 
@@ -788,7 +817,6 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       act.title = o.label;
       act.innerHTML = ICONS[o.kind] || ICONS.chat;
       act.addEventListener("click", function () {
-        stopRing();
         o.run();
       });
       launcher.appendChild(act);
@@ -796,18 +824,7 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     document.body.appendChild(launcher);
   }
 
-  /** A few rings on a phone, where the launcher is there from the start. Never under reduced motion. */
-  function ring() {
-    if (!launcher || reduced.matches) return;
-    [].forEach.call(launcher.querySelectorAll(".vl-act"), function (a) { a.classList.add("is-ringing"); });
-  }
-
-  function stopRing() {
-    if (!launcher) return;
-    [].forEach.call(launcher.querySelectorAll(".vl-act"), function (a) { a.classList.remove("is-ringing"); });
-  }
-
-  // What the launcher must never sit on: the pricing, and any button or form.
+  // What the small face must never sit on: the pricing, and any button or form.
   var AVOID =
     "#price .sec-head, #price .market-note, #price .price-bar, #price .plans, #price .plan-shared, #price .price-tax, #price .compare, #price .terms, " +
     ".btn, .nav-cta, .cta-row, .roi-result, #warteliste, .chat-dock, .call-dock";
@@ -845,7 +862,8 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
 
   function update() {
     if (!launcher) return;
-    var show = Boolean(ctl) && !inCall && !docked && !(inHero() && faceInView);
+    // Never beside the big face: only once × made her small, or her face is out of view.
+    var show = Boolean(ctl) && !inCall && !docked && (small() || !inHero() || !faceInView);
     launcher.hidden = !show;
     if (show) avoid();
   }
@@ -862,13 +880,20 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
 
   // --- the call ---------------------------------------------------------------
 
+  /**
+   * The call in the corner, where the visitor is. The hero keeps the room her
+   * face took, so the page does not jump while she floats.
+   */
+  function float() {
+    if (!bubble || bubble.classList.contains("vb-float")) return;
+    if (slot && inHero()) slot.style.minHeight = slot.offsetHeight + "px";
+    bubble.classList.remove("vb-parked", "vb-leaving");
+    bubble.classList.add("vb-float");
+  }
+
   function startCall() {
     if (!ctl || !bubble) return;
-    stopRing();
-    if (!(inHero() && bubbleOnScreen())) {
-      bubble.classList.remove("vb-parked", "vb-leaving");
-      bubble.classList.add("vb-float");
-    }
+    if (small() || !(inHero() && bubbleOnScreen())) float();
     inCall = true;
     update();
     ctl.openCall();
@@ -877,7 +902,10 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   function callClosed() {
     var floated = Boolean(bubble && bubble.classList.contains("vb-float"));
     inCall = false;
-    if (bubble && inHero()) bubble.classList.remove("vb-float");
+    if (bubble && inHero() && !small()) {
+      bubble.classList.remove("vb-float");
+      if (slot) slot.style.minHeight = "";
+    }
     else if (bubble) {
       // Out of sight at once, but still rendered while the call frame ends its
       // session (embed-video.js gives it END_GRACE_MS): a frame under
@@ -892,7 +920,7 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       }, 600);
     }
     update();
-    // A call that floated ends where it was: focus goes to the launcher, not to a bubble off screen.
+    // A call that floated ends where it was: focus goes to the small face, not to a bubble off screen.
     if (floated && launcher && !launcher.hidden) {
       try {
         launcher.querySelector(".vl-main").focus({ preventScroll: true });
@@ -912,21 +940,30 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       // In the hero's flow; site.css floats it for a call away from the hero.
       fixed: false,
       ring: true,
-      strings: SITE_DE ? { talk: WORDS.tryVideo, caption: "Hallo, ich bin Belle — zum Sprechen tippen" } : { talk: WORDS.tryVideo },
+      // The face is the button: no "Talk to Belle" under it.
+      talkButton: false,
+      strings: { face: WORDS.face, caption: WORDS.caption },
       actions: actions,
       place: place,
+      onDismissed: function () {
+        shrink();
+        update();
+      },
       onCallOpened: function () {
         inCall = true;
         update();
       },
       onCallClosed: callClosed,
+      // Grown back from picture in picture while her place in the hero is off screen: in the corner, not out of view.
+      onPip: function (on) {
+        if (!on && inHero() && !bubbleOnScreen()) float();
+      },
       // "Type instead" during a call: the chat opens where the bubble was.
       onSwitch: function (to) {
         if (to === "chat") chatFab.click();
       },
     });
     buildLauncher();
-    if (!inHero()) ring();
     if (slot && "IntersectionObserver" in window) {
       new IntersectionObserver(
         function (entries) {
@@ -941,8 +978,8 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     update();
   }
 
-  // The chat and the voice call dock in the corner: Belle and her launcher step
-  // out of their way while one is open, and come back when it closes.
+  // The chat and the voice call dock in the corner: Belle and her small face
+  // step out of their way while one is open, and come back when it closes.
   document.addEventListener("belline:dock", function (e) {
     docked = Boolean(e.detail && e.detail.open);
     if (ctl) ctl.setHidden(docked);
@@ -971,15 +1008,13 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     })
     .then(function (cfg) {
       if (!cfg) return;
-      waLink = typeof cfg.whatsappLink === "string" && cfg.whatsappLink ? cfg.whatsappLink : null;
-      if (waFab && waLink) waFab.hidden = false;
+      waLink = typeof cfg.whatsappLink === "string" && /^https:\/\/wa\.me\//.test(cfg.whatsappLink) ? cfg.whatsappLink : null;
+      offerWhatsApp();
       if (cfg.video !== true) return;
       window.__bellineVideoConfig = cfg.videoBubble || {};
       var still = window.__bellineVideoConfig.posterUrl;
       if (typeof still === "string" && still) poster = still.charAt(0) === "/" && still.charAt(1) !== "/" ? appOrigin + still : still;
       if (figure) {
-        var cta = figure.querySelector(".hv-cta");
-        if (cta) cta.textContent = WORDS.tryVideo;
         var face = figure.querySelector(".hv-face");
         if (face && poster) {
           face.style.backgroundImage = cssUrl(poster);

@@ -1810,7 +1810,9 @@ await test("under the face: Talk to Belle and two round icons (chat, WhatsApp), 
   // WhatsApp only while the widget config names a connected number, beside Belle and as the floating button.
   assert.match(site, /if \(waFab && waLink\) list\.push\(\{ kind: "whatsapp"/);
   assert.match(site, /if \(waFab\) waFab\.hidden = true;/);
-  assert.match(site, /waLink = typeof cfg\.whatsappLink === "string" && cfg\.whatsappLink \? cfg\.whatsappLink : null;/);
+  assert.match(site, /waLink = typeof cfg\.whatsappLink === "string" && \/\^https:\\\/\\\/wa\\\.me\\\/\/\.test\(cfg\.whatsappLink\) \? cfg\.whatsappLink : null;/);
+  // And the floating WhatsApp button goes straight to that number.
+  assert.match(site, /function offerWhatsApp\(\) \{[\s\S]{0,300}waFab\.setAttribute\("href", waLink\);/);
   assert.equal(/bellFab/.test(site), false, "the bell is back beside the face");
   assert.match(site, /ring: true,/);
   const embed = read("public/embed.js");
@@ -1828,12 +1830,15 @@ await test("every Talk to Belle on belline.ai starts the video call once the bub
   for (const [file, label] of [["public/landing.html", "Talk to Belle"], ["public/landing.de.html", "Mit Belle sprechen"]]) {
     const html = read(file);
     const hero = html.slice(html.indexOf('<section class="hero">'), html.indexOf("</section>", html.indexOf('<section class="hero">')));
-    // Without video (or JavaScript) the hero's button is the voice call, and says so; site.js says "Try Belle on video" once video is here.
+    // Without video (or JavaScript) the hero's button is the voice call, and says so. With video the face is the button, and the button goes (founder, f5).
     assert.match(hero, new RegExp(`<a class="btn line hv-cta" href="https://app\\.belline\\.ai/call\\?start=1" data-call>${label}</a>`), `${file}: the hero button`);
     assert.equal(/Speak to Belline<\/a>|Mit Belline sprechen<\/a>/.test(html.replace(/<a class="bell-fab"[\s\S]*?<\/a>/, "")), false, `${file}: an old button name is left`);
   }
-  assert.match(video, /tryVideo: "Try Belle on video"/);
-  assert.match(video, /pill: "Talk to Belle · video"/);
+  assert.doesNotMatch(video, /Try Belle on video|Talk to Belle · video|tryVideo/, "a second way to start the call is back beside the face");
+  assert.match(video, /face: "Talk to Belle on video"/);
+  assert.match(video, /talkButton: false,/);
+  assert.match(read("public/site.css"), /\.hero-video\.has-bubble \.hv-head,\s*\.hero-video\.has-bubble \.hv-text \{ display: none; \}/);
+  assert.match(read("public/site.css"), /\.hero-video\.has-bubble \.hv-cta \{ display: none; \}/);
   // The video receptionist leads (founder, 2026-09-17) once video.avatar is on;
   // the committed pages are the flag-off ones (src/lib/site-flags.ts, check-webchat).
   assert.match(read("public/landing.html"), /<p class="eyebrow rise">AI receptionist for your website<\/p>/);

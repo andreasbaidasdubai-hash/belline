@@ -61,6 +61,12 @@ WHATSAPP_VERIFY_TOKEN=(already set)
 CREDENTIALS_KEY=(already set — the token is stored encrypted)
 ```
 
+On a server without that connection (staging), set only
+`SITE_WHATSAPP_NUMBER=+9715XXXXXXXX`: belline.ai's own WhatsApp buttons then
+link to the public number, which production Belle answers. It is read for
+Belline's own site venue only; a customer's widget still needs its own
+connected number.
+
 Restart the service. The boot log says one of:
 
 ```

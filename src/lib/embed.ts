@@ -358,6 +358,31 @@ export function connectedWhatsAppLink(
   return /^\+\d{8,15}$/.test(number) ? `https://wa.me/${number.slice(1)}` : null;
 }
 
+/** Belline's own website venue (lib/seed-belline.ts), the only one `SITE_WHATSAPP_NUMBER` speaks for. */
+const BELLINE_SITE_VENUE = "loc_belline";
+
+/**
+ * The WhatsApp link a venue's widget shows: its own connected, active number,
+ * and nothing else — except on Belline's own website.
+ *
+ * belline.ai's WhatsApp number is answered by production Belle whichever
+ * server serves the page, so a host where that account is not connected here
+ * (staging) may still link to it: `SITE_WHATSAPP_NUMBER`, in E.164. Only for
+ * `loc_belline` with the site's embed key; a customer's venue still needs its
+ * own connected number, whatever the environment says.
+ */
+export function venueWhatsAppLink(
+  location: { id: string; embed?: { key?: string } | null },
+  account: { phoneE164?: string | null; status?: string; channel?: string } | null | undefined,
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  const connected = connectedWhatsAppLink(account);
+  if (connected) return connected;
+  if (location.id !== BELLINE_SITE_VENUE || location.embed?.key !== BELLINE_SITE_EMBED_KEY) return null;
+  const number = (env.SITE_WHATSAPP_NUMBER ?? "").replace(/[\s-]/g, "");
+  return /^\+[1-9]\d{7,14}$/.test(number) ? `https://wa.me/${number.slice(1)}` : null;
+}
+
 /**
  * What the widget fetches on load: the venue's choices and nothing else.
  *

@@ -375,17 +375,15 @@ async function blockAudio(context: BrowserContext) {
 }
 
 /**
- * belline.ai: on a wide screen Belle rests in the hero, and her own button
- * says "Try Belle on video"; on a phone she is parked and the launcher in the
- * corner starts the call.
+ * belline.ai: Belle rests large in the hero on every screen, and her face is
+ * the button (there is no "Try Belle on video" under it).
  */
 async function talkOnSite(page: Page) {
-  if (page.viewportSize()!.width <= 900) await page.locator(".video-launcher .vl-main").click();
-  else await page.locator(".video-bubble").getByRole("button", { name: "Try Belle on video", exact: true }).click();
+  await page.locator(".video-bubble").getByRole("button", { name: "Talk to Belle on video", exact: true }).click();
 }
 
-/** At rest the bubble is the call circle's own size (about 320px, 240px on a phone), with its talk button under it, all on screen. */
-async function expectBigBubble(page: Page, bubble: Locator, talkName = "Talk to Belle") {
+/** At rest the bubble is the call circle's own size (about 320px, 240px on a phone), with its talk button (if it has one) under it, all on screen. */
+async function expectBigBubble(page: Page, bubble: Locator, talkName: string | null = "Talk to Belle") {
   const viewport = page.viewportSize()!;
   const circle = await box(bubble.locator(".bvb-circle"));
   if (viewport.width <= 520) {
@@ -395,8 +393,12 @@ async function expectBigBubble(page: Page, bubble: Locator, talkName = "Talk to 
     expect(circle.width).toBeGreaterThanOrEqual(296);
     expect(circle.width).toBeLessThanOrEqual(330);
   }
-  const talk = await box(bubble.getByRole("button", { name: talkName, exact: true }));
-  expect(talk.y).toBeGreaterThanOrEqual(circle.y + circle.height);
+  if (talkName) {
+    const talk = await box(bubble.getByRole("button", { name: talkName, exact: true }));
+    expect(talk.y).toBeGreaterThanOrEqual(circle.y + circle.height);
+  } else {
+    await expect(bubble.locator(".bvb-talk")).toHaveCount(0);
+  }
   const all = await box(bubble);
   expect(all.x).toBeGreaterThanOrEqual(0);
   expect(all.y).toBeGreaterThanOrEqual(0);
@@ -505,7 +507,7 @@ test("on a venue's page: the bubble opens big with no session, the chat icon und
   }
 });
 
-test("on belline.ai: Belle rests in the hero on a wide screen and as a launcher on a phone, chat beside her, no voice button, no session on load", async ({ page, context, baseURL }, info) => {
+test("on belline.ai: Belle rests large in the hero on every screen, her face the button, chat beside her, no voice button, no session on load", async ({ page, context, baseURL }, info) => {
   const server = await landingSite(baseURL!);
   test.skip(!server, "localhost:4321 is taken on this machine");
   const posts = countSessionPosts(context);
@@ -524,45 +526,38 @@ test("on belline.ai: Belle rests in the hero on a wide screen and as a launcher 
     for (const fab of [".bell-fab", ".chat-fab", ".wa-fab"]) await expect(page.locator(fab)).toBeHidden();
     await expect(page.getByRole("link", { name: /Speak to Belline/ }).filter({ visible: true })).toHaveCount(0);
 
-    if (wide) {
-      // The big bubble is the hero's demonstration, in the page's flow: nothing floats at rest.
-      await expect(bubble).toBeVisible();
-      expect(await bubble.evaluate((b) => Boolean(b.closest(".hero")) && getComputedStyle(b).position !== "fixed")).toBe(true);
-      await expectBigBubble(page, bubble, "Try Belle on video");
-      await expect(launcher).toBeHidden();
-      const icons = bubble.locator(".bvb-act");
-      await expect(bubble.getByRole("button", { name: "Chat with Belle" })).toHaveClass(/\bis-ringing\b/);
-      const circle = await box(bubble.locator(".bvb-circle"));
-      const talk = await box(bubble.getByRole("button", { name: "Try Belle on video", exact: true }));
-      for (let i = 0; i < (await icons.count()); i++) {
-        const icon = await box(icons.nth(i));
-        expect(icon.y).toBeGreaterThanOrEqual(circle.y + circle.height);
-        expect(Math.abs(icon.width - icon.height)).toBeLessThanOrEqual(1);
-        expect(overlaps(icon, talk)).toBe(false);
-      }
-      // Nothing of the bubble covers the hero's button or copy.
-      expect(overlaps(await box(bubble), await box(page.locator('.hero a[data-cta="hero"]')))).toBe(false);
-      expect(overlaps(await box(bubble), await box(page.locator(".hero .hero-copy")))).toBe(false);
-      await shot(page, info, "14-site-rest");
-    } else {
-      // A phone never shows the big bubble at rest: the launcher is there from the start.
-      await expect(bubble).toBeHidden();
-      await expect(launcher).toBeVisible();
-      await expect(launcher.getByRole("button", { name: "Talk to Belle · video" })).toBeVisible();
-      await expect(launcher.getByRole("button", { name: "Chat with Belle" })).toBeVisible();
+    // The big bubble is the hero's demonstration, in the page's flow, on a phone too: nothing floats at rest.
+    await expect(bubble).toBeVisible();
+    expect(await bubble.evaluate((b) => Boolean(b.closest(".hero")) && getComputedStyle(b).position !== "fixed")).toBe(true);
+    await expectBigBubble(page, bubble, null);
+    await expect(launcher).toBeHidden();
+    // The face is the button, and says so; no "Try Belle on video" anywhere.
+    const face = bubble.getByRole("button", { name: "Talk to Belle on video", exact: true });
+    await expect(face).toHaveCSS("cursor", "pointer");
+    await expect(page.getByText("Try Belle on video")).toHaveCount(0);
+    await expect(page.locator(".hero-video .hv-title")).toBeHidden();
+    await expect(page.locator(".hero-video .hv-text")).toBeHidden();
+    const icons = bubble.locator(".bvb-act");
+    await expect(bubble.getByRole("button", { name: "Chat with Belle" })).toHaveClass(/\bis-ringing\b/);
+    const circle = await box(bubble.locator(".bvb-circle"));
+    for (let i = 0; i < (await icons.count()); i++) {
+      const icon = await box(icons.nth(i));
+      expect(icon.y).toBeGreaterThanOrEqual(circle.y + circle.height);
+      expect(Math.abs(icon.width - icon.height)).toBeLessThanOrEqual(1);
     }
+    // Nothing of the bubble covers the hero's button or copy.
+    expect(overlaps(await box(bubble), await box(page.locator('.hero a[data-cta="hero"]')))).toBe(false);
+    if (wide) expect(overlaps(await box(bubble), await box(page.locator(".hero .hero-copy")))).toBe(false);
+    await shot(page, info, "14-site-rest");
 
     // Chat does what the chat button did, and Belle steps out of its way.
-    const chatButton = wide ? bubble.getByRole("button", { name: "Chat with Belle" }) : launcher.getByRole("button", { name: "Chat with Belle" });
-    await chatButton.click();
+    await bubble.getByRole("button", { name: "Chat with Belle" }).click();
     await expect(page.locator(".chat-dock")).toBeVisible();
     await expect(bubble).toBeHidden();
     await expect(launcher).toBeHidden();
     await page.locator(".chat-dock .call-shut").click();
-    if (wide) {
-      await expect(bubble).toBeVisible();
-      await expect(bubble.locator(".bvb-act.is-ringing")).toHaveCount(0);
-    } else await expect(launcher).toBeVisible();
+    await expect(bubble).toBeVisible();
+    await expect(bubble.locator(".bvb-act.is-ringing")).toHaveCount(0);
 
     // A Talk to Belle further down the page starts the video call, in the circle (not the voice dock, not a page).
     await page.locator("#book a[data-call]").click();
