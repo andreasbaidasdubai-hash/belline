@@ -162,6 +162,31 @@ test("Belle is large in the hero on load, on a phone within the first screen, an
       await withConfig(page, { whatsappLink: "https://wa.me/971501234567" });
       await page.emulateMedia({ reducedMotion: "no-preference" });
       await page.goto(`${SITE}/`);
+      // This test measures to the pixel, so it has to measure the hero as it
+      // finally renders. landing.html loads Inter from Google with
+      // `display=swap`: until that face arrives the hero is laid out on
+      // fallback metrics that leave `.hero-can`'s bottom edge about 0.4px past
+      // the caption under it — invisible, but enough to fail the assertion
+      // below. This used to be hidden by the dev server taking ~50s to hand
+      // over the page, which always gave the font time; against a built app the
+      // page is ready in half that, so wait for the font itself.
+      //
+      // Waiting on the fonts alone is not enough: the hero also reflows a
+      // little as the widget sizes itself, and that lands after
+      // `document.fonts.ready`. So wait for the thing actually measured to stop
+      // moving — two readings of `.hero-can`'s bottom edge that agree.
+      await expect
+        .poll(
+          async () => {
+            const bottom = () =>
+              page.evaluate(() => document.querySelector(".hero-can")?.getBoundingClientRect().bottom ?? null);
+            const first = await bottom();
+            await page.waitForTimeout(150);
+            return first !== null && first === (await bottom());
+          },
+          { timeout: 45_000 },
+        )
+        .toBe(true);
       const wide = size.width > 900;
       const bubble = page.locator(".video-bubble");
       const launcher = page.locator(".video-launcher");
