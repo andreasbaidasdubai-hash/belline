@@ -1,6 +1,6 @@
-# Belline CI: the full gate on fast Linux machines, in parallel.
+﻿# Belline CI: the full gate on fast Linux machines, in parallel.
 #
-# Runs on every push to a feature branch (not main — main is what production
+# Runs on every push to a feature branch (not main â€” main is what production
 # and the website are built from, and it only ever receives tested merges) and
 # on demand. No secrets are needed or used: every suite runs against stubs, the
 # e2e server runs with FLAG_STUBS=on and an unreachable database, and
@@ -26,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -45,8 +45,8 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -64,8 +64,8 @@ jobs:
       matrix:
         suite: [zero-touch, video]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

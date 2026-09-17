@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-leads-"));
 
@@ -288,7 +289,7 @@ test("every origin the site fetches is allowed by the site's CSP", () => {
   // `connect-src 'self'`, and the form posts to app.belline.ai — so the browser
   // would have blocked every submission, in production only, with nothing
   // wrong locally and no error anybody would see but the visitor.
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.slice(1)), "..");
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const js = fs.readFileSync(path.join(root, "public", "site.js"), "utf8");
   const config = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
 
@@ -475,7 +476,7 @@ test("without JavaScript the form still works: a form post gets a German page ba
 });
 
 test("the route runs this handler, the German pages post to it, and nothing on the way sends an email", () => {
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.slice(1)), "..");
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const routeSrc = fs.readFileSync(path.join(root, "src", "app", "api", "leads", "waitlist", "route.ts"), "utf8");
   assert.match(routeSrc, /handleWaitlist\(request, deps\)/);
   const lib = fs.readFileSync(path.join(root, "src", "lib", "leads", "waitlist.ts"), "utf8");
