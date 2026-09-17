@@ -306,8 +306,14 @@ import { resolveAppearance } from "./embed-look";
  * so it is built from a whitelist. The origins list, the ceilings and the
  * key's owner are not in it and must not be.
  */
-export function widgetConfig(config: EmbedConfig, whatsappLink: string | null, language: "en" | "de" = "en") {
-  const look = resolveAppearance(config.appearance, language);
+export function widgetConfig(
+  config: EmbedConfig,
+  whatsappLink: string | null,
+  language: "en" | "de" = "en",
+  /** The venue's uploaded logo, from logo.ts `logoUrlFor`. A path on this app; embed.js adds the origin. */
+  logoUrl: string | null = null,
+) {
+  const look = resolveAppearance(config.appearance, language, logoUrl);
   return {
     mode: modeOf(config) ?? "voice",
     ...look,

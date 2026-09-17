@@ -125,16 +125,40 @@ export function parseAppearance(
   }
   if (typeof input.whatsapp === "boolean") out.whatsapp = input.whatsapp;
 
+  // "logo" is accepted whether or not a logo is uploaded yet: this is pure and
+  // cannot see the venue, and a removed logo must not turn a saved choice into
+  // an error. resolveAppearance draws the bell until there is a logo to draw.
+  if (input.buttonMark !== undefined) {
+    if (input.buttonMark !== "bell" && input.buttonMark !== "logo") {
+      return { ok: false, problem: { field: "buttonMark", message: "The bell or your logo." } };
+    }
+    out.buttonMark = input.buttonMark;
+  }
+  if (input.ring !== undefined) {
+    if (typeof input.ring !== "boolean") {
+      return { ok: false, problem: { field: "ring", message: "Ringing is on or off." } };
+    }
+    out.ring = input.ring;
+  }
+
   return { ok: true, appearance: out };
 }
 
 /**
  * The appearance with every default filled in and the colours resolved — what the widget is told.
  * `language` is the venue's: a German venue that never wrote its own labels gets German ones.
+ * `logoUrl` is the venue's uploaded logo (logo.ts `logoUrlFor`), or null when there is none.
  */
-export function resolveAppearance(appearance: EmbedAppearance | undefined, language: CopyLanguage = "en") {
+export function resolveAppearance(
+  appearance: EmbedAppearance | undefined,
+  language: CopyLanguage = "en",
+  logoUrl: string | null = null,
+) {
   const accent = accentHex(appearance?.accent) ?? EMBED_PALETTE.indigo;
   const text = textOn(accent);
+  // The logo only where the owner chose it *and* there is one. A choice
+  // outliving its logo draws the bell rather than an empty circle.
+  const buttonMark: "bell" | "logo" = appearance?.buttonMark === "logo" && logoUrl ? "logo" : "bell";
   return {
     voiceLabel: appearance?.voiceLabel ?? (language === "en" ? "Talk to us" : copy(language, "embed.voice_label")),
     chatLabel: appearance?.chatLabel ?? (language === "en" ? "Chat with us" : copy(language, "embed.chat_label")),
@@ -147,6 +171,10 @@ export function resolveAppearance(appearance: EmbedAppearance | undefined, langu
     shape: appearance?.shape ?? "pill",
     corner: appearance?.corner ?? "right",
     whatsapp: appearance?.whatsapp ?? true,
+    buttonMark,
+    // Sent only when it will be drawn: the widget has no other use for it.
+    logoUrl: buttonMark === "logo" ? logoUrl : null,
+    ring: appearance?.ring ?? false,
   };
 }
 

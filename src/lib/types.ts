@@ -610,9 +610,10 @@ export interface DemoConfig {
  * within the guidelines.
  *
  * What may change: the words on the buttons, the colour of the filled one,
- * pill or circle, which corner. What may not: the mark. The bell in the
- * button is what makes a Belline widget recognisable as one from across the
- * room, on any site, and it stays.
+ * pill or circle, which corner, whether it rings, and whether the main button
+ * shows the bell or the venue's own uploaded logo. What may not: any other
+ * mark. No drawing comes from the settings — the only picture the button can
+ * carry instead of the bell is a logo Belline itself checked and serves.
  */
 export interface EmbedAppearance {
   voiceLabel?: string;
@@ -624,6 +625,14 @@ export interface EmbedAppearance {
   corner?: "right" | "left";
   /** Show the WhatsApp button when the venue has a number. Default on. */
   whatsapp?: boolean;
+  /**
+   * What the main button shows: Belline's bell (the default) or the venue's
+   * own uploaded logo. "logo" with no logo uploaded draws the bell — see
+   * resolveAppearance.
+   */
+  buttonMark?: "bell" | "logo";
+  /** Ring the main button now and then to draw the eye, as belline.ai's does. Default off. */
+  ring?: boolean;
 }
 
 /**
@@ -924,12 +933,6 @@ export interface SalonService {
    * up both a room and a machine needs both held, and the old single field
    * silently checked whichever one happened to come first in the chain.
    */
-  /**
-   * What it is, in the owner's words, one line: "Two-hour site visit with an
-   * architect". A service called "Consultation" means nothing to a caller who
-   * asks what they would get, and the agent may only say what it was told.
-   */
-  description?: string;
   resourceTypes?: string[];
   /**
    * The shape of the appointment, when it is not one solid block.

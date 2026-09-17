@@ -101,7 +101,43 @@
     ".belline-dock{bottom:18px;right:18px}.belline-dock.belline-left{left:18px}" +
     ".belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
     ".belline-fab span{display:none}}" +
-    "@media (prefers-reduced-motion:reduce){.belline-fab{transition:none}}";
+    // The venue's logo in place of the mark: always in a white circle, with
+    // room around it, so a dark logo on a dark accent (or a white one on
+    // white) still reads. Contained, never cropped — a wordmark stays whole.
+    ".belline-logo{display:block;flex:none;width:30px;height:30px;box-sizing:border-box;padding:3px;" +
+    "border-radius:999px;background:#FFFFFF;box-shadow:0 0 0 1px rgba(27,39,53,.1);overflow:hidden}" +
+    ".belline-logo img{display:block;width:100%;height:100%;object-fit:contain;border-radius:999px}" +
+    ".belline-fab.belline-has-logo{padding-top:11px;padding-bottom:11px;padding-left:12px}" +
+    ".belline-dock.belline-round .belline-logo{width:46px;height:46px;padding:5px}" +
+    "@media (max-width:520px){.belline-fab.belline-has-logo{padding:0}" +
+    ".belline-fab .belline-logo{width:46px;height:46px;padding:5px}}" +
+    // Ringing, as the bell on belline.ai rings (site.css bell-shake, bell-nudge,
+    // bell-ring, value for value): the mark swings, the button nudges, a ring
+    // runs outwards. Only while the dock carries .belline-ringing, which the
+    // script adds for a few seconds at a time — see `ring` below.
+    ".belline-fab.belline-main{position:relative;isolation:isolate}" +
+    ".belline-fab.belline-main::after{content:'';position:absolute;inset:0;border-radius:inherit;" +
+    "border:2px solid var(--belline-accent);pointer-events:none;opacity:0;z-index:-1}" +
+    ".belline-ringing .belline-fab.belline-main{animation:belline-nudge 1.5s ease-in-out infinite}" +
+    ".belline-ringing .belline-fab.belline-main svg,.belline-ringing .belline-fab.belline-main .belline-logo" +
+    "{animation:belline-shake 1.5s ease-in-out infinite}" +
+    ".belline-ringing .belline-fab.belline-main::after{animation:belline-ring 1.5s ease-out infinite}" +
+    "@keyframes belline-shake{0%,27%,100%{transform:rotate(0deg)}2%{transform:rotate(-22deg)}" +
+    "4%{transform:rotate(22deg)}6%{transform:rotate(-19deg)}8%{transform:rotate(19deg)}" +
+    "10%{transform:rotate(-15deg)}12%{transform:rotate(15deg)}14%{transform:rotate(-11deg)}" +
+    "16%{transform:rotate(11deg)}18%{transform:rotate(-8deg)}20%{transform:rotate(8deg)}" +
+    "22%{transform:rotate(-4deg)}24%{transform:rotate(4deg)}}" +
+    "@keyframes belline-nudge{0%,14%,100%{transform:translateY(0) rotate(0deg)}" +
+    "3%{transform:translateY(-2px) rotate(-1.6deg)}7%{transform:translateY(-2px) rotate(1.6deg)}" +
+    "11%{transform:translateY(-1px) rotate(-.8deg)}}" +
+    "@keyframes belline-ring{0%{transform:scale(1);opacity:.55}55%{transform:scale(1.28);opacity:0}" +
+    "100%{transform:scale(1.28);opacity:0}}" +
+    // The script never starts it under reduced motion; this is the belt for
+    // a preference switched on while a ring is already running.
+    "@media (prefers-reduced-motion:reduce){.belline-fab{transition:none}" +
+    ".belline-ringing .belline-fab.belline-main,.belline-ringing .belline-fab.belline-main svg," +
+    ".belline-ringing .belline-fab.belline-main .belline-logo,.belline-ringing .belline-fab.belline-main::after" +
+    "{animation:none!important}}";
 
   var style = document.createElement("style");
   style.textContent = css;
@@ -145,7 +181,9 @@
   function fabFor(kind, label, icon, second) {
     var fab = document.createElement("button");
     fab.type = "button";
-    fab.className = "belline-fab" + (second ? " belline-second" : "");
+    // The filled one is "main": it is the button that may carry the logo and
+    // the one that rings. There is exactly one per mode.
+    fab.className = "belline-fab" + (second ? " belline-second" : " belline-main");
     fab.setAttribute("aria-label", label);
     fab.innerHTML = icon + "<span>" + escapeHtml(label) + "</span>";
     fab.addEventListener("click", function () {
@@ -174,7 +212,43 @@
     } else {
       dock.appendChild(fabFor("voice", voiceLabel, BELL, false));
     }
+    markMain();
   }
+
+  /**
+   * The venue's logo on the main button, when it chose that and has one.
+   *
+   * Only ever a path under /api/logo/ on Belline's own origin — a logo Belline
+   * checked and serves with its own headers — never a URL from anywhere else,
+   * so the settings cannot make somebody's website load a stranger's file.
+   * The image is decorative: the button already says what it does in its
+   * aria-label. If it fails to load, the mark it replaced comes back.
+   */
+  var logoPath = null;
+
+  function markMain() {
+    var kind = mode === "chat" ? "chat" : "voice";
+    var fab = fabs[kind];
+    if (!fab || !logoPath || fab.querySelector(".belline-logo")) return;
+    var mark = fab.querySelector("svg");
+    if (!mark) return;
+    var holder = document.createElement("span");
+    holder.className = "belline-logo";
+    holder.setAttribute("aria-hidden", "true");
+    var img = document.createElement("img");
+    img.alt = "";
+    img.decoding = "async";
+    img.referrerPolicy = "no-referrer";
+    img.addEventListener("error", function () {
+      if (holder.parentNode) holder.parentNode.replaceChild(mark, holder);
+      fab.classList.remove("belline-has-logo");
+    });
+    img.src = origin + logoPath;
+    holder.appendChild(img);
+    fab.replaceChild(holder, mark);
+    fab.classList.add("belline-has-logo");
+  }
+
   buildMode(mode);
 
   /**
@@ -207,6 +281,11 @@
       mode = cfg.mode;
       buildMode(mode);
     }
+    if (cfg.buttonMark === "logo" && typeof cfg.logoUrl === "string" && /^\/api\/logo\/lg_[0-9a-f]{24}$/.test(cfg.logoUrl)) {
+      logoPath = cfg.logoUrl;
+      markMain();
+    }
+    if (cfg.ring === true) ring();
     if (!attrVoice) relabel("voice", cfg.voiceLabel);
     if (!attrChat) relabel("chat", cfg.chatLabel);
     if (cfg.accent && cfg.accentText) {
@@ -232,6 +311,83 @@
       dock.insertBefore(wa, dock.firstChild);
       fabs.whatsapp = wa;
     }
+  }
+
+  /**
+   * Ringing, when the venue switched it on.
+   *
+   * belline.ai's bell rings on a 1.5 s beat for as long as the page is open,
+   * which is right on our own page and too much on somebody else's. So the
+   * same ring, value for value, but in short bursts: two beats (3 s), first
+   * a few seconds after the page settles, then every 20 seconds, and not more
+   * than five times in a page view. Enough to be noticed from the corner of an
+   * eye; not a thing that nags a visitor reading a price list.
+   *
+   * Never under prefers-reduced-motion — checked before every burst and
+   * followed live, so switching the setting on stops a ring already running.
+   * And it stops for good, for this page view, the moment the visitor shows
+   * any interest in the widget: a pointer over it, focus on it, a touch, a
+   * tap, the panel opening. Somebody who has noticed the button does not need
+   * it waving at them, and a moving target is harder to hit.
+   */
+  var RING_FIRST_MS = 4000;
+  var RING_EVERY_MS = 20000;
+  var RING_FOR_MS = 3000;
+  var RING_MAX = 5;
+  var ringStarted = false;
+  var ringStopped = false;
+  var ringTimer = null;
+  var ringEnd = null;
+  var ringCount = 0;
+  var stillQuery = null;
+  try {
+    stillQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+  } catch (e) {
+    stillQuery = null;
+  }
+
+  function reducedMotion() {
+    // No way to ask counts as "reduce": motion is the thing that needs permission.
+    return !stillQuery || stillQuery.matches;
+  }
+
+  function quiet() {
+    clearTimeout(ringEnd);
+    dock.classList.remove("belline-ringing");
+  }
+
+  function stopRinging() {
+    ringStopped = true;
+    clearTimeout(ringTimer);
+    quiet();
+  }
+
+  function burst() {
+    if (ringStopped) return;
+    // Skipped, not spent, while the motion setting is on, the tab is in the
+    // background or the panel is open.
+    if (!reducedMotion() && !document.hidden && !panel) {
+      dock.classList.add("belline-ringing");
+      ringEnd = setTimeout(quiet, RING_FOR_MS);
+      ringCount++;
+    }
+    if (ringCount < RING_MAX) ringTimer = setTimeout(burst, RING_EVERY_MS);
+  }
+
+  function ring() {
+    if (ringStarted || ringStopped) return;
+    ringStarted = true;
+    ["pointerenter", "mouseenter", "focusin", "touchstart", "click"].forEach(function (type) {
+      dock.addEventListener(type, stopRinging, { passive: true });
+    });
+    if (stillQuery) {
+      var onChange = function () {
+        if (stillQuery.matches) quiet();
+      };
+      if (stillQuery.addEventListener) stillQuery.addEventListener("change", onChange);
+      else if (stillQuery.addListener) stillQuery.addListener(onChange);
+    }
+    ringTimer = setTimeout(burst, RING_FIRST_MS);
   }
 
   // Tell Belline the widget loaded here. This is how the dashboard knows it is
@@ -268,6 +424,7 @@
 
   function open(kind, label) {
     if (panel) return;
+    stopRinging();
 
     panel = document.createElement("iframe");
     // The venue's own origin goes in the URL so the edge can name it in

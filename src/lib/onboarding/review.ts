@@ -267,8 +267,6 @@ export interface ServiceRow {
   name: string;
   durationMin: number;
   price: number;
-  /** What it is, in a line. Optional, and never asked of a restaurant's menu. */
-  description?: string;
   source: Source;
 }
 
@@ -297,7 +295,7 @@ export interface CurrentVenue {
   address: string;
   phone: string;
   hours: WeeklyHours;
-  services: { name: string; durationMin: number; price: number; description?: string }[];
+  services: { name: string; durationMin: number; price: number }[];
   staff: string[];
   faqs: Faq[];
   policies: string[];
@@ -317,29 +315,6 @@ export interface Found {
 /** The question every restaurant's menu is filed under, so the agent can find it. */
 export const MENU_QUESTION = "What is on the menu, and what does it cost?";
 
-/**
- * A restaurant's saved menu back into rows, so the form shows it.
- *
- * The menu is stored as one answer ("Grilled hammour (AED 95); Lamb ouzi.",
- * written by onboarding `applyDraft`), and the review used to start with no
- * dishes at all: saving the business details from the dashboard would have
- * filed an empty menu over the real one. An item that does not end in the
- * venue's own price shape keeps its whole text as the name, so it saves back
- * word for word.
- */
-export function menuFromAnswer(answer: string, currency: string): { name: string; durationMin: number; price: number }[] {
-  const priced = new RegExp(`^(.+?) \\(${currency.replace(/[^A-Za-z]/g, "")} (\\d+)\\)$`);
-  return answer
-    .replace(/\.\s*$/, "")
-    .split("; ")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => {
-      const m = item.match(priced);
-      return m ? { name: m[1], durationMin: 0, price: Number(m[2]) } : { name: item, durationMin: 0, price: 0 };
-    });
-}
-
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /**
@@ -357,14 +332,9 @@ export function formFromDraft(found: Found | null, read: Source, current: Curren
     name: s.name,
     durationMin: Math.round(Number(s.durationMin) || 0),
     price: Math.max(0, Number(s.price) || 0),
-    // The reader never writes descriptions; one the owner typed before is
-    // kept when the website names the same service again.
-    description: current.services.find((x) => same(x.name, s.name))?.description ?? "",
     source: read,
   }));
-  for (const s of current.services) {
-    if (!services.some((x) => same(x.name, s.name))) services.push({ ...s, description: s.description ?? "", source: "saved" });
-  }
+  for (const s of current.services) if (!services.some((x) => same(x.name, s.name))) services.push({ ...s, source: "saved" });
 
   const staff: Field<string>[] = (found?.staff ?? []).map((name) => ({ value: name, source: read }));
   for (const name of current.staff) if (!staff.some((x) => same(x.value, name))) staff.push({ value: name, source: "saved" });
@@ -400,13 +370,8 @@ export interface SaveBody {
   address: string;
   phone: string;
   hours: WeeklyHours;
-  services: { name: string; durationMin: number; price: number; description: string }[];
-  /**
-   * Absent when the form did not show the staff list: a business Belline does
-   * not fit into a day is never asked who works there, so names the reader
-   * found on its website were never seen, and the saved team is left alone.
-   */
-  staff?: string[];
+  services: { name: string; durationMin: number; price: number }[];
+  staff: string[];
   faqs: Faq[];
   policies: string[];
 }
@@ -429,7 +394,6 @@ export const REVIEW_IDS = {
   phone: "review-phone",
   hours: "review-hours",
   serviceMinutes: (i: number) => `review-service-${i}-minutes`,
-  serviceDescription: (i: number) => `review-service-${i}-description`,
   faqQuestion: (i: number) => `review-faq-${i}-q`,
   faqAnswer: (i: number) => `review-faq-${i}-a`,
 } as const;
@@ -446,11 +410,6 @@ export interface ReviewOptions {
   lengthsRequired?: boolean;
   /** The business's own market (ISO), for a phone typed without its country code. */
   country?: string;
-  /**
-   * Was "Who works there" on the screen? Unset means yes. When it was not, the
-   * body carries no staff and the team already saved is kept as it is.
-   */
-  staffShown?: boolean;
 }
 
 /** The business phone as E.164, or why not. Empty is allowed. */
@@ -475,26 +434,6 @@ export function lengthProblem(name: string, durationMin: unknown, required: bool
   if (minutes < 5) return `"${name}" is shorter than 5 minutes. Type the minutes, or leave it empty.`;
   if (minutes > 12 * 60) return "A service can take at most 12 hours (720 minutes).";
   return null;
-}
-
-/**
- * A service description is one line the agent may repeat to a caller, so it
- * is kept short: room for "Two-hour site visit with the architect, at your
- * plot", not for a second set of instructions. The server cuts at the same
- * length (`cleanConfirmed`); the form says so first, so nothing the owner
- * typed is dropped without them seeing it.
- */
-export const DESCRIPTION_MAX = 240;
-
-/** Newlines and runs of spaces as one space: each service is one line in what the agent is told. */
-export function oneLine(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
-
-export function descriptionProblem(name: string, description: unknown): string | null {
-  const text = oneLine(String(description ?? ""));
-  if (text.length <= DESCRIPTION_MAX) return null;
-  return `The description of "${name}" is ${text.length} characters. Keep it to ${DESCRIPTION_MAX}, a line a receptionist would say.`;
 }
 
 export type SaveCheck =
@@ -529,8 +468,6 @@ export function reviewErrors(form: ReviewForm, opts: ReviewOptions = {}): FieldE
     if (!s.name.trim()) return;
     const problem = lengthProblem(s.name.trim(), s.durationMin, opts.lengthsRequired ?? true);
     if (problem) errors.push({ id: REVIEW_IDS.serviceMinutes(i), message: problem });
-    const described = descriptionProblem(s.name.trim(), s.description);
-    if (described) errors.push({ id: REVIEW_IDS.serviceDescription(i), message: described });
   });
 
   form.faqs.forEach((f, i) => {
@@ -555,13 +492,7 @@ export function payloadFromForm(form: ReviewForm, opts: ReviewOptions = {}): Sav
   const services = form.services
     .filter((s) => s.name.trim())
     // 0 is "not given", for the length and the price alike.
-    .map((s) => ({
-      name: s.name.trim(),
-      durationMin: Math.max(0, Math.round(Number(s.durationMin) || 0)),
-      price: Math.max(0, Number(s.price) || 0),
-      // Always sent, "" included: an emptied description is a cleared one.
-      description: oneLine(s.description ?? ""),
-    }));
+    .map((s) => ({ name: s.name.trim(), durationMin: Math.max(0, Math.round(Number(s.durationMin) || 0)), price: Math.max(0, Number(s.price) || 0) }));
   const faqs = form.faqs.filter((f) => f.q.trim() && f.a.trim()).map((f) => ({ q: f.q.trim(), a: f.a.trim() }));
 
   return {
@@ -577,7 +508,7 @@ export function payloadFromForm(form: ReviewForm, opts: ReviewOptions = {}): Sav
       })(),
       hours: hours.hours,
       services,
-      ...(opts.staffShown === false ? {} : { staff: form.staff.map((s) => s.value.trim()).filter(Boolean) }),
+      staff: form.staff.map((s) => s.value.trim()).filter(Boolean),
       faqs,
       policies: form.policies.value.split("\n").map((s) => s.trim()).filter(Boolean),
     },
@@ -602,8 +533,7 @@ export interface Confirmed {
   phone?: string;
   greeting?: string;
   hours?: WeeklyHours;
-  /** A `description` left out keeps the saved one; "" clears it. */
-  services?: { name: string; durationMin: number; price: number; description?: string }[];
+  services?: { name: string; durationMin: number; price: number }[];
   staff?: string[];
   faqs?: Faq[];
   policies?: string[];
@@ -642,18 +572,11 @@ export function cleanConfirmed(body: Record<string, unknown>, opts: ReviewOption
   const list = (v: unknown, max: number) => (Array.isArray(v) ? v.slice(0, max) : undefined);
 
   const services = list(body.services, 80)
-    ?.map((s) => {
-      const raw = (s as { description?: unknown })?.description;
-      return {
-        name: str((s as { name?: unknown })?.name, 120) ?? "",
-        durationMin: Math.max(0, Math.round(Number((s as { durationMin?: unknown })?.durationMin) || 0)),
-        price: Math.max(0, Number((s as { price?: unknown })?.price) || 0),
-        // One line, cut at the length the form allows. Not sent stays not
-        // sent, so a caller that never sends descriptions (Belle, an older
-        // page) does not wipe the ones the owner wrote.
-        ...(typeof raw === "string" ? { description: oneLine(raw).slice(0, DESCRIPTION_MAX).trim() } : {}),
-      };
-    })
+    ?.map((s) => ({
+      name: str((s as { name?: unknown })?.name, 120) ?? "",
+      durationMin: Math.max(0, Math.round(Number((s as { durationMin?: unknown })?.durationMin) || 0)),
+      price: Math.max(0, Number((s as { price?: unknown })?.price) || 0),
+    }))
     .filter((s) => s.name);
   for (const s of services ?? []) {
     const problem = lengthProblem(s.name, s.durationMin, opts.lengthsRequired ?? true);

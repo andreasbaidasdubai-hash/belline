@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EmbedAppearance, EmbedMode } from "@/lib/types";
 import { APPEARANCE_RULES, EMBED_PALETTE, accentHex, contrastRatio, textOn } from "@/lib/embed-look";
+import LogoUpload from "@/components/LogoUpload";
 import InstallGuide from "./InstallGuide";
 import InstallCheck from "./InstallCheck";
 
@@ -57,6 +58,7 @@ export default function WidgetEditor({
   appearance,
   whatsappNumber,
   detectedAt,
+  logoUrl: logoUrlAtLoad = null,
 }: {
   locationId: string;
   enabled: boolean;
@@ -74,6 +76,12 @@ export default function WidgetEditor({
   whatsappNumber: string | null;
   /** When the widget was last seen loading on the venue's own site, if ever. */
   detectedAt: string | null;
+  /**
+   * The venue's uploaded logo (logo.ts `logoUrlFor`), if any. Optional so
+   * every place that mounted this before logos existed still does; without
+   * it the logo can still be uploaded right here.
+   */
+  logoUrl?: string | null;
 }) {
   const router = useRouter();
   const [enabled, setEnabled] = useState(enabledAtLoad);
@@ -91,6 +99,9 @@ export default function WidgetEditor({
   const [customHex, setCustomHex] = useState(
     appearance.accent && !EMBED_PALETTE[appearance.accent] ? appearance.accent : "",
   );
+  const [logoUrl, setLogoUrl] = useState<string | null>(logoUrlAtLoad);
+  // As the widget resolves it: the logo only when chosen *and* uploaded.
+  const showsLogo = look.buttonMark === "logo" && Boolean(logoUrl);
 
   // What the buttons will look like, resolved the way the widget resolves it.
   const accent = accentHex(look.accent) ?? EMBED_PALETTE.indigo;
@@ -290,7 +301,7 @@ export default function WidgetEditor({
         <div className="panel-head">
           How it looks
           <span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>
-            your words, your colour — the bell stays
+            your words, your colour, the bell or your logo
           </span>
         </div>
         <div style={{ padding: 18, display: "grid", gap: 18, gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }} className="widget-look">
@@ -417,6 +428,72 @@ export default function WidgetEditor({
                 Show a WhatsApp button for {whatsappNumber}
               </label>
             )}
+
+            {/*
+             * The bell or the venue's logo on the main button. The logo can be
+             * uploaded right here, so the choice is never a dead end: disabled
+             * until there is a logo, with the reason beside it.
+             */}
+            <LogoUpload locationId={locationId} logoUrl={logoUrl} onChange={setLogoUrl} />
+            <fieldset style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+              {/* Styled as the other field labels on this panel. */}
+              <legend
+                style={{ padding: 0, fontSize: 11, fontWeight: 600, letterSpacing: "0.045em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 7 }}
+              >
+                The main button shows
+              </legend>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 4 }}>
+                {(
+                  [
+                    ["bell", "Belline's bell"],
+                    ["logo", "Your logo"],
+                  ] as const
+                ).map(([value, text]) => {
+                  const disabled = value === "logo" && !logoUrl;
+                  const checked = value === "logo" ? showsLogo : !showsLogo;
+                  return (
+                    <label
+                      key={value}
+                      className="label-plain"
+                      style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, margin: 0, opacity: disabled ? 0.55 : 1 }}
+                    >
+                      <input
+                        type="radio"
+                        name={`button-mark-${locationId}`}
+                        value={value}
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={() => setLook((prev) => ({ ...prev, buttonMark: value }))}
+                        style={{ width: 18, height: 18, margin: 0, accentColor: "var(--accent)" }}
+                      />
+                      {text}
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+                {logoUrl
+                  ? "Your logo sits in a white circle, so it reads on any colour. If it ever fails to load, visitors see the bell."
+                  : "Upload your logo above to put it on the button. Until then, the button shows the bell."}
+              </div>
+            </fieldset>
+
+            <div>
+              <label className="label-plain" style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 }}>
+                <input
+                  type="checkbox"
+                  checked={look.ring ?? false}
+                  onChange={(e) => setLook((prev) => ({ ...prev, ring: e.target.checked }))}
+                  style={{ width: 22, height: 22, margin: 0, accentColor: "var(--accent)" }}
+                />
+                Ring the button now and then
+              </label>
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 4, maxWidth: "52ch" }}>
+                A few seconds of ringing, a few times per visit, to catch the eye. It stops for good once a
+                visitor points at or taps it, and never plays for visitors who have asked their device for
+                less motion. The preview rings all the time so you can see it.
+              </div>
+            </div>
           </div>
 
           {/* The preview: the buttons exactly as the widget will draw them. */}
@@ -445,19 +522,36 @@ export default function WidgetEditor({
                 <PreviewFab label={look.whatsappLabel || "WhatsApp us"} round={look.shape === "round"} quiet mark="wa" />
               )}
               {pick !== "voice" && (
-                <PreviewFab label={look.chatLabel || "Chat with us"} round={look.shape === "round"} quiet={pick === "both"} mark="bubble" accent={pick === "chat" ? { bg: accent, fg: accentText, mark: accentMark } : undefined} />
+                <PreviewFab
+                  label={look.chatLabel || "Chat with us"}
+                  round={look.shape === "round"}
+                  quiet={pick === "both"}
+                  mark="bubble"
+                  accent={pick === "chat" ? { bg: accent, fg: accentText, mark: accentMark } : undefined}
+                  // In "Messages only" this is the main button: it carries the logo and rings.
+                  logoUrl={pick === "chat" && showsLogo ? logoUrl : null}
+                  ring={pick === "chat" && Boolean(look.ring)}
+                />
               )}
               {pick !== "chat" && (
-                <PreviewFab label={look.voiceLabel || "Talk to us"} round={look.shape === "round"} mark="bell" accent={{ bg: accent, fg: accentText, mark: accentMark }} />
+                <PreviewFab
+                  label={look.voiceLabel || "Talk to us"}
+                  round={look.shape === "round"}
+                  mark="bell"
+                  accent={{ bg: accent, fg: accentText, mark: accentMark }}
+                  logoUrl={showsLogo ? logoUrl : null}
+                  ring={Boolean(look.ring)}
+                />
               )}
             </div>
           </div>
         </div>
         <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6, margin: "0 18px 18px", maxWidth: "68ch" }}>
-          Saved with the button below. Changes reach your website within a minute — nothing to
-          paste again. The words are limited to {APPEARANCE_RULES.labelMaxChars} characters and the colour has to keep the
-          words readable; the bell itself does not change, so a visitor who has seen Belline
-          anywhere knows what the button is.
+          Saved with the button below (your logo itself saves as soon as you upload it). Changes
+          reach your website within a minute — nothing to paste again. The words are limited to{" "}
+          {APPEARANCE_RULES.labelMaxChars} characters and the colour has to keep the words readable.
+          The bell and the message bubble themselves do not change; the only other mark the main
+          button can carry is your own logo.
         </p>
       </div>
 
@@ -542,24 +636,36 @@ function PreviewFab({
   quiet,
   mark,
   accent,
+  logoUrl = null,
+  ring = false,
 }: {
   label: string;
   round: boolean;
   quiet?: boolean;
   mark: "bell" | "bubble" | "wa";
   accent?: { bg: string; fg: string; mark: string };
+  /** The venue's logo in place of the mark, in its white circle, as embed.js draws it. */
+  logoUrl?: string | null;
+  /** Ring as embed.js does (globals.css .widget-preview-ring; off under reduced motion). */
+  ring?: boolean;
 }) {
   const bg = quiet || !accent ? "#FFFFFF" : accent.bg;
   const fg = quiet || !accent ? "#1B2735" : accent.fg;
   const markColor = quiet || !accent ? "#2667FF" : accent.mark;
+  // Falls back to the mark if the picture will not load, as the widget does.
+  // Keyed by URL, so a newly uploaded logo gets its own chance to load.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const logo = logoUrl && logoUrl !== failedUrl ? logoUrl : null;
   return (
     <span
+      className={ring ? "widget-preview-ring" : undefined}
       style={{
+        ["--ring-colour" as string]: bg,
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
         gap: 10,
-        padding: round ? 0 : "14px 22px 14px 18px",
+        padding: round ? 0 : logo ? "11px 22px 11px 12px" : "14px 22px 14px 18px",
         width: round ? 58 : undefined,
         height: round ? 58 : undefined,
         borderRadius: 999,
@@ -569,7 +675,32 @@ function PreviewFab({
         boxShadow: "0 14px 34px -14px rgba(0,0,0,.5)",
       }}
     >
-      <svg viewBox={mark === "bell" ? "0 0 48 48" : "0 0 24 24"} width="24" height="24" fill="none" aria-hidden="true" style={{ color: markColor }}>
+      {logo ? (
+        <span
+          className="widget-preview-mark"
+          aria-hidden="true"
+          style={{
+            display: "block",
+            flex: "none",
+            width: round ? 46 : 30,
+            height: round ? 46 : 30,
+            padding: round ? 5 : 3,
+            boxSizing: "border-box",
+            borderRadius: 999,
+            background: "#FFFFFF",
+            boxShadow: "0 0 0 1px rgba(27,39,53,.1)",
+            overflow: "hidden",
+          }}
+        >
+          <img
+            src={logo}
+            alt=""
+            onError={() => setFailedUrl(logo)}
+            style={{ display: "block", width: "100%", height: "100%", objectFit: "contain", borderRadius: 999 }}
+          />
+        </span>
+      ) : (
+      <svg className="widget-preview-mark" viewBox={mark === "bell" ? "0 0 48 48" : "0 0 24 24"} width="24" height="24" fill="none" aria-hidden="true" style={{ color: markColor }}>
         {mark === "bell" && (
           <>
             <circle cx="24" cy="9.5" r="3.5" fill="currentColor" />
@@ -592,6 +723,7 @@ function PreviewFab({
           </>
         )}
       </svg>
+      )}
       {!round && <span>{label}</span>}
     </span>
   );

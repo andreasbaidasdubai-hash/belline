@@ -21,7 +21,7 @@ import { droppedNote, filterServices, type Dropped } from "./offerings";
 import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
 import { copy } from "../customer-copy";
-import { MENU_QUESTION, menuFromAnswer, type Confirmed, type CurrentVenue } from "./review";
+import { MENU_QUESTION, type Confirmed, type CurrentVenue } from "./review";
 import { serviceLengthsRequired, takesRequestsOnly } from "../booking/destination";
 
 /**
@@ -560,10 +560,6 @@ export function applyDraft(location: Location, confirmed: Confirmed): Location {
   };
 
   if (location.vertical === "restaurant") {
-    // The review never shows the menu as a question, so confirmed questions
-    // arrive without it. Kept unless a new menu came with them.
-    const menu = location.agent.faqs.find((f) => f.q === MENU_QUESTION);
-    if (confirmed.faqs && !confirmed.services && menu && !faqs.some((f) => f.q === MENU_QUESTION)) faqs = [...faqs, menu];
     // A menu is something to answer questions about, never something to book:
     // a table is booked, the lamb shoulder is not. So it is filed as one FAQ
     // the agent reads, replacing the last menu it was given.
@@ -608,11 +604,6 @@ export function applyDraft(location: Location, confirmed: Confirmed): Location {
             // minutes is the number every salon uses when asked, and it is editable.
             bufferMin: was?.bufferMin ?? 15,
             price: Math.max(0, Math.round(s.price || 0)),
-            // Everything the plain form does not show — turnaround above, and
-            // rooms, phases, recall and the rest through `was` — is kept as it
-            // was. The description is the form's: sent empty clears it, not
-            // sent at all (Belle, an older page) keeps it.
-            ...descriptionOf(s.description, was?.description),
           };
         })
       : salon.services;
@@ -663,13 +654,6 @@ export function applyDraft(location: Location, confirmed: Confirmed): Location {
   return upsertLocation(next);
 }
 
-/** A service description as saved: one sent replaces the old one ("" removes it); none sent keeps it. */
-function descriptionOf(sent: string | undefined, was: string | undefined): { description?: string } {
-  if (sent === undefined) return was ? { description: was } : {};
-  // An explicit undefined, so a cleared description is not brought back by `...was`.
-  return { description: sent.trim() || undefined };
-}
-
 /** The venue as the review form starts from it (review.ts `CurrentVenue`). */
 export function currentVenue(location: Location): CurrentVenue {
   return {
@@ -679,17 +663,10 @@ export function currentVenue(location: Location): CurrentVenue {
     address: location.address,
     phone: location.businessPhone,
     hours: location.hours,
-    // A restaurant's menu is saved as one answer; it is read back into rows,
-    // so saving the form again keeps it rather than filing an empty menu.
     services:
       location.vertical === "restaurant"
-        ? menuFromAnswer(location.agent.faqs.find((f) => f.q === MENU_QUESTION)?.a ?? "", location.currency)
-        : (location.salon?.services ?? []).map((s) => ({
-            name: s.name,
-            durationMin: s.durationMin,
-            price: s.price ?? 0,
-            ...(s.description ? { description: s.description } : {}),
-          })),
+        ? []
+        : (location.salon?.services ?? []).map((s) => ({ name: s.name, durationMin: s.durationMin, price: s.price ?? 0 })),
     staff: location.vertical === "restaurant" ? [] : (location.salon?.staff ?? []).map((s) => s.name),
     faqs: location.agent.faqs,
     policies: location.agent.policies,
@@ -704,30 +681,22 @@ export function readiness(location: Location): {
   const missing: { label: string; where: string }[] = [];
 
   if (!location.address.trim()) missing.push({ label: "An address", where: "/agents" });
-  // Tables, sittings and a team are the diary's machinery, asked for only
-  // where Belline fits bookings into a day itself: its own diary, or a Google
-  // or Outlook calendar it books into with the same engine, which offers no
-  // time without somebody to do it. Since the pivot a new account takes
-  // requests or books into its own calendar, and one that has not chosen yet
-  // was told it needed a rota it had nowhere to enter.
-  const fitsIntoADay = serviceLengthsRequired(location);
   // A business that confirms its own bookings needs no tables, sittings,
   // services or rota in Belline: nothing is booked against them.
   if (takesRequestsOnly(location)) {
     // Only what every business needs, below.
   } else if (location.vertical === "restaurant") {
-    if (fitsIntoADay && !location.restaurant?.tables.length) {
-      missing.push({ label: "Your tables", where: "/venue/diary" });
+    if (!location.restaurant?.tables.length) {
+      missing.push({ label: "Your tables", where: "/venue" });
     }
-    if (fitsIntoADay && !location.restaurant?.services.length) {
-      missing.push({ label: "Service times", where: "/venue/diary" });
+    if (!location.restaurant?.services.length) {
+      missing.push({ label: "Service times", where: "/venue" });
     }
   } else {
     if (!location.salon?.services.length) {
       missing.push({ label: "What you offer", where: "/venue" });
     }
-    // On the business details page, which lists the team wherever it is needed.
-    if (fitsIntoADay && !location.salon?.staff.length) {
+    if (!location.salon?.staff.length) {
       missing.push({ label: "Who works there", where: "/venue" });
     }
     // Set up before the diary was chosen, when lengths were not asked for.

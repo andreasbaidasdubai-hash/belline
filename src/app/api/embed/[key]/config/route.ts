@@ -5,6 +5,7 @@ import { widgetConfig } from "@/lib/embed";
 import { answersIn } from "@/lib/language";
 import { venueWhatsApp, whatsappLink } from "@/lib/whatsapp";
 import { isActivated } from "@/lib/onboarding/journey";
+import { logoUrlFor } from "@/lib/logo";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,8 @@ export const dynamic = "force-dynamic";
  *
  * Public and cross-origin by design: it runs on the customer's site, and it
  * carries only what a visitor could see by looking at the buttons anyway —
- * words, colours, which corner, the WhatsApp link. The origin allowlist and
+ * words, colours, which corner, the WhatsApp link, the logo when the button
+ * carries one (a public picture already). The origin allowlist and
  * the ceilings stay out of it (see `widgetConfig`).
  *
  * Fetched rather than baked into the pasted snippet so a venue can change
@@ -40,7 +42,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   const account = await venueWhatsApp(location).catch(() => null);
   const link = account?.phoneE164 ? `https://wa.me/${account.phoneE164.slice(1)}` : whatsappLinkFor(location.id);
 
-  return NextResponse.json(widgetConfig(location.embed, link, answersIn(location)), {
+  return NextResponse.json(widgetConfig(location.embed, link, answersIn(location), logoUrlFor(location)), {
     headers: { ...cors(), "cache-control": "public, max-age=60" },
   });
 }
