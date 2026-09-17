@@ -118,6 +118,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
+    "@daily-co/daily-js": "0.92.2",
     "next": "^15.5.4",
     "pg": "^8.23.0",
     "react": "^19.1.0",
