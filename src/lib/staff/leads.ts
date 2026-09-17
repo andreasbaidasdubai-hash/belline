@@ -1,4 +1,5 @@
 import type { Lead } from "../leads";
+import { isWaitlistLead } from "../leads/waitlist";
 import type { LeadCrmRow, LeadEvent, User } from "../types";
 import { getLead as getJsonLead, getLeadCrm, getUser, id as newId, listLeadCrm, listLeads as listJsonLeads, listUsers, saveLead, saveLeadCrm } from "../store";
 import { isBellineStaff } from "../auth";
@@ -41,7 +42,7 @@ export const SOURCE_LABEL: Record<SourceTag, string> = {
 
 export function sourceOfJson(lead: Pick<Lead, "source">): SourceTag {
   const source = lead.source ?? "";
-  if (source === "dach-waitlist") return "waitlist_dach";
+  if (isWaitlistLead(lead)) return "waitlist_dach";
   if (source === "belle:whatsapp") return "whatsapp";
   if (source === "belle:phone") return "phone_belle";
   if (source.startsWith("belle:")) return "website_belle";
