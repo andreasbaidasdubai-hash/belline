@@ -37,11 +37,11 @@ export async function POST(request: Request) {
   // The venue, through the call this transfer belongs to, for its language.
   const call = params.CallSid ? findCallBySid(params.CallSid) : undefined;
   const location = call ? getLocation(call.locationId) : undefined;
-  const german = location ? answersIn(location) === "de" : false;
+  const language = location ? answersIn(location, { channel: "phone" }) : "en";
   const body = answered
     ? `<Response><Hangup/></Response>`
-    : german
-      ? `<Response>${sayTwiml("de", copy("de", "transfer.no_answer"))}<Hangup/></Response>`
+    : language !== "en"
+      ? `<Response>${sayTwiml(language, copy(language, "transfer.no_answer"))}<Hangup/></Response>`
       : `<Response><Say voice="Polly.Joanna">I'm sorry, nobody could get to the phone just now. The team has your number and what you told me, and they will call you back as soon as they can.</Say><Hangup/></Response>`;
 
   return new Response(`<?xml version="1.0" encoding="UTF-8"?>${body}`, {

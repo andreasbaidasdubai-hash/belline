@@ -3,6 +3,7 @@ import { id, listCalls, saveCall } from "../store";
 import { isE164 } from "../phone";
 import { answersIn } from "../language";
 import { copy } from "../customer-copy";
+import { LANGUAGE_REGISTRY } from "../../config/languages";
 
 /**
  * A voicemail for callers who reach a venue that has not gone live.
@@ -43,19 +44,18 @@ function escapeXml(value: string): string {
 /**
  * The voice Twilio reads a line in, before any stream is open.
  *
- * English keeps Polly.Joanna with no language attribute, exactly as it always
- * was. German is Polly.Vicki (neural, de-DE): Twilio lists German voices under
- * de-DE only, and neither Polly's Austrian nor its Swiss voice is on Twilio's
- * list, so Vienna and Zurich hear the German one too.
+ * From the registry. English keeps Polly.Joanna with no language attribute,
+ * exactly as it always was. German is Polly.Vicki (neural, de-DE): Twilio lists
+ * German voices under de-DE only, and neither Polly's Austrian nor its Swiss
+ * voice is on Twilio's list, so Vienna and Zurich hear the German one too.
  */
-export const SAY_VOICE: Record<VenueLanguage, { voice: string; language?: string }> = {
-  en: { voice: "Polly.Joanna" },
-  de: { voice: "Polly.Vicki-Neural", language: "de-DE" },
-};
+export const SAY_VOICE: Partial<Record<VenueLanguage, { voice: string; language?: string }>> = Object.fromEntries(
+  LANGUAGE_REGISTRY.flatMap((l) => (l.twilio ? [[l.code, l.twilio]] : [])),
+);
 
-/** A `<Say>` element in the venue's language. `text` is escaped here. */
+/** A `<Say>` element in the language (from config/languages.ts), or English's voice where it has none. `text` is escaped here. */
 export function sayTwiml(language: VenueLanguage, text: string): string {
-  const { voice, language: tag } = SAY_VOICE[language];
+  const { voice, language: tag } = SAY_VOICE[language] ?? SAY_VOICE.en!;
   return `<Say voice="${voice}"${tag ? ` language="${tag}"` : ""}>${escapeXml(text)}</Say>`;
 }
 
@@ -70,9 +70,9 @@ export function sayTwiml(language: VenueLanguage, text: string): string {
  * webhook again and replay the greeting. An empty recording goes to the
  * `<Hangup/>` after it.
  */
-export function voicemailTwiml(location: Pick<Location, "id" | "name" | "language">): string {
+export function voicemailTwiml(location: Pick<Location, "id" | "name" | "language" | "languages">): string {
   const loc = encodeURIComponent(location.id);
-  const language = answersIn(location);
+  const language = answersIn(location, { channel: "phone" });
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   ${sayTwiml(language, voicemailGreeting(location.name, language))}

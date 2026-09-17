@@ -119,7 +119,7 @@ export async function POST(request: Request) {
   const service = serviceState(location, todayIn(location.timezone), { channel: "phone" });
   if (!service.answering) {
     console.warn("[twilio] not answering for %s: %s", location.id, service.refused);
-    const language = answersIn(location);
+    const language = answersIn(location, { channel: "phone" });
     return xml(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   ${sayTwiml(language, service.callerMessage ?? copy(language, "phone.not_answering_short"))}

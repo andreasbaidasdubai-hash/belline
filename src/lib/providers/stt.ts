@@ -16,8 +16,12 @@ export interface SttOptions {
   sampleRate: number;
   /** Words so far, revised as the caller keeps talking. */
   onPartial?: (text: string) => void;
-  /** The caller finished a thought — this is the cue to answer. */
-  onFinal: (text: string) => void;
+  /**
+   * The caller finished a thought — this is the cue to answer. `meta.languages`
+   * is what nova-3's multilingual mode heard, most words first, when listening
+   * with `language: "multi"`.
+   */
+  onFinal: (text: string, meta?: SttFinalMeta) => void;
   /** Caller started speaking, which is the barge-in trigger. */
   onSpeechStart?: () => void;
   /**
@@ -39,23 +43,38 @@ export interface SttOptions {
    */
   keyterms?: string[];
   /**
-   * What the caller is expected to speak: "en", "de", or "de-CH" for Swiss
-   * German, which nova-3 has its own model for. From language.ts `localeOf`.
-   * Absent is English.
+   * What the caller is expected to speak: a registry language's Deepgram code
+   * ("de", or "de-CH" for Swiss German, which nova-3 has its own model for), or
+   * "multi" for a business answering in several. From voice/language-pick.ts
+   * `sttLanguageFor`. Absent is English.
    */
   language?: SttLanguage;
+}
+
+export interface SttFinalMeta {
+  /** Languages heard in the utterance, as Deepgram tags, the one with most words first. */
+  languages?: string[];
 }
 
 /**
  * The recogniser's language tag.
  *
- * `de` rather than `multi`: nova-3's multilingual mode code-switches between
- * ten languages, which a German venue does not need and pays for in accuracy
- * on the language it does. Swiss venues get `de-CH`, trained on Swiss
- * speakers' Standard German. Keyterms, numerals and smart formatting are all
- * supported on nova-3 German (Deepgram, Nova-3 German launch notes).
+ * One language where a business speaks one: `de` rather than `multi` for a
+ * German-only venue, because nova-3's multilingual mode code-switches between
+ * ten languages and pays for it in accuracy on the one that matters. Swiss
+ * venues get `de-CH`, trained on Swiss speakers' Standard German. Keyterms,
+ * numerals and smart formatting are all supported on nova-3 German.
+ *
+ * `multi` where a business speaks several that nova-3's multilingual mode
+ * covers (English, Spanish, French, German, Hindi, Russian, Portuguese,
+ * Japanese, Italian, Dutch): the one stream that follows a caller from one to
+ * another, reporting per utterance which it heard. Streaming language
+ * detection does not exist on Deepgram, so a language outside that set cannot
+ * be switched into mid-call (see config/languages.ts, Arabic).
+ *   https://developers.deepgram.com/docs/multilingual-code-switching
+ *   https://developers.deepgram.com/docs/language-detection
  */
-export type SttLanguage = "en" | "de" | "de-CH";
+export type SttLanguage = string;
 
 export interface SttStream {
   send(chunk: Buffer): void;
@@ -100,7 +119,7 @@ export type SttEngine = "nova-3" | "flux";
 
 export function sttEngine(language: SttLanguage = "en"): SttEngine {
   // Flux's turn-taking was measured on English callers, on `flux-general-en`.
-  // A German caller stays on nova-3 until somebody has measured it in German.
+  // Any other language, or several, stays on nova-3 until somebody has measured it.
   if (language !== "en") return "nova-3";
   return process.env.STT_ENGINE === "flux" ? "flux" : "nova-3";
 }
@@ -131,7 +150,7 @@ export function createSttStream(opts: SttOptions): SttStream {
   return novaStream(socket, opts);
 }
 
-/** Exactly what nova-3 is asked for on a live line. Exported for check:german. */
+/** Exactly what nova-3 is asked for on a live line. Exported for check:languages. */
 export function novaStreamParams(opts: Pick<SttOptions, "encoding" | "sampleRate" | "keyterms" | "language">): URLSearchParams {
   // A phone line is 8 kHz µ-law over a lossy network and callers on one pause
   // more — mid-sentence, to check a diary, because the line lags. The browser
@@ -178,6 +197,8 @@ function novaStream(socket: WebSocket, opts: SttOptions): SttStream {
   const pending: Buffer[] = [];
   /** Finalised words not yet flushed — Deepgram sends a thought in pieces. */
   let settled = "";
+  /** The languages multilingual mode reported for those pieces, in order. */
+  let heard: string[] = [];
 
   const ready = new Promise<void>((resolve, reject) => {
     socket.once("open", () => {
@@ -202,8 +223,10 @@ function novaStream(socket: WebSocket, opts: SttOptions): SttStream {
 
   const flush = () => {
     const text = settled.trim();
+    const languages = [...new Set(heard)];
     settled = "";
-    if (text) opts.onFinal(text);
+    heard = [];
+    if (text) opts.onFinal(text, languages.length ? { languages } : undefined);
   };
 
   socket.on("message", (raw) => {
@@ -211,7 +234,7 @@ function novaStream(socket: WebSocket, opts: SttOptions): SttStream {
       type?: string;
       is_final?: boolean;
       speech_final?: boolean;
-      channel?: { alternatives?: { transcript?: string }[] };
+      channel?: { alternatives?: { transcript?: string; languages?: string[] }[] };
     };
     try {
       msg = JSON.parse(raw.toString());
@@ -236,6 +259,7 @@ function novaStream(socket: WebSocket, opts: SttOptions): SttStream {
 
     if (msg.is_final) {
       settled = `${settled} ${transcript}`.trim();
+      heard.push(...(msg.channel?.alternatives?.[0]?.languages ?? []));
       if (msg.speech_final) flush();
     } else {
       opts.onPartial?.(`${settled} ${transcript}`.trim());

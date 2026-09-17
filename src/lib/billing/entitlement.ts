@@ -130,14 +130,15 @@ export function unitRefusal(location: Location, today: string, channel: Channel)
 function messageFor(location: Location, channel: Channel | undefined): string {
   // A German venue's callers and customers are refused in German; the lines
   // are customer-copy.ts's, and the English below is the same table's English.
-  if (answersIn(location) !== "en") {
-    if (channel === "web_voice") return lineFor(location, "web_voice.not_answering");
+  const ctx = { channel: channel === "chat" ? ("web_chat" as const) : channel === "web_voice" || channel === "whatsapp" ? channel : ("phone" as const) };
+  if (answersIn(location, ctx) !== "en") {
+    if (channel === "web_voice") return lineFor(location, "web_voice.not_answering", {}, ctx);
     if (channel === "chat" || channel === "whatsapp") {
       return location.businessPhone
-        ? lineFor(location, "messages.not_answering_ring", { phone: location.businessPhone })
-        : lineFor(location, "messages.not_answering");
+        ? lineFor(location, "messages.not_answering_ring", { phone: location.businessPhone }, ctx)
+        : lineFor(location, "messages.not_answering", {}, ctx);
     }
-    return lineFor(location, "phone.not_answering", { name: location.name });
+    return lineFor(location, "phone.not_answering", { name: location.name }, ctx);
   }
   switch (channel) {
     case "web_voice":
