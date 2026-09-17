@@ -220,7 +220,10 @@ async function website(page: Page, j: Journey, browser: Browser, site: Awaited<R
     // A click that lands before the page is live does nothing, so press until it takes.
     const pre = page.locator("pre.widget-snippet");
     await expect(async () => {
-      await page.getByRole("button", { name: "Switch it on" }).click();
+      // Only while it is still off: a click that did land can take longer than
+      // five seconds to show the line, and pressing again would find no button.
+      const switchOn = page.getByRole("button", { name: "Switch it on" });
+      if (await switchOn.count()) await switchOn.click();
       await expect(pre).toBeVisible({ timeout: 5_000 });
     }).toPass({ timeout: 45_000 });
     site.setSnippet((await pre.textContent())!.replace(/src="https?:\/\/[^/]+/, `src="${baseURL}`));
