@@ -379,7 +379,11 @@ test("the conservative basis costs text on the model reception actually ships", 
 
 test("a pool is costed at its dearest channel, so the mix can only flatter the margin", () => {
   for (const basis of margin.BASIS_ORDER) {
-    assert.equal(margin.poolCostUsd("minutes", basis), Math.max(margin.unitCostUsd("phone", basis), margin.unitCostUsd("web_voice", basis)));
+    // Voice minutes can also be spent as video, at the ratio: the pool takes the dearest of all three.
+    assert.equal(
+      margin.poolCostUsd("minutes", basis),
+      Math.max(margin.unitCostUsd("phone", basis), margin.unitCostUsd("web_voice", basis), margin.videoCostPerVoiceMinuteUsd(basis)),
+    );
     assert.equal(margin.poolCostUsd("conversations", basis), Math.max(margin.unitCostUsd("chat", basis), margin.unitCostUsd("whatsapp", basis)));
   }
 });
@@ -433,6 +437,59 @@ test("a real carrier quote replaces an estimated rate without a deploy", () => {
     assert.deepEqual(margin.unverifiedLines("conservative"), []);
   } finally {
     for (const key of lines) delete process.env[`RATE_${key}`];
+  }
+});
+
+console.log("\n\x1b[1mVideo, from the voice-minute pool\x1b[0m\n");
+
+/** Run with the video.avatar flag on (Tavus's three values set) or off, then put the environment back. */
+function withVideo<T>(on: boolean, fn: () => T): T {
+  const keys = ["FLAG_VIDEO_AVATAR", "TAVUS_API_KEY", "TAVUS_FACE_ID", "VIDEO_LLM_SECRET", "VIDEO_AVATAR_PROVIDER"];
+  const before = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  for (const k of keys) delete process.env[k];
+  if (on) Object.assign(process.env, { FLAG_VIDEO_AVATAR: "on", TAVUS_API_KEY: "k", TAVUS_FACE_ID: "f", VIDEO_LLM_SECRET: "s" });
+  try {
+    return fn();
+  } finally {
+    for (const k of keys) {
+      if (before[k] === undefined) delete process.env[k];
+      else process.env[k] = before[k];
+    }
+  }
+}
+
+test("one setting: 1 video minute uses 2.5 voice minutes, and video minutes round down for display", () => {
+  assert.equal(plans.VIDEO_VOICE_MINUTE_RATIO, 2.5);
+  const expected: Record<string, number> = { v2_starter: 30, v2_growth: 100, v2_scale: 200 };
+  for (const p of sellable("AE")) assert.equal(plans.videoMinutesFor(p.pools!.minutes!), expected[p.id], p.id);
+  assert.equal(plans.videoMinutesFor(TRIAL.minutes), 12);
+  assert.equal(plans.videoMinutesFor(PACKS.find((p) => p.pool === "minutes")!.units), 40);
+  assert.equal(plans.videoMinutesFor(74), 29);
+  assert.equal(plans.videoMinutesFor(0), 0);
+  assert.equal(plans.voiceMinutesForVideoSeconds(60), 3);
+  assert.equal(plans.voiceMinutesForVideoSeconds(48), 2);
+  assert.equal(plans.voiceMinutesForVideoSeconds(0), 0);
+});
+
+test("every current plan has the video lines, generated from its pool, live only while video.avatar is on", () => {
+  for (const on of [true, false]) {
+    withVideo(on, () => {
+      for (const p of sellable("AE")) {
+        const lines = [...plans.allowanceFeatures(p), ...p.features];
+        const allowance = lines.find((f) => /video minutes/.test(f.text));
+        const feature = lines.find((f) => f.text === "Video receptionist on your website");
+        assert.ok(allowance && feature, `${p.id} has no video lines`);
+        assert.equal(allowance.text, `${plans.videoMinutesFor(p.pools!.minutes!)} video minutes (each uses 2.5 voice minutes)`);
+        assert.equal(allowance.status, on ? "live" : "not-yet", `${p.id} video allowance with the flag ${on ? "on" : "off"}`);
+        assert.equal(feature.status, on ? "live" : "not-yet");
+        assert.equal(plans.publicLines(p).some((l) => /video/i.test(l)), on, `${p.id} public lines with the flag ${on ? "on" : "off"}`);
+        if (!on) assert.ok(feature.gap, "a not-yet video feature has no gap written down");
+      }
+    });
+  }
+  // An older product was never sold video.
+  for (const p of PRODUCTS.filter((x) => x.version !== CATALOGUE_VERSION)) {
+    assert.ok(!withVideo(true, () => plans.publicLines(p)).some((l) => /video/i.test(l)), `${p.id} says video`);
   }
 });
 

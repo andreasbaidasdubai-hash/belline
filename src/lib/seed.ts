@@ -827,6 +827,9 @@ function refreshOurOwnKnowledge(): void {
     JSON.stringify(stored.agent.faqs) === JSON.stringify(bellineVenue.agent.faqs) &&
     JSON.stringify(stored.agent.policies) === JSON.stringify(bellineVenue.agent.policies) &&
     stored.agent.persona === bellineVenue.agent.persona &&
+    // The chat's opener and starter prompts are sales copy too, with no dashboard setting.
+    stored.agent.chatGreeting === bellineVenue.agent.chatGreeting &&
+    JSON.stringify(stored.agent.starterPrompts) === JSON.stringify(bellineVenue.agent.starterPrompts) &&
     JSON.stringify(stored.salon) === JSON.stringify(bellineVenue.salon) &&
     stored.requiresEmail === bellineVenue.requiresEmail;
   if (same) return;
@@ -839,6 +842,8 @@ function refreshOurOwnKnowledge(): void {
       faqs: bellineVenue.agent.faqs,
       policies: bellineVenue.agent.policies,
       persona: bellineVenue.agent.persona,
+      chatGreeting: bellineVenue.agent.chatGreeting,
+      starterPrompts: bellineVenue.agent.starterPrompts,
     },
   });
 }

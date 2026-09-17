@@ -23,6 +23,9 @@ import {
   productById,
   recommend,
   selectionName,
+  VIDEO_VOICE_MINUTE_RATIO,
+  videoMinutesFor,
+  voiceMinutesForVideoSeconds,
   type Channel,
   type Pool,
   type ProductId,
@@ -122,7 +125,16 @@ export function billableVoiceMinutes(call: Call): number {
 
   const seconds = callDurationSeconds(call);
   if (seconds <= 0) return 0;
+  // A video call on the website draws on the same pool at the video ratio,
+  // rounded up once: a minute of video is 2.5 voice minutes, billed as 3.
+  if (call.video) return voiceMinutesForVideoSeconds(seconds);
   return Math.ceil(seconds / 60);
+}
+
+/** Raw seconds of a finished, billable video call, for cost reporting and the billing page. 0 for anything else. */
+export function billableVideoSeconds(call: Call): number {
+  if (!call.video || billableVoiceMinutes(call) === 0) return 0;
+  return callDurationSeconds(call);
 }
 
 /** Phone minutes only — what an older trial caps and the call list on the billing page shows. */
@@ -177,6 +189,24 @@ export const MINUTE_DEFINITION =
   "through the voice button on your website — from the moment it answers to the moment the " +
   "call ends, rounded up to the next whole minute. Calls you make from your own test console " +
   "do not count, and neither do calls cut short by a fault on our side.";
+
+/**
+ * Video, in the same terms. Separate from MINUTE_DEFINITION, which the website
+ * quotes word for word, so adding video cannot silently change that sentence.
+ */
+export const VIDEO_MINUTE_DEFINITION =
+  `A minute on a video call with the receptionist on your website uses ${VIDEO_VOICE_MINUTE_RATIO} voice minutes from ` +
+  "the same allowance. The call's time is counted the same way, and rounded up to the next whole voice minute.";
+
+/** "70 voice minutes left, or 28 video minutes (each video minute uses 2.5 voice minutes)". For the billing page. */
+export function videoLeftSentence(included: number, used: number): string {
+  const left = Math.max(0, included - used);
+  const video = videoMinutesFor(left);
+  return (
+    `${left} voice minute${left === 1 ? "" : "s"} left, or ${video} video minute${video === 1 ? "" : "s"} ` +
+    `(each video minute uses ${VIDEO_VOICE_MINUTE_RATIO} voice minutes)`
+  );
+}
 
 export const CONVERSATION_DEFINITION =
   "A conversation is one customer's thread in your website chat or on WhatsApp in which Belline replies at " +

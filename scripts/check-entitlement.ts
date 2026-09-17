@@ -604,5 +604,65 @@ test("PAYMENTS OFF: internal, demo and prospect venues on packs are never held, 
   }
 });
 
+console.log("\n\x1b[1mVideo draws on voice minutes at 2.5\x1b[0m\n");
+
+{
+  const { VIDEO_VOICE_MINUTE_RATIO, TRIAL } = await import("../src/lib/billing/plans");
+  const { voiceMinutesLeft, videoSecondsLeft } = await import("../src/lib/billing/entitlement");
+  const { videoCallLimitSeconds, VIDEO_ALLOWANCE_MARGIN_SECONDS } = await import("../src/lib/video/sessions");
+
+  /** A completed website video call of `seconds`, just ended. */
+  function videoCall(venue: () => ReturnType<typeof fresh>, seconds: number) {
+    const call = startCall(venue(), "embed", "website");
+    call.status = "completed";
+    const start = Date.now();
+    call.startedAt = new Date(start).toISOString();
+    call.endedAt = new Date(start + seconds * 1000).toISOString();
+    call.video = { provider: "tavus", sessionId: `vs_${Math.random().toString(36).slice(2)}`, seconds };
+    saveCall(call);
+  }
+
+  const vid = await trialVenue("Video Lashes", "owner@video-lashes.test");
+
+  test("a trial's 30 voice minutes are 12 video minutes, and video counts 2.5x against them", () => {
+    assert.equal(VIDEO_VOICE_MINUTE_RATIO, 2.5);
+    assert.equal(voiceMinutesLeft(vid.get(), today), TRIAL.minutes);
+    assert.equal(videoSecondsLeft(vid.get(), today), 12 * 60);
+    videoCall(vid.get, 4 * 60); // 4 video minutes = 10 voice minutes
+    const meter = accountFor(vid.get(), today)!.usage.meters.find((m) => m.id === "minutes")!;
+    assert.equal(meter.used, 10);
+    assert.equal(voiceMinutesLeft(vid.get(), today), 20);
+    assert.equal(videoSecondsLeft(vid.get(), today), 8 * 60);
+  });
+
+  test("a video call is capped at what the allowance still covers, and refused when too little is left", () => {
+    // 20 voice minutes left = 480 video seconds, less the margin; under a 300s ceiling the ceiling wins.
+    assert.equal(videoCallLimitSeconds(vid.get(), 300, today), 300);
+    assert.equal(videoCallLimitSeconds(vid.get(), 1800, today), 480 - VIDEO_ALLOWANCE_MARGIN_SECONDS);
+    videoCall(vid.get, 7 * 60); // 17.5 → 18 voice minutes; 2 left = 48 video seconds
+    assert.equal(voiceMinutesLeft(vid.get(), today), 2);
+    assert.equal(videoCallLimitSeconds(vid.get(), 300, today), null, "a call with 18 usable seconds was opened");
+    // A call that ran to its limit never bills past the allowance.
+    const left = videoSecondsLeft(vid.get(), today)!;
+    assert.ok(Math.ceil((left * VIDEO_VOICE_MINUTE_RATIO) / 60) <= voiceMinutesLeft(vid.get(), today)!);
+  });
+
+  test("video that uses up the trial's voice minutes stops the voice button and video, and not the chat", () => {
+    assert.equal(serviceState(vid.get(), today, { channel: "web_voice" }).answering, true);
+    videoCall(vid.get, 48); // exactly 2 voice minutes
+    assert.equal(lapseOf(vid.get(), today), "trial_minutes_used");
+    assert.equal(serviceState(vid.get(), today, { channel: "web_voice" }).answering, false);
+    assert.equal(serviceState(vid.get(), today, { channel: "phone" }).answering, false);
+    assert.equal(serviceState(vid.get(), today, { channel: "chat" }).answering, true);
+    assert.equal(voiceMinutesLeft(vid.get(), today), 0);
+    assert.equal(videoCallLimitSeconds(vid.get(), 300, today), null);
+  });
+
+  test("our own venues and demo lines are never capped for video", () => {
+    assert.equal(voiceMinutesLeft(getLocation("loc_belline")!, today), null);
+    assert.equal(videoCallLimitSeconds(getLocation("loc_belline")!, 300, today), 300);
+  });
+}
+
 console.log(`\n${failed ? "\x1b[31m" : "\x1b[32m"}✓ ${passed} passed, ${failed} failed\x1b[0m\n`);
 if (failed > 0) process.exitCode = 1;

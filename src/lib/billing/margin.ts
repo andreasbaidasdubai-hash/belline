@@ -1,5 +1,6 @@
-import { RATE_CARD, rate } from "./cost";
+import { RATE_CARD, TAVUS_BUSINESS_PER_MIN_USD, rate } from "./cost";
 import {
+  VIDEO_VOICE_MINUTE_RATIO,
   CHANNEL_ORDER,
   POOL_CHANNELS,
   POOL_ORDER,
@@ -166,7 +167,23 @@ export function unitCostUsd(channel: Channel, basis: Basis): number {
  * that is what it is costed at. The real mix can only improve on it.
  */
 export function poolCostUsd(pool: Pool, basis: Basis): number {
-  return Math.max(...POOL_CHANNELS[pool].map((channel) => unitCostUsd(channel, basis)));
+  const channels = POOL_CHANNELS[pool].map((channel) => unitCostUsd(channel, basis));
+  // A voice minute can also be spent as 1/2.5 of a video minute, so the pool
+  // is costed at the dearer of its channels and video.
+  return Math.max(...channels, ...(pool === "minutes" ? [videoCostPerVoiceMinuteUsd(basis)] : []));
+}
+
+/**
+ * One video minute: the Tavus Business estimate plus the model turns a voice
+ * minute has (the face does its own speech, so no speech-to-text or voice).
+ */
+export function videoMinuteCostUsd(basis: Basis): number {
+  return TAVUS_BUSINESS_PER_MIN_USD + tokens(BASES[basis].voiceModel, VOICE_TOKENS_PER_MINUTE);
+}
+
+/** What a voice minute of the pool costs when it is spent on video: a video minute over the ratio. */
+export function videoCostPerVoiceMinuteUsd(basis: Basis): number {
+  return videoMinuteCostUsd(basis) / VIDEO_VOICE_MINUTE_RATIO;
 }
 
 /** A number's monthly rental, charged once for any plan that includes the phone. */

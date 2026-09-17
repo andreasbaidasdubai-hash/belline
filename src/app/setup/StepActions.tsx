@@ -430,7 +430,7 @@ export function RulesForm({
           label="Number for urgent calls"
           value={initial.transferNumber}
           defaultCountry={countryIso}
-          hint={<>Belline puts urgent calls through to this number. It has to be a number in {country}, with its country code.</>}
+          hint={<>On the Growth and Scale plans, Belline puts urgent calls through to this number live. It has to be a number in {country}, with its country code.</>}
           serverError={error?.field === "transferNumber" ? error.message : undefined}
           onValue={(p) => {
             transferE164.current = p.e164;

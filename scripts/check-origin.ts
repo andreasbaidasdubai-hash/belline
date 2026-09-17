@@ -176,6 +176,75 @@ await test("nothing invents its own name for the public origin", () => {
   assert.equal([...fixed.matchAll(bad)].length, 0, "the sweep flags the corrected line");
 });
 
+console.log("\n\x1b[1mOnly production is indexable\x1b[0m\n");
+
+const PROD_ENV = { PUBLIC_ORIGIN: "https://app.belline.ai" };
+const STAGING_ENV = { PUBLIC_ORIGIN: "https://belline-staging.up.railway.app" };
+
+/** A real server with server.ts's first step in front of a stand-in handler. */
+async function ask(host: string, pathname: string, env: Record<string, string>) {
+  const http = await import("node:http");
+  const { applyIndexing } = await import("../src/lib/marketing");
+  const server = http.createServer((req, res) => {
+    if (applyIndexing(req, res, env)) return;
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("User-agent: *\nAllow: /\n");
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const port = (server.address() as import("node:net").AddressInfo).port;
+  try {
+    return await new Promise<{ status: number; robots: string | undefined; body: string }>((resolve, reject) => {
+      const req = http.request({ host: "127.0.0.1", port, path: pathname, headers: { host } }, (res) => {
+        let body = "";
+        res.on("data", (c) => (body += c));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, robots: res.headers["x-robots-tag"] as string | undefined, body }));
+      });
+      req.on("error", reject);
+      req.end();
+    });
+  } finally {
+    server.close();
+  }
+}
+
+await test("production hosts on the production server: no X-Robots-Tag, robots.txt as built", async () => {
+  for (const host of ["belline.ai", "www.belline.ai", "app.belline.ai"]) {
+    for (const p of ["/", "/checkout", "/api/embed/x/config"]) {
+      const r = await ask(host, p, PROD_ENV);
+      assert.equal(r.robots, undefined, `${host}${p} is marked noindex on production`);
+    }
+    const robots = await ask(host, "/robots.txt", PROD_ENV);
+    assert.match(robots.body, /Allow: \//);
+  }
+});
+
+await test("the staging host: every response is noindex, and robots.txt disallows everything", async () => {
+  const host = "belline-staging.up.railway.app";
+  for (const p of ["/", "/checkout", "/whatsapp", "/api/embed/x/config"]) {
+    const r = await ask(host, p, STAGING_ENV);
+    assert.equal(r.robots, "noindex, nofollow", `${p} has no X-Robots-Tag on staging`);
+  }
+  const robots = await ask(host, "/robots.txt?x=1", STAGING_ENV);
+  assert.equal(robots.status, 200);
+  assert.equal(robots.robots, "noindex, nofollow");
+  assert.match(robots.body, /Disallow: \//);
+  assert.doesNotMatch(robots.body, /Allow: \/\n/);
+});
+
+await test("a forged production Host on staging, and a production server on its bare railway host, stay noindex", async () => {
+  assert.equal((await ask("belline.ai", "/", STAGING_ENV)).robots, "noindex, nofollow");
+  assert.equal((await ask("belline-production.up.railway.app", "/", PROD_ENV)).robots, "noindex, nofollow");
+  assert.equal((await ask("localhost:3000", "/", {})).robots, "noindex, nofollow");
+});
+
+await test("the marketing file server marks its own pages the same way", () => {
+  const src = fs.readFileSync(path.join(process.cwd(), "src", "lib", "marketing.ts"), "utf8");
+  assert.match(src, /indexableRequest\(req\.headers\.host\) \? \{\} : \{ "X-Robots-Tag": NOINDEX_HEADER \}/);
+  const server = fs.readFileSync(path.join(process.cwd(), "server.ts"), "utf8");
+  const first = server.indexOf("applyIndexing(req, res)");
+  assert.ok(first > 0 && first < server.indexOf("serveMarketing(req, res)"), "server.ts does not apply indexing before serving");
+});
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 console.log(`\n${failed ? "\x1b[31m" : "\x1b[32m"}✓ ${passed} passed, ${failed} failed\x1b[0m\n`);

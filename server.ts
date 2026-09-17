@@ -18,7 +18,7 @@ import { checkConsoleGate, checkDemoGate } from "./src/lib/demo";
 import { paidWorkRefusal } from "./src/lib/abuse/gate";
 import { checkEmbedGate } from "./src/lib/embed";
 import { mayStreamTo, watchLiveness, sweepLiveness, type Liveness } from "./src/lib/voice/entitlement";
-import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
+import { applyIndexing, isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
 import { speakClip, ttsEnabled } from "./src/lib/providers/tts";
 import { meterTts } from "./src/lib/billing/cost";
 import { VoiceSession, greetingClip, acknowledgementClips } from "./src/lib/voice/session";
@@ -159,6 +159,9 @@ const server = createServer((req, res) => {
   // The socket address, for the signup rate limit when no proxy header is
   // present. Always overwritten, so a client cannot choose its own bucket.
   req.headers[PEER_HEADER] = req.socket.remoteAddress ?? "";
+  // Staging and preview hosts: X-Robots-Tag on everything, and a robots.txt
+  // that disallows it all. Production hosts pass through untouched.
+  if (applyIndexing(req, res)) return;
   // The website and the product share this process, chosen by hostname. See
   // marketing.ts — anything that is not `app.` is the website, and a request
   // it does not recognise falls through to Next rather than 404ing.

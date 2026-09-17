@@ -2,12 +2,16 @@ import { formatMoney, type Market, type PriceLocale } from "../markets";
 import {
   ALERT_THRESHOLDS,
   CHANNELS,
+  CATALOGUE_VERSION,
   CHANNEL_ORDER,
   POOL_CHANNELS,
   POOL_ORDER,
   PRODUCTS,
   TRIAL,
+  VIDEO_VOICE_MINUTE_RATIO,
   packFor,
+  videoLive,
+  videoMinutesFor,
   type Channel,
   type Feature,
   type Pool,
@@ -49,6 +53,7 @@ export const CATALOGUE_DE: Record<string, string> = {
   "Summary and full transcript of every call and chat": "Zusammenfassung und vollständiges Transkript jedes Anrufs und Chats",
   "Your team can take over any chat from the inbox": "Ihr Team kann jeden Chat aus dem Posteingang übernehmen",
   "Your own words and colours on the website buttons": "Ihre eigenen Texte und Farben auf den Website-Buttons",
+  "Video receptionist on your website": "Video-Rezeptionistin auf Ihrer Website",
   "One Google Calendar connection": "Eine Verbindung zu Google Calendar",
   "One Microsoft Outlook connection": "Eine Verbindung zu Microsoft Outlook",
   "One Google Calendar or Microsoft Outlook connection": "Eine Verbindung zu Google Calendar oder Microsoft Outlook",
@@ -112,6 +117,12 @@ export function poolTextDe(pool: Pool, amount: number, locale: GermanLocale): st
   return `${countDe(amount, locale)} ${POOL_NAMES_DE[pool]} pro Monat, geteilt zwischen ${joinDe(places)}`;
 }
 
+/** `videoAllowanceText`, in German: "30 Videominuten (jede verbraucht 2,5 Sprachminuten)". */
+export function videoAllowanceTextDe(voiceMinutes: number, locale: GermanLocale): string {
+  const ratio = String(VIDEO_VOICE_MINUTE_RATIO).replace(".", ",");
+  return `${countDe(videoMinutesFor(voiceMinutes), locale)} Videominuten (jede verbraucht ${ratio} Sprachminuten)`;
+}
+
 /**
  * The lines a pricing card may show, in German: allowances, users, then the
  * live features — the same selection and order as `allowanceFeatures` and
@@ -122,6 +133,10 @@ export function allowanceLinesDe(product: Product, locale: GermanLocale): { text
     text: poolTextDe(pool, product.pools![pool]!, locale),
     status: POOL_CHANNELS[pool].some((c) => CHANNELS[c].status === "live") ? ("live" as const) : ("not-yet" as const),
   }));
+  // The video line, in the same place and on the same terms as `allowanceFeatures`.
+  if (typeof product.pools?.minutes === "number" && product.version === CATALOGUE_VERSION) {
+    pools.push({ text: videoAllowanceTextDe(product.pools.minutes, locale), status: videoLive() ? "live" : "not-yet" });
+  }
   const users = product.users ? [{ text: `Bis zu ${product.users} Nutzer in Ihrem Dashboard`, status: "live" as const }] : [];
   return [...pools, ...users];
 }

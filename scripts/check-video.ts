@@ -2122,14 +2122,20 @@ await test("13. chat and voice are unaffected: widget modes, the bell's gate and
   const bell = startCall(getLocation(A.id)!, "embed", "website");
   assert.equal(checkEmbedGate(getLocation(A.id)!).used, before + 1);
   saveCall({ ...bell, status: "completed", endedAt: new Date().toISOString() });
-  // A finished video call is web-voice minutes, like the bell.
+  // A finished video call draws on the voice-minute pool at 2.5 voice minutes a video minute, rounded up once.
   if (started.ok) {
     await sessions.endVideoSession(started.session.id, "done", { by: "visitor" });
     const call = getCall(started.session.callId)!;
     const venue = getLocation(A.id)!;
     assert.equal(Boolean(call.isDemo), Boolean(venue.demo?.enabled || venue.internal), "a demo venue's video calls are ours, never billed");
-    const minutes = billableVoiceMinutes({ ...call, isDemo: false, endedAt: new Date(Date.parse(call.startedAt) + 61_000).toISOString() });
-    assert.equal(minutes, 2, "61 seconds is two web-voice minutes, as on the bell");
+    assert.equal(typeof call.video?.seconds, "number", "the raw video seconds are not recorded");
+    const at = (s: number) => billableVoiceMinutes({ ...call, isDemo: false, endedAt: new Date(Date.parse(call.startedAt) + s * 1000).toISOString() });
+    assert.equal(at(61), 3, "61 seconds of video is 2.54 voice minutes, billed as 3");
+    assert.equal(at(60), 3, "a minute of video is 2.5 voice minutes, billed as 3");
+    assert.equal(at(48), 2, "48 seconds of video is exactly 2 voice minutes");
+    // The bell's own minute is unchanged.
+    const { video: _ignored, ...plain } = call;
+    assert.equal(billableVoiceMinutes({ ...plain, isDemo: false, endedAt: new Date(Date.parse(call.startedAt) + 61_000).toISOString() }), 2);
   }
   // The telephone and the chat prompts say nothing about video.
   for (const channel of ["voice", "text"] as const) {

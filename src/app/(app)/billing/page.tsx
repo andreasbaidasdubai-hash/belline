@@ -4,16 +4,18 @@ import { seedIfEmpty } from "@/lib/seed";
 import {
   CONVERSATION_DEFINITION,
   MINUTE_DEFINITION,
+  VIDEO_MINUTE_DEFINITION,
   accountFor,
   billableVoiceMinutes,
   channelOfCall,
   conversationStarts,
   isPooledTrial,
   meterWords,
+  videoLeftSentence,
   type Meter,
 } from "@/lib/billing/usage";
 import { extendTrialIfPaymentsClosed, raisePacksHeldIfPaymentsClosed, raiseTrialCapIfPaymentsClosed } from "@/lib/billing/trial-end";
-import { ALERT_THRESHOLDS, CHANNELS, isPooled, money, nextPlanUp, productById } from "@/lib/billing/plans";
+import { ALERT_THRESHOLDS, CHANNELS, isPooled, money, nextPlanUp, productById, videoLive } from "@/lib/billing/plans";
 import { packsSentence } from "@/lib/billing/speak";
 import { canManageUsers } from "@/lib/auth";
 import UsagePolicy from "./UsagePolicy";
@@ -41,7 +43,7 @@ export const dynamic = "force-dynamic";
  * to drift away from the first.
  */
 
-function Bar({ usage }: { usage: Meter }) {
+function Bar({ usage, video = false }: { usage: Meter; video?: boolean }) {
   const { used, included } = usage;
   const words = meterWords(usage.id);
   const across = usage.kind === "pool" ? usage.channels.map((c) => CHANNELS[c].name).join(" · ") : null;
@@ -98,6 +100,12 @@ function Bar({ usage }: { usage: Meter }) {
         </span>
         <span>{Math.round(share * 100)}%</span>
       </div>
+      {video && usage.id === "minutes" && (
+        // The same pool, said as video: what is left, at the ratio, rounded down.
+        <div className="muted" data-video-left style={{ fontSize: 11.5, marginTop: 4 }}>
+          {videoLeftSentence(included, used)}
+        </div>
+      )}
     </div>
   );
 }
@@ -197,6 +205,8 @@ export default async function BillingPage({
   const ends = new Date(`${period.end}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
   const units = new Set(usage.meters.map((m) => m.unit));
   const billedIn = MARKETS[market].currency;
+  // Video draws on the voice-minute pool: said wherever that pool is, while video is live.
+  const video = videoLive() && usage.meters.some((m) => m.id === "minutes");
 
   return (
     <>
@@ -247,7 +257,7 @@ export default async function BillingPage({
             </div>
             <div style={{ padding: "4px 18px 20px" }}>
               {usage.meters.map((m) => (
-                <Bar key={m.id} usage={m} />
+                <Bar key={m.id} usage={m} video={video} />
               ))}
             </div>
           </div>
@@ -272,7 +282,11 @@ export default async function BillingPage({
                         </div>
                       </td>
                       <td style={{ width: 110, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                        {CHANNELS[channel].unit === "minutes" ? `${n} min` : `${n} conversation${n === 1 ? "" : "s"}`}
+                        {CHANNELS[channel].unit === "minutes"
+                          ? call.video
+                            ? `${n} min · video`
+                            : `${n} min`
+                          : `${n} conversation${n === 1 ? "" : "s"}`}
                       </td>
                     </tr>
                   ))}
@@ -358,6 +372,11 @@ export default async function BillingPage({
               {units.has("minutes") && (
                 <p className="muted" style={{ fontSize: 12.5, margin: 0, lineHeight: 1.6 }}>
                   {MINUTE_DEFINITION}
+                </p>
+              )}
+              {video && (
+                <p className="muted" data-video-definition style={{ fontSize: 12.5, margin: 0, lineHeight: 1.6 }}>
+                  {VIDEO_MINUTE_DEFINITION}
                 </p>
               )}
               {units.has("conversations") && (

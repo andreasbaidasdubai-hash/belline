@@ -81,12 +81,22 @@ export default function Chat({
   copy,
   notice,
   logoUrl = null,
+  opener,
+  starterPrompts = [],
 }: {
   embedKey: string;
   freshToken: string;
   venueName: string;
   agentName: string;
   voiceHref?: string;
+  /** The venue's own opening line (`agent.chatGreeting`), in place of the generic one. */
+  opener?: string;
+  /**
+   * Up to three things a visitor can tap to ask (`agent.starterPrompts`, via
+   * embed.ts `starterPromptsFor`). Shown until the first message; a tap sends
+   * the prompt's own words, exactly as if typed.
+   */
+  starterPrompts?: string[];
   /**
    * The venue's uploaded logo (logo.ts `logoUrlFor`), shown in the header in
    * place of the bell. Absent, or failing to load, keeps the bell.
@@ -212,11 +222,11 @@ export default function Chat({
     foot.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [lines, busy]);
 
-  async function send() {
-    const text = draft.trim();
+  async function send(said?: string) {
+    const text = (said ?? draft).trim();
     if (!text || busy) return;
 
-    setDraft("");
+    if (said === undefined) setDraft("");
     setTrouble(null);
     // Optimistic, and negative ids so it can never collide with a row's. The
     // visitor's own words appearing instantly is the difference between a chat
@@ -456,13 +466,25 @@ export default function Chat({
       </header>
 
       <div className="bl-log" role="log" aria-live="polite">
-        {copy ? (
+        {opener ? (
+          <p className="bl-opener">{opener}</p>
+        ) : copy ? (
           <p className="bl-opener">{fill(copy["chat.opener"], { agent: agentName, venue: venueName })}</p>
         ) : (
           <p className="bl-opener">
             Hi — I&rsquo;m {agentName} at {venueName}. Ask me anything, or tell me what you&rsquo;d
             like to book.
           </p>
+        )}
+
+        {starterPrompts.length > 0 && lines.length === 0 && !busy && (
+          <div className="bl-starters" role="group" aria-label={tx("chat.starters", "Suggested questions")}>
+            {starterPrompts.slice(0, 3).map((prompt) => (
+              <button key={prompt} type="button" className="bl-starter" onClick={() => void send(prompt)}>
+                {prompt}
+              </button>
+            ))}
+          </div>
         )}
 
         {lines.map((l) =>
@@ -719,6 +741,15 @@ body { background: #FFFFFF }
 .bl-log { overflow-y: auto; padding: 18px 16px 6px; display: grid; align-content: start; gap: 10px }
 
 .bl-opener { margin: 0 0 4px; font-size: 14.5px; color: #6E6E73; max-width: 34ch }
+
+/* Starter prompts: tappable questions under the opener, gone after the first message. */
+.bl-starters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 4px }
+.bl-wrap button.bl-starter {
+  width: auto; height: auto; border-radius: 999px; display: inline-block;
+  padding: 8px 13px; font: inherit; font-size: 13.5px; line-height: 1.3; text-align: left;
+  background: #FFFFFF; color: #0066CC; border: 1px solid rgba(0,113,227,.32);
+}
+.bl-wrap button.bl-starter:hover { background: rgba(0,113,227,.08) }
 
 .bl-line { display: flex }
 .bl-line p {

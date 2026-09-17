@@ -3,7 +3,7 @@ import { getBusiness, getTenant, listLocations } from "../store";
 import { keysOf } from "../abuse/business-key";
 import { answersIn, lineFor } from "../language";
 import { accountFor, isPooledTrial, meterFor, periodFor, productsOf } from "./usage";
-import { channelsOf, grandfatherExpires, poolOf, poolPlaces, type Channel, type Pool } from "./plans";
+import { VIDEO_VOICE_MINUTE_RATIO, channelsOf, grandfatherExpires, poolOf, poolPlaces, type Channel, type Pool } from "./plans";
 import { stripeEnabled } from "./stripe";
 import { applyUsagePolicy, governs, markAlertsSent, notifyAlerts, packsHeldPools, poolExhausted, settlePacks } from "./usage-policy";
 
@@ -132,6 +132,42 @@ export function businessTrialUsage(location: Location, today: string, meterId: s
     used += accountFor(other, today)?.usage.meters.find((m) => m.id === meterId)?.used ?? 0;
   }
   return used;
+}
+
+/**
+ * Voice minutes left before a cap stops this venue's voice channels, or null
+ * when nothing here would stop them mid-call: an exempt venue, an older
+ * product, or a `packs` policy with card payments open (the next check adds a
+ * pack). A pooled trial counts the same business's other trials, as the cap
+ * itself does.
+ */
+export function voiceMinutesLeft(location: Location, today: string): number | null {
+  if (exempt(location)) return null;
+  const sub = location.subscription!;
+  if (isPooledTrial(sub)) {
+    const account = accountFor(location, today);
+    const meter = account?.usage.meters.find((m) => m.id === "minutes");
+    const allowance = sub.trial?.minutes ?? 0;
+    if (!meter || allowance <= 0) return null;
+    return Math.max(0, allowance - meter.used - businessTrialUsage(location, today, "minutes"));
+  }
+  if (governs(location)) {
+    if (sub.usagePolicy?.mode === "packs" && stripeEnabled()) return null;
+    const meter = accountFor(location, today)?.usage.meters.find((m) => m.id === "minutes");
+    if (!meter || meter.included === null) return null;
+    return Math.max(0, meter.included - meter.used);
+  }
+  return null;
+}
+
+/**
+ * The longest video call the allowance still covers, in seconds, or null when
+ * uncapped here. A video call uses VIDEO_VOICE_MINUTE_RATIO voice minutes a
+ * minute, rounded up once, so this many seconds never bills past what is left.
+ */
+export function videoSecondsLeft(location: Location, today: string): number | null {
+  const left = voiceMinutesLeft(location, today);
+  return left === null ? null : Math.floor((left * 60) / VIDEO_VOICE_MINUTE_RATIO);
 }
 
 /** Does the venue's plan include this channel? A trial includes all of them. */

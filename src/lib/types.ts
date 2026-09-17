@@ -782,6 +782,16 @@ export interface AgentConfig {
   displayName: string;
   greeting: string;
   /**
+   * The website chat's opening line, where the venue has its own. Unset keeps
+   * the generic "Ask me anything, or tell me what you'd like to book".
+   */
+  chatGreeting?: string;
+  /**
+   * Up to three questions the website chat offers as tappable chips until the
+   * visitor's first message. Unset or empty shows none.
+   */
+  starterPrompts?: string[];
+  /**
    * Spoken instead of `greeting` when the caller's number matches a past
    * guest. `{name}` is replaced with the name they booked under. Left blank,
    * returning guests get the standard greeting.
@@ -1515,10 +1525,13 @@ export interface Call {
   callSid?: string;
   /**
    * Set when this `embed` call was the video receptionist rather than the bell
-   * (docs/video). Metered as web-voice minutes like the bell; kept out of the
-   * bell's daily ceiling, because video has its own.
+   * (docs/video). Metered against the voice-minute pool at
+   * VIDEO_VOICE_MINUTE_RATIO voice minutes per video minute (billing/usage.ts);
+   * kept out of the bell's daily ceiling, because video has its own.
    */
   video?: {
+    /** The call's raw video seconds, recorded when it ends, for cost reporting. */
+    seconds?: number;
     provider: "tavus" | "mock";
     /** Our session id. */
     sessionId: string;

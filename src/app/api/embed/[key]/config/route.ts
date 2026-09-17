@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { seedIfEmpty } from "@/lib/seed";
 import { listLocations } from "@/lib/store";
-import { widgetConfig } from "@/lib/embed";
+import { connectedWhatsAppLink, widgetConfig } from "@/lib/embed";
 import { answersIn, languageNotice } from "@/lib/language";
-import { venueWhatsApp, whatsappLink } from "@/lib/whatsapp";
+import { venueWhatsApp } from "@/lib/whatsapp";
 import { isActivated } from "@/lib/onboarding/journey";
 import { logoUrlFor } from "@/lib/logo";
 import { videoBubbleConfig, videoOffered, venueFaceId } from "@/lib/video/availability";
@@ -42,8 +42,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
     return NextResponse.json({ live: false }, { headers: { ...cors(), "cache-control": "no-store" } });
   }
 
+  // A real, active connection or nothing: the site hides the WhatsApp icon on null.
   const account = await venueWhatsApp(location).catch(() => null);
-  const link = account?.phoneE164 ? `https://wa.me/${account.phoneE164.slice(1)}` : whatsappLinkFor(location.id);
+  const link = connectedWhatsAppLink(account);
 
   // `video` says only whether to show it (lib/video/availability.ts); the bubble's
   // clip, poster and agent name come with it, and only then.
@@ -70,11 +71,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
     },
     { headers: { ...cors(), "cache-control": "public, max-age=60" } },
   );
-}
-
-/** Belline's own site is the one venue whose number comes from the environment. */
-function whatsappLinkFor(locationId: string): string | null {
-  return locationId === "loc_belline" ? whatsappLink("Hi Belle") : null;
 }
 
 function cors(): Record<string, string> {

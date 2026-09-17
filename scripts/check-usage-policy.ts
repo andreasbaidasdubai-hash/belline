@@ -556,6 +556,44 @@ await test("the website's generated pricing quotes the same sentence", () => {
   assert.ok(renderPricing(["AE"]).includes(speak.overLimitSentence()));
 });
 
+console.log("\n\x1b[1mVideo counts at 2.5 voice minutes a minute\x1b[0m\n");
+
+/** One completed website video call of `seconds`, inside the period. */
+function video(locationId: string, seconds: number) {
+  const c = startCall(getLocation(locationId)!, "embed", "website");
+  const start = new Date("2026-11-05T12:00:00Z");
+  saveCall({
+    ...c,
+    channel: "embed",
+    startedAt: start.toISOString(),
+    endedAt: new Date(start.getTime() + seconds * 1000).toISOString(),
+    status: "completed",
+    video: { provider: "tavus", sessionId: `vs_${Math.random().toString(36).slice(2)}`, seconds },
+  });
+}
+
+await test("video raises the 70%, 90% and 100% alerts on the voice pool at 2.5x", async () => {
+  const v = await venue();
+  video(v.id, 21 * 60); // 21 video minutes = 52.5 → 53 voice minutes: 70.7% of 75
+  assert.equal(accountFor(v.fresh()!, TODAY)!.usage.meters.find((m) => m.id === "minutes")!.used, 53);
+  assert.deepEqual(apply(v).alerts, [{ pool: "minutes", threshold: 70 }]);
+  video(v.id, 6 * 60); // +15 → 68 = 90.7%
+  assert.deepEqual(apply(v).alerts, [{ pool: "minutes", threshold: 90 }]);
+  video(v.id, 3 * 60); // +7.5 → 8 = 76 ≥ 75
+  assert.deepEqual(apply(v).alerts, [{ pool: "minutes", threshold: 100 }]);
+});
+
+await test("a cap policy stops the voice button when video used the pool, and a pack of 100 voice minutes is 40 video minutes", async () => {
+  const { videoMinutesFor, packFor } = await import("../src/lib/billing/plans");
+  const v = await venue({ usagePolicy: { mode: "cap", chosenAt: "2026-11-01T00:00:00.000Z", chosenBy: "usr_owner" } });
+  video(v.id, 30 * 60); // 75 voice minutes: the whole Starter pool
+  assert.equal(decide(v).pools.minutes.exhausted, true);
+  assert.equal(serviceState(v.fresh()!, TODAY, { channel: "web_voice" }).answering, false);
+  assert.equal(serviceState(v.fresh()!, TODAY, { channel: "chat" }).answering, true);
+  assert.equal(packFor("minutes").units, 100);
+  assert.equal(videoMinutesFor(packFor("minutes").units), 40);
+});
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 console.log(

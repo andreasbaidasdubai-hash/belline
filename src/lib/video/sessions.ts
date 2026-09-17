@@ -3,7 +3,9 @@ import type { Call, Location } from "../types";
 import { getCall, getLocation, saveCall } from "../store";
 import { startCall } from "../calls";
 import { releaseCall } from "../booking/holds";
-import { meterCallTime } from "../billing/cost";
+import { meterCallTime, meterVideoTime } from "../billing/cost";
+import { videoSecondsLeft } from "../billing/entitlement";
+import { todayIn } from "../time";
 import { openException } from "../exceptions";
 import { BELLINE_TENANT_ID } from "../tenancy";
 import { BELLINE_LOCATION_ID, BELLINE_VIDEO_GREETING } from "../seed-belline";
@@ -186,13 +188,42 @@ export async function startVideoSession(
     return { ok: false, reason: "busy", retryable: true, status: 429 };
   }
 
-  const creation = create(location, visitorKey, available.config, provider, env);
+  // The allowance, not only the deployment's ceiling, decides how long this
+  // call may run: video uses voice minutes at VIDEO_VOICE_MINUTE_RATIO, so a
+  // call that would run past what is left ends at it instead.
+  const limit = videoCallLimitSeconds(location, available.config.maxCallSeconds);
+  if (limit === null) return { ok: false, reason: "not_entitled", retryable: false, status: 403 };
+  const config = limit === available.config.maxCallSeconds ? available.config : { ...available.config, maxCallSeconds: limit, warnBeforeSeconds: Math.min(available.config.warnBeforeSeconds, Math.floor(limit / 2)) };
+
+  const creation = create(location, visitorKey, config, provider, env);
   reg.pending.set(visitorKey, creation);
   try {
     return await creation;
   } finally {
     reg.pending.delete(visitorKey);
   }
+}
+
+/**
+ * Allowance kept back from a capped call: the room is created, and the call's
+ * clock started, a few seconds before the provider's own maximum starts
+ * counting, and our backstop timer adds END_GRACE_SECONDS after it.
+ */
+export const VIDEO_ALLOWANCE_MARGIN_SECONDS = 30;
+/** Shorter than this is not a call worth opening. */
+const MIN_VIDEO_CALL_SECONDS = 30;
+
+/**
+ * How long a video call may run for this venue: the deployment's ceiling, or
+ * less when the voice-minute allowance ends sooner. Null when what is left is
+ * too short to open a call at all.
+ */
+export function videoCallLimitSeconds(location: Location, ceiling: number, today: string = todayIn(location.timezone)): number | null {
+  const left = videoSecondsLeft(location, today);
+  if (left === null) return ceiling;
+  const usable = left - VIDEO_ALLOWANCE_MARGIN_SECONDS;
+  if (usable < MIN_VIDEO_CALL_SECONDS) return null;
+  return Math.min(ceiling, usable);
 }
 
 async function create(
@@ -379,20 +410,25 @@ function finishCall(call: Call, location: Location, session: VideoSession): void
   releaseCall(call.id);
   const spoke = call.transcript.some((t) => t.role === "caller");
   const endedAt = new Date(session.endedAt ?? Date.now()).toISOString();
+  const seconds = (Date.parse(endedAt) - Date.parse(call.startedAt)) / 1000;
   const finished: Call = {
     ...call,
     status: "completed",
     endedAt,
     outcome: call.outcome ?? (spoke ? "answered_question" : "abandoned"),
     summary: call.summary ?? (spoke ? "Video call on the website." : "Video call ended before anything was said."),
-    video: { ...(call.video ?? { provider: session.provider, sessionId: session.id }), endReason: session.endReason },
+    video: {
+      ...(call.video ?? { provider: session.provider, sessionId: session.id }),
+      endReason: session.endReason,
+      seconds: Math.max(0, Math.round(seconds)),
+    },
   };
   saveCall(finished);
-  // Web-voice minutes, through the same meter as the bell (billing/usage.ts
-  // counts `embed` calls). Nothing is priced for the provider here: its rates
-  // are not on Belline's card, and are not guessed.
-  const seconds = (Date.parse(endedAt) - Date.parse(call.startedAt)) / 1000;
+  // Usage: billing/usage.ts counts this `embed` call against the voice-minute
+  // pool at the video ratio. Cost: the call's time as the bell's would be, and
+  // the provider's minutes at the Tavus Business estimate (cost.ts).
   meterCallTime(finished, location, seconds, { stt: false });
+  meterVideoTime(finished, seconds, session.provider);
   recordVideoMetric(location, { name: "ended", sessionId: session.id, ms: seconds * 1000, detail: session.endReason });
 }
 

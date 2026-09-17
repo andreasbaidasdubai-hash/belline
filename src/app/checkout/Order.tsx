@@ -16,17 +16,29 @@ import {
   type ProductId,
 } from "@/lib/billing/plans";
 import { formatMoney, type Market } from "@/lib/markets";
-import type { Vertical } from "@/lib/types";
 import { overLimitSentence } from "@/lib/billing/speak";
 import CheckoutForm from "./CheckoutForm";
 import PayButton from "./PayButton";
+import {
+  NEXT_STEPS,
+  VAT_NOTE,
+  chooseCycle,
+  choosePlan,
+  initialOrder,
+  orderSearch,
+  toggleEditing,
+  trialAllowance,
+  voiceAllowance,
+} from "./order-state";
 
 /**
- * The order: three plans, one choice, and a total that moves.
+ * The order: the plan in one line, the price, and what is due.
  *
- * Every plan has every channel; they differ only in how much. So the page
- * asks one question — which size — and shows what that size includes. Every
- * number comes from `plans.ts`, in the market's own currency.
+ * The plan arrives chosen — from the pricing page's link, or the one we
+ * recommend — so it is shown as a summary with an Edit button rather than as
+ * a price table to choose from all over again. What the plan includes sits
+ * behind "What's included": the form beside it is what this page is for.
+ * Every number comes from `plans.ts`, in the market's own currency.
  */
 
 // The brand display face from public/brand/tokens.css: SF Pro Display on Apple
@@ -34,10 +46,10 @@ import PayButton from "./PayButton";
 const serif = { fontFamily: "var(--bl-font-display)", fontWeight: 600, letterSpacing: "var(--bl-track-display)" } as const;
 
 /** "250 voice min · 600 text conversations · 5 users", or an older product's per-channel list, live channels only. */
-function shortAllowances(product: Product): string {
+function shortAllowances(product: Product, video: boolean): string {
   if (product.pools) {
     const parts: string[] = [];
-    if (product.pools.minutes) parts.push(`${product.pools.minutes.toLocaleString("en-GB")} voice min`);
+    if (product.pools.minutes) parts.push(voiceAllowance(product.pools.minutes, video, true));
     if (product.pools.conversations) parts.push(`${product.pools.conversations.toLocaleString("en-GB")} text conversations`);
     if (product.users) parts.push(`${product.users} users`);
     return parts.join(" · ");
@@ -63,6 +75,8 @@ function choice(on: boolean): React.CSSProperties {
   };
 }
 
+const small = { fontSize: 11.5, margin: "8px 0 0", lineHeight: 1.6 } as const;
+
 export default function Order({
   market,
   initial,
@@ -74,7 +88,14 @@ export default function Order({
   cancelled,
   markets,
   trade,
+  siteOrigin,
+  video = false,
+  included,
 }: {
+  /** Each plan's "What's included" lines, read on the server (flags decide some of them). */
+  included?: Partial<Record<ProductId, string[]>>;
+  /** The video receptionist is live (plans.ts `videoLive`): allowances name video minutes too. */
+  video?: boolean;
   market: Market;
   initial: ProductId[];
   initialCycle: BillingCycle;
@@ -87,10 +108,12 @@ export default function Order({
   markets: Market[];
   /** Preselected from the link's `?trade=`, or "" for nothing chosen. */
   trade: string;
+  /** The marketing site for this environment (lib/origin.ts `siteOrigin`). */
+  siteOrigin: string;
 }) {
   const plans = sellable(market);
-  const [selected, setSelected] = useState<ProductId>(initial[0] ?? plans[0].id);
-  const [cycle, setCycle] = useState<BillingCycle>(initialCycle);
+  const [order, setOrder] = useState(() => initialOrder(initial[0] ?? plans[0].id, initialCycle));
+  const { selected, cycle, editing } = order;
 
   const ids = [selected];
   const money = (minor: number) => formatMoney(minor, market);
@@ -102,14 +125,8 @@ export default function Order({
 
   // The choice lives in the URL too, so an order can be sent to somebody.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    params.delete("bundle");
-    params.delete("plan");
-    params.set("products", selected);
-    if (cycle === "annual") params.set("cycle", "annual");
-    else params.delete("cycle");
-    window.history.replaceState(null, "", `?${params.toString()}`);
-  }, [selected, cycle]);
+    window.history.replaceState(null, "", orderSearch(window.location.search, order));
+  }, [order]);
 
   const priceLine = (id: ProductId) =>
     cycle === "annual" ? `${money(annualPerMonth([id], market))}/mo` : `${money(periodFee([id], market, "monthly"))}/mo`;
@@ -127,7 +144,7 @@ export default function Order({
               key={c}
               type="button"
               aria-pressed={cycle === c}
-              onClick={() => setCycle(c)}
+              onClick={() => setOrder((o) => chooseCycle(o, c))}
               style={{
                 font: "inherit",
                 fontSize: 12.5,
@@ -144,57 +161,95 @@ export default function Order({
           ))}
         </div>
 
-        <h1 style={{ ...serif, fontSize: 25, letterSpacing: "-0.02em", margin: "0 0 4px" }}>Choose your plan</h1>
-        <p className="muted" style={{ fontSize: 13, margin: "0 0 14px", lineHeight: 1.55 }}>
-          Phone, website voice button, website chat and WhatsApp in every plan, per location. Pick how much.
-        </p>
-        <div style={{ display: "grid", gap: 8, marginBottom: 24 }} role="radiogroup" aria-label="Plan">
-          {plans.map((p) => {
-            const on = p.id === selected;
-            return (
-              <button key={p.id} type="button" role="radio" aria-checked={on} onClick={() => setSelected(p.id)} style={choice(on)}>
-                <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
-                  <strong style={{ fontSize: 15 }}>
-                    {p.name}
-                    {p.recommended && (
-                      <span style={{ marginLeft: 8, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold-ink)" }}>
-                        Most popular
-                      </span>
-                    )}
-                  </strong>
-                  <span style={{ ...serif, fontSize: 18, whiteSpace: "nowrap" }}>{priceLine(p.id)}</span>
-                </span>
-                <span className="muted" style={{ display: "block", fontSize: 12, marginTop: 4 }}>
-                  {shortAllowances(p)}
-                </span>
-              </button>
-            );
-          })}
+        <h1 style={{ ...serif, fontSize: 25, letterSpacing: "-0.02em", margin: "0 0 12px" }}>Your plan</h1>
+
+        <div
+          data-plan-summary
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, padding: "14px 16px", border: "1px solid var(--border)", borderRadius: 10 }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <strong style={{ fontSize: 15 }}>Belline {plan.name}</strong>
+            <span style={{ ...serif, display: "block", fontSize: 18, marginTop: 2 }}>
+              {priceLine(selected)}
+              {cycle === "annual" && <span className="muted" style={{ fontFamily: "var(--bl-font-text)", fontWeight: 400, fontSize: 12 }}> billed yearly</span>}
+            </span>
+            <span className="muted" style={{ display: "block", fontSize: 12, marginTop: 4 }}>
+              {shortAllowances(plan, video)}
+            </span>
+          </div>
+          {plans.length > 1 && (
+            <button
+              type="button"
+              className="btn"
+              aria-expanded={editing}
+              aria-controls="plan-editor"
+              onClick={() => setOrder(toggleEditing)}
+              style={{ flex: "none", padding: "6px 14px", fontSize: 12.5 }}
+            >
+              {editing ? "Done" : "Edit"}
+            </button>
+          )}
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Belline {plan.name}</div>
-          <ul style={{ listStyle: "none", padding: 0, margin: "12px 0 16px" }}>
-            {publicLines(plan).map((line) => (
+        {editing && (
+          <div id="plan-editor" style={{ display: "grid", gap: 8, marginTop: 10 }} role="radiogroup" aria-label="Plan">
+            {plans.map((p) => {
+              const on = p.id === selected;
+              return (
+                <button key={p.id} type="button" role="radio" aria-checked={on} onClick={() => setOrder((o) => choosePlan(o, p.id))} style={choice(on)}>
+                  <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+                    <strong style={{ fontSize: 15 }}>
+                      {p.name}
+                      {p.recommended && (
+                        <span style={{ marginLeft: 8, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold-ink)" }}>
+                          Most popular
+                        </span>
+                      )}
+                    </strong>
+                    <span style={{ ...serif, fontSize: 18, whiteSpace: "nowrap" }}>{priceLine(p.id)}</span>
+                  </span>
+                  <span className="muted" style={{ display: "block", fontSize: 12, marginTop: 4 }}>
+                    {shortAllowances(p, video)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>What&rsquo;s included</summary>
+          <p className="muted" style={{ fontSize: 12.5, margin: "10px 0 0", lineHeight: 1.55 }}>
+            Phone, website voice button, website chat and WhatsApp in every plan, per location.
+          </p>
+          <ul style={{ listStyle: "none", padding: 0, margin: "10px 0 4px" }}>
+            {(included?.[selected] ?? publicLines(plan)).map((line) => (
               <li key={line} style={{ position: "relative", paddingLeft: 19, marginBottom: 7, fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
                 <span aria-hidden="true" style={{ position: "absolute", left: 0, top: "0.62em", width: 8, height: 1, background: "var(--gold-ink)" }} />
                 {line}
               </li>
             ))}
           </ul>
+        </details>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 12, borderTop: "1px solid var(--border-soft)" }}>
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
             <span style={{ fontSize: 13.5, fontWeight: 600 }}>Due today</span>
             <span style={{ ...serif, fontSize: 21, letterSpacing: "-0.015em" }}>{money(signedIn ? fee : 0)}</span>
           </div>
-          <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0", lineHeight: 1.6 }}>
+          {!signedIn && (
+            <p data-trial-allowance style={{ fontSize: 12.5, margin: "8px 0 0", lineHeight: 1.5, color: "var(--text-2)" }}>
+              Free trial: {trialAllowance(TRIAL, video)}. No card.
+            </p>
+          )}
+          <p className="muted" style={small}>
             {!signedIn
-              ? `${TRIAL.days} days free, no card. Then ${money(fee)} ${cycle === "annual" ? "a year" : "a month"}, if you choose it.`
+              ? `Then ${money(fee)} ${cycle === "annual" ? "a year" : "a month"}, only if you choose a plan. ${VAT_NOTE}`
               : cycle === "annual"
-                ? `${money(fee)} a year — ${money(annualPerMonth(ids, market))} a month. Plus VAT where it applies.`
-                : `Or ${money(periodFee(ids, market, "annual"))} billed yearly (${money(annualPerMonth(ids, market))} a month)${savedText ? ` — ${savedText}` : ""}. Plus VAT where it applies.`}
+                ? `${money(fee)} a year — ${money(annualPerMonth(ids, market))} a month. ${VAT_NOTE}`
+                : `Or ${money(periodFee(ids, market, "annual"))} billed yearly (${money(annualPerMonth(ids, market))} a month)${savedText ? ` — ${savedText}` : ""}. ${VAT_NOTE}`}
           </p>
-          <p className="muted" style={{ fontSize: 11.5, margin: "6px 0 0", lineHeight: 1.6 }}>
+          <p className="muted" style={{ ...small, marginTop: 6 }}>
             Priced per location. Setting up is free. {overLimitSentence()}
           </p>
         </div>
@@ -218,10 +273,21 @@ export default function Order({
         ) : (
           <>
             <h2 style={{ ...serif, fontSize: 21, letterSpacing: "-0.015em", margin: "0 0 6px" }}>Someone always answers.</h2>
-            <p className="muted" style={{ fontSize: 13, margin: "0 0 22px", lineHeight: 1.55 }}>
-              Four things and you are set up. No card until you choose a plan.
+            <p className="muted" style={{ fontSize: 13, margin: "0 0 10px", lineHeight: 1.55 }}>
+              Start with your account. No card until you choose a plan.
             </p>
-            <CheckoutForm products={ids} market={market} markets={markets} trade={trade} />
+            <ol
+              aria-label="What happens next"
+              style={{ listStyle: "none", padding: 0, margin: "0 0 22px", display: "flex", flexWrap: "wrap", gap: "4px 6px", fontSize: 12, color: "var(--text-2)" }}
+            >
+              {NEXT_STEPS.map((step, i) => (
+                <li key={step} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span style={i === 0 ? { color: "var(--text)", fontWeight: 600 } : undefined}>{step}</span>
+                  {i < NEXT_STEPS.length - 1 && <span aria-hidden="true">→</span>}
+                </li>
+              ))}
+            </ol>
+            <CheckoutForm products={ids} market={market} markets={markets} trade={trade} siteOrigin={siteOrigin} />
           </>
         )}
 
