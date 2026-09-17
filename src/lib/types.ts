@@ -98,6 +98,52 @@ export interface Tenant {
     /** The legal versions the owner agreed to at signup (legal.ts). */
     terms?: TermsAcceptance;
   };
+  /**
+   * How the account was opened through self-serve signup, for the abuse
+   * screening in abuse/. Absent on every tenant that predates it, which is
+   * what grandfathers them: an account with no `signup` is never screened as a
+   * second trial (it is still matched against, as an existing account).
+   */
+  signup?: { at: string; email: string; ip?: string; device?: string };
+  /** What Belline staff decided about this account in the abuse review. See abuse/review.ts. */
+  abuse?: {
+    /** A staff override: one-trial-per-business and the signup limits no longer refuse this account. */
+    allowedAt?: string;
+    allowedBy?: string;
+    /** The free trial is stopped: no paid work, and the receptionist does not answer on the trial. */
+    trialSuspendedAt?: string;
+    trialSuspendedBy?: string;
+  };
+}
+
+/**
+ * One thing the abuse screening noticed, for the staff review list.
+ *
+ * Recorded, never acted on silently: a refused signup or a refused trial
+ * leaves a row here, and staff can allow it, note it or suspend the trial.
+ * An `allowed` row is also the override: the same address or network is let
+ * through next time. See abuse/review.ts.
+ */
+export interface AbuseRecord {
+  id: string;
+  kind: "duplicate_business" | "disposable_email" | "ip_limit" | "device_limit" | "many_signups_ip";
+  at: string;
+  /** Raised again while open: counted here rather than added. */
+  count: number;
+  lastAt: string;
+  status: "open" | "allowed" | "noted" | "suspended";
+  tenantId?: string;
+  locationId?: string;
+  email?: string;
+  ip?: string;
+  device?: string;
+  /** What matched another account, for `duplicate_business`. */
+  match?: { by: "domain" | "phone" | "card"; value: string; tenantId: string; locationId: string; name: string };
+  /** Where it was caught: "signup", "import", "review", "golive". */
+  stage?: string;
+  notes: { at: string; by: string; text: string }[];
+  decidedBy?: string;
+  decidedAt?: string;
 }
 
 export interface TermsAcceptance {
@@ -258,7 +304,21 @@ export interface Location {
    * be authoritative about, and mirroring it here would be a second source of
    * truth for somebody else's data.
    */
-  stripe?: { customerId?: string; subscriptionId?: string };
+  stripe?: {
+    customerId?: string;
+    subscriptionId?: string;
+    /**
+     * The card captured at Go live (billing/card.ts): Stripe's setup intent,
+     * when it was saved, and the card's fingerprint once looked up. The
+     * fingerprint is Stripe's hash of the card number, the same for the same
+     * card in any account, which is what one-trial-per-business compares.
+     */
+    setupIntentId?: string;
+    cardSavedAt?: string;
+    cardFingerprint?: string;
+    /** The free month's Stripe subscription, created at Go live with its first invoice on day 31. */
+    trialSubscriptionId?: string;
+  };
   /**
    * The booking is not complete without an email address.
    *
@@ -500,7 +560,12 @@ export interface Subscription {
   paymentFailedAt?: string;
   /** Trialing only. Nothing is charged, and the allowance is its own. */
   trial?: {
-    endsOn: DateStr;
+    /**
+     * Absent until Go live: the free month is counted from activation
+     * (trial-at-golive, 2026-09-16), so a venue still setting up has no end
+     * date and never expires. Stamped by onboarding/activate.ts.
+     */
+    endsOn?: DateStr;
     /**
      * Voice minutes, pooled across the phone and the voice button. A trial
      * without `conversations` began before catalogue 2026-10, and this is a
@@ -1497,6 +1562,29 @@ export interface User {
    * sent, and cleared on use. See `signResetToken` in auth.ts.
    */
   resetNonce?: string;
+  /**
+   * The owner proved the address is theirs: a code, a sign-in or reset link
+   * from an email, or Belline staff. See email-verify.ts.
+   */
+  emailVerifiedAt?: string;
+  /**
+   * Set on accounts opened by self-serve signup once verification shipped.
+   * Only an account with `required` is ever held back for an unconfirmed
+   * address, so every account that predates it is grandfathered as verified.
+   */
+  emailVerification?: {
+    required: true;
+    /** HMAC of the outstanding code. The code itself is only in the email. */
+    codeHash?: string;
+    expiresAt?: string;
+    attempts?: number;
+    /** When codes were sent, newest last, for the resend limits. */
+    sends?: string[];
+    /** When the address was changed before it was confirmed, for their limit. */
+    changes?: string[];
+    /** "code", "link" or the staff member who confirmed it. */
+    verifiedBy?: string;
+  };
 }
 
 /** An event in a calendar, by calendar and key (for Google the key is the id). */
@@ -1560,7 +1648,8 @@ export type ExceptionKind =
   | "outlook_token_expired"
   | "outlook_misconfigured"
   | "outlook_connect_abandoned"
-  | "outlook_admin_approval";
+  | "outlook_admin_approval"
+  | "email_unverified";
 
 export interface SupportException {
   id: string;

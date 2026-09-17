@@ -354,6 +354,10 @@ async function startTrial(input: Record<string, unknown>, ctx: ToolContext) {
     password: `${crypto.randomBytes(18).toString("base64url")}Aa1!`,
     vertical,
     timezone: String(input.timezone ?? "") || "Asia/Dubai",
+    // A public signup like the checkout's: screened, and held back from paid
+    // setup work until the address is confirmed — which the sign-in link
+    // emailed below does the moment it is used.
+    selfServe: {},
   });
   if (!signed.ok) return { started: false, say: `Say this could not be set up: ${signed.error}` };
 

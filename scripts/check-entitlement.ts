@@ -67,6 +67,23 @@ const venueId = made.ok ? made.location.id : "";
 const fresh = () => getLocation(venueId)!;
 const today = todayIn("Asia/Dubai");
 
+/**
+ * The free month starts at Go live (trial-at-golive.md): a signup has no end
+ * date until onboarding/activate.ts stamps one. These venues are treated as
+ * having gone live today, which is what that stamp is.
+ */
+function goneLiveToday(id: string) {
+  const v = getLocation(id)!;
+  upsertLocation({ ...v, subscription: { ...v.subscription!, trial: { ...v.subscription!.trial!, endsOn: addDays(today, 30) } } });
+}
+
+test("a signup that has not gone live has no trial end date, and never lapses by date", () => {
+  assert.equal(fresh().subscription!.trial!.endsOn, undefined);
+  assert.equal(lapseOf(fresh(), addDays(today, 400)), null);
+  assert.equal(extendTrialIfPaymentsClosed(fresh(), addDays(today, 400), { payments: false }).action, "none");
+});
+goneLiveToday(venueId);
+
 /** A completed phone call of `minutes`, just ended. */
 function phoneCall(venue: () => ReturnType<typeof fresh>, minutes: number, channel: "phone" | "embed" = "phone") {
   const call = startCall(venue(), channel, "+971501234567");
@@ -102,7 +119,8 @@ async function trialVenue(name: string, email: string) {
   const out = await signUp({ businessName: name, email, password: "Correct-Horse-Battery-9", vertical: "salon", timezone: "Asia/Dubai" });
   assert.ok(out.ok, "signup failed");
   const id = out.ok ? out.location.id : "";
-  return { id, get: () => getLocation(id)!, endsOn: getLocation(id)!.subscription!.trial!.endsOn };
+  goneLiveToday(id);
+  return { id, get: () => getLocation(id)!, endsOn: getLocation(id)!.subscription!.trial!.endsOn! };
 }
 
 const closed = await trialVenue("Marina Nails", "owner@marina-nails.test");
@@ -180,7 +198,7 @@ test("a trial answers on every channel", () => {
 });
 
 test("the day after the trial ends, it has lapsed", () => {
-  const after = addDays(fresh().subscription!.trial!.endsOn, 1);
+  const after = addDays(fresh().subscription!.trial!.endsOn!, 1);
   assert.equal(lapseOf(fresh(), after), "trial_ended");
   const state = serviceState(fresh(), after, { enforce: true });
   assert.equal(state.answering, false);
@@ -190,7 +208,7 @@ test("the day after the trial ends, it has lapsed", () => {
 });
 
 test("the last day of the trial is still answered", () => {
-  assert.equal(lapseOf(fresh(), fresh().subscription!.trial!.endsOn), null);
+  assert.equal(lapseOf(fresh(), fresh().subscription!.trial!.endsOn!), null);
 });
 
 test("test-console calls do not use up the trial", () => {
@@ -285,7 +303,7 @@ test("STRIPE OFF: a trial past its minute cap refuses the phone and the voice bu
   assert.equal(serviceState(fresh(), today, { enforce: false, channel: "phone" }).answering, false, "enforce:false switched a cap off");
   assert.equal(serviceState(fresh(), today, { channel: "chat" }).answering, true, "chat stopped over minutes");
   // With payments open, the end date still stops chat of a trial whose minutes went first.
-  const past = addDays(fresh().subscription!.trial!.endsOn, 1);
+  const past = addDays(fresh().subscription!.trial!.endsOn!, 1);
   assert.equal(serviceState(fresh(), past, { enforce: true, channel: "chat" }).refused, "trial_ended");
   const v = fresh();
   upsertLocation({ ...v, embed: { enabled: true, key: `k_${v.id}`, mode: "both", allowedOrigins: ["https://example.test"], maxCallsPerDay: 20, maxCallSeconds: 300 } } as never);

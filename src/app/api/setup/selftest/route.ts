@@ -5,6 +5,7 @@ import { getLocation, listCalls, listLocationsFor } from "@/lib/store";
 import { runSelftest } from "@/lib/onboarding/selftest";
 import { testsCurrent } from "@/lib/onboarding/selftest-state";
 import { factsFrom, journey, stepAfter } from "@/lib/onboarding/journey";
+import { paidWorkRefusal } from "@/lib/abuse/gate";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,9 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { locationId?: unknown };
   const location = await venueFor(auth.user, body.locationId);
   if (!location) return NextResponse.json({ error: "Not your venue." }, { status: 403 });
+  // Eight conversations with the model: not before the owner's email is confirmed.
+  const held = paidWorkRefusal(auth.user, location);
+  if (held) return NextResponse.json({ error: held.error, fix: held.fix, code: held.code }, { status: held.status });
 
   const out = await runSelftest(location.id);
   if (!out.ok) return NextResponse.json({ error: out.error }, { status: out.status });

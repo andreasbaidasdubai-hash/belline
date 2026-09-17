@@ -1,4 +1,4 @@
-import { expect, test } from "./helpers";
+import { confirmEmail, expect, test } from "./helpers";
 
 /**
  * Setup keeps what the owner typed (P0-3), and a failed import says so in
@@ -15,11 +15,12 @@ test("a failed import offers the form, and edited hours and prices survive a rel
   const run = Date.now();
   await page.goto("/checkout");
   await page.getByLabel("Business name").fill(`Review Spec Salon ${run}`);
-  await page.getByLabel("Your email").fill(`owner+${run}@example.com`);
+  const email = `owner+${run}@example.com`;
+  await page.getByLabel("Your email").fill(email);
   await page.getByLabel("Choose a password").fill("Correct-Horse-Battery-9");
   await page.locator("#acceptTerms").check();
   await page.getByRole("button", { name: "Start free trial" }).click();
-  await page.waitForURL("**/setup/import");
+  await confirmEmail(page, email);
 
   // Import failure: the mapped sentence and the button, never vendor text.
   await page.getByLabel("Your website address").fill("example.ae");

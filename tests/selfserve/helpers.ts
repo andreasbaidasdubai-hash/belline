@@ -1,5 +1,6 @@
-import type { BrowserContext, Route } from "@playwright/test";
+import type { BrowserContext, Page, Route } from "@playwright/test";
 import { test as base, expect } from "@playwright/test";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -93,3 +94,25 @@ export const test = base.extend<{ aborted: Aborted[] }>({
 });
 
 export { expect };
+
+/**
+ * After "Start free trial": read the 6-digit code the stub mailer wrote to the
+ * run's outbox, type it on /verify, and land on setup. The config puts the
+ * run's data directory in SELFSERVE_DATA_DIR (or ZT_DATA_DIR) and switches
+ * email on against the outbox, so the code exists to be read.
+ */
+export async function confirmEmail(page: Page, email: string): Promise<void> {
+  const dir = process.env.SELFSERVE_DATA_DIR ?? process.env.ZT_DATA_DIR ?? "";
+  await page.waitForURL("**/verify", { timeout: 60_000 });
+  let code = "";
+  await expect(async () => {
+    const outbox = path.join(dir, "outbox.ndjson");
+    const lines = fs.existsSync(outbox) ? fs.readFileSync(outbox, "utf8").trim().split("\n") : [];
+    const mine = lines.filter((l) => l.includes(`"to":"${email}"`)).pop() ?? "";
+    code = /code is (\d{6})/.exec(mine)?.[1] ?? "";
+    expect(code).not.toBe("");
+  }).toPass({ timeout: 20_000 });
+  await page.getByLabel("6-digit code").fill(code);
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await page.waitForURL("**/setup/import", { timeout: 60_000 });
+}

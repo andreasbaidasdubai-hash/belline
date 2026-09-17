@@ -109,7 +109,7 @@ export function catalogueOf(ids: readonly ProductId[]): string {
  * Looked up rather than stored, so this is idempotent across deploys,
  * environments and a wiped database.
  */
-async function priceFor(id: ProductId, market: Market, cycle: BillingCycle): Promise<Stripe.Price> {
+export async function priceFor(id: ProductId, market: Market, cycle: BillingCycle): Promise<Stripe.Price> {
   const product = productById(id);
   const s = stripe();
 
@@ -358,6 +358,8 @@ export function applyStripeEvent(event: Stripe.Event): { locationId?: string; ap
         // Kept when an event omits them: a session with no ids must not erase
         // the customer the portal and the free-chat guard depend on.
         stripe: {
+          // The card saved at Go live stays on file (billing/card.ts).
+          ...location.stripe,
           customerId: typeof session.customer === "string" ? session.customer : location.stripe?.customerId,
           subscriptionId:
             typeof session.subscription === "string" ? session.subscription : location.stripe?.subscriptionId,

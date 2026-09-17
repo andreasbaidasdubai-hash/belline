@@ -91,11 +91,10 @@ await test("the venue starts on a capped trial, not on a plan", () => {
   // Catalogue 2026-10: 30 voice minutes and 50 text conversations.
   assert.equal(sub?.trial?.minutes, 30);
   assert.equal(sub?.trial?.conversations, 50);
-  // The catalogue's length from today, so an unattended account expires on its own.
-  const days =
-    (Date.parse(`${sub!.trial!.endsOn}T12:00:00Z`) - Date.parse(`${sub!.startedOn}T12:00:00Z`)) /
-    86_400_000;
-  assert.equal(Math.round(days), TRIAL.days);
+  // No end date yet: the catalogue's month starts at Go live, not at signup
+  // (trial-at-golive.md). check:abuse proves activation stamps TRIAL.days.
+  assert.equal(sub?.trial?.endsOn, undefined, "the free month started before Go live");
+  assert.equal(TRIAL.days, 30);
 });
 
 await test("the new venue is blank rather than plausibly wrong", () => {

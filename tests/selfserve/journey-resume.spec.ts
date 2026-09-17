@@ -1,4 +1,4 @@
-import { expect, test } from "./helpers";
+import { confirmEmail, expect, test } from "./helpers";
 
 /**
  * Setup resumes where the owner left it (P0-5).
@@ -22,7 +22,7 @@ test("close at step five, sign in again, and land on step five", async ({ page, 
   await page.getByLabel("Choose a password").fill(password);
   await page.locator("#acceptTerms").check();
   await page.getByRole("button", { name: "Start free trial" }).click();
-  await page.waitForURL("**/setup/import");
+  await confirmEmail(page, email);
 
   await page.getByRole("button", { name: "Set it up by hand" }).first().click();
   await expect(page).toHaveURL(/\/setup\/review$/);

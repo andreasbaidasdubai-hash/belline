@@ -89,6 +89,13 @@ function readFrom(draft: Draft): string {
  * would drop the draft held in this component. A refresh then opens the same
  * step, from what is saved.
  */
+/** The way on from a refusal that is not about the form: an unconfirmed email, or a business that already has an account. */
+function refusalLink(error: string) {
+  if (error.includes("already has a Belline account")) return <> <a href="/account-exists">Sign in or contact us</a></>;
+  if (error.startsWith("Confirm your email address first")) return <> <a href="/verify">Enter the code</a></>;
+  return null;
+}
+
 function showStep(step: "import" | "review") {
   window.history.replaceState(null, "", `/setup/${step}`);
 }
@@ -631,6 +638,7 @@ export default function SetupWizard({
         {error && (
           <p role="alert" style={{ marginTop: 20, fontSize: 13.5, color: "var(--bad)" }}>
             {error}
+            {refusalLink(error)}
           </p>
         )}
 
@@ -837,6 +845,7 @@ export default function SetupWizard({
         <div style={{ marginTop: 22, maxWidth: "56ch" }}>
           <p role="alert" style={{ fontSize: 13.5, color: "var(--bad)", margin: "0 0 8px" }}>
             {error}
+            {refusalLink(error)}
           </p>
           <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>
             {fallback ?? "No website, or one Belline cannot read?"} It is the same form, typed rather than read.

@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { confirmEmail } from "./helpers";
 
 /**
  * Sign up and set the business up by hand, stopping on the bookings step.
@@ -8,11 +9,12 @@ export async function signUpAndReview(page: Page, label: string) {
   const run = Date.now();
   await page.goto("/checkout");
   await page.getByLabel("Business name").fill(`${label} ${run}`);
-  await page.getByLabel("Your email").fill(`owner+${label.toLowerCase().replace(/\W+/g, "")}${run}@example.com`);
+  const email = `owner+${label.toLowerCase().replace(/\W+/g, "")}${run}@example.com`;
+  await page.getByLabel("Your email").fill(email);
   await page.getByLabel("Choose a password").fill("Correct-Horse-Battery-9");
   await page.locator("#acceptTerms").check();
   await page.getByRole("button", { name: "Start free trial" }).click();
-  await page.waitForURL("**/setup/import");
+  await confirmEmail(page, email);
   await page.getByRole("button", { name: "Set it up by hand" }).first().click();
   await page.getByLabel("Address").fill("Shop 4, Jumeirah Beach Road, Dubai");
   await page.getByRole("button", { name: "Add a question" }).click();

@@ -50,6 +50,7 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "outlook_misconfigured",
   "outlook_connect_abandoned",
   "outlook_admin_approval",
+  "email_unverified",
 ];
 
 interface KindMeta {
@@ -138,6 +139,11 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
   outlook_admin_approval: {
     label: "Organisation must approve Belline for Outlook",
     next: "Contact the owner and send their IT admin the approval link in the reason. Publisher verification of Belline's Entra app removes most of these.",
+    belle: false,
+  },
+  email_unverified: {
+    label: "New owner's email not confirmed, email off",
+    next: "Write to the address on the account. When they reply, mark the email confirmed in Abuse review; until then Belline does no paid setup work for them.",
     belle: false,
   },
 };

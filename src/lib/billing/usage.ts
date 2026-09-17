@@ -623,7 +623,7 @@ function notesFor(
       .filter((m) => m.included !== null && m.included > 0 && (m.kind === "pool" || m.id === "phone"))
       .map((m) => ({ m, left: Math.max(0, (m.included as number) - m.used) }));
     const spent = parts.filter((p) => p.left === 0);
-    if (sub.trial?.extendedFrom && !stripeEnabled()) {
+    if (sub.trial?.extendedFrom && sub.trial.endsOn && !stripeEnabled()) {
       // Extended because card payments were closed when it reached its end
       // (billing/trial-end.ts). Leads the page: it is the date that matters.
       notes.push(`Payments open soon — you're covered until ${spokenDate(sub.trial.endsOn)}.`);

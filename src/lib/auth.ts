@@ -271,8 +271,17 @@ export function consumeLoginToken(token: string | undefined, now = Date.now()): 
   if (Number(expires) < now) return null;
   const user = getUser(userId);
   if (!user || user.disabled || !user.loginNonce || user.loginNonce !== nonce) return null;
-  saveUser({ ...user, loginNonce: undefined });
-  return user;
+  // The link only ever travels by email, so using it proves the inbox is theirs.
+  return saveUser({ ...user, loginNonce: undefined, ...inboxProved(user, now) });
+}
+
+/** The fields that mark an unconfirmed address confirmed by an emailed link (email-verify.ts). */
+function inboxProved(user: User, now: number): Partial<User> {
+  if (!user.emailVerification?.required || user.emailVerifiedAt) return {};
+  return {
+    emailVerifiedAt: new Date(now).toISOString(),
+    emailVerification: { ...user.emailVerification, codeHash: undefined, expiresAt: undefined, attempts: 0, verifiedBy: "link" },
+  };
 }
 
 // --- password reset links --------------------------------------------------
@@ -334,7 +343,8 @@ export function consumeResetToken(
   }
   const problem = passwordProblem(password);
   if (problem) return { ok: false, field: "password", error: problem };
-  const set = setPassword({ ...user, resetNonce: undefined, loginNonce: undefined }, password);
+  // A reset link only ever travels by email: using it confirms the address too.
+  const set = setPassword({ ...user, resetNonce: undefined, loginNonce: undefined, ...inboxProved(user, now) }, password);
   if (!set.ok) return { ok: false, field: "password", error: set.error ?? "Choose a different password." };
   clearFailures(user.email);
   const fresh = getUser(user.id)!;

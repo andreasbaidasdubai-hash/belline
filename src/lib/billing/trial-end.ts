@@ -45,7 +45,8 @@ export function extendTrialIfPaymentsClosed(
 ): TrialEndOutcome {
   const sub = venue.subscription;
   const payments = opts.payments ?? stripeEnabled();
-  if (payments || !sub || sub.status !== "trialing" || !sub.trial || exempt(venue)) return { location: venue, action: "none" };
+  // A trial with no end date has not gone live yet: its free month has not started.
+  if (payments || !sub || sub.status !== "trialing" || !sub.trial?.endsOn || exempt(venue)) return { location: venue, action: "none" };
   // The last day of the trial counts: extended on the day it would end, so
   // there is never a day on which it has lapsed.
   if (today < sub.trial.endsOn) return { location: venue, action: "none" };

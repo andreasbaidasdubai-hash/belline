@@ -6,6 +6,7 @@ import {
   upsertLocation,
   findUserByEmail,
   deleteUser,
+  saveUser,
   removeBusiness,
   removeLocation,
   removeTenant,
@@ -21,6 +22,8 @@ import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
 import { copy } from "../customer-copy";
 import { defaultLanguageFor } from "../language";
+import { isDisposableEmail } from "../abuse/business-key";
+import { DISPOSABLE_MESSAGE, emailAllowed, recordAbuse } from "../abuse/review";
 import { MENU_QUESTION, type Confirmed, type CurrentVenue } from "./review";
 import { serviceLengthsRequired, takesRequestsOnly } from "../booking/destination";
 
@@ -92,6 +95,13 @@ export interface SignupInput {
   emailConfirmed?: boolean;
   /** Ticked the Terms box. Recorded with the versions (legal.ts) when true. */
   acceptedTerms?: boolean;
+  /**
+   * A public self-serve signup (the checkout form, Belle's trial): the account
+   * is screened for abuse (`tenant.signup`, abuse/review.ts) and its owner
+   * must confirm their email before any paid setup work (email-verify.ts).
+   * Left out by the checks and internal tools that make accounts directly.
+   */
+  selfServe?: { ip?: string; device?: string };
 }
 
 export type SignupField = "businessName" | "email" | "password" | "vertical" | "market" | "terms";
@@ -118,11 +128,12 @@ export interface SignupDeps {
  * A month, every channel on, no card, and a cap on voice minutes and
  * text conversations so an unattended trial cannot run up a bill
  * (billing/plans.ts `TRIAL`, which is the only place the length is set).
+ *
+ * No end date yet: the month starts at Go live (trial-at-golive, 2026-09-16),
+ * when onboarding/activate.ts stamps it. Setting up is free and unmetered.
  */
 function trialSubscription(timezone: string, picked?: unknown[], market?: unknown): Subscription {
   const today = todayIn(timezone);
-  const ends = new Date(`${today}T12:00:00Z`);
-  ends.setUTCDate(ends.getUTCDate() + TRIAL.days);
   const where = marketOf(market);
   const chosen = picked?.length ? checkSelection(picked, where) : null;
   return {
@@ -135,7 +146,7 @@ function trialSubscription(timezone: string, picked?: unknown[], market?: unknow
     cycle: "monthly",
     startedOn: today,
     status: "trialing",
-    trial: { endsOn: ends.toISOString().slice(0, 10), minutes: TRIAL.minutes, conversations: TRIAL.conversations },
+    trial: { minutes: TRIAL.minutes, conversations: TRIAL.conversations },
   };
 }
 
@@ -240,7 +251,16 @@ export async function signUp(input: SignupInput, deps: SignupDeps = {}): Promise
   }
 
   const email = input.email.trim().toLowerCase();
-  const shape = checkShape(email);
+  // A throwaway mailbox, before anything else about the address: nobody can
+  // be reached on it after today. Staff can allow one address in the abuse review.
+  const throwaway = isDisposableEmail(email);
+  if (throwaway && !emailAllowed(email)) {
+    recordAbuse({ kind: "disposable_email", email, ip: input.selfServe?.ip, device: input.selfServe?.device, stage: "signup" });
+    return { ok: false, field: "email", error: DISPOSABLE_MESSAGE };
+  }
+  const checked = checkShape(email);
+  // An allowed throwaway address passes the shape check's own short list too.
+  const shape = throwaway && checked.disposable ? { ...checked, valid: true, reason: undefined } : checked;
   if (!shape.valid) {
     return {
       ok: false,
@@ -304,6 +324,7 @@ export async function signUp(input: SignupInput, deps: SignupDeps = {}): Promise
       name: businessName,
       status: "active",
       createdAt: now,
+      ...(input.selfServe ? { signup: { at: now, email, ...(input.selfServe.ip ? { ip: input.selfServe.ip } : {}), ...(input.selfServe.device ? { device: input.selfServe.device } : {}) } } : {}),
       ...(input.acceptedTerms
         ? { onboarding: { terms: { tosVersion: TOS_VERSION, dpaVersion: DPA_VERSION, acceptedAt: now, acceptedBy: email } } }
         : {}),
@@ -351,7 +372,13 @@ export async function signUp(input: SignupInput, deps: SignupDeps = {}): Promise
     }
     written.user = created.user.id;
 
-    return { ok: true, user: created.user, location };
+    // Held back from paid setup work until the address is confirmed. Only
+    // self-serve signups carry this, which is what grandfathers every older account.
+    const user = input.selfServe
+      ? saveUser({ ...created.user, emailVerification: { required: true } })
+      : created.user;
+
+    return { ok: true, user, location };
   } catch (err) {
     rollback(tenantId, businessId, written);
     throw err;

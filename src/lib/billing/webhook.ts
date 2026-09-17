@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
-import { recordStripeEvent, stripeEventSeen } from "../store";
+import { getLocation, recordStripeEvent, stripeEventSeen, upsertLocation } from "../store";
+import { applyCardEvent, applyTrialSubscriptionEvent, cancelReplacedSubscription } from "./card";
 import { applyDepositEvent } from "./deposits";
 import { applyStripeEvent, verifyWebhook } from "./stripe";
 
@@ -30,7 +31,26 @@ export interface WebhookOutcome {
 
 type Apply = (event: Stripe.Event) => { locationId?: string; applied: string };
 
-const defaultApply: Apply = (event) => applyDepositEvent(event) ?? applyStripeEvent(event);
+const defaultApply: Apply = (event) =>
+  applyDepositEvent(event) ?? applyCardEvent(event) ?? applyTrialSubscriptionEvent(event) ?? replacingTrial(event, applyStripeEvent);
+
+/**
+ * A plan chosen after Go live replaces the free month's Stripe subscription
+ * (billing/card.ts): once the new one is active, the old one is cancelled so
+ * the card is never charged twice.
+ */
+function replacingTrial(event: Stripe.Event, apply: Apply): { locationId?: string; applied: string } {
+  const session = event.type === "checkout.session.completed" ? event.data.object : null;
+  const before = session?.metadata?.belline_location ? getLocation(session.metadata.belline_location) : undefined;
+  const trial = before?.stripe?.trialSubscriptionId;
+  const out = apply(event);
+  if (!session || !out.locationId) return out;
+  const venue = getLocation(out.locationId);
+  if (!venue || !trial || venue.subscription?.status !== "active" || venue.stripe?.subscriptionId === trial) return out;
+  upsertLocation({ ...venue, stripe: { ...venue.stripe, trialSubscriptionId: undefined } });
+  void cancelReplacedSubscription(trial);
+  return { ...out, applied: `${out.applied}; free-month subscription cancelled` };
+}
 
 /** Failures per event id in this process, so a stuck event is raised once rather than on every retry. */
 const failures = new Map<string, number>();

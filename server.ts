@@ -15,6 +15,7 @@ import { reconcileStaleCalls, startCall } from "./src/lib/calls";
 import type { User } from "./src/lib/types";
 import { greetingFor } from "./src/lib/agent/runtime";
 import { checkConsoleGate, checkDemoGate } from "./src/lib/demo";
+import { paidWorkRefusal } from "./src/lib/abuse/gate";
 import { checkEmbedGate } from "./src/lib/embed";
 import { mayStreamTo, watchLiveness, sweepLiveness, type Liveness } from "./src/lib/voice/entitlement";
 import { isMarketingHost, marketingSiteExists, serveMarketing } from "./src/lib/marketing";
@@ -224,6 +225,13 @@ server.on("upgrade", (req, socket, head) => {
     // and a call is eight, and nothing else stood between the two.
     const consoleLocationId = String(query.locationId ?? "");
     const consoleVenue = getLocation(consoleLocationId) ?? listLocations()[0];
+    // Test calls are real model and speech spend: not before the owner's email
+    // is confirmed, nor on a trial staff have paused (lib/abuse/gate.ts).
+    if (paidWorkRefusal(user, consoleVenue)) {
+      socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
     if (consoleVenue && canSeeLocation(user, consoleVenue.id) && !checkConsoleGate(consoleVenue).allowed) {
       socket.write("HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n");
       socket.destroy();

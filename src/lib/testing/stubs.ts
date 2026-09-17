@@ -732,10 +732,37 @@ export function readStubCheckoutSession(id: string): StubCheckoutSession | undef
   }
 }
 
-/** The `checkout.session.completed` event Stripe would send for a paid stub session. */
+/**
+ * The `checkout.session.completed` event Stripe would send for a paid stub
+ * session. A setup-mode session (the card at Go live) saves a card instead:
+ * the event names a setup intent, and the card's fingerprint is registered
+ * for `stubCardFingerprint` — unique per session unless a test registered one.
+ */
 export function stubCompletedEvent(session: StubCheckoutSession, created = Math.floor(Date.now() / 1000)): string {
   const suffix = session.id.slice(-12);
-  const params = session.params as { metadata?: Record<string, string>; client_reference_id?: string; success_url?: string };
+  const params = session.params as { mode?: string; customer?: string; metadata?: Record<string, string>; client_reference_id?: string; success_url?: string };
+  if (params.mode === "setup") {
+    const setupIntent = `seti_stub_${suffix}`;
+    if (!stubCardFingerprint(setupIntent)) registerStubCard(setupIntent, `fp_stub_${suffix}`);
+    return JSON.stringify({
+      id: `evt_stub_${suffix}`,
+      object: "event",
+      type: "checkout.session.completed",
+      created,
+      data: {
+        object: {
+          id: session.id,
+          object: "checkout.session",
+          mode: "setup",
+          customer: params.customer ?? `cus_stub_${suffix}`,
+          setup_intent: setupIntent,
+          subscription: null,
+          client_reference_id: params.client_reference_id ?? null,
+          metadata: params.metadata ?? {},
+        },
+      },
+    });
+  }
   return JSON.stringify({
     id: `evt_stub_${suffix}`,
     object: "event",
@@ -753,4 +780,85 @@ export function stubCompletedEvent(session: StubCheckoutSession, created = Math.
       },
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Stripe cards and trial subscriptions (the card at Go live)
+// ---------------------------------------------------------------------------
+
+function stubCardsFile(): string {
+  return path.join(stubDataDir(), "stub-stripe-cards.json");
+}
+
+function stubSubscriptionsFile(): string {
+  return path.join(stubDataDir(), "stub-stripe-subscriptions.json");
+}
+
+function readJsonFile<T>(file: string, fallback: T): T {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Say which card a stub setup intent saved. A test gives two intents one fingerprint to play "the same card". */
+export function registerStubCard(setupIntentId: string, fingerprint: string): void {
+  const all = readJsonFile<Record<string, string>>(stubCardsFile(), {});
+  fs.mkdirSync(stubDataDir(), { recursive: true });
+  fs.writeFileSync(stubCardsFile(), JSON.stringify({ ...all, [setupIntentId]: fingerprint }, null, 2));
+}
+
+export function stubCardFingerprint(setupIntentId: string): string | undefined {
+  return readJsonFile<Record<string, string>>(stubCardsFile(), {})[setupIntentId];
+}
+
+export interface StubSubscription {
+  id: string;
+  customer: string;
+  setupIntent?: string;
+  prices: string[];
+  /** Unix seconds: when the free month ends and the first invoice is raised. */
+  trialEnd: number;
+  /** The day the first invoice falls on. Nothing is invoiced before it. */
+  firstInvoiceOn: string;
+  metadata: Record<string, string>;
+  status: "trialing" | "active" | "canceled";
+  /** Invoices raised so far. Stays empty through the trial, and after a cancel inside it. */
+  invoices: { on: string; amount: number }[];
+  canceledAt?: string;
+}
+
+export function stubCreateSubscription(input: Omit<StubSubscription, "id" | "status" | "invoices">): StubSubscription {
+  const sub: StubSubscription = { ...input, id: `sub_stub_${randomUUID().replace(/-/g, "").slice(0, 16)}`, status: "trialing", invoices: [] };
+  const all = readJsonFile<StubSubscription[]>(stubSubscriptionsFile(), []);
+  fs.mkdirSync(stubDataDir(), { recursive: true });
+  fs.writeFileSync(stubSubscriptionsFile(), JSON.stringify([...all, sub], null, 2));
+  return sub;
+}
+
+export function stubSubscriptions(): StubSubscription[] {
+  return readJsonFile<StubSubscription[]>(stubSubscriptionsFile(), []);
+}
+
+export function stubCancelSubscription(id: string, at: Date = new Date()): StubSubscription | undefined {
+  const all = stubSubscriptions();
+  const i = all.findIndex((s) => s.id === id);
+  if (i < 0) return undefined;
+  all[i] = { ...all[i], status: "canceled", canceledAt: at.toISOString() };
+  fs.writeFileSync(stubSubscriptionsFile(), JSON.stringify(all, null, 2));
+  return all[i];
+}
+
+/**
+ * Play Stripe's clock forward to `day`: a trialing subscription whose trial has
+ * ended raises its first invoice for `amount` and becomes active. A cancelled
+ * one raises nothing.
+ */
+export function stubAdvanceSubscriptions(day: string, amount: (sub: StubSubscription) => number): StubSubscription[] {
+  const all = stubSubscriptions().map((s) =>
+    s.status === "trialing" && day >= s.firstInvoiceOn ? { ...s, status: "active" as const, invoices: [...s.invoices, { on: s.firstInvoiceOn, amount: amount(s) }] } : s,
+  );
+  fs.writeFileSync(stubSubscriptionsFile(), JSON.stringify(all, null, 2));
+  return all;
 }
