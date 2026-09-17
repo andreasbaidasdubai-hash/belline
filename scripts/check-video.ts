@@ -671,8 +671,12 @@ await test("11. the provider key never reaches a response or a client bundle", a
         if (entry.isDirectory()) walk(full);
         else if (/\.(js|mjs|json|map)$/.test(entry.name)) {
           const text = fs.readFileSync(full, "utf8");
-          if (/TAVUS_API_KEY|tavusapi\.com|VIDEO_LLM_SECRET|x-api-key/.test(text)) offenders.push(path.relative(ROOT, full));
-          if (process.env.TAVUS_API_KEY_REAL_FOR_SCAN && text.includes(process.env.TAVUS_API_KEY_REAL_FOR_SCAN)) offenders.push(path.relative(ROOT, full));
+          // Env var *names* may appear (flags.ts is shared with the client and
+          // lists what each flag needs); values, the endpoint and the header never.
+          if (/tavusapi\.com|x-api-key|NEXT_PUBLIC_TAVUS|NEXT_PUBLIC_VIDEO_LLM/.test(text)) offenders.push(path.relative(ROOT, full));
+          for (const secret of [process.env.TAVUS_API_KEY_REAL_FOR_SCAN, process.env.VIDEO_LLM_SECRET_REAL_FOR_SCAN]) {
+            if (secret && text.includes(secret)) offenders.push(path.relative(ROOT, full));
+          }
         }
       }
     };
