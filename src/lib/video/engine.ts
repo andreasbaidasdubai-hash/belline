@@ -106,7 +106,11 @@ export function authoriseVideoLlm(
   if (!session || session.locationId !== claim.locationId) {
     return { ok: false, response: openAiError(403, "Not this conversation.", "permission_error") };
   }
-  if (session.status !== "live") {
+  // "creating" counts: Tavus asks the model for its first turn while the create
+  // call is still open, before this app has marked the session live. Refusing
+  // that request (410) left Belle mute for the whole call — seen on staging,
+  // 17 September 2026. Only an ended session is refused.
+  if (session.status === "ended") {
     return { ok: false, response: openAiError(410, "This conversation has ended.") };
   }
   const location = getLocation(session.locationId);

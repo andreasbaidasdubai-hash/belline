@@ -539,6 +539,30 @@ await test("7b. the provider's shutdown callback ends the session; its token onl
   assert.equal(getCall(session.callId)?.video?.endReason, "max_call_duration reached");
 });
 
+await test("7c. the model route answers while the session is still being created, and refuses once it has ended", async () => {
+  const { authoriseVideoLlm } = await import("../src/lib/video/engine");
+  const location = getLocation(A.id)!;
+  const result = await sessions.startVideoSession(location, "visitor-7c");
+  assert.ok(result.ok);
+  if (!result.ok) return;
+  const { session } = result;
+  const token = signVideoToken("llm", session.id, location.id, 600);
+  const ask = () =>
+    authoriseVideoLlm(
+      new Request("http://localhost/api/video/llm/chat/completions", { method: "POST", headers: { authorization: `Bearer ${token}` } }),
+      [{ role: "user", content: "hello" }],
+    );
+  // Tavus asks for the first turn before its create call has returned (staging, 17 September 2026).
+  session.status = "creating";
+  assert.equal(ask().ok, true, "a session still being created was refused, which leaves Belle mute");
+  session.status = "live";
+  assert.equal(ask().ok, true);
+  session.status = "ended";
+  const refused = ask();
+  assert.equal(refused.ok, false);
+  if (!refused.ok) assert.equal(refused.response.status, 410);
+});
+
 // ---------------------------------------------------------------------------
 console.log("\n  What the visitor meets");
 
