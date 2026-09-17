@@ -47,6 +47,7 @@
     "check:e2e": "node --import tsx scripts/check-e2e.ts",
     "check:video": "node --import tsx scripts/check-video.ts",
     "e2e:video": "playwright test --config playwright.video.config.ts",
+    "video:clip": "node --import tsx --env-file-if-exists=.env scripts/video-greeting-clip.ts",
     "e2e:zero-touch": "playwright test --config playwright.zero-touch.config.ts",
     "test:dashboard": "playwright test --config playwright.dashboard.config.ts",
     "pricing": "node --import tsx scripts/site-pricing.ts",

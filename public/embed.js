@@ -106,6 +106,9 @@
     ".belline-dock{bottom:18px;right:18px}.belline-dock.belline-left{left:18px}" +
     ".belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
     ".belline-fab span{display:none}}" +
+    // The video greeting bubble sits at the top of the stack, right edges aligned.
+    ".belline-dock .bvb{--bvb-size:200px}.belline-dock .belline-fab[hidden]{display:none}" +
+    "@media (max-width:520px){.belline-dock .bvb{--bvb-size:128px}.belline-dock .bvb-talk{min-height:40px;font-size:13px}}" +
     "@media (prefers-reduced-motion:reduce){.belline-fab{transition:none}}";
 
   var style = document.createElement("style");
@@ -231,11 +234,14 @@
       dock.classList.add("belline-left");
       side = "left";
     }
-    // Video, only where Belline has switched it on for this venue. Quiet, and
-    // above the other two: the bell and the chat stay the first things seen.
+    // Video, only where Belline has switched it on for this venue: a round
+    // greeting bubble at the top of the stack (embed-video.js, loaded now, after
+    // the page has painted), and a quiet Video button that brings it back once
+    // the visitor has closed it. No session exists until they tap.
     if (cfg.video === true && !fabs.video) {
       var video = fabFor("video", script.getAttribute("data-video-label") || "Video call", CAMERA, true);
       dock.insertBefore(video, fabs.chat || fabs.voice || null);
+      mountVideo(cfg.videoBubble || {}, video);
     }
     if (cfg.whatsappLink && !fabs.whatsapp) {
       var wa = document.createElement("a");
@@ -282,6 +288,75 @@
       });
   } catch (e) {
     /* an old browser without fetch keeps the defaults */
+  }
+
+  var videoCtl = null;
+
+  function mountVideo(bubbleCfg, videoFab) {
+    videoFab.hidden = true;
+    // The Video button reopens the bubble rather than a panel of its own.
+    var reopenVideo = function (e) {
+      e.stopImmediatePropagation();
+      if (videoCtl) videoCtl.reopen();
+    };
+    videoFab.addEventListener("click", reopenVideo, true);
+
+    function ready(api) {
+      videoCtl = api.mount({
+        env: window,
+        config: bubbleCfg,
+        origin: origin,
+        key: key,
+        hostOrigin: location.origin,
+        place: function (bubble) {
+          dock.insertBefore(bubble, dock.firstChild);
+        },
+        onBubbleShown: function () {
+          videoFab.hidden = true;
+        },
+        onDismissed: function () {
+          videoFab.hidden = false;
+        },
+        frameClass: "belline-panel belline-video" + (side === "left" ? " belline-left" : ""),
+        shutClass: "belline-shut",
+        placeCall: function (frame, closeBtn) {
+          frame.style.background = "#FFFFFF";
+          document.body.appendChild(frame);
+          panel = frame;
+          shut = closeBtn;
+          panelKind = "video";
+          position(closeBtn);
+          document.body.appendChild(closeBtn);
+          dock.style.display = "none";
+          window.addEventListener("resize", reposition);
+        },
+        onCallClosed: function () {
+          panel = null;
+          shut = null;
+          panelKind = null;
+          dock.style.display = "";
+          window.removeEventListener("resize", reposition);
+          videoFab.hidden = false;
+          try {
+            videoFab.focus();
+          } catch (e) {
+            /* focus is a nicety */
+          }
+        },
+      });
+    }
+
+    if (window.BellineVideo) return ready(window.BellineVideo);
+    (window.__bellineVideoReady = window.__bellineVideoReady || []).push(ready);
+    var loader = document.createElement("script");
+    loader.src = origin + "/embed-video.js";
+    loader.async = true;
+    loader.onerror = function () {
+      // No bubble; the Video button opens the call directly instead.
+      videoFab.removeEventListener("click", reopenVideo, true);
+      videoFab.hidden = false;
+    };
+    document.head.appendChild(loader);
   }
 
   function open(kind, label) {

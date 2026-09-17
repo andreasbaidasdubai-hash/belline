@@ -5,6 +5,7 @@ import {
   INITIAL,
   clock,
   durationView,
+  durationWords,
   errorCopy,
   micErrorCode,
   once,
@@ -51,13 +52,15 @@ type Props = {
   maxCallSeconds: number;
   chatHref?: string;
   voiceHref?: string;
+  /** Opened from the greeting bubble's tap: start at once, the tap was the intent. */
+  autostart?: boolean;
 };
 
 type Session = CallSession & { maxCallSeconds: number; warnBeforeSeconds: number; captions: boolean; perception: boolean };
 
 const TOKEN_KEY = "belline.video.visitor";
 
-export default function VideoPanel({ embedKey, freshToken, venueName, agentName, provider, maxCallSeconds, chatHref, voiceHref }: Props) {
+export default function VideoPanel({ embedKey, freshToken, venueName, agentName, provider, maxCallSeconds, chatHref, voiceHref, autostart }: Props) {
   const [state, dispatch] = useReducer(reduce, INITIAL);
   const [now, setNow] = useState(() => Date.now());
   const [showCaptions, setShowCaptions] = useState(true);
@@ -263,6 +266,25 @@ export default function VideoPanel({ embedKey, freshToken, venueName, agentName,
     }
   };
 
+  // The bubble's tap already said "talk": start without a second press. The
+  // microphone prompt is the browser's own, with the hint on screen beside it.
+  useEffect(() => {
+    if (autostart) void start();
+    // Once, on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The page around the frame closed the call (its ×): end it properly here.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { source?: string; type?: string } | null;
+      if (e.source !== window.parent || data?.source !== "belline-host" || data.type !== "end") return;
+      void end("visitor");
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [end]);
+
   // Leaving the page: stop everything, and tell the server by beacon.
   useEffect(() => {
     const leave = () => {
@@ -364,6 +386,7 @@ export default function VideoPanel({ embedKey, freshToken, venueName, agentName,
       </header>
 
       <section className="bv-stage" aria-label={`Video call with ${agentName}`}>
+        <div className={`bv-circle${state.agentSpeaking ? " is-speaking" : ""}`}>
         <video
           ref={videoRef}
           className={`bv-face${faceVisible ? " is-on" : ""}`}
@@ -389,6 +412,20 @@ export default function VideoPanel({ embedKey, freshToken, venueName, agentName,
           <p className="bv-mock" role="note">
             MOCK — not a live avatar
           </p>
+        )}
+        </div>
+
+        {state.phase === "mic" && <p className="bv-hint">Allow your microphone so {agentName} can hear you. Your camera stays off.</p>}
+        {state.audioBlocked && (
+          <button
+            type="button"
+            className="bv-btn bv-primary bv-sound"
+            onClick={() => {
+              void audioRef.current?.play().then(() => dispatch({ type: "audio_unlocked" })).catch(() => undefined);
+            }}
+          >
+            Tap to hear {agentName}
+          </button>
         )}
 
         <p className="bv-status" role="status" aria-live="polite">
@@ -458,7 +495,7 @@ export default function VideoPanel({ embedKey, freshToken, venueName, agentName,
               </button>
             )}
           </div>
-          {state.phase === "intro" && <p className="bv-small">Calls end after {Math.round(maxCallSeconds / 60)} minutes.</p>}
+          {state.phase === "intro" && <p className="bv-small">Calls end after {durationWords(maxCallSeconds)}.</p>}
         </div>
       )}
 
@@ -611,8 +648,15 @@ html, body { margin: 0; height: 100%; background: var(--bl-ground) }
 .bv-who em { font-style: normal; font-size: 12.5px; color: var(--bl-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .bv-time { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--bl-text-2) }
 
-.bv-stage { position: relative; min-height: 0; background: var(--bl-navy); color: var(--bl-on-navy); overflow: hidden;
-  display: grid; place-items: center }
+/* The call view: the face in a circle, the words under it, the controls in one
+   row below — the same round face the greeting bubble showed, now live. */
+.bv-stage { position: relative; min-height: 0; overflow: hidden; background: var(--bl-ground);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--bl-space-3); padding: var(--bl-space-4) var(--bl-space-4) var(--bl-space-3) }
+.bv-circle { position: relative; flex: none; width: min(300px, 72vw, 46dvh); aspect-ratio: 1; border-radius: 50%;
+  overflow: hidden; background: var(--bl-navy); color: var(--bl-on-navy);
+  box-shadow: 0 0 0 3px var(--bl-ground), 0 0 0 4px var(--bl-blue-line), var(--bl-elev-float); transition: box-shadow .2s ease }
+.bv-circle.is-speaking { box-shadow: 0 0 0 3px var(--bl-ground), 0 0 0 6px var(--bl-blue-lit), var(--bl-elev-float) }
 .bv-face { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s ease }
 .bv-face.is-on { opacity: 1 }
 .bv-placeholder { position: absolute; inset: 0; display: grid; place-items: center;
@@ -620,32 +664,32 @@ html, body { margin: 0; height: 100%; background: var(--bl-ground) }
 .bv-placeholder.is-loading::after { content: ""; position: absolute; inset: 0;
   background: linear-gradient(100deg, transparent 30%, var(--bl-navy-line) 50%, transparent 70%);
   background-size: 200% 100%; animation: bv-shimmer 1.6s linear infinite }
-.bv-avatar { width: 112px; height: 112px; border-radius: 50%; display: grid; place-items: center;
-  font-family: var(--bl-font-display); font-size: 44px; font-weight: 600;
+.bv-avatar { width: 38%; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--bl-font-display); font-size: clamp(32px, 9vw, 52px); font-weight: 600;
   background: var(--bl-navy-card); color: var(--bl-blue-lit); border: 2px solid var(--bl-navy-line);
   transition: box-shadow .2s ease }
 .bv-avatar.is-speaking { box-shadow: 0 0 0 6px var(--bl-navy-line), 0 0 0 12px var(--bl-navy-line) }
-.bv-mock { position: absolute; top: var(--bl-space-3); left: 50%; transform: translateX(-50%); margin: 0;
+.bv-mock { position: absolute; top: 12%; left: 50%; transform: translateX(-50%); margin: 0;
   background: var(--bl-warning-tint); color: var(--bl-warning); border: 1px solid var(--bl-warning);
-  font-weight: 700; font-size: 12.5px; letter-spacing: .02em; padding: 5px 12px; border-radius: var(--bl-radius-pill);
+  font-weight: 700; font-size: 11.5px; letter-spacing: .02em; padding: 4px 10px; border-radius: var(--bl-radius-pill);
   white-space: nowrap; z-index: 2 }
-.bv-status { position: absolute; left: var(--bl-space-3); bottom: var(--bl-space-3); margin: 0; z-index: 2;
-  display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 5px 11px;
-  border-radius: var(--bl-radius-pill); background: var(--bl-navy-card); color: var(--bl-on-navy) }
-.bv-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bl-on-navy-2) }
-.bv-dot.is-speaking { background: var(--bl-blue-lit) }
-.bv-dot.is-warn { background: var(--bl-warning-tint) }
-.bv-captions { position: absolute; left: var(--bl-space-3); right: var(--bl-space-3); bottom: 52px; z-index: 2;
-  display: grid; gap: 4px; max-height: 40%; overflow: hidden }
-.bv-captions p { margin: 0; padding: 6px 10px; border-radius: var(--bl-radius-input); background: var(--bl-navy-card);
-  color: var(--bl-on-navy); font-size: 14px; line-height: 1.4 }
-.bv-captions b { color: var(--bl-on-navy-2); font-weight: 600 }
+.bv-status { margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 5px 12px;
+  border-radius: var(--bl-radius-pill); background: var(--bl-surface); color: var(--bl-ink-900) }
+.bv-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bl-muted) }
+.bv-dot.is-speaking { background: var(--bl-blue) }
+.bv-dot.is-warn { background: var(--bl-warning) }
+.bv-hint { margin: 0; max-width: 34ch; text-align: center; font-size: 13.5px; color: var(--bl-text-2) }
+.bv-sound { min-height: 44px }
+.bv-captions { width: 100%; max-width: 420px; display: grid; gap: 4px; max-height: 30%; overflow: hidden }
+.bv-captions p { margin: 0; padding: 6px 10px; border-radius: var(--bl-radius-input); background: var(--bl-surface);
+  color: var(--bl-ink-900); font-size: 14px; line-height: 1.4 }
+.bv-captions b { color: var(--bl-text-2); font-weight: 600 }
 
 .bv-warning, .bv-note { margin: 0; padding: var(--bl-space-2) var(--bl-space-4); font-size: 13.5px }
 .bv-warning { background: var(--bl-warning-tint); color: var(--bl-warning); font-weight: 600 }
 .bv-note { background: var(--bl-surface); color: var(--bl-text-2) }
 
-.bv-panel { padding: var(--bl-space-4) var(--bl-space-4) max(var(--bl-space-4), env(safe-area-inset-bottom)); display: grid; gap: var(--bl-space-3) }
+.bv-panel { padding: var(--bl-space-4) var(--bl-space-4) calc(var(--bl-space-5) + env(safe-area-inset-bottom)); display: grid; gap: var(--bl-space-3) }
 .bv-panel h1 { margin: 0; font-family: var(--bl-font-display); font-weight: var(--bl-weight-heading);
   letter-spacing: var(--bl-track-h2); font-size: 19px; line-height: 1.25 }
 .bv-panel p { margin: 0; color: var(--bl-text-2); font-size: 14px }
@@ -663,11 +707,12 @@ html, body { margin: 0; height: 100%; background: var(--bl-ground) }
 .bv-primary { background: var(--bl-blue); border-color: var(--bl-blue); color: var(--bl-white) }
 .bv-primary:hover { background: var(--bl-blue-hover) }
 
-.bv-controls { padding: var(--bl-space-3) var(--bl-space-3) max(var(--bl-space-3), env(safe-area-inset-bottom));
+.bv-controls { padding: var(--bl-space-3) var(--bl-space-3) calc(var(--bl-space-4) + env(safe-area-inset-bottom));
   border-top: 1px solid var(--bl-border); display: grid; gap: var(--bl-space-2) }
-.bv-row { display: flex; justify-content: center; gap: var(--bl-space-2); flex-wrap: nowrap }
-.bv-round { flex-direction: column; gap: 2px; min-width: 60px; min-height: 60px; padding: 6px 8px; border-radius: var(--bl-radius-card);
-  font-size: 11.5px; font-weight: 600 }
+.bv-row { display: flex; justify-content: center; align-content: center; gap: var(--bl-space-2); flex-wrap: wrap;
+  max-width: 400px; margin: 0 auto }
+.bv-round { flex: 0 0 64px; flex-direction: column; gap: 2px; width: 64px; height: 64px; min-height: 64px; padding: 6px 4px;
+  border-radius: var(--bl-radius-card); font-size: 11.5px; font-weight: 600 }
 .bv-round[aria-pressed="true"] { background: var(--bl-blue-tint); border-color: var(--bl-blue-line); color: var(--bl-accent-text) }
 .bv-end { background: var(--bl-danger); border-color: var(--bl-danger); color: var(--bl-white) }
 .bv-end:hover { background: var(--bl-danger); filter: brightness(.92) }
@@ -681,16 +726,15 @@ html, body { margin: 0; height: 100%; background: var(--bl-ground) }
 @media (max-width: 520px) {
   /* embed.js puts its close button in the top corner over the frame on a phone. */
   .bv-top { padding-right: 56px }
-  .bv-round { min-width: 56px; min-height: 60px }
-  .bv-row { gap: 6px }
 }
 @media (orientation: landscape) and (max-height: 500px) {
   .bv { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) }
   .bv-top { grid-column: 1 / -1 }
-  .bv-stage { grid-row: 2; grid-column: 1 }
+  .bv-stage { grid-row: 2; grid-column: 1; padding-top: var(--bl-space-2) }
+  .bv-circle { width: min(60dvh, 240px) }
   .bv-controls, .bv-panel { grid-row: 2; grid-column: 2; border-top: 0; border-left: 1px solid var(--bl-border);
     align-content: center; max-width: 320px; overflow-y: auto }
-  .bv-row { flex-wrap: wrap; max-width: 200px }
+  .bv-row { max-width: 216px }
   .bv-warning, .bv-note { display: none }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -20,6 +20,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { mock } from "node:test";
+import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -535,6 +536,13 @@ await test("9. the duration: a warning shortly before the end, then a clean end 
   assert.equal(d(270).phase, "warning");
   assert.equal(d(300).phase, "over");
   assert.equal(machine.clock(d(285).remaining), "0:15");
+  // What the intro says about the limit, from the configured seconds.
+  assert.equal(machine.durationWords(60), "1 minute");
+  assert.equal(machine.durationWords(300), "5 minutes");
+  assert.equal(machine.durationWords(90), "1 minute 30 seconds");
+  assert.equal(machine.durationWords(45), "45 seconds");
+  assert.equal(machine.durationWords(1), "1 second");
+  assert.match(read("src/app/embed/[key]/video/VideoPanel.tsx"), /Calls end after \{durationWords\(maxCallSeconds\)\}/);
   const live = { ...machine.INITIAL, phase: "live" as const, joinedAt: 1 };
   assert.equal(machine.reduce(live, { type: "warn" }).warned, true);
   assert.equal(videoConfig({ VIDEO_MAX_CALL_SECONDS: "5", VIDEO_WARN_BEFORE_SECONDS: "99" }).maxCallSeconds, 30, "a floor on the maximum");
@@ -844,6 +852,289 @@ await test("client timings take a closed list of names and need a token", async 
   const other = await eventRoute.POST(post("http://x/", { name: "video_selected", token: signVisitorToken(B.id, "v") }), params(A.embed!.key));
   assert.equal(other.status, 401);
   assert.equal(recentVideoMetrics().filter((m) => m.name === "video_selected").length, 1);
+});
+
+// ---------------------------------------------------------------------------
+console.log("\n  The greeting bubble (public/embed-video.js)");
+
+/**
+ * A page small enough to drive embed-video.js in Node: the handful of DOM calls
+ * it makes, a sessionStorage, matchMedia, a fetch that records, and timers that
+ * run when told to. Anything it did not expect to be called is not here, so a
+ * change that starts reaching for more of the browser fails loudly.
+ */
+function fakePage(opts: { reducedMotion?: boolean; saveData?: boolean; storage?: Map<string, string> } = {}) {
+  type Node = {
+    tagName: string;
+    className: string;
+    textContent: string;
+    attrs: Record<string, string>;
+    children: Node[];
+    parent: Node | null;
+    listeners: Record<string, ((e?: unknown) => void)[]>;
+    style: Record<string, string>;
+    [k: string]: unknown;
+  };
+  const fetched: string[] = [];
+  const timers: (() => void)[] = [];
+  const posted: unknown[] = [];
+  const make = (tag: string): Node => {
+    const node: Node = {
+      tagName: tag.toUpperCase(),
+      className: "",
+      textContent: "",
+      attrs: {},
+      children: [],
+      parent: null,
+      listeners: {},
+      style: {},
+      setAttribute(k: string, v: string) {
+        node.attrs[k] = String(v);
+      },
+      removeAttribute(k: string) {
+        delete node.attrs[k];
+      },
+      getAttribute(k: string) {
+        return node.attrs[k] ?? null;
+      },
+      appendChild(child: Node) {
+        child.parent = node;
+        node.children.push(child);
+        return child;
+      },
+      insertBefore(child: Node, ref: Node | null) {
+        child.parent = node;
+        const i = ref ? node.children.indexOf(ref) : -1;
+        if (i < 0) node.children.push(child);
+        else node.children.splice(i, 0, child);
+        return child;
+      },
+      remove() {
+        if (!node.parent) return;
+        node.parent.children.splice(node.parent.children.indexOf(node), 1);
+        node.parent = null;
+      },
+      addEventListener(type: string, fn: (e?: unknown) => void) {
+        (node.listeners[type] ??= []).push(fn);
+      },
+      removeEventListener(type: string, fn: (e?: unknown) => void) {
+        node.listeners[type] = (node.listeners[type] ?? []).filter((f) => f !== fn);
+      },
+      click() {
+        for (const fn of node.listeners.click ?? []) fn({});
+      },
+      focus() {},
+      play() {
+        return Promise.resolve();
+      },
+      pause() {},
+    };
+    if (tag === "iframe") node.contentWindow = { postMessage: (msg: unknown) => posted.push(msg) };
+    return node;
+  };
+  const head = make("head");
+  const body = make("body");
+  const dock = make("div");
+  body.appendChild(dock);
+  const doc = {
+    head,
+    body,
+    createElement: make,
+    getElementById: (id: string) => head.children.find((c) => c.id === id) ?? null,
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  const store = opts.storage ?? new Map<string, string>();
+  const env = {
+    document: doc,
+    sessionStorage: {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    },
+    matchMedia: (q: string) => ({ matches: Boolean(opts.reducedMotion && /reduced-motion/.test(q)) }),
+    navigator: { connection: { saveData: Boolean(opts.saveData) } },
+    fetch: (url: string) => {
+      fetched.push(url);
+      return Promise.resolve(new Response("{}"));
+    },
+    setTimeout: (fn: () => void) => void timers.push(fn),
+    requestAnimationFrame: (fn: () => void) => void timers.push(fn),
+  };
+  const all = (node: Node = body): Node[] => node.children.flatMap((c) => [c, ...all(c)]);
+  const find = (pred: (n: Node) => boolean) => all().find(pred);
+  const byClass = (cls: string) => find((n) => n.className.split(" ").includes(cls));
+  const flush = () => {
+    while (timers.length) timers.shift()!();
+  };
+  return { env, dock, body, store, fetched, posted, find, byClass, flush, all };
+}
+
+function loadBubble() {
+  const sandbox: { window: Record<string, unknown> } = { window: {} };
+  vm.runInNewContext(read("public/embed-video.js"), sandbox);
+  return sandbox.window.BellineVideo as {
+    mount: (o: Record<string, unknown>) => { reopen(): void; state(): { bubble: boolean; call: boolean; dismissed: boolean } };
+    DISMISSED: string;
+  };
+}
+
+function mountBubble(page: ReturnType<typeof fakePage>, config: Record<string, unknown> = {}) {
+  const calls: { frames: unknown[]; closed: number } = { frames: [], closed: 0 };
+  const ctl = loadBubble().mount({
+    env: page.env,
+    config: { agentName: "Belle", ...config },
+    origin: "https://app.example",
+    key: "be_site",
+    hostOrigin: "https://venue.example",
+    place: (bubble: unknown) => (page.dock as { appendChild(n: unknown): void }).appendChild(bubble),
+    placeCall: (frame: unknown, shut: unknown) => {
+      calls.frames.push(frame);
+      (page.body as { appendChild(n: unknown): void }).appendChild(frame);
+      (page.body as { appendChild(n: unknown): void }).appendChild(shut);
+    },
+    onCallClosed: () => calls.closed++,
+  });
+  return { ctl, calls };
+}
+
+await test("the bubble opens on load, greeting, when video is on and it has not been dismissed", () => {
+  const page = fakePage();
+  const { ctl } = mountBubble(page, { clipUrl: "/video/greeting.mp4", posterUrl: "/video/greeting.jpg" });
+  assert.equal(ctl.state().bubble, true);
+  const caption = page.byClass("bvb-caption");
+  assert.equal(caption?.textContent, "Hi, I'm Belle, the AI concierge. Tap to talk.");
+  assert.equal(page.byClass("bvb-ai")?.textContent, "AI concierge");
+  assert.ok(page.find((n) => n.tagName === "BUTTON" && n.attrs["aria-label"] === "Close Belle's video greeting"));
+  assert.ok(page.find((n) => n.tagName === "BUTTON" && n.textContent === "Talk to Belle"));
+  const video = page.find((n) => n.tagName === "VIDEO")!;
+  for (const a of ["muted", "playsinline", "loop", "autoplay"]) assert.ok(a in video.attrs, `video lacks ${a}`);
+  assert.equal(video.attrs.preload, "none");
+  assert.equal(video.attrs.poster, "https://app.example/video/greeting.jpg", "a path is on the app, not the host page");
+  assert.equal(video.attrs.src, undefined, "the clip does not load before first paint");
+  page.flush();
+  assert.equal(video.attrs.src, "https://app.example/video/greeting.mp4");
+  // The widget only loads the bubble when the config says so (and the route only says so when video is offered).
+  assert.match(read("public/embed.js"), /if \(cfg\.video === true && !fabs\.video\) \{[\s\S]{0,200}mountVideo\(/);
+  assert.match(read("public/site.js"), /if \(!cfg \|\| cfg\.video !== true\) return;/);
+});
+
+await test("no live session is created on load — only a tap opens the call frame, which starts it", () => {
+  const page = fakePage();
+  const { ctl, calls } = mountBubble(page, { mock: true });
+  page.flush();
+  assert.deepEqual(page.fetched, [], "the bubble made a request on load");
+  assert.equal(calls.frames.length, 0, "a call frame existed before any tap");
+  assert.equal(page.find((n) => n.tagName === "IFRAME"), undefined);
+  assert.equal(page.byClass("bvb-mock")?.textContent, "MOCK — not a live avatar");
+  assert.ok(page.byClass("bvb-ph"), "the lettered placeholder stands in for a missing clip");
+  // Nothing in the bubble can reach the session route, the SDK or the microphone.
+  const source = read("public/embed-video.js");
+  assert.equal(/\/session|getUserMedia|daily|fetch\(/.test(source), false);
+  // The tap.
+  page.byClass("bvb-circle")!.click();
+  assert.equal(calls.frames.length, 1);
+  const frame = page.find((n) => n.tagName === "IFRAME")!;
+  assert.equal(frame.src, "https://app.example/embed/be_site/video?autostart=1&o=https%3A%2F%2Fvenue.example");
+  assert.equal(frame.allow, "microphone; autoplay", "never the camera");
+  assert.equal(ctl.state().bubble, false, "the bubble becomes the call");
+  // And the panel only creates a session when it starts, which autostart does on mount.
+  const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
+  assert.match(panel, /if \(autostart\) void start\(\);/);
+});
+
+await test("close dismisses the bubble and it stays dismissed for the session; the Video button brings it back", () => {
+  const storage = new Map<string, string>();
+  const page = fakePage({ storage });
+  const api = loadBubble();
+  const { ctl } = mountBubble(page);
+  page.find((n) => n.attrs["aria-label"] === "Close Belle's video greeting")!.click();
+  assert.equal(ctl.state().bubble, false);
+  assert.equal(storage.get(api.DISMISSED), "1");
+  // The next page in the same browser session: no bubble.
+  const next = fakePage({ storage });
+  const again = mountBubble(next);
+  assert.equal(again.ctl.state().bubble, false);
+  assert.equal(next.byClass("bvb"), undefined);
+  // The launcher's Video button.
+  again.ctl.reopen();
+  assert.equal(again.ctl.state().bubble, true);
+  assert.equal(storage.get(api.DISMISSED), undefined);
+});
+
+await test("closing during a call asks the frame to end the session, removes it, and the frame ends it on the server", async () => {
+  const page = fakePage();
+  const { ctl, calls } = mountBubble(page);
+  page.byClass("bvb-talk")!.click();
+  const frame = page.find((n) => n.tagName === "IFRAME")!;
+  page.find((n) => n.attrs["aria-label"] === "Close video call")!.click();
+  assert.equal(JSON.stringify(page.posted), JSON.stringify([{ source: "belline-host", type: "end" }]));
+  assert.equal(calls.closed, 1);
+  assert.equal(ctl.state().call, false);
+  assert.ok(frame.parent, "the frame is given a moment to end the session");
+  page.flush();
+  assert.equal(frame.parent, null, "then removed");
+  // Inside the frame: the host's message ends the call the same way End does,
+  // and the page going away sends the beacon regardless.
+  const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
+  assert.match(panel, /data\?\.source !== "belline-host" \|\| data\.type !== "end"\) return;\s*void end\("visitor"\);/);
+  assert.match(panel, /e\.source !== window\.parent/);
+  assert.match(panel, /navigator\.sendBeacon/);
+  // And the server side of that end is idempotent cleanup (case 7).
+  const started = await sessions.startVideoSession(getLocation(A.id)!, "visitor-bubble");
+  assert.ok(started.ok);
+  if (!started.ok) return;
+  const res = await endRoute.POST(
+    new Request("http://x/", { method: "POST", body: JSON.stringify({ sessionId: started.client.sessionId, clientToken: started.client.clientToken, reason: "unload" }) }),
+    params(A.embed!.key),
+  );
+  assert.deepEqual(await res.json(), { ok: true, ended: true });
+  assert.equal(mockVideoRecord().ended.length, 1);
+});
+
+await test("reduced motion and Data Saver show the poster, never the looping clip", () => {
+  for (const flags of [{ reducedMotion: true }, { saveData: true }]) {
+    const page = fakePage(flags);
+    mountBubble(page, { clipUrl: "https://cdn.example/greeting.mp4", posterUrl: "https://cdn.example/greeting.jpg" });
+    page.flush();
+    assert.equal(page.find((n) => n.tagName === "VIDEO"), undefined, JSON.stringify(flags));
+    assert.equal(page.find((n) => n.tagName === "IMG")?.attrs.src, "https://cdn.example/greeting.jpg");
+  }
+  // Without a poster either: the placeholder, with its breathing switched off by CSS.
+  const page = fakePage({ reducedMotion: true });
+  mountBubble(page, { clipUrl: "https://cdn.example/greeting.mp4" });
+  assert.ok(page.byClass("bvb-ph"));
+  assert.match(read("public/embed-video.js"), /@media \(prefers-reduced-motion:reduce\)\{\.bvb-ph span\{animation:none\}\}/);
+});
+
+await test("the widget config carries the bubble's clip, poster and name only when video is offered", async () => {
+  const restore = setEnv({ VIDEO_GREETING_CLIP_URL: "/video/greeting-rf90eb925bd8.mp4", VIDEO_GREETING_POSTER_URL: "javascript:alert(1)" });
+  try {
+    const res = await configRoute.GET(new Request("http://localhost/"), params(A.embed!.key));
+    const cfg = (await res.json()) as { video: boolean; videoBubble?: Record<string, unknown> };
+    assert.equal(cfg.video, true);
+    assert.deepEqual(cfg.videoBubble, {
+      agentName: getLocation(A.id)!.agent.displayName,
+      clipUrl: "/video/greeting-rf90eb925bd8.mp4",
+      posterUrl: "",
+      mock: true,
+    });
+    const off = await configRoute.GET(new Request("http://localhost/"), params(OFF.embed!.key));
+    assert.equal("videoBubble" in ((await off.json()) as object), false);
+  } finally {
+    restore();
+  }
+  // The clip is made by the owner, deliberately: never from a check, a boot or a deploy.
+  const script = read("scripts/video-greeting-clip.ts");
+  assert.match(script, /if \(!flag\("yes"\)\)/);
+  assert.match(script, /FLAG_STUBS === "on"/);
+  const pkg = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
+  for (const [name, command] of Object.entries(pkg.scripts)) {
+    if (name.startsWith("check") || name.startsWith("e2e") || name === "build" || name === "start") {
+      assert.equal(command.includes("video-greeting-clip"), false, `${name} runs the clip generator`);
+    }
+  }
+  assert.equal(/video-greeting-clip/.test(read("server.ts")), false);
 });
 
 // ---------------------------------------------------------------------------

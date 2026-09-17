@@ -34,6 +34,8 @@ export interface PanelState {
   warned: boolean;
   captions: { agent: string; visitor: string };
   endedReason?: string;
+  /** The browser refused to play the face's voice without another tap (iOS). */
+  audioBlocked?: boolean;
 }
 
 export const INITIAL: PanelState = {
@@ -53,7 +55,8 @@ export type CallEvent =
   | { type: "caption"; who: "agent" | "visitor"; text: string }
   | { type: "network"; state: "ok" | "reconnecting" }
   | { type: "left"; reason: string }
-  | { type: "error"; code: VideoErrorCode };
+  | { type: "error"; code: VideoErrorCode }
+  | { type: "audio_blocked" };
 
 export type Action =
   | { type: "start" }
@@ -63,7 +66,8 @@ export type Action =
   | { type: "mute"; muted: boolean }
   | { type: "warn" }
   | { type: "ended"; reason: string }
-  | { type: "reset" };
+  | { type: "reset" }
+  | { type: "audio_unlocked" };
 
 export function reduce(state: PanelState, action: Action): PanelState {
   switch (action.type) {
@@ -85,6 +89,8 @@ export function reduce(state: PanelState, action: Action): PanelState {
       return { ...state, phase: "ended", endedReason: action.reason, agentSpeaking: false, visitorSpeaking: false, reconnecting: false };
     case "reset":
       return INITIAL;
+    case "audio_unlocked":
+      return { ...state, audioBlocked: false };
     case "call":
       return onCall(state, action.event, action.now);
   }
@@ -105,6 +111,8 @@ function onCall(state: PanelState, event: CallEvent, now: number): PanelState {
       return { ...state, phase: "ended", endedReason: event.reason, agentSpeaking: false, visitorSpeaking: false, reconnecting: false };
     case "error":
       return { ...state, phase: "error", error: event.code, retryable: event.code === "network" || event.code === "failed" };
+    case "audio_blocked":
+      return { ...state, audioBlocked: true };
   }
 }
 
@@ -167,6 +175,16 @@ export function durationView(joinedAt: number | undefined, now: number, maxSecon
   const remaining = Math.max(0, maxSeconds - elapsed);
   const phase = remaining <= 0 ? "over" : remaining <= warnBeforeSeconds ? "warning" : "normal";
   return { elapsed, remaining, phase };
+}
+
+/** 60 → "1 minute", 300 → "5 minutes", 90 → "1 minute 30 seconds", 45 → "45 seconds". */
+export function durationWords(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  if (m === 0) return unit(r, "second");
+  return r === 0 ? unit(m, "minute") : `${unit(m, "minute")} ${unit(r, "second")}`;
 }
 
 /** 65 → "1:05". */

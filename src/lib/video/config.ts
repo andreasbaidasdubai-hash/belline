@@ -42,6 +42,9 @@ export interface VideoConfig {
   joinTimeoutSeconds: number;
   maxSessionsPerDay: number;
   maxConcurrentPerVenue: number;
+  /** The bubble's muted greeting clip and its poster, for every venue without its own. */
+  greetingClipUrl: string;
+  greetingPosterUrl: string;
   /** Venue ids allowed by the environment, beside the ones staff add in the console. */
   venues: string[];
 }
@@ -50,6 +53,12 @@ function num(raw: string | undefined, fallback: number, min: number, max: number
   const n = Number(raw);
   if (!raw?.trim() || !Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+/** A clip or poster address a visitor's browser may load: https, or a path on this app. */
+function httpsOrPath(raw: string | undefined): string {
+  const value = (raw ?? "").trim();
+  return /^https:\/\/[^\s"'<>]+$/.test(value) || /^\/[^\s"'<>]*$/.test(value) ? value : "";
 }
 
 function on(raw: string | undefined): boolean {
@@ -78,6 +87,8 @@ export function videoConfig(env: Env = process.env): VideoConfig {
     joinTimeoutSeconds: num(env.VIDEO_JOIN_TIMEOUT_SECONDS, 60, 15, 300),
     maxSessionsPerDay: num(env.VIDEO_MAX_SESSIONS_PER_DAY, 20, 1, 1000),
     maxConcurrentPerVenue: num(env.VIDEO_MAX_CONCURRENT_PER_VENUE, 2, 1, 50),
+    greetingClipUrl: httpsOrPath(env.VIDEO_GREETING_CLIP_URL),
+    greetingPosterUrl: httpsOrPath(env.VIDEO_GREETING_POSTER_URL),
     venues: (env.VIDEO_AVATAR_VENUES ?? "")
       .split(",")
       .map((v) => v.trim())

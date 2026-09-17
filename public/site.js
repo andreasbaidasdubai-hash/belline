@@ -578,94 +578,112 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   if (/[?&]chat=1(?:&|$)/.test(window.location.search)) open();
 })();
 
-/* --- the video panel -------------------------------------------------------
+/* --- the video receptionist ------------------------------------------------
    Belline's video receptionist, on our own site — and only once it is switched
-   on for our own venue. There is no button in the markup: it is made here when
-   the venue's widget config says `video: true`, so with the feature off (as it
-   is in production until approved) the page is exactly the page it was, and a
-   failed fetch costs nothing but the button.
+   on for our own venue. Nothing is in the markup: when the venue's widget
+   config says `video: true`, this loads embed-video.js from the app, which
+   opens a round greeting bubble above the floating buttons (a muted clip or a
+   poster; no session, no microphone) and, on a tap, the call itself. With the
+   feature off, as in production until approved, the page is the page it was.
 
-   The panel is the same one a venue's website gets from embed.js: an iframe on
-   app.belline.ai, allowed the microphone and never the camera. */
+   A labelled Video button joins the stack once the bubble has been closed, so
+   the receptionist stays one tap away without greeting again on every page. */
 (function () {
   var chatFab = document.querySelector("[data-chat]");
   if (!chatFab || typeof window.fetch !== "function") return;
   var chatUrl = chatFab.getAttribute("data-chat") || "";
   var match = /^(https?:\/\/[^/]+)\/embed\/([^/]+)\/chat$/.exec(chatUrl);
   if (!match) return;
+  var appOrigin = match[1];
+  var key = match[2];
 
   var label = SITE_DE ? "Videoanruf mit Belle" : "Video call with Belle";
   var fab = null;
   var dock = null;
+  var ctl = null;
 
-  function close() {
-    if (!dock) return;
-    dock.remove();
-    dock = null;
-    fab.hidden = false;
-    document.removeEventListener("keydown", onKey);
-    try {
-      fab.focus();
-    } catch (e) {
-      /* focus is a nicety, never a failure */
-    }
-  }
-
-  function onKey(e) {
-    if (e.key === "Escape") close();
-  }
-
-  function open() {
-    if (dock) return;
+  function makeFab() {
+    fab = document.createElement("button");
+    fab.type = "button";
+    fab.className = "video-fab";
     fab.hidden = true;
-
-    dock = document.createElement("div");
-    dock.className = "video-dock";
-    dock.setAttribute("role", "region");
-    dock.setAttribute("aria-label", label);
-
-    var frame = document.createElement("iframe");
-    frame.src = match[1] + "/embed/" + match[2] + "/video?o=" + encodeURIComponent(location.origin);
-    frame.title = label;
-    frame.className = "video-frame";
-    // Microphone and sound; never the camera.
-    frame.allow = "microphone; autoplay";
-
-    var shut = document.createElement("button");
-    shut.type = "button";
-    shut.className = "call-shut";
-    shut.setAttribute("aria-label", SITE_DE ? "Videoanruf schließen" : "Close the video call");
-    shut.textContent = "×";
-    shut.addEventListener("click", close);
-
-    dock.appendChild(frame);
-    dock.appendChild(shut);
-    document.body.appendChild(dock);
-    shut.focus();
-    document.addEventListener("keydown", onKey);
+    fab.setAttribute("aria-label", label);
+    fab.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+      '<rect x="3" y="6.5" width="12.5" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/>' +
+      '<path d="M15.5 10.6 20.4 8v8l-4.9-2.6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>' +
+      '<span class="video-fab-say">' + label + "</span>";
+    fab.addEventListener("click", function () {
+      if (ctl) ctl.reopen();
+    });
+    document.body.appendChild(fab);
   }
 
-  fetch(match[1] + "/api/embed/" + match[2] + "/config", { mode: "cors" })
+  function ready(api) {
+    ctl = api.mount({
+      env: window,
+      config: window.__bellineVideoConfig || {},
+      origin: appOrigin,
+      key: key,
+      hostOrigin: location.origin,
+      fixed: true,
+      place: function (bubble) {
+        bubble.classList.add("video-bubble");
+        document.body.appendChild(bubble);
+      },
+      onBubbleShown: function () {
+        fab.hidden = true;
+      },
+      onDismissed: function () {
+        fab.hidden = false;
+      },
+      frameClass: "video-frame",
+      shutClass: "call-shut",
+      placeCall: function (frame, shut) {
+        dock = document.createElement("div");
+        dock.className = "video-dock";
+        dock.setAttribute("role", "region");
+        dock.setAttribute("aria-label", label);
+        dock.appendChild(frame);
+        dock.appendChild(shut);
+        document.body.appendChild(dock);
+        shut.focus();
+        fab.hidden = true;
+      },
+      onCallClosed: function () {
+        var gone = dock;
+        dock = null;
+        // The frame is removed by embed-video.js a moment later; the dock with it.
+        setTimeout(function () {
+          if (gone) gone.remove();
+        }, 400);
+        fab.hidden = false;
+        try {
+          fab.focus();
+        } catch (e) {
+          /* focus is a nicety, never a failure */
+        }
+      },
+    });
+  }
+
+  fetch(appOrigin + "/api/embed/" + key + "/config", { mode: "cors" })
     .then(function (r) {
       return r.ok ? r.json() : null;
     })
     .then(function (cfg) {
       if (!cfg || cfg.video !== true) return;
-      fab = document.createElement("button");
-      fab.type = "button";
-      fab.className = "video-fab";
-      fab.setAttribute("aria-label", label);
-      fab.title = label;
-      fab.innerHTML =
-        '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
-        '<rect x="3" y="6.5" width="12.5" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/>' +
-        '<path d="M15.5 10.6 20.4 8v8l-4.9-2.6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>' +
-        '<span class="video-fab-say">' + label + "</span>";
-      fab.addEventListener("click", open);
-      document.body.appendChild(fab);
+      makeFab();
+      window.__bellineVideoConfig = cfg.videoBubble || {};
+      if (window.BellineVideo) return ready(window.BellineVideo);
+      (window.__bellineVideoReady = window.__bellineVideoReady || []).push(ready);
+      var s = document.createElement("script");
+      s.src = appOrigin + "/embed-video.js";
+      s.async = true;
+      document.head.appendChild(s);
     })
     .catch(function () {
-      /* no button is the right failure */
+      /* no bubble is the right failure */
     });
 })();
 

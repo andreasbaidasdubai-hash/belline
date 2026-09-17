@@ -5,7 +5,7 @@ import { widgetConfig } from "@/lib/embed";
 import { answersIn } from "@/lib/language";
 import { venueWhatsApp, whatsappLink } from "@/lib/whatsapp";
 import { isActivated } from "@/lib/onboarding/journey";
-import { videoOffered } from "@/lib/video/availability";
+import { videoBubbleConfig, videoOffered } from "@/lib/video/availability";
 
 export const dynamic = "force-dynamic";
 
@@ -41,8 +41,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   const account = await venueWhatsApp(location).catch(() => null);
   const link = account?.phoneE164 ? `https://wa.me/${account.phoneE164.slice(1)}` : whatsappLinkFor(location.id);
 
-  // `video` says only whether to show the button (lib/video/availability.ts).
-  return NextResponse.json({ ...widgetConfig(location.embed, link, answersIn(location)), video: videoOffered(location) }, {
+  // `video` says only whether to show it (lib/video/availability.ts); the bubble's
+  // clip, poster and agent name come with it, and only then.
+  const video = videoOffered(location);
+  return NextResponse.json({ ...widgetConfig(location.embed, link, answersIn(location)), video, ...(video ? { videoBubble: videoBubbleConfig(location) } : {}) }, {
     headers: { ...cors(), "cache-control": "public, max-age=60" },
   });
 }

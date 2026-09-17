@@ -82,6 +82,26 @@ export function videoAvailability(
   return { on: true, config };
 }
 
+/**
+ * What the bubble needs to greet: the clip and poster (the venue's own, else the
+ * deployment's), the agent's name, and whether it is the mock. Public, so built
+ * from a whitelist; only for a venue that is offering video.
+ */
+export function videoBubbleConfig(location: Location, env: Env = process.env) {
+  const config = videoConfig(env);
+  const own = readVideoControl().venues[location.id];
+  const pick = (venue: string | undefined, fallback: string) => {
+    const v = (venue ?? "").trim();
+    return /^https:\/\/[^\s"'<>]+$/.test(v) || /^\/[^\s"'<>]*$/.test(v) ? v : fallback;
+  };
+  return {
+    agentName: location.agent.displayName,
+    clipUrl: pick(own?.greetingClipUrl, config.greetingClipUrl),
+    posterUrl: pick(own?.greetingPosterUrl, config.greetingPosterUrl),
+    mock: config.provider === "mock",
+  };
+}
+
 /** What the widget's public config says: offered or not, and nothing about why. */
 export function videoOffered(location: Location, env: Env = process.env): boolean {
   try {

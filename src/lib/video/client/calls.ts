@@ -76,7 +76,8 @@ async function createTavusCall(opts: CallOptions): Promise<CallAdapter> {
     }
     if (e.type === "audio" && media.audio) {
       media.audio.srcObject = new MediaStream([e.track]);
-      void media.audio.play().catch(() => undefined);
+      // iOS may want one more tap before it plays sound in a frame.
+      void media.audio.play().catch(() => emit({ type: "audio_blocked" }));
     }
   });
   call.on("app-message", (e) => {

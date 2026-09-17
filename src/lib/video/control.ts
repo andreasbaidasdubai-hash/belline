@@ -27,6 +27,9 @@ export interface VenueVideoSettings {
   palId?: string;
   /** Reserved for a venue's own opening line; unset means the standard greeting. */
   greeting?: string;
+  /** Reserved for a venue's own greeting clip and poster in the bubble. */
+  greetingClipUrl?: string;
+  greetingPosterUrl?: string;
   /** English today. Structured for the language registry. */
   language?: "en";
   updatedBy?: string;

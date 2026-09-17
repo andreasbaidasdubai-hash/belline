@@ -36,10 +36,10 @@ export default async function VideoPage({
   searchParams,
 }: {
   params: Promise<{ key: string }>;
-  searchParams: Promise<{ o?: string }>;
+  searchParams: Promise<{ o?: string; autostart?: string }>;
 }) {
   const { key } = await params;
-  const { o } = await searchParams;
+  const { o, autostart } = await searchParams;
   const location = venueByEmbedKey(key);
   if (!location?.embed) notFound();
 
@@ -83,6 +83,8 @@ export default async function VideoPage({
       maxCallSeconds={availability.config.maxCallSeconds}
       chatHref={chatHref}
       voiceHref={voiceHref}
+      // From the greeting bubble: the visitor already tapped to talk.
+      autostart={autostart === "1"}
     />
   );
 }
