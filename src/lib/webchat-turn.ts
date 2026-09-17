@@ -9,6 +9,7 @@ import { findChatVenue, type ChatVia } from "./chat-link";
 import { isConfigured } from "./db/client";
 import { acceptInbound } from "./reception/inbound";
 import { respondTo } from "./reception/respond";
+import { pageBriefing, type PageHint } from "./belle/knowledge";
 import { findCustomer, listMessages, openConversationFor } from "./reception/repo";
 import type { Conversation, Message } from "./reception/types";
 import {
@@ -112,6 +113,12 @@ export interface TurnInput {
   clientId: string;
   /** Present when the words were spoken into the page rather than typed. */
   spoken?: { seconds?: number };
+  /**
+   * The Belline page Belle's chat was opened on (checkout, /verify, /login),
+   * already parsed to a closed set by `parsePageHint`. Only Belline's own venue
+   * reads it, and only as a fixed sentence written on the server.
+   */
+  hint?: PageHint | null;
 }
 
 /**
@@ -192,7 +199,7 @@ export async function visitorTurn(visitor: Visitor, input: TurnInput): Promise<N
     // Only answer a message we have not seen. A retry after a dropped
     // connection must not produce a second turn.
     if (accepted.accepted.fresh) {
-      await respondTo(accepted.accepted);
+      await respondTo(accepted.accepted, location.internal && input.hint ? { briefing: pageBriefing(input.hint) } : {});
     }
 
     const messages = await listMessages(location.tenantId, conversationId);

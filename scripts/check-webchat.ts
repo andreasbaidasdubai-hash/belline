@@ -1735,7 +1735,9 @@ head("Belle's chat on belline.ai: who she is, and what to ask");
     const seeded = fs.readFileSync(path.join(process.cwd(), "src", "lib", "seed.ts"), "utf8");
     assert.equal((seeded.match(/starterPrompts:/g) ?? []).length, 1, "a venue other than Belline's is seeded with starter prompts");
     const page = fs.readFileSync(path.join(process.cwd(), "src", "app", "embed", "[key]", "chat", "page.tsx"), "utf8");
-    assert.match(page, /starterPrompts=\{starterPromptsFor\(location\.agent\)\}/);
+    // Belle on Belline's own app pages shows that page's questions instead
+    // (belle/knowledge.ts PAGE_STARTERS); every widget still reads the venue's.
+    assert.match(page, /starterPrompts=\{hint \? PAGE_STARTERS\[hint\.page\] : starterPromptsFor\(location\.agent\)\}/);
   });
 
   await test("the chips show until the first message, and a tapped chip sends its own words", () => {

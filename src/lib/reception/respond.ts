@@ -125,7 +125,15 @@ export type TurnOutcome =
   | { sent: false; skipped: Skipped }
   | { sent: false; failed: string };
 
-export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
+export interface RespondOptions {
+  /**
+   * A server-written note for this turn only, e.g. the page Belline's own
+   * chat was opened from (belle/knowledge.ts `pageBriefing`). Never visitor text.
+   */
+  briefing?: string;
+}
+
+export async function respondTo(accepted: Accepted, opts: RespondOptions = {}): Promise<TurnOutcome> {
   const traceId = newTraceId();
   const { tenantId, conversationId } = accepted;
 
@@ -205,6 +213,7 @@ export async function respondTo(accepted: Accepted): Promise<TurnOutcome> {
     history,
     // So what the model spends on this thread can be summed per conversation.
     conversationId: String(conversationId),
+    ...(opts.briefing ? { briefing: opts.briefing } : {}),
   });
   // Chat follows the customer the moment they write in another language the
   // business speaks: the model is told which, and so is every line below.
