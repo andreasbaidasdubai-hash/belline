@@ -44,6 +44,7 @@ const TEMPLATE_TTL_MS = 10 * 60 * 1000;
 
 interface TemplatePal {
   at: number;
+  palId: string;
   layers: Record<string, unknown>;
 }
 
@@ -51,6 +52,7 @@ export class TavusProvider implements VideoAvatarProvider {
   readonly name = "tavus" as const;
   readonly capabilities = { perception: false, captions: true };
   private template: TemplatePal | null = null;
+  private templateRefresh: Promise<unknown> | null = null;
 
   constructor(
     private readonly config: VideoConfig,
@@ -221,24 +223,42 @@ export class TavusProvider implements VideoAvatarProvider {
     return id;
   }
 
-  /** Voice, hearing and turn-taking from the owner's PAL, so the face sounds as chosen. */
+  /**
+   * Voice, hearing and turn-taking from the owner's PAL, so the face sounds as chosen.
+   *
+   * Only the first session after a start waits for this GET. After that a
+   * stale copy is used at once and refreshed in the background: the owner's
+   * voice settings change rarely, and a visitor who tapped "Talk" should not
+   * wait an extra round trip to Tavus after every ten minutes of quiet.
+   */
   private async templateLayers(palId: string): Promise<Record<string, unknown>> {
     if (!palId) return {};
-    if (this.template && Date.now() - this.template.at < TEMPLATE_TTL_MS) return this.template.layers;
+    const kept = this.template?.palId === palId ? this.template : null;
+    if (kept) {
+      if (Date.now() - kept.at >= TEMPLATE_TTL_MS && !this.templateRefresh) {
+        this.templateRefresh = this.fetchTemplate(palId).finally(() => {
+          this.templateRefresh = null;
+        });
+      }
+      return kept.layers;
+    }
+    return this.fetchTemplate(palId);
+  }
+
+  private async fetchTemplate(palId: string): Promise<Record<string, unknown>> {
     try {
       const pal = await this.call<{ layers?: Record<string, unknown> }>("GET", `/v2/pals/${encodeURIComponent(palId)}`);
       const layers: Record<string, unknown> = {};
       for (const key of ["tts", "stt", "conversational_flow"]) {
         if (pal.layers?.[key]) layers[key] = pal.layers[key];
       }
-      this.template = { at: Date.now(), layers };
+      this.template = { at: Date.now(), palId, layers };
       return layers;
     } catch {
       // A missing template costs the chosen voice, not the call.
-      return {};
+      return this.template?.palId === palId ? this.template.layers : {};
     }
   }
-
   private async deletePal(palId: string): Promise<void> {
     try {
       await this.call("DELETE", `/v2/pals/${encodeURIComponent(palId)}`);
