@@ -241,6 +241,28 @@ function anthropic(): Anthropic {
   return client;
 }
 
+/**
+ * For the checks: a stand-in client whose `messages.stream` scripts the model.
+ * Never called by the app. `null` puts the real client back.
+ */
+export function setAnthropicClientForTests(fake: unknown): void {
+  client = fake as Anthropic | null;
+}
+
+/**
+ * Whether this streamed event is the model starting a tool call.
+ *
+ * The moment a fast first pass reaches for any tool, the turn is no longer
+ * small talk: a booking, a lead, a handover or an availability check is
+ * decided by the venue's own model instead (see `fastModel`).
+ */
+export function startsToolUse(event: { type: string; content_block?: { type?: string } }): boolean {
+  return event.type === "content_block_start" && event.content_block?.type === "tool_use";
+}
+
+/** A fast first pass is for a sentence or two; a runaway reply is cut here. */
+const FAST_PASS_MAX_TOKENS = 400;
+
 export interface AgentSessionOptions {
   /** The number the other end is reachable on, when we have it. */
   callerNumber?: string;
@@ -280,6 +302,20 @@ export interface AgentSessionOptions {
    * asked anything. The model is told it was said, exactly as on a phone call.
    */
   greeting?: string;
+  /**
+   * A faster model for the first pass of each turn (the video channel's
+   * small talk and FAQ answers).
+   *
+   * The policy is deliberately blunt: the fast model answers first, and the
+   * moment it starts a tool call — any tool — its stream is dropped unrun and
+   * the round is run again on the venue's own model, told what was already
+   * said so it carries on instead of repeating it. Nothing a fast pass does
+   * ever touches a booking, a lead or the call record; every sentence still
+   * goes through the caller's guards (video/engine.ts), and the authority
+   * rules run before any model at all. Unset, or equal to the venue's model:
+   * every turn is as it was.
+   */
+  fastModel?: string;
 }
 
 export class AgentSession {
@@ -289,6 +325,9 @@ export class AgentSession {
   private readonly callerNumber?: string;
   private readonly liveTransfer: boolean;
   private readonly conversationId?: string;
+  private readonly fastModel?: string;
+  /** Said by a fast pass this turn before it reached for a tool: the venue's model is told, once. */
+  private alreadySaid: string | null = null;
   private messages: Anthropic.MessageParam[] = [];
   private readonly tools: Anthropic.Tool[];
   private ended = false;
@@ -311,6 +350,7 @@ export class AgentSession {
     this.callerNumber = opts.callerNumber;
     this.liveTransfer = Boolean(opts.liveTransfer);
     this.conversationId = opts.conversationId;
+    this.fastModel = opts.fastModel && opts.fastModel !== location.agent.model ? opts.fastModel : undefined;
     this.channel = opts.channel ?? "voice";
     this.messages = opts.history ? [...opts.history] : [];
     this.tools = toolsFor(location, this.channel);
@@ -492,7 +532,7 @@ export class AgentSession {
    * What one response cost, from the usage block Anthropic sends with it —
    * input, output, and the cache read and write that keep a long call flat.
    */
-  private meterUsage(message: Anthropic.Message): void {
+  private meterUsage(message: Pick<Anthropic.Message, "usage">, model: string = this.location.agent.model): void {
     meterModel(
       {
         venueId: this.location.id,
@@ -500,7 +540,7 @@ export class AgentSession {
         conversationId: this.conversationId,
         channel: costChannelOf(this.call),
       },
-      this.location.agent.model,
+      model,
       message.usage,
     );
   }
@@ -512,11 +552,10 @@ export class AgentSession {
    * a guess answered under different parameters than the turn that adopts it
    * is a guess that will keep being thrown away for reasons nobody can see.
    */
-  private open(messages: Anthropic.MessageParam[]): MessageStream {
-    const model = this.location.agent.model;
+  private open(messages: Anthropic.MessageParam[], model: string = this.location.agent.model): MessageStream {
     const params = {
       model,
-      max_tokens: 2048,
+      max_tokens: model === this.fastModel ? FAST_PASS_MAX_TOKENS : 2048,
       system: this.systemBlocks(),
       tools: this.tools,
       ...modelParams(model),
@@ -578,7 +617,12 @@ ${
             : ""
         }${
           guest ? `\n\n${guestBriefing(this.location, guest)}` : ""
-        }${languageNote ? `\n\n${languageNote}` : ""}`,
+        }${languageNote ? `\n\n${languageNote}` : ""}${
+          // After a fast first pass handed this turn over (see `fastModel`).
+          this.alreadySaid
+            ? `\n\nIn this turn you have already said to the ${this.channel === "video" ? "visitor" : "caller"}: "${this.alreadySaid}" — carry on from there and do not say it again.`
+            : ""
+        }`,
       },
     ];
   }
@@ -612,6 +656,7 @@ ${
     // its second half, not a new one.
     const resume = this.resume;
     this.resume = null;
+    this.alreadySaid = null;
     if (!resume) this.messages.push({ role: "user", content: userText });
 
     if (!hasApiKey()) {
@@ -781,11 +826,26 @@ ${
         }
       }
 
+      // The fast first pass: the opening round of a fresh turn only.
+      let fastPass = !resume && Boolean(this.fastModel);
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const fast = fastPass ? this.fastModel : undefined;
+        fastPass = false;
         const chunker = new SentenceChunker();
-        const stream = this.open(this.messages);
+        const stream = this.open(this.messages, fast);
+        let escalated = false;
+        let fastUsage: Anthropic.Usage | null = null;
 
         for await (const event of stream) {
+          if (fast) {
+            if (event.type === "message_start") fastUsage = event.message.usage;
+            // A tool call: not the fast model's to make. Drop the rest of its
+            // stream unrun — including any half-sentence still in the chunker.
+            if (startsToolUse(event)) {
+              escalated = true;
+              break;
+            }
+          }
           if (
             event.type === "content_block_delta" &&
             event.delta.type === "text_delta"
@@ -798,6 +858,21 @@ ${
           }
         }
 
+        if (escalated && fast) {
+          try {
+            stream.abort();
+          } catch {
+            /* already finished */
+          }
+          // The input it read is real spend; its unfinished output is not reported.
+          if (fastUsage) this.meterUsage({ usage: fastUsage }, fast);
+          // Nothing of the fast pass enters the history. The venue's model runs
+          // the round afresh, told what the visitor has already heard.
+          this.alreadySaid = turn.spoken.trim() || null;
+          round--;
+          continue;
+        }
+
         const tail = chunker.flush();
         if (tail) {
           if (firstAudioMs < 0) firstAudioMs = Date.now() - startedAt;
@@ -806,7 +881,7 @@ ${
         }
 
         const message = await stream.finalMessage();
-        this.meterUsage(message);
+        this.meterUsage(message, fast);
 
         if (message.stop_reason === "refusal") {
           yield {

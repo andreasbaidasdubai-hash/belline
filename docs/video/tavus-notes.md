@@ -116,13 +116,46 @@ varying behaviour — including the "LLM backend" — per session is to create a
 PAL per session and delete it afterwards.
 — https://docs.tavus.io/sections/onboarding-guide/pal-strategies
 
-**Consequence for Belline (see plan.md):** the one documented way to bind a
-custom-LLM request to exactly one conversation is a **per-session PAL** whose
-`layers.llm.api_key` is a secret minted for that session. That is Belline's
-default (`VIDEO_TAVUS_PAL_MODE=per_session`). A shared-PAL mode is kept for
-latency experiments; it relies on the undocumented placement of
-`conversational_context` in the system message and is refused unless the
-signed context token is found in a `system` message.
+**Re-read 17 September 2026 for per-conversation headers or metadata:** none.
+`layers.llm.headers`, `extra_body` and `default_query` exist but are PAL-level
+and static; Create Conversation has no LLM override, header or metadata field
+(its body fields are listed above). So a conversation can only be told apart
+by what it carries in `conversational_context`.
+— https://docs.tavus.io/sections/conversational-video-interface/pal/llm ·
+https://docs.tavus.io/api-reference/conversations/create-conversation
+
+**Consequence for Belline — shared PAL per venue and face (default since
+17 September 2026, `VIDEO_TAVUS_PAL_MODE=shared`).** The docs describe both
+approaches: "keep persistent PALs in Tavus … and reuse them" passing per-session
+data through conversational parameters, or create a PAL per session and delete
+it afterwards (https://docs.tavus.io/sections/onboarding-guide/pal-strategies).
+Belline now reuses one PAL per venue and face:
+
+- the PAL's `layers.llm.api_key` is a static key HMAC-derived from
+  `VIDEO_LLM_SECRET`, the venue id and the face id (`tokens.ts venuePalKey`);
+- each conversation's `conversational_context` carries
+  `belline-session: <signed session token>`;
+- the model route reads the token **only from `system` messages**, and accepts
+  it only when the key, the token and the live session all name the same venue
+  (and the key the session's face). A forged token, a token in the visitor's
+  words, and another venue's valid token through this venue's PAL are all 401
+  (`check:video` 4c);
+- the PAL is kept in `DATA_DIR/video.json` with a hash of the body it was made
+  from; a changed face, language, voice, template or secret makes a new one,
+  and the old one is deleted only after the longest possible call on it;
+- it is made at boot for allowlisted venues and when staff allow a venue, never
+  on a page load.
+
+**Still undocumented, so guarded:** where `conversational_context` lands in the
+custom LLM request. If a request arrives with a venue key but no token in any
+system message, that venue falls back to a PAL per call until restart
+(`shared-pal.ts`) and the log says so. `VIDEO_TAVUS_PAL_MODE=per_session`
+restores the old behaviour everywhere.
+
+**Leaner create:** `enable_closed_captions` is no longer sent (it turns on
+Daily's transcription; the panel's captions come from Tavus's
+`conversation.utterance` events) and `apply_greenscreen` is sent only when
+`true` (default `false`).
 
 ## Create PAL
 
@@ -172,6 +205,41 @@ Sent:
 A camera requirement is **not documented**; `application.perception_unavailable`
 fires when "the participant's camera was off", which implies calls work without
 one. Belline sets `perception_model: "off"` and joins with the camera off.
+
+## Background (green screen)
+
+- `properties.apply_greenscreen`: "If true, the background will be replaced
+  with a greenscreen (RGB values: [0, 255, 155])."
+  — https://docs.tavus.io/api-reference/conversations/create-conversation
+- "Background customization is not currently available with Phoenix-4.5
+  faces"; the page suggests customising the green "on the frontend using
+  WebGL". No other background option is documented.
+  — https://docs.tavus.io/sections/conversational-video-interface/conversation/customizations/background-customizations
+- Belline sends `apply_greenscreen: true` only for a curated Phoenix-4 face with
+  a background chosen, and the panel checks the frame's corners for the green
+  before keying (a stream without it is shown as it is).
+
+## Faces for the picker
+
+- `GET /v2/faces` query `face_type` (`system` = stock), `face_ids` (comma
+  separated), `limit`, `page`, `verbose`, `model_name`; response `data[]` with
+  `face_id`, `face_name`, `default_voice_id`, `thumbnail_video_url`, `status`,
+  `face_type`, `model_name` (`phoenix-4.5`, `phoenix-4`, `phoenix-3`), and
+  `total_count`. — https://docs.tavus.io/api-reference/faces/list-faces ·
+  https://docs.tavus.io/api-reference/faces/get-face
+- Stock faces have a different id per Phoenix model, e.g. Ruby - Office:
+  Phoenix-4 `rcc28da86847`, Phoenix-4.5 `rf90eb925bd8`.
+  — https://docs.tavus.io/sections/faces/stock-face-model-map
+- `thumbnail_image_url` is not in the documented schema; Belline uses it only
+  when present.
+
+## Voices
+
+See [voice.md](voice.md): TTS layer precedence (`external_voice_id` >
+`voice_id` > face `default_voice_id`), public ElevenLabs/Cartesia voices need
+no key, Tavus Voices are Tavus-managed.
+— https://docs.tavus.io/sections/conversational-video-interface/pal/tts ·
+https://docs.tavus.io/sections/conversational-video-interface/voices
 
 ## Stock faces
 

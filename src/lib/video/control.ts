@@ -21,9 +21,12 @@ import { dataDir } from "../store";
  */
 
 export interface VenueVideoSettings {
-  enabled: boolean;
-  /** Reserved for a venue's own avatar; unset means the deployment default. */
+  /** Staff's switch. Absent: the environment's list decides (an owner choosing a face never switches video on or off). */
+  enabled?: boolean;
+  /** The owner's pick from the curated stock faces (faces.ts); unset means `TAVUS_FACE_ID`. */
   faceId?: string;
+  /** One of `VIDEO_BACKGROUNDS` (backgrounds.ts); unset means the face's own. */
+  backgroundId?: string;
   palId?: string;
   /** Reserved for a venue's own opening line; unset means the standard greeting. */
   greeting?: string;
@@ -36,12 +39,25 @@ export interface VenueVideoSettings {
   updatedAt?: string;
 }
 
+/** A venue's shared PAL at Tavus (pals.ts). The key is derived, never kept here. */
+export interface VenuePalRecord {
+  palId: string;
+  faceId: string;
+  /** Hash of the PAL body it was made from: a different hash means make a new one. */
+  hash: string;
+  createdAt: string;
+}
+
 export interface VideoControl {
   killSwitch: { on: boolean; by?: string; at?: string; note?: string };
   venues: Record<string, VenueVideoSettings>;
+  /** Shared PALs by `venueId|faceId`. */
+  pals: Record<string, VenuePalRecord>;
+  /** Replaced PALs, deleted once no call can still be using them. */
+  retiredPals: { palId: string; at: string }[];
 }
 
-const EMPTY: VideoControl = { killSwitch: { on: false }, venues: {} };
+const EMPTY: VideoControl = { killSwitch: { on: false }, venues: {}, pals: {}, retiredPals: [] };
 
 function file(): string {
   return path.join(dataDir(), "video.json");
@@ -53,6 +69,8 @@ export function readVideoControl(): VideoControl {
     return {
       killSwitch: { on: Boolean(raw.killSwitch?.on), by: raw.killSwitch?.by, at: raw.killSwitch?.at, note: raw.killSwitch?.note },
       venues: raw.venues && typeof raw.venues === "object" ? raw.venues : {},
+      pals: raw.pals && typeof raw.pals === "object" ? raw.pals : {},
+      retiredPals: Array.isArray(raw.retiredPals) ? raw.retiredPals.filter((p) => p && typeof p.palId === "string") : [],
     };
   } catch {
     return structuredClone(EMPTY);
@@ -80,6 +98,75 @@ export function setVenueVideo(locationId: string, enabled: boolean, by: string):
   control.venues[locationId] = { ...current, enabled, updatedBy: by, updatedAt: new Date().toISOString() };
   write(control);
   return control;
+}
+
+/**
+ * The owner's face and background. Validation is the caller's (faces.ts,
+ * backgrounds.ts): this only writes. `null` clears a choice back to the default.
+ */
+export function setVenueLook(
+  locationId: string,
+  look: { faceId?: string | null; backgroundId?: string | null },
+  by: string,
+): VenueVideoSettings {
+  const control = readVideoControl();
+  const current: VenueVideoSettings = control.venues[locationId] ?? {};
+  const next: VenueVideoSettings = { ...current, updatedBy: by, updatedAt: new Date().toISOString() };
+  if (look.faceId !== undefined) {
+    if (look.faceId) next.faceId = look.faceId;
+    else delete next.faceId;
+  }
+  if (look.backgroundId !== undefined) {
+    if (look.backgroundId) next.backgroundId = look.backgroundId;
+    else delete next.backgroundId;
+  }
+  control.venues[locationId] = next;
+  write(control);
+  return next;
+}
+
+export function palKey(locationId: string, faceId: string): string {
+  return `${locationId}|${faceId}`;
+}
+
+export function readVenuePal(locationId: string, faceId: string): VenuePalRecord | undefined {
+  return readVideoControl().pals[palKey(locationId, faceId)];
+}
+
+/** Keep a new shared PAL; the one it replaces (if any) is retired, not deleted yet. */
+export function recordVenuePal(locationId: string, record: VenuePalRecord): void {
+  const control = readVideoControl();
+  const key = palKey(locationId, record.faceId);
+  const previous = control.pals[key];
+  if (previous && previous.palId !== record.palId) {
+    control.retiredPals.push({ palId: previous.palId, at: new Date().toISOString() });
+  }
+  control.pals[key] = record;
+  write(control);
+}
+
+/** Forget a shared PAL Tavus no longer has. */
+export function forgetVenuePal(locationId: string, faceId: string, palId: string): void {
+  const control = readVideoControl();
+  const key = palKey(locationId, faceId);
+  if (control.pals[key]?.palId !== palId) return;
+  delete control.pals[key];
+  write(control);
+}
+
+/** For the checks: forget every shared PAL record (nothing is deleted at Tavus). */
+export function clearVenuePalRecords(): void {
+  const control = readVideoControl();
+  control.pals = {};
+  control.retiredPals = [];
+  write(control);
+}
+
+export function dropRetiredPals(palIds: string[]): void {
+  if (!palIds.length) return;
+  const control = readVideoControl();
+  control.retiredPals = control.retiredPals.filter((p) => !palIds.includes(p.palId));
+  write(control);
 }
 
 export function venueVideoSettings(locationId: string): VenueVideoSettings | undefined {

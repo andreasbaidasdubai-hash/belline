@@ -1,9 +1,14 @@
+import crypto from "node:crypto";
 import { missingVideoConfig, type VideoConfig } from "./config";
+import { dropRetiredPals, forgetVenuePal, readVenuePal, readVideoControl, recordVenuePal } from "./control";
+import { sharedContextBroken } from "./shared-pal";
+import { CONTEXT_TOKEN_LABEL, venuePalKey } from "./tokens";
 import {
   VideoProviderError,
   type CreateSessionInput,
   type CreatedSession,
   type EndSessionInput,
+  type VenuePalSpec,
   type VideoAvatarProvider,
   type VideoEvent,
   type WebhookVerdict,
@@ -17,17 +22,20 @@ import {
  * field that page does not list.
  *
  * **The model is Belline's.** Tavus is pointed at `/api/video/llm` as a custom
- * OpenAI-compatible LLM. The docs do not say that Tavus identifies the
- * conversation in those requests, and a conversation cannot override the PAL's
- * LLM settings — but they do recommend a PAL per session to vary the LLM
- * backend. So by default each session gets its own short-lived PAL whose
- * `api_key` is that session's token, and the PAL is deleted when the session
- * ends. A request that reaches the model route therefore names one venue and
- * one conversation using nothing but documented fields.
+ * OpenAI-compatible LLM. The docs document no per-conversation header,
+ * metadata or LLM override on Create Conversation — only the PAL's static
+ * `layers.llm` (`api_key`, `headers`, `extra_body`, `default_query`).
  *
- * `shared` mode (one PAL, token in `conversational_context`) is the lower
- * latency alternative for staging experiments; the model route refuses a
- * shared-mode request without a valid token in a system message.
+ * **`shared` (default): one PAL per venue and face**, made once (pre-warmed at
+ * boot and when video is switched on) and reused, whose `api_key` is a static
+ * key derived for that venue and face. Each conversation carries its session
+ * token in `conversational_context`; the model route reads it only from a
+ * system message and requires the key and the token to agree on the venue.
+ * That removes a GET and a POST (and a DELETE at the end) from every start.
+ *
+ * **`per_session`**: a short-lived PAL per call whose `api_key` is the session
+ * token, deleted at the end — the rollback, and what a venue falls back to if
+ * a shared request ever arrives without its token (shared-pal.ts).
  *
  * **What is never sent:** recordings are off, perception is off, the camera is
  * never asked for, and the context carries the business's and the agent's
@@ -48,11 +56,19 @@ interface TemplatePal {
   layers: Record<string, unknown>;
 }
 
+/** Tavus saying the PAL a conversation named does not exist (a 404, or a 400 that says so). */
+function missingPal(err: unknown): boolean {
+  if (!(err instanceof VideoProviderError)) return false;
+  return err.status === 404 || (err.status === 400 && /(pal|persona)/i.test(err.message) && /(not found|does not exist|invalid|deleted)/i.test(err.message));
+}
+
 export class TavusProvider implements VideoAvatarProvider {
   readonly name = "tavus" as const;
   readonly capabilities = { perception: false, captions: true };
   private template: TemplatePal | null = null;
   private templateRefresh: Promise<unknown> | null = null;
+  /** Shared PALs being made right now, so a burst of visitors makes one. */
+  private readonly making = new Map<string, Promise<string>>();
 
   constructor(
     private readonly config: VideoConfig,
@@ -65,57 +81,86 @@ export class TavusProvider implements VideoAvatarProvider {
 
   async createSession(input: CreateSessionInput): Promise<CreatedSession> {
     const faceId = input.faceId ?? this.config.tavus.faceId;
-    const perSession = this.config.tavus.palMode === "per_session";
-    let ephemeralPalId: string | undefined;
+    const shared = this.config.tavus.palMode === "shared" && !sharedContextBroken(input.locationId);
+    const spec: VenuePalSpec = { locationId: input.locationId, faceId, languages: input.languages, llmBaseUrl: input.llmBaseUrl, palId: input.palId };
 
-    if (perSession) {
-      ephemeralPalId = await this.createPal(input, faceId);
-    }
-
-    try {
-      const body = {
-        face_id: faceId,
-        pal_id: ephemeralPalId ?? input.palId ?? this.config.tavus.palId,
-        // An id, not the venue: conversation names show in Tavus's dashboard.
-        conversation_name: `belline-${input.sessionId}`,
-        callback_url: input.callbackUrl,
-        custom_greeting: input.greeting,
-        conversational_context: this.context(input, perSession),
-        // Private room: the browser needs the meeting token, which lives as
-        // long as `participant_absent_timeout`.
-        require_auth: true,
-        ...(input.euPolicy ? { policy: "eu" } : {}),
-        ...(this.config.tavus.testMode ? { test_mode: true } : {}),
-        properties: {
-          max_call_duration: input.maxCallSeconds,
-          participant_left_timeout: input.leftTimeoutSeconds,
-          participant_absent_timeout: input.absentTimeoutSeconds,
-          enable_recording: false,
-          enable_closed_captions: true,
-          apply_greenscreen: false,
-          languages: input.languages,
-        },
-      };
-      const created = await this.call<{
-        conversation_id?: string;
-        conversation_url?: string;
-        meeting_token?: string;
-      }>("POST", "/v2/conversations", body);
-
-      if (!created.conversation_id || !created.conversation_url) {
-        throw new VideoProviderError("Tavus returned no conversation.", 502, true);
+    if (!shared) {
+      const ephemeralPalId = await this.createPal(input, faceId);
+      try {
+        return { ...(await this.createConversation(input, faceId, ephemeralPalId, false)), ephemeralPalId, pal: "per_session" };
+      } catch (err) {
+        // Never leave a PAL behind for a conversation that did not happen.
+        await this.deletePal(ephemeralPalId).catch(() => undefined);
+        throw err;
       }
-      return {
-        conversationId: created.conversation_id,
-        roomUrl: created.conversation_url,
-        meetingToken: created.meeting_token,
-        ephemeralPalId,
-      };
-    } catch (err) {
-      // Never leave a PAL behind for a conversation that did not happen.
-      if (ephemeralPalId) await this.deletePal(ephemeralPalId).catch(() => undefined);
-      throw err;
     }
+
+    const venue = await this.venuePal(spec);
+    try {
+      return { ...(await this.createConversation(input, faceId, venue.palId, true)), pal: venue.made ? "shared_cold" : "shared_warm" };
+    } catch (err) {
+      // Somebody deleted the kept PAL in Tavus's dashboard: make it again, once.
+      if (!missingPal(err)) throw err;
+      forgetVenuePal(input.locationId, faceId, venue.palId);
+      const again = await this.venuePal(spec);
+      return { ...(await this.createConversation(input, faceId, again.palId, true)), pal: "shared_cold" };
+    }
+  }
+
+  /**
+   * Make or refresh the venue's shared PAL before any visitor needs it (server
+   * boot, video switched on, a new face chosen), and delete PALs it replaced
+   * once no call can still be using them.
+   */
+  async prewarm(spec: VenuePalSpec): Promise<void> {
+    await this.venuePal(spec);
+    await this.sweepRetiredPals();
+  }
+
+  /** The conversation itself: only the fields that change something. */
+  private async createConversation(input: CreateSessionInput, faceId: string, palId: string, shared: boolean) {
+    const body = {
+      face_id: faceId,
+      pal_id: palId,
+      // An id, not the venue: conversation names show in Tavus's dashboard.
+      conversation_name: `belline-${input.sessionId}`,
+      callback_url: input.callbackUrl,
+      custom_greeting: input.greeting,
+      conversational_context: this.context(input, shared),
+      // Private room: the browser needs the meeting token, which lives as
+      // long as `participant_absent_timeout`.
+      require_auth: true,
+      ...(input.euPolicy ? { policy: "eu" } : {}),
+      ...(this.config.tavus.testMode ? { test_mode: true } : {}),
+      properties: {
+        max_call_duration: input.maxCallSeconds,
+        participant_left_timeout: input.leftTimeoutSeconds,
+        participant_absent_timeout: input.absentTimeoutSeconds,
+        // The default, sent anyway: the privacy review promises it in writing.
+        enable_recording: false,
+        // Not sent: `enable_closed_captions` (Daily's transcription, which the
+        // panel does not read — its captions are Tavus's utterance events) and
+        // `apply_greenscreen: false` (the default).
+        ...(input.greenscreen ? { apply_greenscreen: true } : {}),
+        languages: input.languages,
+      },
+    };
+    const created = await this.call<{
+      conversation_id?: string;
+      conversation_url?: string;
+      meeting_token?: string;
+    }>("POST", "/v2/conversations", body);
+
+    if (!created.conversation_id || !created.conversation_url) {
+      throw new VideoProviderError("Tavus returned no conversation.", 502, true);
+    }
+    return {
+      conversationId: created.conversation_id,
+      roomUrl: created.conversation_url,
+      meetingToken: created.meeting_token,
+      faceId,
+      greenscreen: Boolean(input.greenscreen),
+    };
   }
 
   async endSession(input: EndSessionInput): Promise<void> {
@@ -188,39 +233,118 @@ export class TavusProvider implements VideoAvatarProvider {
    * the PAL's api_key carries the token. In shared mode the token rides here,
    * and the model route only trusts it from a system message.
    */
-  private context(input: CreateSessionInput, perSession: boolean): string {
+  private context(input: CreateSessionInput, shared: boolean): string {
     const lines = [`You are ${input.agentName}, the AI concierge for ${input.businessName}.`];
-    if (!perSession) lines.push(`belline-session: ${input.llmToken}`);
+    if (shared) lines.push(`${CONTEXT_TOKEN_LABEL}: ${input.llmToken}`);
     return lines.join("\n");
   }
 
-  private async createPal(input: CreateSessionInput, faceId: string): Promise<string> {
-    const template = await this.templateLayers(input.palId ?? this.config.tavus.palId);
-    const created = await this.call<{ pal_id?: string; persona_id?: string }>("POST", "/v2/pals", {
-      pal_name: `belline-${input.sessionId}`,
-      // The real instructions are Belline's and live behind the model route.
-      system_prompt: `You are ${input.agentName}, the AI concierge for ${input.businessName}. Your replies come from Belline.`,
+  /**
+   * One PAL body for both kinds. The real instructions are Belline's and live
+   * behind the model route, so nothing here names the business: a venue's
+   * shared PAL changes only when its face, languages, voice or key do.
+   */
+  private async palBody(opts: { name: string; faceId: string; languages: string[]; llmBaseUrl: string; apiKey: string; templatePalId?: string }) {
+    const template = await this.templateLayers(opts.templatePalId ?? this.config.tavus.palId);
+    const voice = this.config.tavus.externalVoice;
+    return {
+      pal_name: opts.name,
+      system_prompt: "You are the AI concierge on this business's website. Your replies come from Belline.",
       pipeline_mode: "full",
-      default_face_id: faceId,
-      languages: input.languages,
+      default_face_id: opts.faceId,
+      languages: opts.languages,
       // Belline discloses itself: the greeting says "AI concierge", the panel
       // labels it permanently, and the prompt answers "are you a person?". A
       // second, Tavus-worded disclosure before the greeting would be a third.
       disclosure_type: "off",
       layers: {
         ...template,
+        // Option (b) of the voice plan: a public provider voice, no key sent
+        // (https://docs.tavus.io/sections/conversational-video-interface/pal/tts).
+        ...(voice ? { tts: { tts_engine: voice.engine, external_voice_id: voice.voiceId } } : {}),
         llm: {
           model: "belline-receptionist",
-          base_url: input.llmBaseUrl,
-          api_key: input.llmToken,
+          base_url: opts.llmBaseUrl,
+          api_key: opts.apiKey,
           speculative_inference: this.config.tavus.speculative,
         },
         perception: { perception_model: "off" },
       },
+    };
+  }
+
+  private async createPal(input: CreateSessionInput, faceId: string): Promise<string> {
+    const body = await this.palBody({
+      name: `belline-${input.sessionId}`,
+      faceId,
+      languages: input.languages,
+      llmBaseUrl: input.llmBaseUrl,
+      apiKey: input.llmToken,
+      templatePalId: input.palId,
     });
+    return this.postPal(body);
+  }
+
+  private async postPal(body: unknown): Promise<string> {
+    const created = await this.call<{ pal_id?: string; persona_id?: string }>("POST", "/v2/pals", body);
     const id = created.pal_id ?? created.persona_id;
     if (!id) throw new VideoProviderError("Tavus returned no PAL.", 502, true);
     return id;
+  }
+
+  /**
+   * The venue's shared PAL for this face: the kept one when nothing it was
+   * built from has changed (no network at all), otherwise a new one, made once
+   * however many visitors ask at the same moment. The one it replaces is
+   * retired and deleted later by `sweepRetiredPals`, never under a live call.
+   */
+  private async venuePal(spec: VenuePalSpec): Promise<{ palId: string; made: boolean }> {
+    const apiKey = venuePalKey(spec.locationId, spec.faceId);
+    const body = await this.palBody({
+      name: `belline-venue-${spec.locationId}`,
+      faceId: spec.faceId,
+      languages: spec.languages,
+      llmBaseUrl: spec.llmBaseUrl,
+      apiKey,
+      templatePalId: spec.palId,
+    });
+    // The key itself is not hashed in: a fingerprint of it is, so a rotated
+    // VIDEO_LLM_SECRET makes a new PAL instead of a PAL whose key is refused.
+    const fingerprint = crypto.createHash("sha256").update(apiKey).digest("hex").slice(0, 16);
+    const hash = crypto
+      .createHash("sha256")
+      .update(JSON.stringify({ ...body, layers: { ...body.layers, llm: { ...body.layers.llm, api_key: fingerprint } } }))
+      .digest("hex");
+
+    const kept = readVenuePal(spec.locationId, spec.faceId);
+    if (kept && kept.hash === hash) return { palId: kept.palId, made: false };
+
+    const flight = `${spec.locationId}|${spec.faceId}|${hash}`;
+    let making = this.making.get(flight);
+    if (!making) {
+      making = this.postPal(body)
+        .then((palId) => {
+          recordVenuePal(spec.locationId, { palId, faceId: spec.faceId, hash, createdAt: new Date().toISOString() });
+          return palId;
+        })
+        .finally(() => this.making.delete(flight));
+      this.making.set(flight, making);
+    }
+    return { palId: await making, made: true };
+  }
+
+  /** Delete replaced PALs once the longest possible call on them is over. */
+  private async sweepRetiredPals(now = Date.now()): Promise<void> {
+    const graceMs = (1800 + 15 * 60) * 1000;
+    const due = readVideoControl().retiredPals.filter((p) => now - Date.parse(p.at) >= graceMs);
+    const gone: string[] = [];
+    for (const pal of due) {
+      await this.deletePal(pal.palId).then(
+        () => gone.push(pal.palId),
+        () => undefined,
+      );
+    }
+    dropRetiredPals(gone);
   }
 
   /**

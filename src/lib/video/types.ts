@@ -22,6 +22,8 @@ export interface ProviderCapabilities {
 export interface CreateSessionInput {
   /** Belline's id for this session. Never the venue's name or anything personal. */
   sessionId: string;
+  /** The venue, for its shared PAL. An id, never shown to Tavus as a name. */
+  locationId: string;
   businessName: string;
   agentName: string;
   /** Spoken by the provider before the model is ever asked anything. */
@@ -45,6 +47,17 @@ export interface CreateSessionInput {
   faceId?: string;
   /** A PAL other than the deployment's default, when a venue has one. */
   palId?: string;
+  /** Ask for a green background the panel replaces (only where the face supports it). */
+  greenscreen?: boolean;
+}
+
+/** What a venue's shared PAL is built from; also what pre-warming needs. */
+export interface VenuePalSpec {
+  locationId: string;
+  faceId: string;
+  languages: string[];
+  llmBaseUrl: string;
+  palId?: string;
 }
 
 export interface CreatedSession {
@@ -55,6 +68,12 @@ export interface CreatedSession {
   meetingToken?: string;
   /** A PAL made for this session alone, to be deleted with it. */
   ephemeralPalId?: string;
+  /** How the PAL was had: the venue's kept one, one made now for the venue, or one for this call alone. */
+  pal?: "shared_warm" | "shared_cold" | "per_session";
+  /** The face actually used. */
+  faceId?: string;
+  /** Whether the conversation was asked for a green background. */
+  greenscreen?: boolean;
 }
 
 export interface EndSessionInput {
@@ -79,6 +98,8 @@ export interface VideoAvatarProvider {
   /** The env var names still missing, never their values. */
   missingConfig(): string[];
   createSession(input: CreateSessionInput): Promise<CreatedSession>;
+  /** Make or refresh a venue's reusable PAL ahead of any visitor. Absent: nothing to warm. */
+  prewarm?(spec: VenuePalSpec): Promise<void>;
   endSession(input: EndSessionInput): Promise<void>;
   /**
    * Is this callback really about a session we started? `expected` is the

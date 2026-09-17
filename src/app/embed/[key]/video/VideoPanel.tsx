@@ -16,6 +16,7 @@ import {
   type CallEvent,
 } from "@/lib/video/client/machine";
 import type { CallAdapter, CallSession } from "@/lib/video/client/calls";
+import Greenscreen from "./Greenscreen";
 
 /**
  * The video receptionist's call view.
@@ -108,6 +109,9 @@ export default function VideoPanel({
   const [note, setNote] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [faceVisible, setFaceVisible] = useState(false);
+  // The venue's background, when the session has one: the face is keyed onto it (Greenscreen.tsx).
+  const [background, setBackground] = useState("");
+  const [keyed, setKeyed] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -308,6 +312,7 @@ export default function VideoPanel({
     }
     const session = data.session;
     sessionRef.current = session;
+    setBackground(session.background?.src ?? "");
     // Closed while the session was being made: it ends now rather than waiting out its timer.
     if (endingRef.current) {
       endOnServer("visitor");
@@ -555,7 +560,7 @@ export default function VideoPanel({
           <div className="bv-circle">
             <video
               ref={videoRef}
-              className={`bv-face${faceVisible ? " is-on" : ""}`}
+              className={`bv-face${faceVisible && !keyed ? " is-on" : ""}`}
               playsInline
               autoPlay
               muted
@@ -565,6 +570,7 @@ export default function VideoPanel({
                 report("first_frame", Date.now() - startedAtRef.current);
               }}
             />
+            {background && <Greenscreen videoRef={videoRef} src={background} live={faceVisible} onKeyed={setKeyed} />}
             {/* The face's voice. Separate from the video so the video can stay muted for autoplay. Played by calls.ts
                 `playVoice`, never by the autoplay attribute, so a refusal is always seen and never silent. */}
             <audio ref={audioRef} onPlaying={() => dispatch({ type: "audio_unlocked" })} />

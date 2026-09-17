@@ -38,6 +38,8 @@ const MOCK_ENV: Record<string, string> = {
   VIDEO_AVATAR_PROVIDER: "mock",
   FLAG_STUBS: "on",
   VIDEO_AVATAR_VENUES: "",
+  // Many cases start sessions on the same two venues on the same day.
+  VIDEO_MAX_SESSIONS_PER_DAY: "1000",
 };
 
 function setEnv(env: Record<string, string | undefined>): () => void {
@@ -161,6 +163,7 @@ function fakeTavus(respond: (method: string, url: string, body: any) => { status
   return { calls, fetchImpl };
 }
 
+/** The per-call PAL mode (the rollback); the shared default has its own cases (4b–4f). */
 const TAVUS_ENV = {
   VIDEO_AVATAR_PROVIDER: "tavus",
   TAVUS_API_KEY: SENTINEL_KEY,
@@ -168,7 +171,9 @@ const TAVUS_ENV = {
   TAVUS_PAL_ID: "p_template",
   VIDEO_LLM_SECRET: "check-video-secret",
   VIDEO_PUBLIC_ORIGIN: "https://app.example",
+  VIDEO_TAVUS_PAL_MODE: "per_session",
 };
+const SHARED_ENV = { ...TAVUS_ENV, VIDEO_TAVUS_PAL_MODE: "shared", VIDEO_MAX_SESSIONS_PER_DAY: "1000", VIDEO_MAX_CONCURRENT_PER_VENUE: "5" };
 
 function tavusHappyPath(method: string, url: string) {
   if (method === "GET" && url.includes("/v2/pals/p_template")) return { status: 200, body: { layers: { tts: { voice_id: "v1" }, llm: { model: "x" } } } };
@@ -327,6 +332,8 @@ await test("4. session creation with a mocked Tavus: documented fields only, a P
     assert.equal(conversation.body.require_auth, true);
     assert.equal(conversation.body.properties.enable_recording, false);
     assert.equal(conversation.body.properties.max_call_duration, 300);
+    assert.equal("enable_closed_captions" in conversation.body.properties, false, "leaner: Daily captions are not read by the panel");
+    assert.equal("apply_greenscreen" in conversation.body.properties, false, "a Phoenix-4.5 face gets no green screen, and the default is not sent");
     assert.deepEqual(conversation.body.properties.languages, ["en"]);
     assert.match(conversation.body.custom_greeting, /^Hi, I'm Aria, the AI concierge for .+\. How may I help you today\?$|^Hi, I'm .+, the AI concierge for .+\. How may I help you today\?$/);
     assert.match(conversation.body.callback_url, /^https:\/\/app\.example\/api\/video\/webhook\/tavus\?t=bvt1\.webhook\./);
@@ -354,7 +361,7 @@ await test("4a. the owner's template PAL is fetched once: after that a session n
   }) as typeof fetch;
   const provider = new TavusProvider(videoConfig({ ...process.env, ...TAVUS_ENV }), fetchImpl);
   const input = {
-    sessionId: "vs_t1", businessName: "X", agentName: "Belle", greeting: "Hi", languages: ["en"], maxCallSeconds: 300,
+    sessionId: "vs_t1", locationId: A.id, businessName: "X", agentName: "Belle", greeting: "Hi", languages: ["en"], maxCallSeconds: 300,
     absentTimeoutSeconds: 60, leftTimeoutSeconds: 10, llmToken: "t", llmBaseUrl: "https://app.example/api/video/llm", callbackUrl: "https://app.example/cb", euPolicy: false,
   };
   await provider.createSession(input);
@@ -371,41 +378,231 @@ await test("4a. the owner's template PAL is fetched once: after that a session n
   assert.deepEqual(pal.body.layers.tts, { voice_id: "v1" }, "with the voice from the kept copy");
 });
 
-await test("4b. shared-PAL mode puts the token in the context, and the model route trusts it only from a system message", async () => {
-  const env = { ...process.env, ...TAVUS_ENV, VIDEO_TAVUS_PAL_MODE: "shared", VIDEO_LLM_SHARED_KEY: "shared-key-1" };
-  const fake = fakeTavus(tavusHappyPath);
-  const provider = new TavusProvider(videoConfig(env), fake.fetchImpl);
-  const restore = setEnv({ ...TAVUS_ENV, VIDEO_TAVUS_PAL_MODE: "shared", VIDEO_LLM_SHARED_KEY: "shared-key-1" });
-  try {
-    const result = await sessions.startVideoSession(getLocation(A.id)!, "visitor-4b", { provider });
-    assert.ok(result.ok);
-    if (!result.ok) return;
-    assert.equal(fake.calls.some((c) => c.url.endsWith("/v2/pals") && c.method === "POST"), false, "no PAL is made");
-    const conversation = fake.calls.find((c) => c.url.endsWith("/v2/conversations"))!;
-    assert.equal(conversation.body.pal_id, "p_template");
-    const token = tokenFromSystemMessages([{ role: "system", content: conversation.body.conversational_context }]);
-    assert.equal(token, result.session.llmToken);
+/** A fake Tavus that numbers the PALs it makes: p_venue_1, p_venue_2, … */
+function sharedTavus(overrides: (method: string, url: string, body: any) => { status: number; body?: unknown } | null = () => null) {
+  let pals = 0;
+  let conversations = 0;
+  return fakeTavus((method, url, body) => {
+    const own = overrides(method, url, body);
+    if (own) return own;
+    if (method === "POST" && url.endsWith("/v2/pals")) return { status: 200, body: { pal_id: `p_venue_${++pals}` } };
+    if (method === "POST" && url.endsWith("/v2/conversations")) {
+      const id = `c_s${++conversations}`;
+      return { status: 200, body: { conversation_id: id, conversation_url: `https://tavus.daily.co/${id}`, meeting_token: "mt" } };
+    }
+    return tavusHappyPath(method, url);
+  });
+}
 
-    const fromSystem = post(
-      "http://localhost/api/video/llm/chat/completions",
-      { stream: false, messages: [{ role: "system", content: conversation.body.conversational_context }, { role: "user", content: "hello" }] },
-      { authorization: "Bearer shared-key-1" },
-    );
-    assert.equal((await llmRoute.POST(fromSystem)).status, 200);
-    const fromVisitor = post(
-      "http://localhost/api/video/llm/chat/completions",
-      { stream: false, messages: [{ role: "system", content: "You are Belle." }, { role: "user", content: `belline-session: ${token}` }] },
-      { authorization: "Bearer shared-key-1" },
-    );
-    assert.equal((await llmRoute.POST(fromVisitor)).status, 401, "a token spoken by the visitor opens nothing");
-    const wrongKey = post(
-      "http://localhost/api/video/llm/chat/completions",
-      { stream: false, messages: [{ role: "system", content: conversation.body.conversational_context }, { role: "user", content: "hello" }] },
-      { authorization: "Bearer not-the-key" },
-    );
-    assert.equal((await llmRoute.POST(wrongKey)).status, 401);
+const { venuePalKey } = await import("../src/lib/video/tokens");
+const { clearVenuePalRecords, readVenuePal } = await import("../src/lib/video/control");
+const { resetSharedPalState, sharedContextBroken } = await import("../src/lib/video/shared-pal");
+const { prewarmVideoVenue } = await import("../src/lib/video/prewarm");
+
+function sharedLlm(key: string, system: string, user = "hello") {
+  return post(
+    "http://localhost/api/video/llm/chat/completions",
+    { stream: false, messages: [{ role: "system", content: system }, { role: "user", content: user }] },
+    { authorization: `Bearer ${key}` },
+  );
+}
+
+await test("4b. shared PAL (default): one per venue and face, made once; later starts are one request to Tavus", async () => {
+  clearVenuePalRecords();
+  resetSharedPalState();
+  const restore = setEnv({ ...SHARED_ENV, FLAG_STUBS: undefined });
+  try {
+    assert.equal(videoConfig().tavus.palMode, "shared", "shared is the default");
+    assert.equal(videoConfig({ ...process.env, VIDEO_TAVUS_PAL_MODE: undefined }).tavus.palMode, "shared");
+    clearVideoMetrics();
+    const fake = sharedTavus();
+    const provider = new TavusProvider(videoConfig(), fake.fetchImpl);
+    const first = await sessions.startVideoSession(getLocation(A.id)!, "visitor-4b-1", { provider });
+    assert.ok(first.ok);
+    if (!first.ok) return;
+    const pal = fake.calls.find((c) => c.method === "POST" && c.url.endsWith("/v2/pals"))!;
+    assert.equal(pal.body.pal_name, `belline-venue-${A.id}`);
+    assert.equal(pal.body.default_face_id, "rf90eb925bd8");
+    assert.equal(pal.body.layers.llm.api_key, venuePalKey(A.id, "rf90eb925bd8"), "a static key derived for this venue and face");
+    assert.equal(pal.body.system_prompt.includes(A.name), false, "nothing venue-specific that would churn the PAL");
+    assert.deepEqual(pal.body.layers.tts, { voice_id: "v1" }, "the template's voice carries over");
+    const convo = fake.calls.find((c) => c.url.endsWith("/v2/conversations"))!;
+    assert.equal(convo.body.pal_id, "p_venue_1");
+    assert.equal(tokenFromSystemMessages([{ role: "system", content: convo.body.conversational_context }]), first.session.llmToken);
+    assert.equal(readVenuePal(A.id, "rf90eb925bd8")?.palId, "p_venue_1");
+
+    const before = fake.calls.length;
+    const second = await sessions.startVideoSession(getLocation(A.id)!, "visitor-4b-2", { provider });
+    assert.ok(second.ok);
+    const made = fake.calls.slice(before);
+    assert.deepEqual(made.map((c) => `${c.method} ${new URL(c.url).pathname}`), ["POST /v2/conversations"], "a warm start is one request");
+    assert.equal(made[0].body.pal_id, "p_venue_1");
+
+    const timings = recentVideoMetrics().filter((m) => m.name === "session_create_ms");
+    assert.deepEqual(timings.map((m) => m.detail), ["shared_cold", "shared_warm"]);
+    assert.ok(timings.every((m) => typeof m.ms === "number"));
+
+    // Ending a shared-PAL call ends the conversation and leaves the PAL alone.
+    await sessions.endVideoSession(first.session.id, "done", { by: "visitor", provider });
+    assert.equal(fake.calls.some((c) => c.method === "DELETE" && c.url.includes("/v2/pals/")), false);
+    assert.ok(fake.calls.some((c) => c.url.endsWith(`/v2/conversations/${first.session.conversationId}/end`)));
+
+    // Concurrent cold starts at another venue make one PAL between them.
+    const burst = sharedTavus();
+    const other = new TavusProvider(videoConfig(), burst.fetchImpl);
+    const both = await Promise.all([
+      sessions.startVideoSession(getLocation(B.id)!, "visitor-4b-b1", { provider: other }),
+      sessions.startVideoSession(getLocation(B.id)!, "visitor-4b-b2", { provider: other }),
+    ]);
+    assert.ok(both.every((r) => r.ok));
+    assert.equal(burst.calls.filter((c) => c.method === "POST" && c.url.endsWith("/v2/pals")).length, 1);
   } finally {
     restore();
+  }
+});
+
+await test("4c. shared PAL security: the token only from a system message, and key, token and session must agree on the venue", async () => {
+  clearVenuePalRecords();
+  resetSharedPalState();
+  const restore = setEnv({ ...SHARED_ENV, FLAG_STUBS: undefined });
+  try {
+    const fake = sharedTavus();
+    const provider = new TavusProvider(videoConfig(), fake.fetchImpl);
+    const a = await sessions.startVideoSession(getLocation(A.id)!, "visitor-4c-a", { provider });
+    const b = await sessions.startVideoSession(getLocation(B.id)!, "visitor-4c-b", { provider });
+    assert.ok(a.ok && b.ok);
+    if (!a.ok || !b.ok) return;
+    const contextOf = (conversationId: string) =>
+      fake.calls.find((c) => c.url.endsWith("/v2/conversations") && c.body.conversation_name === `belline-${conversationId}`)!.body.conversational_context as string;
+    const ctxA = contextOf(a.session.id);
+    const ctxB = contextOf(b.session.id);
+    const keyA = venuePalKey(A.id, "rf90eb925bd8");
+    const keyB = venuePalKey(B.id, "rf90eb925bd8");
+
+    assert.equal((await llmRoute.POST(sharedLlm(keyA, ctxA))).status, 200, "A's PAL with A's context");
+    assert.equal((await llmRoute.POST(sharedLlm(keyB, ctxB))).status, 200, "B's PAL with B's context");
+
+    // The token from anything but a system message.
+    assert.equal((await llmRoute.POST(sharedLlm(keyA, "You are Belle.", ctxA))).status, 401, "a token in the visitor's words opens nothing");
+    // (With no token in the system messages that also trips A's breaker — case 4d.)
+    resetSharedPalState();
+    // A forged token: A's, edited to name B's venue or B's session.
+    const parts = a.session.llmToken.split(".");
+    const forgedVenue = ctxA.replace(a.session.llmToken, [...parts.slice(0, 3), B.id, ...parts.slice(4)].join("."));
+    const forgedSession = ctxA.replace(a.session.llmToken, [parts[0], parts[1], b.session.id, ...parts.slice(3)].join("."));
+    assert.equal((await llmRoute.POST(sharedLlm(keyA, forgedVenue))).status, 401);
+    assert.equal((await llmRoute.POST(sharedLlm(keyB, forgedSession))).status, 401);
+    // Validly signed, but another venue's: B's token through A's PAL, and A's through B's.
+    assert.equal((await llmRoute.POST(sharedLlm(keyA, ctxB))).status, 401, "another venue's token through this venue's PAL");
+    assert.equal((await llmRoute.POST(sharedLlm(keyB, ctxA))).status, 401);
+    // A key signed with another secret, or a made-up one.
+    assert.equal((await llmRoute.POST(sharedLlm(venuePalKey(A.id, "rf90eb925bd8", { VIDEO_LLM_SECRET: "someone-else" }), ctxA))).status, 401);
+    assert.equal((await llmRoute.POST(sharedLlm("bvk1_nonsense", ctxA))).status, 401);
+    // The same token, but the face the key was made for is not the session's.
+    assert.equal((await llmRoute.POST(sharedLlm(venuePalKey(A.id, "rcc28da86847"), ctxA))).status, 401);
+    // None of that opened anybody's circuit breaker: those carried a token.
+    assert.equal(sharedContextBroken(A.id) || sharedContextBroken(B.id), false);
+    // B's transcript holds only B's words.
+    assert.equal(getCall(b.session.callId)!.transcript.filter((t) => t.role === "caller").length, 1);
+  } finally {
+    restore();
+  }
+});
+
+await test("4d. a shared request with no token in any system message falls the venue back to a PAL per call", async () => {
+  clearVenuePalRecords();
+  resetSharedPalState();
+  const restore = setEnv({ ...SHARED_ENV, FLAG_STUBS: undefined });
+  try {
+    const fake = sharedTavus();
+    const provider = new TavusProvider(videoConfig(), fake.fetchImpl);
+    const first = await sessions.startVideoSession(getLocation(A.id)!, "visitor-4d-1", { provider });
+    assert.ok(first.ok);
+    const keyA = venuePalKey(A.id, "rf90eb925bd8");
+    // Tavus put the context somewhere else: refused, and noted.
+    const res = await llmRoute.POST(sharedLlm(keyA, "You are the AI concierge on this business's website."));
+    assert.equal(res.status, 401);
+    assert.equal(sharedContextBroken(A.id), true);
+    assert.equal(sharedContextBroken(B.id), false, "only that venue");
+    const before = fake.calls.length;
+    const next = await sessions.startVideoSession(getLocation(A.id)!, "visitor-4d-2", { provider });
+    assert.ok(next.ok);
+    if (!next.ok) return;
+    const pal = fake.calls.slice(before).find((c) => c.method === "POST" && c.url.endsWith("/v2/pals"))!;
+    assert.match(pal.body.pal_name, /^belline-vs_/, "a PAL for this call alone");
+    assert.equal(verifyVideoToken(pal.body.layers.llm.api_key, "llm")?.sessionId, next.session.id);
+  } finally {
+    resetSharedPalState();
+    restore();
+  }
+});
+
+await test("4e. a changed face, voice or language makes a new shared PAL; the old one is deleted only after calls on it are over", async () => {
+  clearVenuePalRecords();
+  resetSharedPalState();
+  const restore = setEnv({ ...SHARED_ENV, FLAG_STUBS: undefined });
+  try {
+    const fake = sharedTavus();
+    const provider = new TavusProvider(videoConfig(), fake.fetchImpl);
+    await sessions.startVideoSession(getLocation(A.id)!, "visitor-4e-1", { provider });
+    const spec = { locationId: A.id, faceId: "rf90eb925bd8", languages: ["de"], llmBaseUrl: "https://app.example/api/video/llm" };
+    await provider.prewarm(spec);
+    assert.equal(readVenuePal(A.id, "rf90eb925bd8")?.palId, "p_venue_2", "a new language, a new PAL");
+    const retired = readVideoControl().retiredPals;
+    assert.deepEqual(retired.map((p) => p.palId), ["p_venue_1"]);
+    assert.equal(fake.calls.some((c) => c.method === "DELETE"), false, "not deleted while a call may still be on it");
+    await provider.prewarm(spec);
+    assert.equal(fake.calls.filter((c) => c.method === "POST" && c.url.endsWith("/v2/pals")).length, 2, "unchanged: nothing made");
+
+    // An hour later the sweep deletes it.
+    const control = readVideoControl();
+    control.retiredPals = control.retiredPals.map((p) => ({ ...p, at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() }));
+    fs.writeFileSync(path.join(process.env.DATA_DIR!, "video.json"), JSON.stringify(control));
+    await provider.prewarm(spec);
+    assert.ok(fake.calls.some((c) => c.method === "DELETE" && c.url.endsWith("/v2/pals/p_venue_1")));
+    assert.deepEqual(readVideoControl().retiredPals, []);
+
+    // A PAL deleted in Tavus's dashboard is made again, once, inside the same start.
+    clearVenuePalRecords();
+    let deletedInDashboard = false;
+    const gone = sharedTavus((method, url, body) => {
+      if (deletedInDashboard && method === "POST" && url.endsWith("/v2/conversations") && body.pal_id === "p_venue_1") {
+        return { status: 404, body: { message: "PAL not found" } };
+      }
+      return null;
+    });
+    const again = new TavusProvider(videoConfig(), gone.fetchImpl);
+    assert.ok((await sessions.startVideoSession(getLocation(A.id)!, "visitor-4e-2", { provider: again })).ok);
+    deletedInDashboard = true;
+    const rescued = await sessions.startVideoSession(getLocation(A.id)!, "visitor-4e-3", { provider: again });
+    assert.ok(rescued.ok, "the visitor still got a call");
+    assert.equal(readVenuePal(A.id, "rf90eb925bd8")?.palId, "p_venue_2");
+    assert.equal(gone.calls.filter((c) => c.method === "POST" && c.url.endsWith("/v2/pals")).length, 2);
+  } finally {
+    restore();
+  }
+});
+
+await test("4f. pre-warming: at boot and when video is allowed, for listed venues only — never from a page or the widget config", async () => {
+  clearVenuePalRecords();
+  resetSharedPalState();
+  const env = { ...process.env, ...SHARED_ENV, FLAG_VIDEO_AVATAR: "on", FLAG_STUBS: undefined };
+  const fake = sharedTavus();
+  const provider = new TavusProvider(videoConfig(env), fake.fetchImpl);
+  assert.equal(await prewarmVideoVenue(getLocation(A.id)!, { env, provider }), "warmed");
+  assert.equal(readVenuePal(A.id, "rf90eb925bd8")?.palId, "p_venue_1");
+  assert.equal(await prewarmVideoVenue(getLocation(OFF.id)!, { env, provider }), "skipped", "not on the list");
+  assert.equal(await prewarmVideoVenue(getLocation(A.id)!, { env: { ...env, VIDEO_TAVUS_PAL_MODE: "per_session" }, provider }), "skipped");
+  assert.equal(await prewarmVideoVenue(getLocation(A.id)!, { env: { ...env, FLAG_VIDEO_AVATAR: "off" }, provider }), "skipped");
+  const failing = new TavusProvider(videoConfig(env), sharedTavus(() => ({ status: 500 })).fetchImpl);
+  clearVenuePalRecords();
+  assert.equal(await prewarmVideoVenue(getLocation(A.id)!, { env, provider: failing }), "failed", "quietly");
+
+  // Wired where it should be, and nowhere a visitor's page load reaches.
+  assert.match(read("server.ts"), /prewarmAllowlistedVenues\(\)/);
+  assert.match(read("src/app/api/sales/video/route.ts"), /prewarmVideoVenueSoon\(/);
+  for (const file of ["src/app/api/embed/[key]/config/route.ts", "src/app/embed/[key]/video/page.tsx", "src/app/api/video/[key]/session/route.ts"]) {
+    assert.equal(/prewarm/i.test(read(file)), false, `${file} must not pre-warm`);
   }
 });
 
@@ -587,6 +784,368 @@ await test("7c. the model route answers while the session is still being created
   const refused = ask();
   assert.equal(refused.ok, false);
   if (!refused.ok) assert.equal(refused.response.status, 410);
+});
+
+// ---------------------------------------------------------------------------
+console.log("\n  Faster replies: the fast model first, the venue's model for any tool");
+
+const { AgentSession, setAnthropicClientForTests, startsToolUse } = await import("../src/lib/agent/runtime");
+const { videoFastModel, VIDEO_FAST_MODEL_DEFAULT } = await import("../src/lib/video/model-policy");
+const { runVideoTurn } = await import("../src/lib/video/engine");
+
+type Scripted = { events: any[]; final: any };
+/** A scripted Anthropic client: each request is answered by `script`, and recorded. */
+function fakeClaude(script: (params: any, index: number) => Scripted) {
+  const requests: any[] = [];
+  const aborted: boolean[] = [];
+  const client = {
+    messages: {
+      stream(params: any) {
+        const index = requests.push(params) - 1;
+        aborted[index] = false;
+        const { events, final } = script(params, index);
+        return {
+          abort() {
+            aborted[index] = true;
+          },
+          async *[Symbol.asyncIterator]() {
+            for (const event of events) {
+              if (aborted[index]) return;
+              yield event;
+            }
+          },
+          async finalMessage() {
+            return final;
+          },
+        };
+      },
+    },
+  };
+  return { requests, aborted, client };
+}
+const usage = { input_tokens: 100, output_tokens: 20 };
+const textTurn = (text: string): Scripted => ({
+  events: [
+    { type: "message_start", message: { usage } },
+    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
+  ],
+  final: { stop_reason: "end_turn", content: [{ type: "text", text }], usage },
+});
+const toolTurn = (said: string, name: string, input: Record<string, unknown>, id = "tu_1"): Scripted => ({
+  events: [
+    { type: "message_start", message: { usage } },
+    ...(said ? [{ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }, { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: said } }] : []),
+    { type: "content_block_start", index: 1, content_block: { type: "tool_use", id, name, input: {} } },
+    { type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: JSON.stringify(input) } },
+  ],
+  final: { stop_reason: "tool_use", content: [...(said ? [{ type: "text", text: said }] : []), { type: "tool_use", id, name, input }], usage },
+});
+
+async function withClaude<T>(fake: { client: unknown }, fn: () => Promise<T>): Promise<T> {
+  const restore = setEnv({ ANTHROPIC_API_KEY: "sk-ant-check-only-never-sent" });
+  setAnthropicClientForTests(fake.client);
+  try {
+    return await fn();
+  } finally {
+    setAnthropicClientForTests(null);
+    restore();
+  }
+}
+
+async function drain(agent: InstanceType<typeof AgentSession>, text: string) {
+  const events: any[] = [];
+  for await (const event of agent.respond(text)) events.push(event);
+  return events;
+}
+
+const onSonnet = (id: string) => {
+  const location = getLocation(id)!;
+  return { ...location, agent: { ...location.agent, model: "claude-sonnet-5" } };
+};
+
+await test("routing policy: Haiku first for a venue on a slower model, nothing changes for one already on it, and it can be switched off", () => {
+  assert.equal(VIDEO_FAST_MODEL_DEFAULT, "claude-haiku-4-5");
+  assert.equal(videoFastModel(onSonnet(A.id), {}), "claude-haiku-4-5");
+  assert.equal(videoFastModel({ agent: { ...A.agent, model: "claude-haiku-4-5" } }, {}), undefined, "already fast");
+  assert.equal(videoFastModel(onSonnet(A.id), { VIDEO_FAST_MODEL: "off" }), undefined);
+  assert.equal(videoFastModel(onSonnet(A.id), { VIDEO_FAST_MODEL: "gpt-4o; rm -rf" }), undefined, "only an Anthropic model id");
+  assert.equal(startsToolUse({ type: "content_block_start", content_block: { type: "tool_use" } }), true);
+  assert.equal(startsToolUse({ type: "content_block_start", content_block: { type: "text" } }), false);
+  // Only the video channel is given a fast model.
+  const engine = read("src/lib/video/engine.ts");
+  assert.match(engine, /fastModel: videoFastModel\(location\)/);
+  for (const file of ["src/lib/voice/session.ts", "server.ts"]) assert.equal(read(file).includes("fastModel"), false, file);
+});
+
+await test("small talk and FAQ answers come from the fast model alone, capped short", async () => {
+  const location = onSonnet(A.id);
+  const fake = fakeClaude(() => textTurn("We're open from nine until six, every day. Anything else?"));
+  await withClaude(fake, async () => {
+    const call = startCall(location, "embed", "website");
+    const agent = new AgentSession(location, call, { channel: "video", fastModel: videoFastModel(location, {}) });
+    const events = await drain(agent, "What are your hours?");
+    assert.deepEqual(fake.requests.map((r) => r.model), ["claude-haiku-4-5"]);
+    assert.equal(fake.requests[0].max_tokens, 400);
+    assert.equal("thinking" in fake.requests[0], false, "Haiku takes no thinking parameter");
+    assert.ok(fake.requests[0].tools.length > 0, "the fast pass sees the tools, so it can say it needs one");
+    assert.match(events.filter((e) => e.type === "sentence").map((e) => e.text).join(" "), /nine until six/);
+    assert.equal(call.toolCalls.length, 0);
+  });
+});
+
+await test("a turn that needs a tool is handed to the venue's model: the fast call is never run, nothing said twice, history clean", async () => {
+  const location = onSonnet(A.id);
+  const fake = fakeClaude((params, index) => {
+    if (index === 0) return toolTurn("Sure, one moment.", "take_message", { caller_name: "Fast Model", message: "should never run" });
+    if (index === 1) return toolTurn("", "take_message", { caller_name: "Sam Lee", callback_number: "+971501234567", message: "Call back about a group booking", urgency: "normal" }, "tu_real");
+    return textTurn("I've passed that on, and someone will call you back.");
+  });
+  await withClaude(fake, async () => {
+    const call = startCall(location, "embed", "website");
+    const agent = new AgentSession(location, call, { channel: "video", fastModel: videoFastModel(location, {}) });
+    const events = await drain(agent, "Can someone call me back? I'm Sam Lee, +971 50 123 4567, about a group booking.");
+    assert.deepEqual(fake.requests.map((r) => r.model), ["claude-haiku-4-5", "claude-sonnet-5", "claude-sonnet-5"]);
+    assert.equal(fake.aborted[0], true, "the fast stream is dropped");
+    assert.equal(fake.requests[1].max_tokens, 2048);
+    assert.ok(fake.requests[1].thinking, "the venue's model keeps its own parameters");
+    const volatile = fake.requests[1].system.at(-1).text as string;
+    assert.match(volatile, /already said to the visitor: "Sure, one moment\."/);
+    // Only the venue's model's tool call ran.
+    assert.deepEqual(call.toolCalls.map((t) => (t.input as { caller_name?: string }).caller_name), ["Sam Lee"]);
+    const said = events.filter((e) => e.type === "sentence").map((e) => e.text);
+    assert.equal(said.filter((s) => /one moment/.test(s)).length, 1, "nothing said twice");
+    // The history holds no trace of the fast pass's tool call.
+    const history = JSON.stringify(agent.history());
+    assert.equal(history.includes("should never run"), false);
+    assert.equal(history.includes("tu_1"), false);
+    // The next turn starts on the fast model again, and the note is gone.
+    await drain(agent, "Thanks!");
+    assert.equal(fake.requests[3].model, "claude-haiku-4-5");
+    assert.equal(/already said/.test(fake.requests[3].system.at(-1).text), false);
+  });
+});
+
+await test("the guards are unchanged under routing: authority rules before any model, honesty repair on the fast model's words", async () => {
+  // An invented time from the fast model is repaired before it is spoken.
+  const started = await sessions.startVideoSession(getLocation(A.id)!, "visitor-route-guard");
+  assert.ok(started.ok);
+  if (!started.ok) return;
+  const location = onSonnet(A.id);
+  const fake = fakeClaude(() => textTurn("I have a table for you at 9:15 PM tonight."));
+  await withClaude(fake, async () => {
+    const call = getCall(started.session.callId)!;
+    started.session.agent = new AgentSession(location, call, { channel: "video", fastModel: videoFastModel(location, {}) });
+    let out = "";
+    await runVideoTurn(started.session, location, "Do you have anything tonight?", new AbortController().signal, (t) => (out += t));
+    assert.equal(fake.requests[0].model, "claude-haiku-4-5");
+    assert.equal(/9:15|nine fifteen/i.test(out), false, out);
+  });
+
+  // An emergency at a clinic never reaches either model.
+  const clinic = getLocation("loc_meridian")!;
+  setVenueVideo(clinic.id, true, "check");
+  try {
+    const onClinic = await sessions.startVideoSession(clinic, "visitor-route-auth");
+    assert.ok(onClinic.ok);
+    if (!onClinic.ok) return;
+    const never = fakeClaude(() => textTurn("should not be asked"));
+    await withClaude(never, async () => {
+      const slow = { ...clinic, agent: { ...clinic.agent, model: "claude-sonnet-5" } };
+      onClinic.session.agent = new AgentSession(slow, getCall(onClinic.session.callId)!, { channel: "video", fastModel: videoFastModel(slow, {}) });
+      let out = "";
+      await runVideoTurn(onClinic.session, slow, "I have chest pain and I can't breathe", new AbortController().signal, (t) => (out += t));
+      assert.equal(never.requests.length, 0);
+      assert.ok(out.length > 0);
+    });
+  } finally {
+    setVenueVideo(clinic.id, false, "check");
+  }
+});
+
+// ---------------------------------------------------------------------------
+console.log("\n  The face and the background");
+
+const { venueLook, CURATED_FACES, confirmedFaces, resetFaceCache } = await import("../src/lib/video/faces");
+const { VIDEO_BACKGROUNDS, DEFAULT_BACKGROUND_ID } = await import("../src/lib/video/backgrounds");
+const { readLook, saveLook } = await import("../src/lib/video/look-settings");
+const { setVenueLook, venueVideoSettings } = await import("../src/lib/video/control");
+const { venueAllowlisted } = await import("../src/lib/video/availability");
+const { listUsers } = await import("../src/lib/store");
+const { canEditAgent } = await import("../src/lib/auth");
+const chroma = await import("../src/lib/video/client/chroma");
+
+const PHOENIX4_RUBY = "rcc28da86847";
+
+await test("the look: a Phoenix-4 face takes the Belline background by default; Phoenix-4.5 and unknown faces keep their room; bad ids fall back", () => {
+  const tavus = videoConfig({ ...TAVUS_ENV });
+  assert.ok(CURATED_FACES.length >= 8 && CURATED_FACES.length <= 12);
+  assert.equal(new Set(CURATED_FACES.map((f) => f.id)).size, CURATED_FACES.length);
+  assert.ok(VIDEO_BACKGROUNDS.filter((b) => b.src).length >= 3 && VIDEO_BACKGROUNDS.length <= 6);
+  for (const b of VIDEO_BACKGROUNDS.filter((x) => x.src)) {
+    const file = path.join(ROOT, "public", b.src);
+    assert.ok(fs.existsSync(file), b.src);
+    assert.ok(fs.statSync(file).size < 120 * 1024, `${b.src} is small`);
+  }
+  assert.deepEqual(
+    (({ faceId, greenscreen, background }) => ({ faceId, greenscreen, bg: background.id }))(venueLook(undefined, tavus)),
+    { faceId: "rf90eb925bd8", greenscreen: false, bg: "original" },
+    "the deployment's Phoenix-4.5 face: Tavus cannot key it",
+  );
+  const p4 = venueLook({ faceId: PHOENIX4_RUBY }, tavus);
+  assert.equal(p4.faceId, PHOENIX4_RUBY);
+  assert.equal(p4.greenscreen, true);
+  assert.equal(p4.background.id, DEFAULT_BACKGROUND_ID);
+  assert.equal(venueLook({ faceId: PHOENIX4_RUBY, backgroundId: "original" }, tavus).greenscreen, false);
+  assert.equal(venueLook({ faceId: PHOENIX4_RUBY, backgroundId: "evening-navy" }, tavus).background.id, "evening-navy");
+  // Something not curated in the file (edited by hand, or a face since removed) is never used.
+  assert.equal(venueLook({ faceId: "r_arbitrary_1", backgroundId: "javascript:x" }, tavus).faceId, "rf90eb925bd8");
+  assert.equal(venueLook({ faceId: PHOENIX4_RUBY, backgroundId: "javascript:x" }, tavus).background.id, DEFAULT_BACKGROUND_ID);
+});
+
+await test("a Phoenix-4 face asks Tavus for the green screen and hands the panel its background; a Phoenix-4.5 face does neither", async () => {
+  const restore = setEnv({ ...TAVUS_ENV, FLAG_STUBS: undefined });
+  try {
+    setVenueLook(A.id, { faceId: PHOENIX4_RUBY, backgroundId: "belline-light" }, "check");
+    const fake = fakeTavus(tavusHappyPath);
+    const provider = new TavusProvider(videoConfig(), fake.fetchImpl);
+    const keyed = await sessions.startVideoSession(getLocation(A.id)!, "visitor-look-1", { provider });
+    assert.ok(keyed.ok);
+    if (!keyed.ok) return;
+    const convo = fake.calls.find((c) => c.url.endsWith("/v2/conversations"))!;
+    assert.equal(convo.body.face_id, PHOENIX4_RUBY);
+    assert.equal(convo.body.properties.apply_greenscreen, true);
+    assert.deepEqual(keyed.client.background, { id: "belline-light", src: "/video/backgrounds/belline-light.jpg", tone: "light" });
+
+    setVenueLook(A.id, { faceId: "rf90eb925bd8" }, "check");
+    const plain = fakeTavus(tavusHappyPath);
+    const raw = await sessions.startVideoSession(getLocation(A.id)!, "visitor-look-2", { provider: new TavusProvider(videoConfig(), plain.fetchImpl) });
+    assert.ok(raw.ok);
+    if (!raw.ok) return;
+    assert.equal("apply_greenscreen" in plain.calls.find((c) => c.url.endsWith("/v2/conversations"))!.body.properties, false);
+    assert.equal(raw.client.background, undefined);
+  } finally {
+    setVenueLook(A.id, { faceId: null, backgroundId: null }, "check");
+    restore();
+  }
+});
+
+await test("owners choose from the curated faces and known backgrounds only, for their own venue only; saving never switches video on or off", async () => {
+  const person = (location: typeof A, role = "owner") => ({ ...(listUsers()[0] ?? {}), id: `u_check_${location.id}`, tenantId: location.tenantId, role, locationIds: [location.id], name: "Check Owner", email: `owner@${location.id}.example` }) as any;
+  const owner = person(A);
+  assert.ok(owner, "a fixture owner who can edit A");
+  const foreign = ["loc_belline", B.id, OFF.id].find((id) => !canEditAgent(owner, id));
+  const confirmedNone = async () => null;
+  const deps = { config: videoConfig({ ...TAVUS_ENV }), faces: confirmedNone, prewarm: () => undefined };
+
+  // Nobody signed in, staff at the venue, another venue.
+  assert.equal((await readLook(null, A.id, deps)).status, 401);
+  assert.equal((await saveLook({ ...owner, role: "staff" }, { locationId: A.id, faceId: PHOENIX4_RUBY }, deps)).status, 403);
+  if (foreign) {
+    assert.equal((await readLook(owner, foreign, deps)).status, 403, "another tenant's venue is not readable");
+    assert.equal((await saveLook(owner, { locationId: foreign, faceId: PHOENIX4_RUBY }, deps)).status, 403);
+    assert.equal(venueVideoSettings(foreign)?.faceId, undefined);
+  }
+
+  // Never arbitrary.
+  for (const faceId of ["r_not_curated", "", 42, "rf90eb925bd8; drop"]) {
+    const out = await saveLook(owner, { locationId: A.id, faceId }, deps);
+    assert.equal(out.status, 422, String(faceId));
+  }
+  for (const backgroundId of ["/etc/passwd", "https://evil.example/x.jpg", "neon"]) {
+    assert.equal((await saveLook(owner, { locationId: A.id, backgroundId }, deps)).status, 422, backgroundId);
+  }
+  // When Tavus answers, the face must be one it confirms on this account.
+  const onlyRuby45 = async () => [{ id: "rf90eb925bd8", name: "Ruby · Office", model: "phoenix-4.5", backgrounds: false, clipUrl: "", posterUrl: "" }];
+  assert.equal((await saveLook(owner, { locationId: A.id, faceId: PHOENIX4_RUBY }, { ...deps, faces: onlyRuby45 })).status, 422);
+
+  // A good save: stored, pre-warmed, and it neither allows nor removes video.
+  let warmed = "";
+  const ok = await saveLook(owner, { locationId: A.id, faceId: PHOENIX4_RUBY, backgroundId: "warm-lounge" }, { ...deps, prewarm: (l) => (warmed = l.id) });
+  assert.equal(ok.status, 200);
+  assert.equal(warmed, A.id);
+  assert.equal(venueVideoSettings(A.id)?.faceId, PHOENIX4_RUBY);
+  assert.equal(venueVideoSettings(A.id)?.enabled, true, "A's staff switch is untouched");
+  const stored = await readLook(owner, A.id, deps);
+  assert.deepEqual((stored.body as { current: unknown }).current, { faceId: PHOENIX4_RUBY, backgroundId: "warm-lounge" });
+  assert.equal((stored.body as { confirmed: boolean }).confirmed, false);
+  // An owner at a venue that only the environment lists keeps it listed after saving a look.
+  const envOwner = canEditAgent(person(OFF), OFF.id) ? person(OFF) : null;
+  if (envOwner) {
+    const control = readVideoControl();
+    delete control.venues[OFF.id];
+    fs.writeFileSync(path.join(process.env.DATA_DIR!, "video.json"), JSON.stringify(control));
+    await saveLook(envOwner, { locationId: OFF.id, backgroundId: "plain-white" }, deps);
+    assert.equal(venueAllowlisted(getLocation(OFF.id)!, videoConfig({ VIDEO_AVATAR_VENUES: OFF.id })), true);
+  }
+  setVenueLook(A.id, { faceId: null, backgroundId: null }, "check");
+
+  // The page offers the picker only where video is on for the venue, and names the consent route for a custom face.
+  const page = read("src/app/(app)/agents/page.tsx");
+  assert.match(page, /flag\("video\.avatar"\) && venueAllowlisted\(location, videoConfig\(\)\)/);
+  const ui = read("src/app/(app)/agents/VideoLook.tsx");
+  assert.match(ui, /written consent/);
+  assert.equal(/<button[^>]*>\s*(Upload|Create) (your )?(own )?face/i.test(ui), false, "a note, not a fake button");
+  assert.equal(/var\(--(?!bl-)[a-z]/.test(ui), false, "brand tokens only");
+});
+
+await test("stock faces are confirmed with Tavus server-side, by id, cached; unusable rows and addresses are dropped", async () => {
+  resetFaceCache();
+  const calls: string[] = [];
+  const fake = (async (url: string | URL | Request) => {
+    calls.push(String(url));
+    return new Response(
+      JSON.stringify({
+        data: [
+          { face_id: PHOENIX4_RUBY, face_name: "Ruby - Office", status: "completed", model_name: "phoenix-4", thumbnail_video_url: "https://cdn.example/r.mp4" },
+          { face_id: "rf90eb925bd8", status: "completed", model_name: "phoenix-4.5", thumbnail_video_url: "javascript:alert(1)" },
+          { face_id: "rc9cff32ceba", status: "error" },
+          { face_id: "r_not_curated", status: "completed" },
+        ],
+        total_count: 4,
+      }),
+      { status: 200 },
+    );
+  }) as typeof fetch;
+  const config = videoConfig({ TAVUS_API_KEY: "tvs_x", TAVUS_FACE_ID: "rf90eb925bd8" });
+  const faces = (await confirmedFaces(config, fake, 1_000))!;
+  assert.deepEqual(faces.map((f) => f.id), ["rf90eb925bd8", PHOENIX4_RUBY], "curated order, completed, curated only");
+  assert.equal(faces[1].backgrounds, true);
+  assert.equal(faces[0].backgrounds, false);
+  assert.equal(faces[0].clipUrl, "", "a non-https preview never reaches the page");
+  const url = new URL(calls[0]);
+  assert.equal(url.pathname, "/v2/faces");
+  assert.equal(url.searchParams.get("face_type"), "system");
+  assert.ok(url.searchParams.get("face_ids")!.split(",").includes(PHOENIX4_RUBY));
+  await confirmedFaces(config, fake, 2_000);
+  assert.equal(calls.length, 1, "cached");
+  assert.equal(await confirmedFaces(videoConfig({ VIDEO_AVATAR_PROVIDER: "mock" }), fake), null, "the mock asks nobody");
+  resetFaceCache();
+});
+
+await test("the chroma key: Tavus's green goes, the face stays, a stream with no green is left alone, and a slow device falls back", () => {
+  assert.equal(chroma.keyAlpha(0, 255, 155), 0, "the documented green");
+  assert.equal(chroma.keyAlpha(0, 200, 120), 0, "the same green in shadow");
+  assert.equal(chroma.keyAlpha(201, 165, 140), 1, "skin");
+  assert.equal(chroma.keyAlpha(58, 65, 80), 1, "a dark jacket");
+  assert.equal(chroma.keyAlpha(255, 255, 255), 1, "a white shirt");
+  const frame = (fill: [number, number, number]) => {
+    const data = new Uint8ClampedArray(48 * 48 * 4);
+    for (let i = 0; i < data.length; i += 4) [data[i], data[i + 1], data[i + 2], data[i + 3]] = [...fill, 255];
+    return data;
+  };
+  assert.equal(chroma.looksKeyed(frame([0, 255, 155]), 48, 48), true);
+  assert.equal(chroma.looksKeyed(frame([120, 110, 100]), 48, 48), false, "an office: show the stream as it is");
+  assert.equal(chroma.median([3, 50, 4, 5, 6]), 5);
+  assert.ok(chroma.BUDGET_MS.webgl <= 16 && chroma.BUDGET_MS["2d"] <= 16, "inside one 60 Hz frame");
+  const source = read("src/lib/video/client/chroma.ts");
+  assert.match(source, /visibilitychange/, "paused while hidden");
+  assert.match(source, /IntersectionObserver/, "paused while off screen");
+  assert.match(source, /prefers-reduced-motion/);
+  assert.match(source, /getBattery/);
+  const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
+  assert.match(panel, /<Greenscreen /);
+  assert.match(panel, /faceVisible && !keyed/, "the plain video returns whenever keying stops");
 });
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,10 @@ import AgentEditor from "./AgentEditor";
 import { venueMarket } from "@/lib/onboarding/rules";
 import { answersIn, languageChoiceOpen, savedLanguages, selectableLanguages } from "@/lib/language";
 import LanguageSettings from "./LanguageSettings";
+import VideoLook from "./VideoLook";
+import { flag } from "@/lib/flags";
+import { venueAllowlisted } from "@/lib/video/availability";
+import { videoConfig } from "@/lib/video/config";
 import SectionTabs from "@/components/SectionTabs";
 import { businessTabs } from "@/lib/nav";
 
@@ -46,6 +50,12 @@ export default async function AgentsPage({
         country={venueMarket(location)}
         initialLanguage={answersIn(location)}
         languageOpen={languageChoiceOpen()}
+        videoSettings={
+          // Only where the video receptionist is switched on for this venue.
+          flag("video.avatar") && venueAllowlisted(location, videoConfig()) ? (
+            <VideoLook locationId={location.id} agentName={location.agent.displayName} />
+          ) : undefined
+        }
         languageSettings={
           <LanguageSettings
             locationId={location.id}

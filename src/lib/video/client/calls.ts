@@ -17,6 +17,8 @@ export interface CallSession {
   conversationId?: string;
   clientToken: string;
   greeting: string;
+  /** The venue's background: the stream is a green screen to key onto it (chroma.ts). */
+  background?: { id: string; src: string; tone: "light" | "dark" };
 }
 
 export interface CallMedia {
@@ -152,6 +154,46 @@ async function createTavusCall(opts: CallOptions): Promise<CallAdapter> {
   };
 }
 
+/**
+ * The mock's green-screen stand-in: an abstract head-and-shoulders shape, not
+ * a person, drawn on Tavus's green (RGB 0, 255, 155) into a canvas stream.
+ */
+function mockGreenscreenStream(video: HTMLVideoElement): { stop(): void } | null {
+  const canvas = document.createElement("canvas");
+  canvas.width = 480;
+  canvas.height = 480;
+  const ctx = canvas.getContext("2d");
+  if (!ctx || typeof canvas.captureStream !== "function") return null;
+  let frame = 0;
+  const timer = setInterval(() => {
+    const bob = Math.sin(frame++ / 12) * 4;
+    ctx.fillStyle = "rgb(0, 255, 155)";
+    ctx.fillRect(0, 0, 480, 480);
+    ctx.fillStyle = "#3A4150";
+    ctx.beginPath();
+    ctx.ellipse(240, 470 + bob / 2, 190, 150, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "#C9A58C";
+    ctx.fillRect(215, 250 + bob, 50, 80);
+    ctx.beginPath();
+    ctx.ellipse(240, 205 + bob, 78, 96, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#4A3428";
+    ctx.beginPath();
+    ctx.ellipse(240, 160 + bob, 86, 62, 0, Math.PI, 0);
+    ctx.fill();
+  }, 1000 / 24);
+  const stream = canvas.captureStream(24);
+  video.srcObject = stream;
+  void video.play().catch(() => undefined);
+  return {
+    stop() {
+      clearInterval(timer);
+      stream.getTracks().forEach((t) => t.stop());
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // The mock: no face, no room — typed turns through the real model route
 
@@ -169,6 +211,7 @@ function createMockCall(opts: CallOptions): CallAdapter {
   // A silent voice, played through the same element and the same checks as a
   // real face's, so the mock exercises "Tap to hear" as a live call would.
   let silence: AudioContext | null = null;
+  let stand: { stop(): void } | null = null;
 
   const online = () => emit({ type: "network", state: "ok" });
   const offline = () => emit({ type: "network", state: "reconnecting" });
@@ -236,6 +279,9 @@ function createMockCall(opts: CallOptions): CallAdapter {
           /* no audio stack: the mock carries on in captions */
         }
       }
+      // With a background, a drawn stand-in on Tavus's green, so the key and
+      // the composite run in the mock exactly as they would on a live face.
+      if (session.background && opts.media.video) stand = mockGreenscreenStream(opts.media.video);
       emit({ type: "speaking", who: "agent", on: true });
       emit({ type: "caption", who: "agent", text: session.greeting });
       later(() => emit({ type: "speaking", who: "agent", on: false }), speakFor(session.greeting));
@@ -254,6 +300,8 @@ function createMockCall(opts: CallOptions): CallAdapter {
       timers.forEach(clearTimeout);
       void silence?.close().catch(() => undefined);
       silence = null;
+      stand?.stop();
+      stand = null;
       window.removeEventListener("online", online);
       window.removeEventListener("offline", offline);
     },

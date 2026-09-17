@@ -37,6 +37,7 @@ export const FLAG_NAMES = [
   "forwarding.carrier.virgin",
   "language.de",
   "video.avatar",
+  "voice.unify",
   "stubs",
 ] as const;
 
@@ -88,6 +89,10 @@ const DEFS: Record<Exclude<StaticFlag, "stubs">, FlagDef> = {
   // and the secret that ties Tavus's model requests to one conversation —
   // unless the mock was asked for, see videoDef.
   "video.avatar": { needs: ["TAVUS_API_KEY", "TAVUS_FACE_ID", "VIDEO_LLM_SECRET"], explicit: true },
+  // The video receptionist's voice on the phone and the website's voice button
+  // (docs/video/voice.md): Cartesia's key and the voice id, and somebody having
+  // listened to a real call first.
+  "voice.unify": { needs: ["CARTESIA_API_KEY", "VOICE_UNIFY_VOICE_ID"], explicit: true },
 };
 
 /**

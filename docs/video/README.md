@@ -50,10 +50,13 @@ OpenAI-compatible `/chat/completions` endpoint with SSE
 The docs do not document a conversation id in that request, and a
 conversation cannot override the PAL's LLM settings, but they recommend a PAL
 per session to vary the LLM backend
-([docs](https://docs.tavus.io/sections/onboarding-guide/pal-strategies)). So
-each call gets a short-lived PAL whose `layers.llm.api_key` is an HMAC token
-naming exactly one venue and one session; the route refuses anything else and
-the PAL is deleted when the call ends. Inside the route: authority rules →
+([docs](https://docs.tavus.io/sections/onboarding-guide/pal-strategies)). By
+default each venue and face has one reusable PAL whose `layers.llm.api_key` is
+a key derived for that venue and face, and each conversation carries an HMAC
+session token in `conversational_context`; the route takes the token only from
+a system message and refuses unless key, token and session name the same
+venue. `VIDEO_TAVUS_PAL_MODE=per_session` makes a short-lived PAL per call
+instead, its `api_key` the token, deleted when the call ends. Inside the route: authority rules →
 `AgentSession` (channel `video`) → per-clause honesty guards → spoken-language
 layer → SSE. Time to first token is recorded per turn.
 
@@ -110,8 +113,10 @@ All placeholders are in `.env.example`.
 | `VIDEO_JOIN_TIMEOUT_SECONDS` | optional | Default 60; also Tavus `participant_absent_timeout` |
 | `VIDEO_MAX_SESSIONS_PER_DAY` | optional | Per venue, default 20 |
 | `VIDEO_MAX_CONCURRENT_PER_VENUE` | optional | Default 2 |
-| `VIDEO_TAVUS_PAL_MODE` | optional | `per_session` (default) or `shared` |
-| `VIDEO_LLM_SHARED_KEY` | shared mode | The `api_key` given to the shared PAL |
+| `VIDEO_TAVUS_PAL_MODE` | optional | `shared` (default: one PAL per venue and face, made and kept by Belline, pre-warmed) or `per_session` (a PAL per call; the rollback) |
+| `VIDEO_FAST_MODEL` | optional | Video small talk on this model first, any tool turn on the venue's model. Default `claude-haiku-4-5`; `off` disables |
+| `VIDEO_TAVUS_TTS_ENGINE`, `VIDEO_TAVUS_EXTERNAL_VOICE_ID` | optional | Voice option (b): a public ElevenLabs/Cartesia voice on the face ([voice.md](voice.md)) |
+| `FLAG_VOICE_UNIFY`, `CARTESIA_API_KEY`, `VOICE_UNIFY_VOICE_ID`, `VOICE_UNIFY_VENUES`, `CARTESIA_MODEL_ID` | optional | Voice option (a): the phone and voice button speak the video voice on Cartesia ([voice.md](voice.md)) |
 | `VIDEO_TAVUS_SPECULATIVE` | optional | `on` enables Tavus `speculative_inference` (off: a half-heard sentence must not run a booking) |
 | `VIDEO_TAVUS_TEST_MODE` | optional | `on`: free, unjoinable conversations — credential check only |
 | `VIDEO_TAVUS_DELETE_AFTER_END` | optional | `on`: hard-delete each conversation at Tavus when it ends |
@@ -142,8 +147,10 @@ session route answer with a readable refusal plus Chat and Voice.
 5. **Webhook.** Nothing to set in the dashboard: each conversation carries its own
    `callback_url` = `https://<app host>/api/video/webhook/tavus?t=<session token>`.
 6. **Secret.** Generate 48 random characters for **`VIDEO_LLM_SECRET`**.
-7. **(Shared mode only)** set the template PAL's LLM API key to a random value,
-   put the same value in `VIDEO_LLM_SHARED_KEY`, and `VIDEO_TAVUS_PAL_MODE=shared`.
+7. **Shared PALs** need nothing in the dashboard: Belline makes one PAL per
+   venue and face (`belline-venue-<venue id>`) at boot and when a venue is
+   allowed, with its own derived key. Leave them; replaced ones are deleted
+   automatically after the longest possible call.
 8. **Greeting clip (once, costs credits).** From a machine with the key:
    `node --import tsx --env-file=.env scripts/video-greeting-clip.ts --agent Belle --business Belline --yes --download public/video`.
    It calls `POST /v2/videos` with `replica_id` = the face and the greeting script, polls
@@ -153,6 +160,36 @@ session route answer with a readable refusal plus Chat and Voice.
    `VIDEO_GREETING_POSTER_URL=/video/greeting-rf90eb925bd8.jpg`. Without them the bubble shows a placeholder.
 9. **Optional credential check:** `VIDEO_TAVUS_TEST_MODE=on` for one start — Tavus
    creates a free conversation you cannot join; turn it off again.
+
+## Faster start, faster replies, one voice, a branded background (17 September 2026)
+
+- **Start:** a venue's shared PAL is reused, so a start is one `POST
+  /v2/conversations` instead of GET template + POST PAL + POST conversation
+  (and a DELETE at the end). Recorded as `session_create_ms` with `detail`
+  `shared_warm` / `shared_cold` / `per_session`. Security and the fallback:
+  [tavus-notes.md](tavus-notes.md#custom-llm).
+- **Replies:** Haiku 4.5 answers first; the moment it reaches for a tool the
+  venue's model runs that turn (`src/lib/video/model-policy.ts`). A venue
+  already on Haiku (Belline's own seed venue) is unchanged.
+- **Voice:** [voice.md](voice.md).
+- **Face and background:** Your business → Agent → *Video face and
+  background*. Backgrounds need a Phoenix-4 face (Tavus cannot green-screen
+  Phoenix-4.5; the default `rf90eb925bd8` is Phoenix-4.5, its Phoenix-4 twin is
+  `rcc28da86847`). The panel keys the green in WebGL and falls back to the
+  plain stream when it cannot. Regenerate the pictures with
+  `node --import tsx scripts/build-video-backgrounds.ts`.
+
+## Go-live checklist
+
+- [ ] **Greeting clip** in the bubble (step 8 above): generated, re-encoded
+      small, committed, `VIDEO_GREETING_CLIP_URL` / `VIDEO_GREETING_POSTER_URL`
+      set — the founder wants this before go-live.
+- [ ] Shared PAL mode verified on staging (the model route logs no
+      "carried no session token" line; `session_create_ms` shows `shared_warm`).
+- [ ] Voice probe run and the voice decision taken ([voice.md](voice.md)).
+- [ ] A Phoenix-4 face chosen if the branded background is wanted, and watched
+      on an iPhone and a mid-range Android (keyed, or cleanly the plain stream).
+- [ ] The owner test script below, end to end.
 
 ## Local testing (mock, no keys)
 

@@ -787,8 +787,15 @@ export interface AgentConfig {
    * returning guests get the standard greeting.
    */
   returningGreeting?: string;
-  /** ElevenLabs voice id. */
+  /** ElevenLabs voice id (a Cartesia voice id when `voiceEngine` is `cartesia`). */
   voiceId: string;
+  /**
+   * Which speech engine speaks `voiceId`. Unset is ElevenLabs, as every venue
+   * always was. `cartesia` is used only where `voice.unify` is on and
+   * Cartesia's key is set; otherwise the venue keeps ElevenLabs. See
+   * providers/voice-choice.ts and docs/video/voice.md.
+   */
+  voiceEngine?: "elevenlabs" | "cartesia";
   /**
    * ElevenLabs model id — the latency/warmth trade. Unset falls back to
    * `DEFAULT_VOICE_MODEL`; see `VOICE_MODELS` for what is worth offering.
