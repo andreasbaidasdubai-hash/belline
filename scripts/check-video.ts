@@ -841,8 +841,10 @@ console.log("\n  Everything else is as it was");
 await test("12. the mobile panel: full screen in the widget and on our site, safe areas, large controls, landscape", () => {
   const embed = read("public/embed.js");
   assert.match(embed, /@media \(max-width:520px\)\{\.belline-panel,\.belline-panel\.belline-left,\.belline-panel\.belline-video\{inset:0;width:100%;height:100%;/);
-  assert.match(embed, /kind === "voice" \|\| kind === "video" \? "microphone; autoplay"/);
-  assert.equal(/camera/.test(embed.match(/panel\.allow = [^;]+;/)?.[0] ?? ""), false, "the frame is never allowed the camera");
+  assert.match(embed, /if \(kind === "video"\) panel\.allow = "microphone; autoplay";/);
+  for (const allow of embed.match(/panel\.allow = [^;]+;/g) ?? []) {
+    assert.equal(/camera/.test(allow), false, "the frame is never allowed the camera");
+  }
   const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
   assert.match(panel, /env\(safe-area-inset-bottom\)/);
   assert.match(panel, /@media \(max-width: 520px\)/);
@@ -900,7 +902,8 @@ await test("13. chat and voice are unaffected: widget modes, the bell's gate and
   // embed.js still builds the bell and the chat exactly as before.
   const embed = read("public/embed.js");
   assert.match(embed, /dock\.appendChild\(fabFor\("chat", chatLabel, BUBBLE, true\)\);\s*dock\.appendChild\(fabFor\("voice", voiceLabel, BELL, false\)\);/);
-  assert.match(embed, /\(kind === "chat" \? "\/chat" : kind === "video" \? "\/video" : ""\)/);
+  assert.match(embed, /\(kind === "video" \? "\/video" : \(kind === "chat" \? "\/chat" : ""\)\)/);
+  assert.ok(embed.includes('panel.allow = kind === "voice" ? "microphone; autoplay" : "microphone"'), "the bell and chat frames' permissions are unchanged");
   // The embed config keeps its fields and only adds `video`.
   const res = await configRoute.GET(new Request("http://localhost/"), params(A.embed!.key));
   const json = (await res.json()) as Record<string, unknown>;

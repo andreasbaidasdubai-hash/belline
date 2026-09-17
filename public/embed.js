@@ -295,7 +295,7 @@
       origin +
       "/embed/" +
       encodeURIComponent(key) +
-      (kind === "chat" ? "/chat" : kind === "video" ? "/video" : "") +
+      (kind === "video" ? "/video" : (kind === "chat" ? "/chat" : "")) +
       "?o=" +
       encodeURIComponent(location.origin);
     panel.className = "belline-panel" + (side === "left" ? " belline-left" : "") + (kind === "video" ? " belline-video" : "");
@@ -309,9 +309,10 @@
     // answer. The chat needs the microphone too, but only for a voice note,
     // and only when the visitor holds the button — the browser asks then, not
     // on opening. Granting the frame permission to *ask* is not a prompt.
+    panel.allow = kind === "voice" ? "microphone; autoplay" : "microphone";
     // Video, like the call, needs the microphone and the speakers from Start —
     // and never the camera: nothing on the other end looks at the visitor.
-    panel.allow = kind === "voice" || kind === "video" ? "microphone; autoplay" : "microphone";
+    if (kind === "video") panel.allow = "microphone; autoplay";
     document.body.appendChild(panel);
 
     shut = document.createElement("button");
