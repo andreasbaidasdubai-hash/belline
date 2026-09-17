@@ -13,6 +13,13 @@ import { SELFSERVE_PORT, selfserveEnv } from "./tests/selfserve/helpers";
  *
  *   npx playwright test --config playwright.selfserve.config.ts
  */
+// One data directory for the runner and its worker (which loads this file
+// again), so a spec can read the stub outbox for the email code. Email is on
+// against the outbox: signup asks for the code before any paid setup work.
+process.env.SELFSERVE_RUN_ID ??= `ss-${Date.now()}`;
+const env = { ...selfserveEnv(process.env.SELFSERVE_RUN_ID), FLAG_EMAIL_TRANSACTIONAL: "on" };
+process.env.SELFSERVE_DATA_DIR = env.DATA_DIR;
+
 export default defineConfig({
   testDir: "./tests/selfserve",
   // The full journey switches the pool, payments and email on: its own config.
@@ -41,6 +48,6 @@ export default defineConfig({
     url: `http://localhost:${SELFSERVE_PORT}/login`,
     reuseExistingServer: false,
     timeout: 240_000,
-    env: selfserveEnv(),
+    env,
   },
 });

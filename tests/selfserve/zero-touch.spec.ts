@@ -53,8 +53,16 @@ interface SavedVenue {
   currency: string;
   phone?: string;
   embed?: { key?: string };
-  subscription?: { status?: string; startedOn?: string };
+  subscription?: { status?: string; startedOn?: string; trial?: { endsOn?: string } };
+  stripe?: { cardSavedAt?: string; trialSubscriptionId?: string };
   onboarding?: { activatedAt?: string; terms?: unknown };
+}
+
+/** The newest message the stub mailer wrote to one address, as its raw line. */
+function outboxFor(email: string): string {
+  const outbox = path.join(DATA_DIR, "outbox.ndjson");
+  const lines = fs.existsSync(outbox) ? fs.readFileSync(outbox, "utf8").trim().split("\n") : [];
+  return lines.filter((l) => l.includes(`"to":"${email}"`)).pop() ?? "";
 }
 
 function venueNamed(name: string): SavedVenue {
@@ -149,6 +157,24 @@ async function signUp(page: Page, j: Journey, opts: { name: string; email: strin
 
     await page.getByLabel("Choose a password").fill(PASSWORD);
     await page.getByRole("button", { name: "Start free trial" }).click();
+
+    // Added 2026-09-17: the email is confirmed before Belline does any paid work.
+    // The code goes to the stub outbox, the same file the password reset below reads.
+    await page.waitForURL("**/verify", { timeout: 60_000 });
+    await expect(page.getByText(opts.email)).toBeVisible();
+    let code = "";
+    await expect(async () => {
+      code = /code is (\d{6})/.exec(outboxFor(opts.email))?.[1] ?? "";
+      expect(code).not.toBe("");
+    }).toPass({ timeout: 20_000 });
+    // Paid work is refused until then, however it is asked for.
+    const early = await page.request.post("/api/setup/selftest", { data: {} });
+    expect(early.status()).toBe(403);
+    await page.getByLabel("6-digit code").fill(code === "000001" ? "000002" : "000001");
+    await page.getByRole("button", { name: "Confirm" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "not right" })).toBeVisible();
+    await page.getByLabel("6-digit code").fill(code);
+    await page.getByRole("button", { name: "Confirm" }).click();
     await page.waitForURL("**/setup/import", { timeout: 60_000 });
 
     // One tenant for this owner, prices in dirhams whatever the browser's timezone, terms recorded.
@@ -157,6 +183,9 @@ async function signUp(page: Page, j: Journey, opts: { name: string; email: strin
     expect(venue.currency).toBe("AED");
     const tenant = readJson<{ id: string; onboarding?: { terms?: { tosVersion?: string } } }>("tenants").find((t) => t.id === venue.tenantId);
     expect(tenant?.onboarding?.terms?.tosVersion).toBeTruthy();
+    // The free month has not started: it starts at Go live.
+    expect(venue.subscription?.trial?.endsOn).toBeFalsy();
+    expect(readJson<{ email: string; emailVerifiedAt?: string }>("users").find((u) => u.email === opts.email)?.emailVerifiedAt).toBeTruthy();
   });
 }
 
@@ -371,8 +400,26 @@ test("salon-requests: signup to live, then billing and a password reset, with no
       const goLive = page.getByRole("button", { name: "Go live" });
       await expect(goLive).toBeVisible();
       await goLive.click();
-      await page.waitForURL((u) => !u.pathname.endsWith("/setup/golive"));
-      expect(venueNamed(name).onboarding?.activatedAt).toBeTruthy();
+
+      // Added 2026-09-17 (trial-at-golive.md): with card payments on, Go live asks for a
+      // card first, charges nothing and says until when it is free.
+      const ask = page.getByRole("alert").filter({ hasText: "Add a card to go live" });
+      await expect(ask).toContainText(/Nothing is charged today: Belline is free until \d{1,2} \w+\. Cancel any time before then and you pay nothing\./);
+      expect(venueNamed(name).onboarding?.activatedAt).toBeFalsy();
+      await ask.getByRole("link").click();
+      // The stub Stripe saves the card through the signed webhook and sends the browser back.
+      await page.waitForURL("**/setup/golive?card=saved", { timeout: 30_000 });
+      expect(venueNamed(name).stripe?.cardSavedAt).toBeTruthy();
+
+      await expect(async () => {
+        await page.getByRole("button", { name: "Go live" }).click();
+        await page.waitForURL((u) => !u.pathname.endsWith("/setup/golive"), { timeout: 5_000 });
+      }).toPass({ timeout: 45_000 });
+      const live = venueNamed(name);
+      expect(live.onboarding?.activatedAt).toBeTruthy();
+      // The free month starts now, and Stripe holds a subscription whose first invoice is day 31.
+      expect(live.subscription?.trial?.endsOn).toBeTruthy();
+      expect(live.stripe?.trialSubscriptionId).toBeTruthy();
 
       await page.goto("/");
       // The dashboard's own destinations, which the collapsed setup menu does not have
