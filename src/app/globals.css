@@ -967,6 +967,23 @@ tbody tr:hover {
 }
 @keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
+
+/* A confirmation that has to be answered: archiving or deleting a location.
+   A native <dialog> opened modally, so the browser traps focus, makes the page
+   inert and closes it on Escape; this only gives it the panel's look. */
+.confirm-dialog {
+  width: min(440px, calc(100% - 32px));
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 24px 60px -30px rgba(27, 39, 53, 0.55);
+}
+.confirm-dialog::backdrop {
+  background: rgba(27, 39, 53, 0.32);
+}
+
 .drawer-head {
   display: flex;
   justify-content: space-between;

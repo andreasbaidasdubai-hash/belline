@@ -49,7 +49,7 @@ import { applyUsagePolicy, governs, markAlertsSent, notifyAlerts, packsHeldPools
  */
 
 export type Lapse = "trial_ended" | "trial_minutes_used" | "cancelled" | "legacy_plan_ended";
-export type Refusal = Lapse | "not_in_plan" | "trial_conversations_used" | "allowance_exhausted";
+export type Refusal = Lapse | "not_in_plan" | "trial_conversations_used" | "allowance_exhausted" | "archived";
 
 export interface ServiceState {
   /** Whether this venue — on this channel, if one was asked about — should be answered right now. */
@@ -159,6 +159,15 @@ export function serviceState(
   today: string,
   opts: { enforce?: boolean; channel?: Channel } = {},
 ): ServiceState {
+  // An archived location (locations.ts) answers nothing, on any channel,
+  // whatever it pays for. Most doors already cannot find it — the dialled
+  // number, the embed key and the chat link are all looked up through
+  // `listLocations`, which leaves it out — but a conversation or a stream token
+  // that names the venue by id reaches here, and this is the one check they
+  // all share. Before the usage policy, so an archived venue never buys a pack.
+  if (venue.archivedAt) {
+    return { answering: false, lapsed: null, refused: "archived", callerMessage: messageFor(venue, opts.channel) };
+  }
   let location = venue;
   // On a live channel, let the owner's usage policy act first — record the
   // alerts it raises and add the packs they chose — so a pool that a pack

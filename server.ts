@@ -391,7 +391,9 @@ function handleTwilio(ws: WebSocket): void {
         const locationId = verifyStreamToken(params.token);
         const location = locationId ? getLocation(locationId) : undefined;
         const streamSid = msg.start?.streamSid ?? "";
-        if (!location || !streamSid) {
+        // An archived venue answers nothing (lib/locations.ts); the token may
+        // have been minted by the voice webhook just before it was archived.
+        if (!location || location.archivedAt || !streamSid) {
           ws.close();
           return;
         }

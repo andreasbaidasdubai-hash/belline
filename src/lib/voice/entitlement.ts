@@ -25,6 +25,9 @@ import { channelIncluded } from "../billing/entitlement";
  */
 export function mayStreamTo(location: Location | undefined): boolean {
   if (!location) return false;
+  // An archived venue answers nothing (locations.ts), and a token minted
+  // before it was archived lives an hour.
+  if (location.archivedAt) return false;
   // A customer's own website widget. Deliberately a separate clause rather
   // than a loosening of the one below: the demo rule exists to stop a stranger
   // spending a customer's minutes, and the widget is an explicit decision by
