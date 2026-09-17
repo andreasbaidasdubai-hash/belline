@@ -397,7 +397,7 @@ await test("a token for link A with link B's id is refused", async () => {
 // ---------------------------------------------------------------------------
 console.log("\n\x1b[1mThe email: guards and compliance\x1b[0m\n");
 
-const policy = { minDaysBetweenTouches: 2, touchCap90d: 6, lastTouchAt: null, touches90d: 0 };
+const policy: { minDaysBetweenTouches: number; touchCap90d: number; lastTouchAt: string | null; touches90d: number } = { minDaysBetweenTouches: 2, touchCap90d: 6, lastTouchAt: null, touches90d: 0 };
 
 await test("a draft for a researched prospect passes the outreach guards and carries the frame", () => {
   const f = ctx.prospectFactsFrom(STUB_PROSPECT);
