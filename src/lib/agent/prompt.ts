@@ -76,7 +76,7 @@ function diaryFacts(location: Location): string {
   const services = c.services
     .map(
       (s) =>
-        `- ${s.name} (id: ${s.id}) — ${s.durationMin > 0 ? `${s.durationMin} min` : "length not set"}, ${s.price > 0 ? `${location.currency} ${s.price}` : NO_PRICE}`,
+        `- ${s.name} (id: ${s.id}) — ${s.durationMin > 0 ? `${s.durationMin} min` : "length not set"}, ${s.price > 0 ? `${location.currency} ${s.price}` : NO_PRICE}${s.description ? ` — ${s.description}` : ""}`,
     )
     .join("\n");
   const staff = c.staff
@@ -112,7 +112,7 @@ function requestFacts(location: Location): string {
   const services = location.vertical === "restaurant" ? [] : (location.salon?.services ?? []);
   if (!services.length) return "";
   const list = services
-    .map((s) => `- ${s.name}${s.durationMin > 0 ? `, about ${s.durationMin} min` : ""}, ${s.price > 0 ? `${location.currency} ${s.price}` : NO_PRICE}`)
+    .map((s) => `- ${s.name}${s.durationMin > 0 ? `, about ${s.durationMin} min` : ""}, ${s.price > 0 ? `${location.currency} ${s.price}` : NO_PRICE}${s.description ? ` — ${s.description}` : ""}`)
     .join("\n");
   return `${t.services.toUpperCase()} AND PRICES
 ${list}

@@ -924,6 +924,12 @@ export interface SalonService {
   /** Cleanup/reset time held after the appointment but not shown to guests. */
   bufferMin: number;
   price: number;
+  /**
+   * What it is, in the owner's words, one line: "Two-hour site visit with an
+   * architect". A service called "Consultation" means nothing to a caller who
+   * asks what they would get, and the agent may only say what it was told.
+   */
+  description?: string;
   /** Optional shared equipment this service needs (colour room, basin...). */
   resourceType?: string;
   /**

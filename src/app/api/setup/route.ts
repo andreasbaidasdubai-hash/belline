@@ -77,7 +77,12 @@ export async function PUT(req: Request) {
   // Every field is checked, hours included: the old handler cast whatever
   // arrived to WeeklyHours and saved it.
   // A length for each service only where Belline books it into a day itself.
-  const checked = cleanConfirmed(body, { lengthsRequired: serviceLengthsRequired(location), country: venueMarket(location) });
+  // Never for a restaurant: its "services" on this form are the menu, which
+  // has no minutes and is never booked; tables and sittings are.
+  const checked = cleanConfirmed(body, {
+    lengthsRequired: location.vertical !== "restaurant" && serviceLengthsRequired(location),
+    country: venueMarket(location),
+  });
   // With the field it is about, so the page can show it under that input.
   if (!checked.ok) return NextResponse.json({ error: checked.error, field: checked.field, service: checked.service }, { status: 422 });
 
@@ -104,8 +109,13 @@ export async function PUT(req: Request) {
   // Recorded as a published version, like every other change to a venue's
   // configuration — so "who set this up, and what did it say on the call I am
   // complaining about" has an answer from the first day rather than the
-  // second.
-  publish(updated.id, user, setupNote(String(body.website ?? ""), Number(body.documents) || 0));
+  // second. Saved from the dashboard's business page it was an edit, not a
+  // setup, and the history says so rather than "Set up by hand".
+  publish(
+    updated.id,
+    user,
+    body.from === "dashboard" ? "Business details changed" : setupNote(String(body.website ?? ""), Number(body.documents) || 0),
+  );
 
   // The page moves on to whatever the journey says is next, read from the venue
   // as it was just saved.
