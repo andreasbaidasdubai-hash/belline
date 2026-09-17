@@ -196,7 +196,7 @@ export default function VenueEditor({
           gap: 12,
           alignItems: "center",
           flexWrap: "wrap",
-          boxShadow: "0 6px 20px rgba(27, 39, 53, 0.09)",
+          boxShadow: "0 6px 20px rgba(0, 0, 0, 0.09)",
         }}
       >
         <input

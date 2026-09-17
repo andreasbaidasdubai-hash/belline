@@ -1,9 +1,9 @@
 /**
  * Die Marke, an einer Stelle.
  *
- * "The Bell Button" in Navy + Electric Blue (15.09.2026): the bell sits in a
- * solid blue (#2667FF) badge, white on blue, and the name is set in Plus
- * Jakarta Sans 700. The badge is the logo, the app icon, the avatar and the
+ * "The Bell Button", Apple look (17.09.2026): the bell sits in a solid blue
+ * (#0071E3) badge, white on blue, and the name is set in the display stack
+ * (SF Pro on Apple devices, Inter elsewhere) at 700. The badge is the logo, the app icon, the avatar and the
  * shape of the primary button, so it looks the same here as on belline.ai and
  * in public/brand/.
  *
@@ -45,7 +45,7 @@ export default function Brand({
         aria-label={words ? undefined : "Belline"}
         style={{ display: "block", flexShrink: 0 }}
       >
-        <circle cx="24" cy="24" r="24" fill={tone ?? "var(--bl-blue, #2667FF)"} />
+        <circle cx="24" cy="24" r="24" fill={tone ?? "var(--bl-blue, #0071E3)"} />
         <g fill={bell ?? "#FFFFFF"} transform="matrix(0.6 0 0 0.6 9.6 9.81)">
           <circle cx="24" cy="10" r="4.2" />
           <path d="M8.5 32a15.5 15.5 0 0 1 31 0Z" />

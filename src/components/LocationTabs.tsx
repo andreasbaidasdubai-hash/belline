@@ -40,7 +40,7 @@ export async function LocationTabs({ base, active }: { base: string; active: str
             }}
           >
             {l.name}
-            {/* Not faded on the active blue tab: white on #2667FF is 4.70:1,
+            {/* Not faded on the active blue tab: white on #0071E3 is 4.70:1,
                 so any opacity drops it under 4.5:1 (0.9 measured 4.11). */}
             <span style={{ fontWeight: 500 }}>
               {l.vertical}

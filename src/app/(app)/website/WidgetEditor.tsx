@@ -96,7 +96,7 @@ export default function WidgetEditor({
   const accent = accentHex(look.accent) ?? EMBED_PALETTE.indigo;
   const accentText = textOn(accent);
   const accentMark = accentText;
-  const contrast = Math.max(contrastRatio(accent, "#FFFFFF"), contrastRatio(accent, "#1B2735"));
+  const contrast = Math.max(contrastRatio(accent, "#FFFFFF"), contrastRatio(accent, "#1D1D1F"));
   const tooPale = contrast < APPEARANCE_RULES.minContrast;
 
   // voiceAllowed/chatAllowed, off the saved mode rather than off a server prop
@@ -550,8 +550,8 @@ function PreviewFab({
   accent?: { bg: string; fg: string; mark: string };
 }) {
   const bg = quiet || !accent ? "#FFFFFF" : accent.bg;
-  const fg = quiet || !accent ? "#1B2735" : accent.fg;
-  const markColor = quiet || !accent ? "#2667FF" : accent.mark;
+  const fg = quiet || !accent ? "#1D1D1F" : accent.fg;
+  const markColor = quiet || !accent ? "#0071E3" : accent.mark;
   return (
     <span
       style={{
