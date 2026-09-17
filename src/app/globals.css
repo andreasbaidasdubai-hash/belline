@@ -973,6 +973,8 @@ tbody tr:hover {
    inert and closes it on Escape; this only gives it the panel's look. */
 .confirm-dialog {
   width: min(440px, calc(100% - 32px));
+  /* The global reset takes the user-agent auto margin that centres a modal dialog. */
+  margin: auto;
   padding: 20px 22px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -2602,3 +2604,11 @@ body:has(.callbar) {
   padding-top: 18px;
   border-top: 1px solid var(--border-soft);
 }
+
+/* Home's period choice: two small links in one row beside the panel title,
+   never wrapping into a second line that makes the header twice as tall. */
+.period-switch { display: inline-flex; gap: 2px; margin-left: auto; padding: 2px; border-radius: 8px; background: var(--panel-2); }
+.period-switch a { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; line-height: 1.4; white-space: nowrap; color: var(--text-2); text-decoration: none; }
+.period-switch a:hover { color: var(--text); }
+.period-switch a.is-on { background: var(--panel); color: var(--accent-hover); box-shadow: 0 1px 2px rgba(27, 39, 53, 0.08); }
+.period-switch a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

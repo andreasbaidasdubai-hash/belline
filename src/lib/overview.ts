@@ -196,12 +196,14 @@ export function overviewFor(location: Location): Overview {
       // Not proof the line is forwarded — but a venue that has taken nothing
       // in three days either is not forwarded or has a problem, and that is
       // exactly the silence nobody notices.
-      ok: hoursSinceCall < 72,
+      // The phone is optional: a business on its website chat or chat link
+      // alone has no line to go quiet, and "needs fixing" in red would be false.
+      ok: hoursSinceCall < 72 || !location.bellineNumber?.number.trim(),
       detail: lastCall
         ? `Last call ${new Date(lastCall.startedAt).toLocaleString()}`
         : location.bellineNumber?.number.trim()
           ? "No calls yet. Check the number is forwarded."
-          : "No phone number yet. Add one under Your business.",
+          : "No Belline number yet. Get one under Channels, Phone.",
     },
     {
       label: "Calls completing",

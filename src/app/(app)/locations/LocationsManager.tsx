@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Vertical, WeeklyHours } from "@/lib/types";
 import type { RemovalBlock } from "@/lib/locations";
 import { TRADES, TRADE_GROUPS, tradeLabel } from "@/lib/signup-rules";
+import { venueChip } from "@/lib/verticals";
 import { minutesToClock } from "@/lib/time";
 
 /**
@@ -197,7 +198,7 @@ function VenueCard({
     <div className="panel" style={{ padding: "16px 18px", opacity: venue.archivedAt ? 0.8 : 1 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
         <strong style={{ fontSize: 15 }}>{venue.name}</strong>
-        <span className="pill">{tradeLabel(venue.tradeKey, venue.vertical)}</span>
+        {venueChip(venue) && <span className="pill">{venueChip(venue)}</span>}
       </div>
       <p className="muted" style={{ fontSize: 12.5, margin: "6px 0 0", lineHeight: 1.55 }}>
         {venue.address || "No address yet"}

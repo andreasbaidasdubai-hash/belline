@@ -55,7 +55,7 @@ export default async function VenuePage({
           chat's header shows it, and the website button can too. */}
       <section className="panel" style={{ padding: "16px 18px", marginBottom: 22 }} aria-labelledby="business-logo">
         <h2 id="business-logo" style={{ fontSize: 14.5, fontWeight: 600, margin: "0 0 4px" }}>
-          Your logo
+          Logo
         </h2>
         <p className="muted" style={{ fontSize: 13, lineHeight: 1.55, margin: "0 0 10px", maxWidth: "64ch" }}>
           Shown at the top of your website chat and your chat link. You can also put it on the website button, under Channels,

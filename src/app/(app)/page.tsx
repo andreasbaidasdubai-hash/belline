@@ -209,10 +209,10 @@ export default async function HomePage({
       <section className="panel" style={{ marginBottom: 14 }} data-testid="home-handled">
         <div className="panel-head" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           Handled by Belline
-          <nav aria-label="Period" className="plan-switch" style={{ marginLeft: "auto" }}>
+          <nav aria-label="Period" className="period-switch">
             {PERIODS.map((d) => (
               <Link key={d} href={`/?${locQuery}&days=${d}`} className={d === days ? "is-on" : ""} aria-current={d === days ? "page" : undefined}>
-                <span>Last {d} days</span>
+                Last {d} days
               </Link>
             ))}
           </nav>
