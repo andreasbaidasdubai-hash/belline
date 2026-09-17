@@ -787,6 +787,183 @@ await test("7c. the model route answers while the session is still being created
 });
 
 // ---------------------------------------------------------------------------
+console.log("\n  Faster replies: the fast model first, the venue's model for any tool");
+
+const { AgentSession, setAnthropicClientForTests, startsToolUse } = await import("../src/lib/agent/runtime");
+const { videoFastModel, VIDEO_FAST_MODEL_DEFAULT } = await import("../src/lib/video/model-policy");
+const { runVideoTurn } = await import("../src/lib/video/engine");
+
+type Scripted = { events: any[]; final: any };
+/** A scripted Anthropic client: each request is answered by `script`, and recorded. */
+function fakeClaude(script: (params: any, index: number) => Scripted) {
+  const requests: any[] = [];
+  const aborted: boolean[] = [];
+  const client = {
+    messages: {
+      stream(params: any) {
+        const index = requests.push(params) - 1;
+        aborted[index] = false;
+        const { events, final } = script(params, index);
+        return {
+          abort() {
+            aborted[index] = true;
+          },
+          async *[Symbol.asyncIterator]() {
+            for (const event of events) {
+              if (aborted[index]) return;
+              yield event;
+            }
+          },
+          async finalMessage() {
+            return final;
+          },
+        };
+      },
+    },
+  };
+  return { requests, aborted, client };
+}
+const usage = { input_tokens: 100, output_tokens: 20 };
+const textTurn = (text: string): Scripted => ({
+  events: [
+    { type: "message_start", message: { usage } },
+    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
+  ],
+  final: { stop_reason: "end_turn", content: [{ type: "text", text }], usage },
+});
+const toolTurn = (said: string, name: string, input: Record<string, unknown>, id = "tu_1"): Scripted => ({
+  events: [
+    { type: "message_start", message: { usage } },
+    ...(said ? [{ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }, { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: said } }] : []),
+    { type: "content_block_start", index: 1, content_block: { type: "tool_use", id, name, input: {} } },
+    { type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: JSON.stringify(input) } },
+  ],
+  final: { stop_reason: "tool_use", content: [...(said ? [{ type: "text", text: said }] : []), { type: "tool_use", id, name, input }], usage },
+});
+
+async function withClaude<T>(fake: { client: unknown }, fn: () => Promise<T>): Promise<T> {
+  const restore = setEnv({ ANTHROPIC_API_KEY: "sk-ant-check-only-never-sent" });
+  setAnthropicClientForTests(fake.client);
+  try {
+    return await fn();
+  } finally {
+    setAnthropicClientForTests(null);
+    restore();
+  }
+}
+
+async function drain(agent: InstanceType<typeof AgentSession>, text: string) {
+  const events: any[] = [];
+  for await (const event of agent.respond(text)) events.push(event);
+  return events;
+}
+
+const onSonnet = (id: string) => {
+  const location = getLocation(id)!;
+  return { ...location, agent: { ...location.agent, model: "claude-sonnet-5" } };
+};
+
+await test("routing policy: Haiku first for a venue on a slower model, nothing changes for one already on it, and it can be switched off", () => {
+  assert.equal(VIDEO_FAST_MODEL_DEFAULT, "claude-haiku-4-5");
+  assert.equal(videoFastModel(onSonnet(A.id), {}), "claude-haiku-4-5");
+  assert.equal(videoFastModel({ agent: { ...A.agent, model: "claude-haiku-4-5" } }, {}), undefined, "already fast");
+  assert.equal(videoFastModel(onSonnet(A.id), { VIDEO_FAST_MODEL: "off" }), undefined);
+  assert.equal(videoFastModel(onSonnet(A.id), { VIDEO_FAST_MODEL: "gpt-4o; rm -rf" }), undefined, "only an Anthropic model id");
+  assert.equal(startsToolUse({ type: "content_block_start", content_block: { type: "tool_use" } }), true);
+  assert.equal(startsToolUse({ type: "content_block_start", content_block: { type: "text" } }), false);
+  // Only the video channel is given a fast model.
+  const engine = read("src/lib/video/engine.ts");
+  assert.match(engine, /fastModel: videoFastModel\(location\)/);
+  for (const file of ["src/lib/voice/session.ts", "server.ts"]) assert.equal(read(file).includes("fastModel"), false, file);
+});
+
+await test("small talk and FAQ answers come from the fast model alone, capped short", async () => {
+  const location = onSonnet(A.id);
+  const fake = fakeClaude(() => textTurn("We're open from nine until six, every day. Anything else?"));
+  await withClaude(fake, async () => {
+    const call = startCall(location, "embed", "website");
+    const agent = new AgentSession(location, call, { channel: "video", fastModel: videoFastModel(location, {}) });
+    const events = await drain(agent, "What are your hours?");
+    assert.deepEqual(fake.requests.map((r) => r.model), ["claude-haiku-4-5"]);
+    assert.equal(fake.requests[0].max_tokens, 400);
+    assert.equal("thinking" in fake.requests[0], false, "Haiku takes no thinking parameter");
+    assert.ok(fake.requests[0].tools.length > 0, "the fast pass sees the tools, so it can say it needs one");
+    assert.match(events.filter((e) => e.type === "sentence").map((e) => e.text).join(" "), /nine until six/);
+    assert.equal(call.toolCalls.length, 0);
+  });
+});
+
+await test("a turn that needs a tool is handed to the venue's model: the fast call is never run, nothing said twice, history clean", async () => {
+  const location = onSonnet(A.id);
+  const fake = fakeClaude((params, index) => {
+    if (index === 0) return toolTurn("Sure, one moment.", "take_message", { caller_name: "Fast Model", message: "should never run" });
+    if (index === 1) return toolTurn("", "take_message", { caller_name: "Sam Lee", callback_number: "+971501234567", message: "Call back about a group booking", urgency: "normal" }, "tu_real");
+    return textTurn("I've passed that on, and someone will call you back.");
+  });
+  await withClaude(fake, async () => {
+    const call = startCall(location, "embed", "website");
+    const agent = new AgentSession(location, call, { channel: "video", fastModel: videoFastModel(location, {}) });
+    const events = await drain(agent, "Can someone call me back? I'm Sam Lee, +971 50 123 4567, about a group booking.");
+    assert.deepEqual(fake.requests.map((r) => r.model), ["claude-haiku-4-5", "claude-sonnet-5", "claude-sonnet-5"]);
+    assert.equal(fake.aborted[0], true, "the fast stream is dropped");
+    assert.equal(fake.requests[1].max_tokens, 2048);
+    assert.ok(fake.requests[1].thinking, "the venue's model keeps its own parameters");
+    const volatile = fake.requests[1].system.at(-1).text as string;
+    assert.match(volatile, /already said to the visitor: "Sure, one moment\."/);
+    // Only the venue's model's tool call ran.
+    assert.deepEqual(call.toolCalls.map((t) => (t.input as { caller_name?: string }).caller_name), ["Sam Lee"]);
+    const said = events.filter((e) => e.type === "sentence").map((e) => e.text);
+    assert.equal(said.filter((s) => /one moment/.test(s)).length, 1, "nothing said twice");
+    // The history holds no trace of the fast pass's tool call.
+    const history = JSON.stringify(agent.history());
+    assert.equal(history.includes("should never run"), false);
+    assert.equal(history.includes("tu_1"), false);
+    // The next turn starts on the fast model again, and the note is gone.
+    await drain(agent, "Thanks!");
+    assert.equal(fake.requests[3].model, "claude-haiku-4-5");
+    assert.equal(/already said/.test(fake.requests[3].system.at(-1).text), false);
+  });
+});
+
+await test("the guards are unchanged under routing: authority rules before any model, honesty repair on the fast model's words", async () => {
+  // An invented time from the fast model is repaired before it is spoken.
+  const started = await sessions.startVideoSession(getLocation(A.id)!, "visitor-route-guard");
+  assert.ok(started.ok);
+  if (!started.ok) return;
+  const location = onSonnet(A.id);
+  const fake = fakeClaude(() => textTurn("I have a table for you at 9:15 PM tonight."));
+  await withClaude(fake, async () => {
+    const call = getCall(started.session.callId)!;
+    started.session.agent = new AgentSession(location, call, { channel: "video", fastModel: videoFastModel(location, {}) });
+    let out = "";
+    await runVideoTurn(started.session, location, "Do you have anything tonight?", new AbortController().signal, (t) => (out += t));
+    assert.equal(fake.requests[0].model, "claude-haiku-4-5");
+    assert.equal(/9:15|nine fifteen/i.test(out), false, out);
+  });
+
+  // An emergency at a clinic never reaches either model.
+  const clinic = getLocation("loc_meridian")!;
+  setVenueVideo(clinic.id, true, "check");
+  try {
+    const onClinic = await sessions.startVideoSession(clinic, "visitor-route-auth");
+    assert.ok(onClinic.ok);
+    if (!onClinic.ok) return;
+    const never = fakeClaude(() => textTurn("should not be asked"));
+    await withClaude(never, async () => {
+      const slow = { ...clinic, agent: { ...clinic.agent, model: "claude-sonnet-5" } };
+      onClinic.session.agent = new AgentSession(slow, getCall(onClinic.session.callId)!, { channel: "video", fastModel: videoFastModel(slow, {}) });
+      let out = "";
+      await runVideoTurn(onClinic.session, slow, "I have chest pain and I can't breathe", new AbortController().signal, (t) => (out += t));
+      assert.equal(never.requests.length, 0);
+      assert.ok(out.length > 0);
+    });
+  } finally {
+    setVenueVideo(clinic.id, false, "check");
+  }
+});
+
+// ---------------------------------------------------------------------------
 console.log("\n  What the visitor meets");
 
 await test("8. a refused microphone is explained, with the chat offered, and any session made beside the prompt is ended", () => {

@@ -23,6 +23,7 @@ import { endVideoSession, getVideoSession, markVideoJoined, type VideoSession } 
 import { stubVideoAgent, type VideoAgent } from "./stub-agent";
 import { contentText, tokenFromSystemMessages, venuePalKey, verifyVideoToken } from "./tokens";
 import { markSharedContextBroken } from "./shared-pal";
+import { videoFastModel } from "./model-policy";
 
 /**
  * Belline's receptionist, as the video provider's language model.
@@ -252,7 +253,13 @@ function agentFor(session: VideoSession, location: Location): VideoAgent {
   const agent: VideoAgent =
     session.provider === "mock" && flag("stubs")
       ? stubVideoAgent(location, call)
-      : new AgentSession(location, call, { channel: "video", greeting: session.greeting, liveTransfer: false });
+      : new AgentSession(location, call, {
+          channel: "video",
+          greeting: session.greeting,
+          liveTransfer: false,
+          // Small talk on the fast model; any tool turn on the venue's (model-policy.ts).
+          fastModel: videoFastModel(location),
+        });
   session.agent = agent;
   return agent;
 }
