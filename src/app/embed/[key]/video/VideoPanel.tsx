@@ -30,8 +30,9 @@ import type { CallAdapter, CallSession } from "@/lib/video/client/calls";
  * transparent: the frame is exactly the circle's width and is laid over the
  * page's own greeting circle, so the call happens in the circle the visitor
  * tapped. Under it, one status pill, one caption line when captions are on,
- * and two controls, Mute and End, with a small "…" menu (a person, captions)
- * and "Type instead". "AI concierge" is the page's pill on the circle's top
+ * and two controls, Mute and End, with a small Captions toggle beside them
+ * and "Type instead". (No "Talk to a person" button: asked out loud, Belle
+ * takes a message or hands over.) "AI concierge" is the page's pill on the circle's top
  * edge; the timer is this frame's pill on its bottom edge. The frame tells the
  * page its height, when it is drawn, when the face appears, and when the call
  * has ended or moved to chat, by postMessage to the one origin that framed it.
@@ -104,7 +105,6 @@ export default function VideoPanel({
   const [now, setNow] = useState(() => Date.now());
   // Off until asked for: the face is the conversation, words under it are an aid.
   const [showCaptions, setShowCaptions] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [faceVisible, setFaceVisible] = useState(false);
@@ -120,7 +120,6 @@ export default function VideoPanel({
   const firstResponseRef = useRef(false);
   const endingRef = useRef(false);
   const startButtonRef = useRef<HTMLButtonElement>(null);
-  const moreRef = useRef<HTMLDivElement>(null);
 
   const base = `/api/video/${encodeURIComponent(embedKey)}`;
 
@@ -205,7 +204,6 @@ export default function VideoPanel({
       if (videoRef.current) videoRef.current.srcObject = null;
       if (audioRef.current) audioRef.current.srcObject = null;
       setFaceVisible(false);
-      setMoreOpen(false);
       endOnServer(reason);
       // Silent when a failure is about to be shown instead.
       if (!opts.silent) dispatch({ type: "ended", reason });
@@ -382,6 +380,23 @@ export default function VideoPanel({
     return () => window.removeEventListener("message", onMessage);
   }, [end]);
 
+  // The page's small picture-in-picture face has its own mute: it asks here, and hears back below.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { source?: string; type?: string; muted?: unknown } | null;
+      if (e.source !== window.parent || data?.source !== "belline-host" || data.type !== "mute") return;
+      if (typeof data.muted !== "boolean" || state.phase !== "live") return;
+      callRef.current?.setMuted(data.muted);
+      dispatch({ type: "mute", muted: data.muted });
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [state.phase]);
+
+  useEffect(() => {
+    tellHost({ type: "muted", muted: state.muted });
+  }, [state.muted, tellHost]);
+
   // Leaving the page: stop everything, and tell the server by beacon.
   useEffect(() => {
     const leave = () => {
@@ -435,14 +450,10 @@ export default function VideoPanel({
     return () => clearTimeout(timer);
   }, [bubble, state.phase, tellHost]);
 
-  // Escape: the menu first, then (inside the bubble) the call.
+  // Escape (inside the bubble) ends the call.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (moreOpen) {
-        setMoreOpen(false);
-        return;
-      }
       if (bubble) {
         void end("visitor", { silent: true });
         tellHost({ type: "ended" });
@@ -450,17 +461,7 @@ export default function VideoPanel({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [bubble, end, moreOpen, tellHost]);
-
-  // The menu closes on a tap anywhere else.
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onDown = (e: PointerEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
-    };
-    document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
-  }, [moreOpen]);
+  }, [bubble, end, tellHost]);
 
   // While the voice is blocked, any tap on the call is the gesture that unblocks it.
   const unlockAudio = useCallback(() => {
@@ -506,24 +507,6 @@ export default function VideoPanel({
     const muted = !state.muted;
     callRef.current?.setMuted(muted);
     dispatch({ type: "mute", muted });
-  }
-
-  async function handover() {
-    setMoreOpen(false);
-    const session = sessionRef.current;
-    if (!session) return;
-    const res = await fetch(`${base}/session/handover`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sessionId: session.sessionId, clientToken: session.clientToken }),
-    }).catch(() => null);
-    const data = (await res?.json().catch(() => ({}))) as { say?: string } | undefined;
-    if (res?.ok && data?.say) {
-      callRef.current?.say(data.say);
-      setNote(`${agentName} will take your details so someone from the team can get back to you.`);
-    } else {
-      setNote("That didn't go through. You can ask out loud to speak to a person.");
-    }
   }
 
   async function switchTo(kind: "chat" | "voice") {
@@ -708,41 +691,21 @@ export default function VideoPanel({
               </span>
               <span className="bv-ctl-t">End</span>
             </button>
-            <div className="bv-more" ref={moreRef}>
+            {/* Captions, the one small extra: a toggle of its own, not a menu of one. A person is
+                asked for out loud; Belle takes a message or hands over when asked. */}
+            <div className="bv-more">
               <button
                 type="button"
                 className="bv-ctl bv-ctl-more"
-                aria-label="More options"
-                aria-haspopup="menu"
-                aria-expanded={moreOpen}
-                onClick={() => setMoreOpen((v) => !v)}
+                aria-label="Captions"
+                aria-pressed={showCaptions}
+                onClick={() => setShowCaptions((v) => !v)}
               >
                 <span className="bv-ctl-i">
-                  <MoreIcon />
+                  <CcIcon />
                 </span>
-                <span className="bv-ctl-t">More</span>
+                <span className="bv-ctl-t">Captions</span>
               </button>
-              {moreOpen && (
-                <div className="bv-menu" role="menu" aria-label="More options">
-                  <button type="button" role="menuitem" onClick={() => void handover()} disabled={state.phase !== "live"}>
-                    <PersonIcon />
-                    <span>Talk to a person</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitemcheckbox"
-                    aria-checked={showCaptions}
-                    onClick={() => {
-                      setShowCaptions((v) => !v);
-                      setMoreOpen(false);
-                    }}
-                  >
-                    <CcIcon />
-                    <span>Captions</span>
-                    <em>{showCaptions ? "On" : "Off"}</em>
-                  </button>
-                </div>
-              )}
             </div>
           </div>
           {chatHref && (
@@ -808,30 +771,11 @@ function EndIcon() {
   );
 }
 
-function MoreIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="6" cy="12" r="1.7" fill="currentColor" />
-      <circle cx="12" cy="12" r="1.7" fill="currentColor" />
-      <circle cx="18" cy="12" r="1.7" fill="currentColor" />
-    </svg>
-  );
-}
-
 function SpeakerIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4Z" fill="currentColor" />
       <path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.6 7.6 0 0 1 0 11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PersonIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="8" r="3.6" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M5 20a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }
@@ -952,22 +896,10 @@ html, body { margin: 0; height: 100%; background: var(--bl-ground) }
 .bv-ctl-more .bv-ctl-i { width: 40px; height: 40px; margin-top: 8px }
 .bv-ctl-more .bv-ctl-i svg { width: 20px; height: 20px }
 .bv-ctl-more .bv-ctl-t { margin-top: 8px; font-weight: 500; color: var(--bl-text-2) }
-.bv-ctl-more[aria-expanded="true"] .bv-ctl-i { background: var(--bl-sunken) }
+.bv-ctl-more[aria-pressed="true"] .bv-ctl-t { color: var(--bl-ink-900) }
 .bv-ctl:focus-visible { outline: none }
 .bv-ctl:focus-visible .bv-ctl-i { outline: var(--bl-focus); outline-offset: 3px }
 .bv-more { position: relative; width: 40px }
-.bv-menu { position: absolute; right: -6px; bottom: calc(100% + 8px); z-index: 6; min-width: 204px; padding: 6px;
-  background: var(--bl-ground); border: 1px solid var(--bl-blue-line); border-radius: 14px;
-  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, .35); display: grid }
-.bv-menu button { appearance: none; border: 0; background: none; display: flex; align-items: center; gap: 10px;
-  min-height: 44px; padding: 0 10px; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 500;
-  color: var(--bl-ink-900); text-align: left; cursor: pointer; white-space: nowrap }
-.bv-menu button:hover:not(:disabled) { background: var(--bl-surface) }
-.bv-menu button:disabled { opacity: .5; cursor: default }
-.bv-menu button:focus-visible { outline: var(--bl-focus); outline-offset: -2px }
-.bv-menu svg { width: 20px; height: 20px; flex: none; color: var(--bl-blue) }
-.bv-menu span { flex: 1 }
-.bv-menu em { font-style: normal; font-size: 12.5px; color: var(--bl-text-2) }
 .bv-link { appearance: none; border: 0; background: none; font: inherit; font-size: 13.5px; font-weight: 600;
   color: var(--bl-accent-text); min-height: 40px; padding: 0 12px; cursor: pointer; border-radius: var(--bl-radius-pill) }
 .bv-link:hover { text-decoration: underline; text-underline-offset: 3px }
@@ -1017,10 +949,9 @@ html, body { background: transparent !important; height: auto; overflow: hidden 
 .is-bubble .bv-row { grid-template-columns: 36px 60px 60px 36px; column-gap: 10px }
 .is-bubble .bv-more { width: 36px }
 .is-bubble .bv-ctl-more .bv-ctl-i { width: 36px; height: 36px; margin-top: 10px }
-.is-bubble .bv-ctl-more .bv-ctl-t { margin-top: 6px }
+.is-bubble .bv-ctl-more .bv-ctl-t { margin-top: 6px; font-size: 10.5px; letter-spacing: -.01em }
 .is-bubble .bv-ctl-i { width: 52px; height: 52px }
 .is-bubble .bv-ctl-more .bv-ctl-i { width: 36px; height: 36px }
-.is-bubble .bv-menu { right: -10px }
 .is-bubble .bv-link { min-height: 36px; font-size: 13px }
 .is-bubble .bv-panel { margin: 10px auto 12px; padding: 14px 16px; gap: 10px; width: auto; max-width: 100vw;
   background: var(--bl-ground); border: 1px solid var(--bl-blue-line); border-radius: 18px; box-shadow: var(--bl-elev-float) }
