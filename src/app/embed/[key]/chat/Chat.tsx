@@ -407,7 +407,7 @@ export default function Chat({
         <span className="bl-mark" aria-hidden="true">
           {/* The bell button: white bell on blue, as everywhere Belline answers. */}
           <svg viewBox="0 0 48 48">
-            <circle cx="24" cy="24" r="24" fill="#2667FF" />
+            <circle cx="24" cy="24" r="24" fill="#0071E3" />
             <g fill="#FFFFFF" transform="matrix(0.6 0 0 0.6 9.6 9.81)">
               <circle cx="24" cy="10" r="4.2" />
               <path d="M8.5 32a15.5 15.5 0 0 1 31 0Z" />
@@ -669,8 +669,8 @@ body { background: #FFFFFF }
   display: grid;
   grid-template-rows: auto 1fr auto;
   background: #FFFFFF;
-  color: #1B2735;
-  font: 400 15px/1.55 "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  color: #1D1D1F;
+  font: 400 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -679,7 +679,7 @@ body { background: #FFFFFF }
   align-items: center;
   gap: 11px;
   padding: 14px 16px;
-  border-bottom: 1px solid #DDE3F5;
+  border-bottom: 1px solid #D2D2D7;
   background: #FFFFFF;
 }
 .bl-mark { display: block; width: 36px; height: 36px; flex: none }
@@ -687,18 +687,18 @@ body { background: #FFFFFF }
 .bl-who { display: grid; min-width: 0 }
 .bl-who strong { font-weight: 600; font-size: 14.5px; letter-spacing: -.01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.bl-who em { font-style: normal; font-size: 12.5px; color: #5B6472 }
-.bl-languages { font-size: 11.5px; color: #5B6472; unicode-bidi: plaintext }
+.bl-who em { font-style: normal; font-size: 12.5px; color: #6E6E73 }
+.bl-languages { font-size: 11.5px; color: #6E6E73; unicode-bidi: plaintext }
 .bl-swap {
-  margin-left: auto; flex: none; color: #1A4FD6; text-decoration: none;
+  margin-left: auto; flex: none; color: #0066CC; text-decoration: none;
   font-size: 12.5px; padding: 6px 11px; border-radius: 999px;
-  border: 1px solid rgba(38,103,255,.32);
+  border: 1px solid rgba(0,113,227,.32);
 }
-.bl-swap:hover { background: rgba(38,103,255,.08) }
+.bl-swap:hover { background: rgba(0,113,227,.08) }
 
 .bl-log { overflow-y: auto; padding: 18px 16px 6px; display: grid; align-content: start; gap: 10px }
 
-.bl-opener { margin: 0 0 4px; font-size: 14.5px; color: #535862; max-width: 34ch }
+.bl-opener { margin: 0 0 4px; font-size: 14.5px; color: #6E6E73; max-width: 34ch }
 
 .bl-line { display: flex }
 .bl-line p {
@@ -709,17 +709,17 @@ body { background: #FFFFFF }
    lesbar — aber die dunkle Blase ist die auffälligere, und auffällig gehört
    dem, was der Besucher gerade selbst getan hat. */
 .bl-line.bl-them { justify-content: flex-start }
-.bl-line.bl-them p { background: #F2F4F7; color: #1B2735; border-bottom-left-radius: 5px }
+.bl-line.bl-them p { background: #F5F5F7; color: #1D1D1F; border-bottom-left-radius: 5px }
 .bl-line.bl-you { justify-content: flex-end }
-.bl-line.bl-you p { background: #2667FF; color: #FFFFFF; border-bottom-right-radius: 5px }
+.bl-line.bl-you p { background: #0071E3; color: #FFFFFF; border-bottom-right-radius: 5px }
 
 .bl-note {
   margin: 2px auto; padding: 6px 12px; font-size: 12.5px; text-align: center;
-  color: #5B6472; background: #F2F4F7; border-radius: 999px;
+  color: #6E6E73; background: #F5F5F7; border-radius: 999px;
 }
 
 .bl-thinking p { display: flex; gap: 4px; padding: 13px }
-.bl-thinking i { width: 5px; height: 5px; border-radius: 999px; background: rgba(27,39,53,.42);
+.bl-thinking i { width: 5px; height: 5px; border-radius: 999px; background: rgba(0,0,0,.42);
   animation: pulse 1.1s infinite }
 .bl-thinking i:nth-child(2) { animation-delay: .15s }
 .bl-thinking i:nth-child(3) { animation-delay: .3s }
@@ -728,24 +728,24 @@ body { background: #FFFFFF }
 .bl-trouble { margin: 0; padding: 8px 16px; font-size: 13px; color: #B91C1C }
 
 .bl-wrap form { display: flex; gap: 8px; align-items: end; padding: 12px 14px 14px;
-  border-top: 1px solid #DDE3F5; background: #FFFFFF }
+  border-top: 1px solid #D2D2D7; background: #FFFFFF }
 .bl-wrap textarea {
   flex: 1; resize: none; min-height: 42px; max-height: 120px;
-  padding: 11px 13px; border-radius: 13px; border: 1px solid rgba(27,39,53,.18);
-  background: #fff; color: #1B2735; font: inherit; font-size: 14.5px;
+  padding: 11px 13px; border-radius: 13px; border: 1px solid rgba(0,0,0,.18);
+  background: #fff; color: #1D1D1F; font: inherit; font-size: 14.5px;
 }
-.bl-wrap textarea::placeholder { color: #5B6472 }
+.bl-wrap textarea::placeholder { color: #6E6E73 }
 /* Der Rahmen des Dashboards legt beim Fokus noch einen blassen Ring auf jedes
    Textfeld. Zusammen mit dem Umriss unten sind das zwei Ringe um dasselbe
    Feld — hier gilt nur der eine. */
-.bl-wrap textarea:focus { box-shadow: none; border-color: rgba(27,39,53,.18) }
+.bl-wrap textarea:focus { box-shadow: none; border-color: rgba(0,0,0,.18) }
 .bl-wrap textarea:focus-visible, .bl-wrap button:focus-visible, .bl-swap:focus-visible {
-  outline: 2px solid #2667FF; outline-offset: 2px;
+  outline: 2px solid #0071E3; outline-offset: 2px;
 }
 .bl-wrap button {
   flex: none; width: 42px; height: 42px; border: 0; border-radius: 999px;
   /* Send is the primary action: blue with a white arrow (4.70:1). */
-  background: #2667FF; color: #FFFFFF; cursor: pointer; display: grid; place-items: center;
+  background: #0071E3; color: #FFFFFF; cursor: pointer; display: grid; place-items: center;
 }
 .bl-wrap button svg { width: 21px; height: 21px }
 .bl-wrap button:disabled { opacity: .32; cursor: default }
@@ -754,24 +754,24 @@ body { background: #FFFFFF }
    two buttons, because typing is what this panel is for — and ink while a
    note is being held, so the state is visible under a thumb. */
 .bl-wrap .bl-mic {
-  background: #FFFFFF; color: #1B2735; border: 1px solid rgba(27,39,53,.22);
+  background: #FFFFFF; color: #1D1D1F; border: 1px solid rgba(0,0,0,.22);
   touch-action: none; -webkit-user-select: none; user-select: none;
   -webkit-touch-callout: none;
 }
-.bl-wrap .bl-mic.is-on { background: #1B2735; color: #FFFFFF; border-color: #1B2735;
+.bl-wrap .bl-mic.is-on { background: #1D1D1F; color: #FFFFFF; border-color: #1D1D1F;
   transform: scale(1.08) }
 .bl-wrap .bl-mic svg { width: 20px; height: 20px }
 
 /* The bar in place of the textarea while recording. */
 .bl-rec {
   flex: 1; min-height: 42px; display: flex; align-items: center; gap: 10px;
-  padding: 0 13px; border-radius: 13px; background: #F2F4F7; font-size: 13.5px;
+  padding: 0 13px; border-radius: 13px; background: #F5F5F7; font-size: 13.5px;
 }
 .bl-rec-dot { width: 9px; height: 9px; border-radius: 999px; background: #B91C1C;
   animation: rec 1s infinite }
 @keyframes rec { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
 .bl-rec-time { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 34px }
-.bl-rec-say { color: #5B6472; font-size: 12.5px; white-space: nowrap; overflow: hidden;
+.bl-rec-say { color: #6E6E73; font-size: 12.5px; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis }
 
 /* The label on a spoken message. Inside the visitor's blue bubble, so it is
@@ -780,7 +780,7 @@ body { background: #FFFFFF }
   margin-bottom: 3px; letter-spacing: .01em }
 .bl-voice svg { width: 12px; height: 12px }
 
-.bl-hint { margin: 0; padding: 8px 16px; font-size: 13px; color: #5B6472 }
+.bl-hint { margin: 0; padding: 8px 16px; font-size: 13px; color: #6E6E73 }
 
 @media (prefers-reduced-motion: reduce) {
   .bl-thinking i { animation: none; opacity: .6 }

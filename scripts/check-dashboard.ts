@@ -271,8 +271,9 @@ console.log("\n\x1b[1mText on tinted surfaces stays readable\x1b[0m\n");
 
 // axe measured the grey on the tinted surfaces at 4.34:1 (on --panel-2) and
 // 4.04:1 (on --accent-soft), and the venue-type label at 2.55:1 because of an
-// opacity. The fix is where the grey is used, never the tokens: --muted was
-// darkened on purpose (#5B6472, not #667085) and must not be lightened back.
+// opacity. The fix is where the grey is used, never the tokens: --muted is
+// Apple's #6E6E73 on purpose (not the lighter #86868B, 3.62:1 on white) and
+// must not be lightened.
 const shellCss = fs.readFileSync(path.join(process.cwd(), "src", "app", "globals.css"), "utf8");
 function ruleBody(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
@@ -281,14 +282,16 @@ function ruleBody(selector: string): string {
 }
 
 await test("the text tokens keep their checked values", () => {
-  // Navy + Electric Blue: the app maps onto the shared brand tokens, whose values
-  // were checked for contrast (muted 5.43 on the grey band, 5.38 on blue tint;
-  // white on blue 4.70). --bl-indigo is kept as an alias of --bl-blue.
+  // Apple look: the app maps onto the shared brand tokens, whose values were
+  // checked for contrast (muted 4.66 on the grey band, 4.67 on blue tint;
+  // white on blue 4.70). --bl-indigo is kept as an alias of --bl-blue. Hover
+  // rows use the grey band: muted is only 4.15 on --bl-sunken.
   const tokensCss = fs.readFileSync(path.join(process.cwd(), "public", "brand", "tokens.css"), "utf8");
   assert.match(shellCss, /--muted:\s*var\(--bl-muted\);/);
   assert.match(shellCss, /--brass:\s*var\(--bl-indigo\);/);
-  assert.match(tokensCss, /--bl-muted:\s*#5B6472;/);
-  assert.match(tokensCss, /--bl-blue:\s*#2667FF;/);
+  assert.match(tokensCss, /--bl-muted:\s*#6E6E73;/);
+  assert.match(tokensCss, /--bl-blue:\s*#0071E3;/);
+  assert.match(shellCss, /--hover:\s*var\(--bl-surface\);/);
   assert.match(tokensCss, /--bl-indigo:\s*var\(--bl-blue\);/);
 });
 

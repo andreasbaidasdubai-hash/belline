@@ -21,8 +21,8 @@ import { copy, type CopyLanguage } from "./customer-copy";
  * the contrast rule below decides whether it is allowed.
  */
 export const EMBED_PALETTE: Record<string, string> = {
-  indigo: "#2667FF",
-  ink: "#1B2735",
+  indigo: "#0071E3",
+  ink: "#1D1D1F",
   brass: "#7E5E28",
   forest: "#2F4A3A",
   navy: "#1F2E4A",
@@ -30,7 +30,7 @@ export const EMBED_PALETTE: Record<string, string> = {
 };
 
 const PAPER = "#FFFFFF";
-const INK = "#1B2735";
+const INK = "#1D1D1F";
 
 /** Guidelines, in numbers. */
 export const APPEARANCE_RULES = {

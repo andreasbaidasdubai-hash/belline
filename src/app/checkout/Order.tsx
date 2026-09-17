@@ -29,9 +29,9 @@ import PayButton from "./PayButton";
  * number comes from `plans.ts`, in the market's own currency.
  */
 
-// The brand display face: Plus Jakarta Sans, 600 at these sizes (loaded in
-// src/app/layout.tsx), with the text face and system fonts behind it.
-const serif = { fontFamily: '"Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif', fontWeight: 600, letterSpacing: "-0.025em" } as const;
+// The brand display face from public/brand/tokens.css: SF Pro Display on Apple
+// devices, Inter elsewhere, 600 at these sizes.
+const serif = { fontFamily: "var(--bl-font-display)", fontWeight: 600, letterSpacing: "var(--bl-track-display)" } as const;
 
 /** "250 voice min · 600 text conversations · 5 users", or an older product's per-channel list, live channels only. */
 function shortAllowances(product: Product): string {

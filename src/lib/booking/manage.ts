@@ -202,21 +202,21 @@ export function bookingEmail(location: Location, booking: Booking, kind: Booking
   ].join("\n");
 
   const button = (href: string, label: string, primary: boolean) =>
-    `<a href="${esc(href)}" style="display:inline-block;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px;${
-      primary ? "background:#2667FF;color:#FFFFFF;" : "border:1px solid #DDE3F5;color:#1B2735;"
+    `<a href="${esc(href)}" style="display:inline-block;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:500;font-size:14px;${
+      primary ? "background:#0071E3;color:#FFFFFF;" : "border:1px solid #D2D2D7;color:#1D1D1F;"
     }">${esc(label)}</a>`;
 
-  const html = `<!doctype html><html><body style="margin:0;background:#FFFFFF;font-family:Inter,-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1B2735">
+  const html = `<!doctype html><html><body style="margin:0;background:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Inter,'Helvetica Neue',Arial,sans-serif;color:#1D1D1F">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border:1px solid #DDE3F5;border-radius:16px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border:1px solid #D2D2D7;border-radius:18px">
 <tr><td style="padding:28px 28px 8px">
-<p style="margin:0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#1A4FD6">${esc(location.name)}</p>
-<h1 style="margin:10px 0 18px;font-family:'Plus Jakarta Sans',-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-weight:600;font-size:26px;line-height:1.2;letter-spacing:-0.02em">${esc(heading)}</h1>
+<p style="margin:0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#0066CC">${esc(location.name)}</p>
+<h1 style="margin:10px 0 18px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',Inter,'Helvetica Neue',Arial,sans-serif;font-weight:600;font-size:26px;line-height:1.2;letter-spacing:-0.015em">${esc(heading)}</h1>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:15px;line-height:1.5">
 ${rows
   .map(
     ([k, v]) =>
-      `<tr><td style="padding:6px 0;color:#746C63;width:96px;vertical-align:top">${esc(k)}</td><td style="padding:6px 0">${esc(v)}</td></tr>`,
+      `<tr><td style="padding:6px 0;color:#6E6E73;width:96px;vertical-align:top">${esc(k)}</td><td style="padding:6px 0">${esc(v)}</td></tr>`,
   )
   .join("")}
 </table>
@@ -226,13 +226,13 @@ ${
     ? `<tr><td style="padding:18px 28px 6px">${button(manageUrl(booking), t("booking.change_or_cancel"), true)}&nbsp; ${button(calendarUrl(booking), t("booking.add_to_calendar"), false)}</td></tr>`
     : ""
 }
-${deposit ? `<tr><td style="padding:14px 28px 0;font-size:14px;color:#4A443C">${esc(deposit)}</td></tr>` : ""}
-${policy ? `<tr><td style="padding:14px 28px 0;font-size:13px;color:#746C63">${esc(policy)}</td></tr>` : ""}
-<tr><td style="padding:22px 28px 28px;font-size:13px;color:#746C63">${
+${deposit ? `<tr><td style="padding:14px 28px 0;font-size:14px;color:#424245">${esc(deposit)}</td></tr>` : ""}
+${policy ? `<tr><td style="padding:14px 28px 0;font-size:13px;color:#6E6E73">${esc(policy)}</td></tr>` : ""}
+<tr><td style="padding:22px 28px 28px;font-size:13px;color:#6E6E73">${
     location.businessPhone ? t("booking.questions", { name: esc(location.name), phone: esc(location.businessPhone) }) : esc(location.name)
   }</td></tr>
 </table>
-<p style="font-size:11px;color:#9A9288;margin:16px 0 0">${t("booking.sent_by", { name: esc(location.name) })}</p>
+<p style="font-size:11px;color:#6E6E73;margin:16px 0 0">${t("booking.sent_by", { name: esc(location.name) })}</p>
 </td></tr></table></body></html>`;
 
   // Swiss spelling for a Swiss venue; unchanged for everyone else.

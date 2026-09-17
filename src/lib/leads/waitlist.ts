@@ -186,7 +186,7 @@ function htmlPage(title: string, body: string, page: string, status: number, hea
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)} – Belline</title>
-<style>body{font:16px/1.6 system-ui,sans-serif;color:#1B2735;max-width:560px;margin:12vh auto;padding:0 20px}h1{font-size:1.6rem;line-height:1.25}a{color:#1E54D6}</style>
+<style>body{font:17px/1.47 -apple-system,BlinkMacSystemFont,'SF Pro Text',Inter,'Helvetica Neue',Arial,sans-serif;color:#1D1D1F;max-width:560px;margin:12vh auto;padding:0 20px}h1{font-size:1.6rem;line-height:1.25}a{color:#0066CC}</style>
 </head>
 <body>
 <h1>${escapeHtml(title)}</h1>

@@ -39,8 +39,8 @@
   /* Semantic roles, so a palette change is a token change, not a hunt.
      Each points at a brand token today; none carries a colour of its own
      except the shadows, which the tokens only offer in one size. */
-  /* Indigo with white words (6.29:1); hover goes a step darker (7.90:1). The
-     bell on the button is the inverse mark: a white badge with an indigo bell. */
+  /* Apple blue with white words (4.70:1); hover goes a step darker (4.94:1). The
+     bell on the button is the inverse mark: a white badge with a blue bell. */
   --btn-primary-bg: var(--bl-indigo);
   --btn-primary-text: var(--bl-ground);
   --btn-primary-hover-bg: var(--bl-indigo-hover);
@@ -52,10 +52,10 @@
   --accent-line: var(--bl-indigo-line); /* decorative rules and dots, never text */
   --surface-dark: var(--bl-ink-900);  /* the call card's header bar */
   --on-dark: var(--bl-ground);        /* text on --surface-dark */
-  --on-dark-accent: var(--bl-indigo-lit); /* labels and the level meter on --surface-dark (8.90:1) */
-  --site-shadow-sheet: 0 18px 34px -22px rgba(27, 39, 53, 0.5);
-  --site-shadow-fab: 0 14px 34px -14px rgba(27, 39, 53, 0.5);
-  --site-shadow-fab-soft: 0 12px 28px -14px rgba(27, 39, 53, 0.42);
+  --on-dark-accent: var(--bl-indigo-lit); /* labels and the level meter on --surface-dark (5.58:1) */
+  --site-shadow-sheet: 0 18px 34px -22px rgba(0, 0, 0, 0.5);
+  --site-shadow-fab: 0 14px 34px -14px rgba(0, 0, 0, 0.5);
+  --site-shadow-fab-soft: 0 12px 28px -14px rgba(0, 0, 0, 0.42);
   --site-shadow-chat-dock: 0 24px 60px -20px rgba(17, 17, 17, 0.55);
   --site-shadow-call-dock: 0 20px 46px -16px rgba(17, 17, 17, 0.4);
 
@@ -2194,12 +2194,13 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 }
 
 /* ===========================================================================
-   Navy + Electric Blue, September 2026 (after concordium.com).
+   Apple look, 17 September 2026 (measured on apple.com; was Navy + Electric Blue).
    Everything below restyles the rules above; it comes last so it wins, and it
-   repeats its own breakpoints for the same reason. White ground, navy ink,
-   one blue for fills, focus and links; Plus Jakarta Sans 500 headlines, Inter
-   body. Rhythm comes from full-width bands: white sections with thin
-   blue-bordered cards, one light grey band, one dark navy band, and faint blue
+   repeats its own breakpoints for the same reason. White ground, near-black
+   ink, one blue for fills, focus and links; the system stack (SF Pro on Apple
+   devices, Inter elsewhere), 600 headlines, 17px body, 400 pill buttons.
+   Rhythm comes from full-width bands: white sections with hairline-bordered
+   18px tiles, one light grey band, one near-black band, and faint blue
    washes between some sections. Copy, order and generated markers untouched.
    =========================================================================== */
 
@@ -2207,12 +2208,15 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   --card-line: var(--bl-blue-line);
   --card-radius: var(--bl-radius-card);
   --band-pad: 104px;
-  --site-shadow-fab: 0 14px 34px -14px rgba(27, 39, 53, 0.45);
-  --site-shadow-fab-soft: 0 12px 28px -16px rgba(27, 39, 53, 0.35);
+  --site-shadow-fab: 0 14px 34px -14px rgba(0, 0, 0, 0.45);
+  --site-shadow-fab-soft: 0 12px 28px -16px rgba(0, 0, 0, 0.35);
 }
 
-body { font-size: 16px; line-height: 1.6; color: var(--bl-ink-900); }
+body { font-size: var(--bl-text-size); line-height: var(--bl-line-body); color: var(--bl-ink-900); }
 p { color: var(--bl-text-2); }
+/* Apple's body tracking, set where the text is so the em resolves at its own size. */
+p,
+.lead { letter-spacing: var(--bl-track-body); }
 .wrap { max-width: 1200px; padding: 0 32px; }
 section { padding: var(--band-pad) 0; }
 .rule { border-top: 1px solid var(--bl-rule-soft); }
@@ -2226,14 +2230,14 @@ section { padding: var(--band-pad) 0; }
 }
 h1.display {
   font-size: clamp(2.55rem, 1.5rem + 4.2vw, 4.6rem);
-  line-height: 1.02;
+  line-height: 1.07;
   letter-spacing: var(--bl-track-display);
 }
 h2.display {
   font-size: clamp(2rem, 1.35rem + 2.1vw, 3rem);
   font-weight: var(--bl-weight-display);
-  line-height: 1.08;
-  letter-spacing: var(--bl-track-h1);
+  line-height: 1.1;
+  letter-spacing: var(--bl-track-h2);
 }
 .eyebrow {
   font-size: 0.95rem;
@@ -2243,7 +2247,7 @@ h2.display {
   color: var(--bl-accent-text);
   margin-bottom: 18px;
 }
-.lead { font-size: 1.125rem; line-height: 1.6; color: var(--bl-text-2); }
+.lead { font-size: 1.1875rem; line-height: 1.42; color: var(--bl-text-2); }
 :focus-visible { outline: 2px solid var(--bl-blue); outline-offset: 2px; }
 
 .sec-head { grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 780px; align-items: start; }
@@ -2251,7 +2255,10 @@ h2.display {
 
 /* --- Header ---------------------------------------------------------------- */
 .top {
-  background: rgba(255, 255, 255, 0.94);
+  /* Apple's translucent bar: light grey at 80% over a saturated blur. */
+  background: rgba(245, 245, 247, 0.8);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid var(--bl-rule-soft);
 }
 .top-in { padding-block: 16px; }
@@ -2264,13 +2271,13 @@ h2.display {
   color: var(--bl-ink-900);
 }
 .top nav { gap: 30px; }
-.top nav a { font-size: 0.95rem; font-weight: 500; color: var(--bl-ink-900); }
+.top nav a { font-size: 0.95rem; font-weight: 400; color: var(--bl-ink-900); }
 .top nav a:hover { color: var(--bl-accent-text); border-bottom-color: transparent; }
 .top nav .nav-cta {
   padding: 11px 22px;
   background: var(--bl-blue);
   color: #FFFFFF;
-  font-weight: 600;
+  font-weight: var(--bl-weight-button);
   box-shadow: none;
 }
 .top nav .nav-cta:hover { background: var(--bl-blue-hover); color: #FFFFFF; box-shadow: none; }
@@ -2280,11 +2287,11 @@ h2.display {
 .menu-toggle .bar::before,
 .menu-toggle .bar::after { background: var(--bl-ink-900); }
 
-/* --- Buttons: pills, Inter 600 --------------------------------------------- */
+/* --- Buttons: Apple pills, 17px 400 --------------------------------------- */
 .btn {
-  padding: 13px 24px;
-  font-size: 0.95rem;
-  font-weight: 600;
+  padding: 11px 21px;
+  font-size: 1.0625rem;
+  font-weight: var(--bl-weight-button);
   background: var(--bl-blue);
   border-color: var(--bl-blue);
   color: #FFFFFF;
@@ -2715,7 +2722,7 @@ h2.display {
 /* --- Where Belline answers ------------------------------------------------- */
 #channels { background: linear-gradient(180deg, var(--bl-blue-tint) 0%, #FFFFFF 240px); border-top: 0; }
 #channels .channels-4 { gap: 20px; border-top: 0; margin-top: 48px; }
-#channels .channels-4 > li:hover { border-color: #B9C8EE; }
+#channels .channels-4 > li:hover { border-color: #AEAEB2; }
 #channels .ico {
   width: 44px;
   height: 44px;
@@ -2967,7 +2974,7 @@ footer a { color: var(--bl-ink-900); }
 .bell-fab {
   background: var(--bl-blue);
   color: #FFFFFF;
-  font-weight: 600;
+  font-weight: 500;
   box-shadow: 0 0 0 4px #FFFFFF, var(--site-shadow-fab);
 }
 .bell-fab svg { color: #FFFFFF; }
@@ -3033,12 +3040,12 @@ footer a { color: var(--bl-ink-900); }
 @media (max-width: 900px) {
   :root { --band-pad: 68px; }
   .wrap { padding: 0 20px; }
-  body { font-size: 16px; }
+  body { font-size: var(--bl-text-size); }
   .hero { padding: 20px 0 64px; }
   .top nav { background: #FFFFFF; }
   .top nav a { font-family: var(--bl-font-display); font-size: 1.3rem; font-weight: var(--bl-weight-display); color: var(--bl-ink-900); }
-  .top nav .nav-cta { font-family: var(--bl-font-text); font-size: 1rem; font-weight: 600; color: #FFFFFF; }
-  .top nav .nav-quiet { font-family: var(--bl-font-text); font-size: 0.95rem; font-weight: 500; }
+  .top nav .nav-cta { font-family: var(--bl-font-text); font-size: 1rem; font-weight: var(--bl-weight-button); color: #FFFFFF; }
+  .top nav .nav-quiet { font-family: var(--bl-font-text); font-size: 0.95rem; font-weight: 400; }
   .closer-in { gap: 32px; }
   #book .proof { padding: 26px 22px 28px; border-top: 1px solid var(--card-line); }
   #works .works-grid > div { padding: 24px 22px 26px; border-bottom: 1px solid var(--card-line); }
@@ -3070,8 +3077,8 @@ footer a { color: var(--bl-ink-900); }
    its state in words (the tags come from the flags; scripts/site-integrations.ts).
    No logo files: official marks may replace the wordmarks only once a
    partnership or that company's brand guidelines permit it.
-   Contrast (tokens.css): muted 5.98 on white, 5.38 on the blue tint the band
-   fades from; ink 15.13 / 13.61. Nothing moves on its own: no marquee, no
+   Contrast (tokens.css): muted 5.07 on white, 4.67 on the blue tint the band
+   fades from; ink 16.83 / 15.48. Nothing moves on its own: no marquee, no
    auto-scroll, and the hover colour change is dropped under reduced motion. */
 .connects {
   padding: 16px 0 32px; /* the hero above and the next band below bring their own space */
@@ -3252,7 +3259,7 @@ footer a { color: var(--bl-ink-900); }
   background: #FFFFFF;
   border: 1px solid var(--bl-rule);
   border-radius: var(--bl-radius-card);
-  box-shadow: 0 18px 50px rgba(18, 32, 74, 0.14);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12);
 }
 .locale[open] > .locale-panel,
 .locale.is-open > .locale-panel { display: grid; }
@@ -3293,7 +3300,7 @@ footer a { color: var(--bl-ink-900); }
   width: 28px;
   height: 20px;
   border-radius: 5px;
-  background: #F1F3F7;
+  background: var(--bl-surface);
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.03em;
