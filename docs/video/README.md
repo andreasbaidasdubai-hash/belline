@@ -1,0 +1,229 @@
+# Video receptionist (Tavus) — prototype
+
+A third way to reach a venue's receptionist from a website, beside Chat and
+Voice: a real-time talking face. Tavus supplies the face, the ears and the
+mouth; **Belline stays the receptionist** — the prompt, knowledge, tools,
+bookings, leads, handover, call record, usage and tenancy are the same ones
+the bell and the telephone use.
+
+- Plan and decisions: [`plan.md`](plan.md)
+- What the Tavus docs say, with links: [`tavus-notes.md`](tavus-notes.md)
+- Privacy points to settle before customers: [`privacy-review.md`](privacy-review.md)
+
+Off everywhere by default. Hidden in production until approved.
+
+## How it works
+
+```
+visitor ─ embed.js / site.js ─ iframe /embed/<key>/video ─ VideoPanel
+   Start ─► microphone ─► POST /api/video/<key>/session ─► Tavus: PAL + conversation
+   panel joins the Daily room (daily-js, loaded on Start) ◄── room URL + meeting token
+   Tavus ─► POST /api/video/llm/chat/completions (SSE) ─► Belline's receptionist
+   Tavus ─► POST /api/video/webhook/tavus?t=… (joined, shutdown, transcript)
+   End / close / unload ─► POST /api/video/<key>/session/end (beacon) ─► Tavus end + PAL delete
+```
+
+**Architecture: Belline as Tavus's LLM.** Tavus's custom LLM layer calls an
+OpenAI-compatible `/chat/completions` endpoint with SSE
+([docs](https://docs.tavus.io/sections/conversational-video-interface/pal/llm)).
+The docs do not document a conversation id in that request, and a
+conversation cannot override the PAL's LLM settings, but they recommend a PAL
+per session to vary the LLM backend
+([docs](https://docs.tavus.io/sections/onboarding-guide/pal-strategies)). So
+each call gets a short-lived PAL whose `layers.llm.api_key` is an HMAC token
+naming exactly one venue and one session; the route refuses anything else and
+the PAL is deleted when the call ends. Inside the route: authority rules →
+`AgentSession` (channel `video`) → per-clause honesty guards → spoken-language
+layer → SSE. Time to first token is recorded per turn.
+
+## Files
+
+| Path | What |
+|---|---|
+| `src/lib/video/types.ts` | `VideoAvatarProvider` contract, capability flags |
+| `src/lib/video/tavus.ts` | Tavus implementation (PAL, conversation, end, webhook mapping) |
+| `src/lib/video/mock.ts` | Mock provider; refused in production / next to a real DB |
+| `src/lib/video/provider.ts` | Picks the provider from `VIDEO_AVATAR_PROVIDER` |
+| `src/lib/video/config.ts` | Env vars (names only ever leave it) |
+| `src/lib/video/tokens.ts` | `llm` / `webhook` / `client` tokens |
+| `src/lib/video/control.ts` | Kill switch and venue list in `DATA_DIR/video.json` |
+| `src/lib/video/availability.ts` | Flag, config, kill switch, list, widget, live, plan, daily ceiling |
+| `src/lib/video/sessions.ts` | Single-flight create, timers, idempotent end, handover, metering |
+| `src/lib/video/engine.ts` | The model route: auth, authority, turn, guards, SSE |
+| `src/lib/video/stub-agent.ts` | Scripted receptionist for the mock under stubs |
+| `src/lib/video/metrics.ts` | Timings to the event table and an in-memory list |
+| `src/lib/video/client/machine.ts` | Panel state machine, Tavus event mapping (pure) |
+| `src/lib/video/client/calls.ts` | Daily call (lazy `daily-js`) and mock call adapters |
+| `src/app/embed/[key]/video/` | The panel page and `VideoPanel.tsx` |
+| `src/app/api/video/…` | session start/end/handover, event, mock relay, webhook, LLM |
+| `src/app/(internal)/sales/video/`, `src/app/api/sales/video/` | Staff console |
+| `public/embed.js`, `public/site.js`, `public/site.css` | Launcher hooks |
+| `src/lib/agent/prompt.ts`, `runtime.ts`, `tools.ts` | `"video"` channel |
+| `src/lib/flags.ts` | `video.avatar` |
+| `scripts/check-video.ts`, `playwright.video.config.ts`, `tests-video/` | Tests |
+
+**Dependency added:** `@daily-co/daily-js@0.92.2` (exact), imported only
+inside `createTavusCall`.
+
+**Migration:** none. `Call.video` is an optional field on the JSON store;
+`video.json` is created on first write.
+
+## Environment
+
+All placeholders are in `.env.example`.
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `FLAG_VIDEO_AVATAR=on` | yes | Explicit switch (the flag also needs the three below unless mock) |
+| `TAVUS_API_KEY` | tavus | PAL Maker → API Key. Server only |
+| `TAVUS_FACE_ID` | tavus | Stock face, Tavus `face_id` (formerly `replica_id`). Prototype: **`rf90eb925bd8`** |
+| `VIDEO_LLM_SECRET` | tavus | 40+ random chars; signs session tokens |
+| `TAVUS_PAL_ID` | optional | PAL (formerly persona) whose `tts`/`stt`/`conversational_flow` each session copies; required in shared mode |
+| `VIDEO_AVATAR_PROVIDER` | optional | `tavus` (default) or `mock` |
+| `VIDEO_AVATAR_VENUES` | optional | Comma-separated venue ids allowed by env (the console can add/remove) |
+| `VIDEO_PUBLIC_ORIGIN` | optional | Where Tavus reaches the app; defaults to `PUBLIC_ORIGIN`; must be https |
+| `VIDEO_MAX_CALL_SECONDS` | optional | Default 300 (30–1800) |
+| `VIDEO_WARN_BEFORE_SECONDS` | optional | Default 30 |
+| `VIDEO_JOIN_TIMEOUT_SECONDS` | optional | Default 60; also Tavus `participant_absent_timeout` |
+| `VIDEO_MAX_SESSIONS_PER_DAY` | optional | Per venue, default 20 |
+| `VIDEO_MAX_CONCURRENT_PER_VENUE` | optional | Default 2 |
+| `VIDEO_TAVUS_PAL_MODE` | optional | `per_session` (default) or `shared` |
+| `VIDEO_LLM_SHARED_KEY` | shared mode | The `api_key` given to the shared PAL |
+| `VIDEO_TAVUS_SPECULATIVE` | optional | `on` enables Tavus `speculative_inference` (off: a half-heard sentence must not run a booking) |
+| `VIDEO_TAVUS_TEST_MODE` | optional | `on`: free, unjoinable conversations — credential check only |
+| `VIDEO_TAVUS_DELETE_AFTER_END` | optional | `on`: hard-delete each conversation at Tavus when it ends |
+
+Missing credentials disable video quietly: no button, and the panel page and
+session route answer with a readable refusal plus Chat and Voice.
+
+## Tavus dashboard — exact steps
+
+1. **Account.** Sign in to the PAL Maker at https://maker.tavus.io/dev
+   ([auth docs](https://docs.tavus.io/api-reference/authentication)).
+2. **API key.** PAL Maker → **API Key** → **Create New Key**, name it
+   `belline-staging`, optionally restrict to Railway's egress IPs → copy it into
+   Railway staging as **`TAVUS_API_KEY`**.
+3. **Stock face.** Faces → Stock. The founder chose **`rf90eb925bd8`**. Put it in
+   **`TAVUS_FACE_ID`**. (Any `r…` stock id works; never a personal replica.)
+4. **Template PAL (recommended, for the voice).** PALs → Create:
+   - name `belline-template`, pipeline mode **full**, default face `rf90eb925bd8`;
+   - pick the **voice** (TTS) and turn-taking you like; leave perception **off**;
+   - **LLM:** custom — model `belline-receptionist`, base URL
+     `https://<staging app host>/api/video/llm` (no `/chat/completions`), API key
+     any placeholder (per-session PALs replace it).
+   Copy the PAL id (`p…`) into **`TAVUS_PAL_ID`**. Belline copies its `tts`,
+   `stt` and `conversational_flow` into each per-session PAL and sets its own
+   `llm` (api_key = the session token) and `perception: off`.
+5. **Webhook.** Nothing to set in the dashboard: each conversation carries its own
+   `callback_url` = `https://<app host>/api/video/webhook/tavus?t=<session token>`.
+6. **Secret.** Generate 48 random characters for **`VIDEO_LLM_SECRET`**.
+7. **(Shared mode only)** set the template PAL's LLM API key to a random value,
+   put the same value in `VIDEO_LLM_SHARED_KEY`, and `VIDEO_TAVUS_PAL_MODE=shared`.
+8. **Optional credential check:** `VIDEO_TAVUS_TEST_MODE=on` for one start — Tavus
+   creates a free conversation you cannot join; turn it off again.
+
+## Local testing (mock, no keys)
+
+```powershell
+$env:DATABASE_URL = $null
+node --import tsx scripts/check-video.ts                       # 23 cases
+npx playwright test --config playwright.video.config.ts        # panel e2e, mock
+```
+
+The Playwright config starts the stubbed server on port 3127 with
+`FLAG_STUBS=on`, `FLAG_VIDEO_AVATAR=on`, `VIDEO_AVATAR_PROVIDER=mock` and
+`VIDEO_AVATAR_VENUES=loc_belline`. Set `VIDEO_SHOTS_DIR` to save screenshots.
+The mock panel says **"MOCK — not a live avatar"** and lets you type what you
+would say; replies go through the real model route and tools (a scripted
+receptionist stands in for the model).
+
+## Staging (Railway)
+
+The main session deploys. For reference, from a directory linked to the
+project: `railway up --service belline --environment staging --ci`.
+
+Set on the `belline` service, staging environment: `FLAG_VIDEO_AVATAR=on`,
+`TAVUS_API_KEY`, `TAVUS_FACE_ID=rf90eb925bd8`, `TAVUS_PAL_ID` (if made),
+`VIDEO_LLM_SECRET`, `VIDEO_AVATAR_VENUES=loc_belline`, and check that
+`PUBLIC_ORIGIN` (or `VIDEO_PUBLIC_ORIGIN`) is the staging https host Tavus can
+reach. Do **not** set `VIDEO_AVATAR_PROVIDER=mock` on Railway — it is refused
+in production mode anyway.
+
+## Switching it on and off
+
+- **Flag:** `FLAG_VIDEO_AVATAR=on` / `off` (needs a restart).
+- **Venue list:** `VIDEO_AVATAR_VENUES`, or **Sales console → Video → Allow
+  video / Remove** (instant, stored in `DATA_DIR/video.json`; a console
+  removal beats the env list).
+- **Kill switch:** **Sales console → Video → Turn video off everywhere now**.
+  Instant for new sessions; live calls hear a short goodbye and end. The
+  widget's public config is cached up to 60 s, so the button can linger that
+  long — pressing it is refused.
+- **Production:** leave `FLAG_VIDEO_AVATAR` unset until approved.
+
+## Usage and metering
+
+A video call is a `Call` with `channel: "embed"` and `video: {…}`, so it is
+billed as **web-voice minutes** by the existing `billableVoiceMinutes` (plans,
+prices and allowances unchanged). Calls on Belline's own or demo venues are
+`isDemo` and never billed. Video has its own daily ceiling and does not use up
+the bell's. Tavus's own cost is not priced on Belline's rate card (the docs
+publish no rates); it is visible in Tavus's dashboard.
+
+## Timings and events
+
+Server: `session_create_started`, `session_created` (ms), `session_create_failed`,
+`llm_first_token` (ms), `booking_or_lead`, `handover_requested`, `ended` (duration).
+Panel: `video_selected`, `mic_prompted`, `mic_denied`, `ready` (ms), `first_frame`
+(ms), `first_response` (ms), `reconnecting`, `fallback_chat`, `fallback_voice`,
+`client_error`. Written to the event table as `video.*` where Postgres is
+configured, and shown as medians in the sales console.
+
+## Known limitations
+
+- **Unverified against a live Tavus account:** how Tavus sends `api_key`
+  (Bearer assumed; `x-api-key`/`api-key` also accepted), and the body it sends.
+  First item of the owner test script.
+- English only on video. German venues get `policy: "eu"` but the video prompt
+  and greeting are English.
+- No typed input in a live Tavus call; the mock panel types instead of speaking.
+- No booking form beside the video: the widget has none to reuse, so the face
+  collects and reads back details conversationally.
+- Captions come from Tavus utterance events; Daily `transcription-message` is
+  not wired.
+- Switching to chat does not carry the video transcript into the chat thread
+  (it is in the call record in the dashboard).
+- Sessions live in one process; a restart ends them (as for voice calls).
+- Speculative inference is off, which costs some latency.
+- Perception and camera are not built (by design for the prototype).
+
+## Owner test script (staging, 20 minutes)
+
+1. **Wiring.** Sales console → Video: flag on, provider `tavus`, no missing
+   config, `loc_belline` listed. Open belline.ai staging: a round camera button
+   above the stack. (If the model route logs 401s, Tavus is not sending the
+   token as Bearer — tell engineering.)
+2. **Start.** Click it → intro text → **Start video call** → allow the mic.
+   Time to a face on screen and the greeting ("Hi, I'm Belle, the AI concierge
+   for Belline…"). Console shows *Room created*, *First frame*, *First words*.
+3. **Visual realism and lip-sync.** Watch the mouth on long sentences, numbers
+   and names. Note any drift or frozen frames.
+4. **Latency.** Ask five short questions; count seconds from when you stop
+   speaking to the first word. Compare with the console's *Model: first words*.
+5. **Interruptions.** Talk over Belle mid-sentence twice. She should stop and
+   answer the new thing without repeating herself.
+6. **FAQ accuracy.** Ask the price, the trial, what Belline does, and one thing
+   not in its knowledge — she must say she doesn't know and offer a person.
+7. **Honesty.** Ask "Are you a real person?" — she must say she is an AI.
+8. **Booking/lead behaviour.** Say you run a salon, give a name and email. She
+   should read details back and confirm before saving; check Sales → Enquiries
+   for the lead.
+9. **Talk to a person.** Press the button: Belle asks for details; the call
+   appears for follow-up.
+10. **Limits.** Stay on until the warning banner, then the automatic end.
+11. **Mobile.** iPhone Safari and Android Chrome: open, Start (audio must play
+    without a second tap), mute, rotate to landscape, lock the phone for 10 s,
+    end. No horizontal scrolling; buttons clear of the browser bars.
+12. **Kill switch.** During a call press *Turn video off everywhere now*: the call
+    ends politely within a turn and the button disappears within a minute.
+13. **Tavus dashboard.** No leftover `belline-vs_*` PALs; conversations ended.
