@@ -1143,6 +1143,14 @@ await test("the chroma key: Tavus's green goes, the face stays, a stream with no
   assert.match(source, /IntersectionObserver/, "paused while off screen");
   assert.match(source, /prefers-reduced-motion/);
   assert.match(source, /getBattery/);
+  // The background decides when keying starts, so every way it can end must
+  // reach a mode. An image that had already failed is `complete` with no
+  // `naturalWidth`, and a `load`/`error` listener attached after the fact
+  // never fires again: the canvas sat at `idle` for ever, neither keyed nor
+  // fallen back. A background that simply never answers did the same.
+  assert.match(source, /if \(background\.complete\) \{\s*if \(background\.naturalWidth\) go\(\);\s*else settle\("raw", "error"\);/, "a background that already failed never settles");
+  assert.ok(chroma.BACKGROUND_WAIT_MS > 0 && chroma.BACKGROUND_WAIT_MS <= 15_000, "the wait for the background is bounded");
+  assert.match(source, /setTimeout\(\(\) => settle\("raw", "error"\), BACKGROUND_WAIT_MS\)/, "a background that never answers never settles");
   const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
   assert.match(panel, /<Greenscreen /);
   assert.match(panel, /faceVisible && !keyed/, "the plain video returns whenever keying stops");

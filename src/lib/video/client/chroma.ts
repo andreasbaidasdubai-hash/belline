@@ -70,6 +70,13 @@ export function median(values: number[]): number {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+/**
+ * How long the background picture may take before keying is given up on.
+ * A local, cached asset; well inside the patience of anyone watching a face
+ * that is already talking underneath it.
+ */
+export const BACKGROUND_WAIT_MS = 8000;
+
 /** Frames measured before deciding the device can keep up, and the budget per frame. */
 export const SAMPLE_FRAMES = 30;
 export const BUDGET_MS: Record<"webgl" | "2d", number> = { webgl: 10, "2d": 14 };
@@ -150,6 +157,8 @@ export function startChromaKey(opts: ChromaOptions): ChromaHandle {
   const minGapMs = reducedMotion() ? 1000 / 15 : 0;
   let lastDraw = 0;
   let checkedGreen = false;
+  /** Cleared by stop(), so nothing settles a mode after the call has gone. */
+  const timers: ReturnType<typeof setTimeout>[] = [];
 
   // A tiny 2D canvas, for the green check and the 2D path's own work.
   const probe = document.createElement("canvas");
@@ -348,6 +357,8 @@ export function startChromaKey(opts: ChromaOptions): ChromaHandle {
     if (stopped) return;
     stopped = true;
     cancel();
+    for (const t of timers) clearTimeout(t);
+    timers.length = 0;
     document.removeEventListener("visibilitychange", onVisibility);
     observer?.disconnect();
   }
@@ -368,10 +379,25 @@ export function startChromaKey(opts: ChromaOptions): ChromaHandle {
       else if (ctx2d() && probeCtx) start("2d");
       else settle("raw", "unsupported");
     };
-    if (background.complete && background.naturalWidth) go();
-    else {
-      background.addEventListener("load", go, { once: true });
-      background.addEventListener("error", () => settle("raw", "error"), { once: true });
+    // The background decides when keying can start, so every way it can end
+    // must reach a mode. It did not: an image that had *already* failed is
+    // `complete` with no `naturalWidth`, and the listeners below would never
+    // fire again, so the canvas sat at `idle` for ever — no keying and no
+    // fallback either. One that simply never answers did the same. Both now
+    // hand the circle back to the plain video, which is what every other
+    // fallback here does.
+    if (background.complete) {
+      if (background.naturalWidth) go();
+      else settle("raw", "error");
+    } else {
+      const done = (run: () => void) => () => {
+        clearTimeout(waited);
+        run();
+      };
+      const waited = setTimeout(() => settle("raw", "error"), BACKGROUND_WAIT_MS);
+      timers.push(waited);
+      background.addEventListener("load", done(go), { once: true });
+      background.addEventListener("error", done(() => settle("raw", "error")), { once: true });
     }
   })();
 
