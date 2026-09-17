@@ -2006,6 +2006,10 @@ body.has-video-bubble .bell-fab { display: none; }
 .channels-4 h3 { font-size: 1.22rem; }
 .channels-4 .channel-how { margin-top: auto !important; padding-top: 6px; }
 .channels-4 .channel-how a { color: var(--ink); text-underline-offset: 3px; }
+/* Three while the video receptionist is off (src/lib/site-flags.ts adds it as the fourth). */
+@media (min-width: 1101px) {
+  .channels-4.channels-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .ico {
   width: 28px;
   height: 28px;

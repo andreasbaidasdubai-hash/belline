@@ -123,6 +123,111 @@ function outlookSwaps(file: string, w: Words): SiteSwap[] {
   ];
 }
 
+/**
+ * The video receptionist on the landing pages (`video.avatar`, as the
+ * catalogue's `videoLive` reads it). The pages in `public/` say nothing about
+ * video; with the flag on they lead with it: the eyebrow, the hero's lead and
+ * Belle's caption, "What Belline does" with video first, the pricing lead,
+ * each card's video row and the trial's video minutes, the two video
+ * questions in the FAQ and in its structured data, and the footer.
+ *
+ * The card rows and the trial are generated (scripts/site-pricing.ts emits
+ * them only while video is live), and so are the "video-ratio" and
+ * "faq-video" phrases: the words here are what a build with the flag on
+ * renders, and check-billing holds them to it, so a catalogue change cannot
+ * leave them behind. Every `on` is one line, so a CRLF checkout serves the
+ * same page.
+ */
+const VIDEO_EN = {
+  eyebrow: ["AI receptionist for your website", "AI video receptionist for your website"],
+  lead: ["Belline puts an AI receptionist on your website chat and voice button,", "Belline puts an AI receptionist on your website, on video, plus chat,"],
+  caption: [
+    '<span class="hv-title">Belle on your website</span> <span class="state state-available">Available</span>',
+    '<span class="hv-title">Belle on video</span> <span class="state state-available">Included in every plan</span>',
+  ],
+  ratio: ['<p class="hv-early">Included in every plan.</p>', '<p class="hv-early"><span class="gen" data-gen="video-ratio">Included in every plan. Each video minute uses 2.5 voice minutes.</span></p>'],
+  channelsLead: ["Chat and voice on your website, WhatsApp and your", "Belle on video on your website, then chat and voice, WhatsApp and your"],
+  channels: [
+    '<ul class="channels channels-4 channels-3">',
+    '<ul class="channels channels-4"><li><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/></svg><div class="channel-head"><h3>Video receptionist on your website</h3><span class="state state-available">Included in every plan</span></div><p>Belle greets visitors face to face and answers out loud, right in their browser. It uses their microphone, never their camera.</p><p class="channel-how">The same line of HTML as the chat.</p></li>',
+  ],
+  priceLead: [
+    "many voice minutes and text conversations they include.",
+    "many voice minutes and text conversations they include, and every plan includes Belle on video, which draws on the voice minutes.",
+  ],
+  trial: [
+    "<strong>Trial:</strong> 30 days, 30 voice minutes and 50 text conversations.",
+    "<strong>Trial:</strong> 30 days, 30 voice or 12 video minutes and 50 text conversations.",
+  ],
+  voiceRow: (minutes: number) => `<li class="allow-voice">${minutes} voice minutes a month, shared across your phone line and your website's voice button</li>`,
+  videoRow: (minutes: number) => `<li class="allow-video">Video receptionist · ${minutes} video minutes (each uses 2.5 voice minutes)</li>`,
+  faq: [
+    "<!-- faq:video -->",
+    '<details><summary>Can Belle answer our website visitors on video?</summary><div class="answer"><p>Yes, on every plan. Belle answers on video, by voice, in the visitor’s browser: it uses their microphone, never their camera.</p></div></details><details><summary>How are video minutes counted?</summary><div class="answer"><p class="gen" data-gen="faq-video">Each video minute uses 2.5 of your plan’s voice minutes, so a plan’s voice minutes cover up to 30 video minutes on Starter, 100 video minutes on Growth and 200 video minutes on Scale.</p></div></details>',
+  ],
+  faqData: [
+    'You can turn it off yourself at any time." } },',
+    'You can turn it off yourself at any time." } }, { "@type": "Question", "name": "Can Belle answer our website visitors on video?", "acceptedAnswer": { "@type": "Answer", "text": "Yes, on every plan. Belle answers on video, by voice, in the visitor’s browser: it uses their microphone, never their camera." } }, { "@type": "Question", "name": "How are video minutes counted?", "acceptedAnswer": { "@type": "Answer", "text": "Each video minute uses 2.5 of your plan’s voice minutes, so a plan’s voice minutes cover up to 30 video minutes on Starter, 100 video minutes on Growth and 200 video minutes on Scale." } },',
+  ],
+  footer: ["bookings: on your website, WhatsApp and phone.", "bookings: video on your website, plus chat, WhatsApp and phone."],
+};
+
+const VIDEO_DE: typeof VIDEO_EN = {
+  eyebrow: ["KI-Empfang für Ihre Website", "KI-Video-Empfang für Ihre Website"],
+  lead: ["Belline setzt einen KI-Empfang auf Ihren Website-Chat und Sprach-Button,", "Belline setzt einen KI-Empfang auf Ihre Website, per Video, dazu Chat,"],
+  caption: [
+    '<span class="hv-title">Belle auf Ihrer Website</span> <span class="state state-available">In den VAE verfügbar</span>',
+    '<span class="hv-title">Belle per Video</span> <span class="state state-available">In jedem Tarif enthalten</span>',
+  ],
+  ratio: ['<p class="hv-early">In jedem Tarif enthalten.</p>', '<p class="hv-early"><span class="gen" data-gen="video-ratio">In jedem Tarif enthalten. Jede Videominute verbraucht 2,5 Sprachminuten.</span></p>'],
+  channelsLead: ["Chat und Sprache auf Ihrer Website, WhatsApp und", "Belle per Video auf Ihrer Website, dazu Chat und Sprache, WhatsApp und"],
+  channels: [
+    '<ul class="channels channels-4 channels-3">',
+    '<ul class="channels channels-4"><li><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/></svg><div class="channel-head"><h3>Video-Empfang auf Ihrer Website</h3><span class="state state-available">In jedem Tarif enthalten</span></div><p>Belle begrüßt Besucher von Angesicht zu Angesicht und antwortet laut, direkt im Browser, derzeit auf Englisch. Dafür wird das Mikrofon genutzt, nie die Kamera.</p><p class="channel-how">Dieselbe Zeile HTML wie der Chat.</p></li>',
+  ],
+  priceLead: ["Textgespräche sie enthalten.", "Textgespräche sie enthalten, und jeder Tarif enthält Belle per Video, das die Sprachminuten nutzt."],
+  trial: [
+    "<strong>Geplante Testphase:</strong> 30 Tage, 30 Sprachminuten und 50 Textgespräche.",
+    "<strong>Geplante Testphase:</strong> 30 Tage, 30 Sprach- oder 12 Videominuten und 50 Textgespräche.",
+  ],
+  voiceRow: (minutes: number) => `<li class="allow-voice">${minutes} Sprachminuten pro Monat, geteilt zwischen Ihrer Telefonleitung und dem Sprach-Button auf Ihrer Website</li>`,
+  videoRow: (minutes: number) => `<li class="allow-video">Video-Empfang · ${minutes} Videominuten (jede verbraucht 2,5 Sprachminuten)</li>`,
+  faq: [
+    "<!-- faq:video -->",
+    '<details><summary>Kann Belle unsere Website-Besucher per Video empfangen?</summary><div class="answer"><p>Ja, in jedem Tarif. Belle antwortet per Video und Sprache im Browser des Besuchers, derzeit auf Englisch: Dafür wird das Mikrofon genutzt, nie die Kamera.</p></div></details><details><summary>Wie werden Videominuten gezählt?</summary><div class="answer"><p class="gen" data-gen="faq-video">Jede Videominute verbraucht 2,5 der Sprachminuten Ihres Tarifs. Die Sprachminuten reichen so für bis zu 30 Videominuten bei Starter, 100 Videominuten bei Growth und 200 Videominuten bei Scale.</p></div></details>',
+  ],
+  faqData: [
+    'Sie können sie jederzeit selbst wieder ausschalten." } },',
+    'Sie können sie jederzeit selbst wieder ausschalten." } }, { "@type": "Question", "name": "Kann Belle unsere Website-Besucher per Video empfangen?", "acceptedAnswer": { "@type": "Answer", "text": "Ja, in jedem Tarif. Belle antwortet per Video und Sprache im Browser des Besuchers, derzeit auf Englisch: Dafür wird das Mikrofon genutzt, nie die Kamera." } }, { "@type": "Question", "name": "Wie werden Videominuten gezählt?", "acceptedAnswer": { "@type": "Answer", "text": "Jede Videominute verbraucht 2,5 der Sprachminuten Ihres Tarifs. Die Sprachminuten reichen so für bis zu 30 Videominuten bei Starter, 100 Videominuten bei Growth und 200 Videominuten bei Scale." } },',
+  ],
+  footer: ["Buchungen erhalten: auf Ihrer Website, per WhatsApp und am Telefon.", "Buchungen erhalten: per Video auf Ihrer Website, dazu Chat, WhatsApp und Telefon."],
+};
+
+/** The plans' voice minutes, and the video minutes each buys (plans.ts `videoMinutesFor`). */
+const VIDEO_PLANS: [voice: number, video: number][] = [
+  [75, 30],
+  [250, 100],
+  [500, 200],
+];
+
+function videoSwaps(file: string, w: typeof VIDEO_EN): SiteSwap[] {
+  const pair = ([off, on]: string[]): SiteSwap => ({ file, off, on });
+  return [
+    pair(w.eyebrow),
+    pair(w.lead),
+    pair(w.caption),
+    pair(w.ratio),
+    pair(w.channelsLead),
+    pair(w.channels),
+    pair(w.priceLead),
+    pair(w.trial),
+    ...VIDEO_PLANS.map(([voice, video]) => ({ file, off: w.voiceRow(voice), on: w.voiceRow(voice) + w.videoRow(video) })),
+    pair(w.faq),
+    pair(w.faqData),
+    pair(w.footer),
+  ];
+}
+
 export const SITE_FLAG_COPY: Partial<Record<FlagName, SiteSwap[]>> = {
   "booking.google": [
     ...googleSwaps("landing.html", EN),
@@ -141,6 +246,7 @@ export const SITE_FLAG_COPY: Partial<Record<FlagName, SiteSwap[]>> = {
     { file: "privacy.de.html", off: "<li><strong>Microsoft</strong> — nur wenn ein Unternehmen einen Outlook-Kalender verbindet, sobald diese Verbindung verfügbar ist. Outlook-Kalender können noch nicht mit Belline verbunden werden.</li>", on: "<li><strong>Microsoft</strong> — nur wenn ein Unternehmen einen Outlook-Kalender verbindet, über Microsoft Graph.</li>" },
     { file: "privacy.de.html", off: "<p>Outlook-Kalender können noch nicht mit Belline verbunden werden. Sobald dies möglich ist, und nur wenn sich ein Unternehmen dafür entscheidet, einen zu verbinden, geht Belline mit den Informationen, die es von Microsoft erhält, wie folgt um:</p>", on: "<p>Die Verbindung eines Outlook-Kalenders ist optional. Nur wenn sich ein Unternehmen dafür entscheidet, einen zu verbinden, geht Belline mit den Informationen, die es von Microsoft erhält, wie folgt um:</p>" },
   ],
+  "video.avatar": [...videoSwaps("landing.html", VIDEO_EN), ...videoSwaps("landing.de.html", VIDEO_DE)],
 };
 
 /**

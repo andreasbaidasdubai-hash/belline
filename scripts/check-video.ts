@@ -1834,9 +1834,12 @@ await test("every Talk to Belle on belline.ai starts the video call once the bub
   }
   assert.match(video, /tryVideo: "Try Belle on video"/);
   assert.match(video, /pill: "Talk to Belle · video"/);
-  // The video receptionist leads (founder, 2026-09-17).
-  assert.match(read("public/landing.html"), /<p class="eyebrow rise">AI video receptionist for your website<\/p>/);
-  assert.match(read("public/landing.de.html"), /<p class="eyebrow rise">KI-Video-Empfang für Ihre Website<\/p>/);
+  // The video receptionist leads (founder, 2026-09-17) once video.avatar is on;
+  // the committed pages are the flag-off ones (src/lib/site-flags.ts, check-webchat).
+  assert.match(read("public/landing.html"), /<p class="eyebrow rise">AI receptionist for your website<\/p>/);
+  assert.match(read("public/landing.de.html"), /<p class="eyebrow rise">KI-Empfang für Ihre Website<\/p>/);
+  const flags = read("src/lib/site-flags.ts");
+  assert.ok(flags.includes('"AI video receptionist for your website"') && flags.includes('"KI-Video-Empfang für Ihre Website"'), "the flag-on eyebrow is gone");
 });
 
 await test("close shrinks the bubble to a small face for the session; the face brings it back", () => {

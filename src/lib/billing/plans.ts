@@ -195,8 +195,11 @@ export function videoAllowanceText(voiceMinutes: number): string {
   return `${videoMinutesFor(voiceMinutes).toLocaleString("en-GB")} video minutes (each uses ${VIDEO_VOICE_MINUTE_RATIO} voice minutes)`;
 }
 
+/** The video feature's line. The pricing page says it in each card's own video row instead (scripts/site-pricing.ts). */
+export const VIDEO_RECEPTIONIST_TEXT = "Video receptionist on your website";
+
 const VIDEO_RECEPTIONIST: Feature = {
-  text: "Video receptionist on your website",
+  text: VIDEO_RECEPTIONIST_TEXT,
   get status(): Feature["status"] {
     return videoLive() ? "live" : "not-yet";
   },

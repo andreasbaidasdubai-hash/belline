@@ -709,16 +709,23 @@ await test("the example WhatsApp card is a live example conversation, not a not-
   assert.doesNotMatch(card, /(?:booked|confirmed) (?:you )?for|see you (?:on|at)/i);
 });
 
-await test("What Belline does: video first, then chat and voice, WhatsApp and the phone, each marked in words", () => {
-  const html = visibleHtml("landing.html");
-  const start = html.indexOf('<section id="channels"');
-  const section = html.slice(start, html.indexOf("</section>", start));
-  const names = [...section.matchAll(/<h3>([^<]+)<\/h3>/g)].map((m) => m[1]);
-  assert.deepEqual(names, ["Video receptionist on your website", "Chat and voice on your website", "WhatsApp for your business", "Your phone"]);
-  // Video is in every plan (founder, 2026-09-17); the other three are available today.
-  assert.equal((section.match(/state-available">Included in every plan</g) ?? []).length, 1, "video is not marked included");
-  assert.equal((section.match(/state-available">Available</g) ?? []).length, 3, "not every channel is marked Available");
-  assert.doesNotMatch(section, /early access/i);
+await test("What Belline does: video first while video.avatar is on, then chat and voice, WhatsApp and the phone, each marked in words", async () => {
+  const { applySiteFlags } = await import("../src/lib/site-flags");
+  const VIDEO = { FLAG_VIDEO_AVATAR: "on", TAVUS_API_KEY: "x", TAVUS_FACE_ID: "x", VIDEO_LLM_SECRET: "x".repeat(40) };
+  const sectionOf = (html: string) => {
+    const start = html.indexOf('<section id="channels"');
+    return html.slice(start, html.indexOf("</section>", start));
+  };
+  const namesOf = (section: string) => [...section.matchAll(/<h3>([^<]+)<\/h3>/g)].map((m) => m[1]);
+  const off = sectionOf(visibleHtml("landing.html"));
+  assert.deepEqual(namesOf(off), ["Chat and voice on your website", "WhatsApp for your business", "Your phone"]);
+  assert.equal((off.match(/state-available">Available</g) ?? []).length, 3, "not every channel is marked Available");
+  assert.doesNotMatch(off, /Included in every plan|early access/i);
+  // Video is in every plan (founder, 2026-09-17) once it works.
+  const on = sectionOf(applySiteFlags("landing.html", visibleHtml("landing.html"), VIDEO));
+  assert.deepEqual(namesOf(on), ["Video receptionist on your website", "Chat and voice on your website", "WhatsApp for your business", "Your phone"]);
+  assert.equal((on.match(/state-available">Included in every plan</g) ?? []).length, 1, "video is not marked included");
+  assert.equal((on.match(/state-available">Available</g) ?? []).length, 3, "not every channel is marked Available");
 });
 
 await test("trade pages link only to homepage sections that exist, and their footer speaks to any business", () => {
@@ -727,7 +734,7 @@ await test("trade pages link only to homepage sections that exist, and their foo
   const anchors = [...build.matchAll(/href="\/#([^"]+)"/g)].map((m) => m[1]);
   assert.ok(anchors.length > 0, "the trade-page template no longer links to any homepage section");
   for (const id of anchors) assert.ok(ids.has(id), `a trade page links to /#${id}, which the homepage does not have`);
-  assert.match(build, /AI video, voice and chat reception for UAE businesses that take calls, messages or bookings\./);
+  assert.match(build, /AI voice and chat reception for UAE businesses that take calls, messages or bookings\./);
   assert.doesNotMatch(build, /clinics, dental practices, salons, restaurants/, "the trade-page footer still names four trades");
 });
 
@@ -887,7 +894,7 @@ const connectionClaims = (text: string, notLive: string[]) =>
     .filter((sentence) => notLive.some((name) => sentence.toLowerCase().includes(name.toLowerCase())));
 
 /** The privacy page from the same builds, by flag state. */
-const builtPrivacy = new Map<"off" | "on", string>();
+const builtPrivacy = new Map<"off" | "on" | "video", string>();
 /** The German pages from the same builds, keyed "off de-ch", "on de-de privacy" and so on. */
 const builtGerman = new Map<string, string>();
 
@@ -907,7 +914,7 @@ function buildLanding(extra: Record<string, string>): string {
   });
   try {
     assert.equal(run.status, 0, `the site build failed:\n${run.stdout}\n${run.stderr}`);
-    const which = extra.FLAG_BOOKING_GOOGLE === "on" ? "on" : "off";
+    const which = extra.FLAG_BOOKING_GOOGLE === "on" ? "on" : extra.FLAG_VIDEO_AVATAR === "on" ? "video" : "off";
     builtPrivacy.set(which, fs.readFileSync(path.join(out, "privacy.html"), "utf8"));
     for (const slug of ["de-de", "de-at", "de-ch"]) {
       builtGerman.set(`${which} ${slug}`, fs.readFileSync(path.join(out, slug, "index.html"), "utf8"));
@@ -926,9 +933,17 @@ const GOOGLE_ON = {
   FLAG_BOOKING_GOOGLE: "on",
 };
 
+/** The video receptionist on, as staging has it (flags.ts: asked for by name, with Tavus's credentials). */
+const VIDEO_ON = {
+  FLAG_VIDEO_AVATAR: "on",
+  TAVUS_API_KEY: "x",
+  TAVUS_FACE_ID: "x",
+  VIDEO_LLM_SECRET: "x".repeat(40),
+};
+
 const builds = new Map<string, string>();
-const built = (which: "off" | "on") => {
-  if (!builds.has(which)) builds.set(which, buildLanding(which === "on" ? GOOGLE_ON : {}));
+const built = (which: "off" | "on" | "video") => {
+  if (!builds.has(which)) builds.set(which, buildLanding(which === "on" ? GOOGLE_ON : which === "video" ? VIDEO_ON : {}));
   return builds.get(which)!;
 };
 
@@ -1078,6 +1093,43 @@ await test("the app's server re-applies the strip and the Google lines from its 
   assert.match(pageWithFlags("privacy.html", Buffer.from(builtPrivacy.get("off")!), GOOGLE_ON).toString("utf8"), /Connecting a Google Calendar is optional\./);
   // Stubs are a test harness: never a reason to tell the public it is on.
   assert.match(exampleOf(pageWithFlags("index.html", off, { FLAG_STUBS: "on", FLAG_BOOKING_GOOGLE: "on" }).toString("utf8")), /Coming soon: books into your calendar/);
+});
+
+await test("video.avatar: the committed pages say nothing about video; the flag-on build and the app's server lead with it, both ways", async () => {
+  const { pageWithFlags } = await import("../src/lib/marketing");
+  const off = built("off");
+  const on = built("video");
+  const videoClaims = (html: string) => plainText(html.replace(/<script[\s\S]*?<\/script>/g, "")).match(/[^.?!]*\bvideo\b[^.?!]*/gi) ?? [];
+  for (const file of ["landing.html", "landing.de.html"]) {
+    const raw = fs.readFileSync(path.join(process.cwd(), "public", file), "utf8");
+    assert.deepEqual(videoClaims(raw), [], `public/${file} still talks about video`);
+    assert.doesNotMatch(raw, /"name": "(?:Can Belle answer our website visitors on video\?|How are video minutes counted\?|Kann Belle unsere Website-Besucher per Video empfangen\?|Wie werden Videominuten gezählt\?)"/, `${file}: the structured data keeps a video question`);
+  }
+  assert.deepEqual(videoClaims(off), [], "the flag-off build talks about video");
+  assert.doesNotMatch(off, /allow-video|data-gen="faq-video"|data-gen="video-ratio"/);
+  // With the flag on: the video-first page.
+  assert.match(heroOf(on), /<p class="eyebrow rise">AI video receptionist for your website<\/p>/);
+  assert.match(heroOf(on), /<span class="hv-title">Belle on video<\/span>/);
+  assert.match(on, /<h3>Video receptionist on your website<\/h3>/);
+  assert.equal(on.split('<li class="allow-video">').length, 4, "a card has no video row");
+  assert.match(on, /30 voice or 12 video minutes/);
+  assert.match(on, /<summary>How are video minutes counted\?<\/summary>/);
+  assert.match(on, /"name": "How are video minutes counted\?"/);
+  // The app's server, from its own env, whichever way the image was built: the
+  // same page as a build with that flag (the integrations strip aside, which
+  // the server re-renders without the build's hashed logo names).
+  const same = (html: string) => html.replace(/<!-- integrations:start[\s\S]*?<!-- integrations:end -->/, "");
+  assert.equal(same(pageWithFlags("index.html", Buffer.from(off), VIDEO_ON).toString("utf8")), same(on), "serving the flag-off build with video on is not the flag-on build");
+  assert.equal(same(pageWithFlags("index.html", Buffer.from(on), {}).toString("utf8")), same(off), "serving the flag-on build with video off is not the flag-off build");
+  for (const slug of ["de-de", "de-at", "de-ch"]) {
+    const deOff = builtGerman.get(`off ${slug}`)!;
+    const deOn = builtGerman.get(`video ${slug}`)!;
+    assert.deepEqual(videoClaims(deOff), [], `${slug}: the flag-off build talks about video`);
+    assert.match(deOn, /KI-Video-Empfang für Ihre Website/, slug);
+    assert.equal(deOn.split('<li class="allow-video">').length, 4, `${slug}: a card has no video row`);
+    assert.equal(same(pageWithFlags(`${slug}/index.html`, Buffer.from(deOff), VIDEO_ON).toString("utf8")), same(deOn), `${slug}: served with video on`);
+    assert.equal(same(pageWithFlags(`${slug}/index.html`, Buffer.from(deOn), {}).toString("utf8")), same(deOff), `${slug}: served with video off`);
+  }
 });
 
 await test("staging serves the site with links into staging's app; production and belline.ai hosts keep app.belline.ai", async () => {

@@ -21,9 +21,9 @@
  * renders it again for Austria and Switzerland.
  */
 
-import { TRIAL, annualMonthsSaved, annualPerMonth, offered, periodFee, priceOf, type Product } from "../src/lib/billing/plans";
+import { TRIAL, annualMonthsSaved, annualPerMonth, offered, periodFee, priceOf, videoLive, type Product } from "../src/lib/billing/plans";
 import { formatMoney, type Market } from "../src/lib/markets";
-import { cardParts, ratioText, sharedFeatures, videoMinutesOf } from "./site-pricing";
+import { VIDEO_ONLY_PHRASES, cardParts, isVideoText, ratioText, sharedFeatures, videoMinutesOf, videoRow } from "./site-pricing";
 
 /** The English videoLine, in German. */
 function videoLineDe(voiceMinutes: number, locale: GermanLocale): string {
@@ -53,7 +53,7 @@ function esc(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-const liveTexts = (list: { text: string; status: string }[]) => list.filter((f) => f.status === "live").map((f) => f.text);
+const liveTexts = (list: { text: string; status: string }[]) => list.filter((f) => f.status === "live" && !isVideoText(f.text)).map((f) => f.text);
 
 /** The same card as the English one (scripts/site-pricing.ts cardParts), in German. */
 function planCardDe(product: Product, below: Product | undefined, market: DachMarket, shared: string[]): string {
@@ -82,8 +82,7 @@ function planCardDe(product: Product, below: Product | undefined, market: DachMa
                   data-annual="${money(periodFee([product.id], market, "annual"))} einmal jährlich abgerechnet.">Monatliche Abrechnung, jederzeit kündbar.</span>
           </div>
           <ul class="plan-allow">
-            <li class="allow-voice">${esc(parts.voice)}</li>
-            <li class="allow-video">${esc(videoLineDe(product.pools?.minutes ?? 0, locale))}</li>
+            <li class="allow-voice">${esc(parts.voice)}</li>${videoRow(videoLineDe(product.pools?.minutes ?? 0, locale))}
             <li class="allow-text">${esc(parts.text)}</li>
           </ul>
           <ul class="plan-diff">
@@ -110,7 +109,7 @@ export function renderPricingDe(market: DachMarket): string {
   return `<!-- pricing:start — generated from src/lib/billing/plans.ts by scripts/site-pricing-de.ts. Change the catalogue, then run npm run pricing; do not edit by hand. -->
       <p class="market-note" data-market-note="${market}"><strong>Geplante Preise ${esc(page.forCountry)}</strong>, netto. Belline ist ${esc(page.inCountry)} noch nicht verfügbar, Sie können noch nichts kaufen. Bis zum Start können sich Preise und Konditionen ändern.</p>
       <div class="price-bar">
-        <p class="price-trial"><strong>Geplante Testphase:</strong> ${TRIAL.days} Tage, ${TRIAL.minutes} Sprach- oder ${videoMinutesOf(TRIAL.minutes)} Videominuten und ${TRIAL.conversations} Textgespräche. Keine Karte nötig.</p>
+        <p class="price-trial"><strong>Geplante Testphase:</strong> ${TRIAL.days} Tage, ${videoLive() ? `${TRIAL.minutes} Sprach- oder ${videoMinutesOf(TRIAL.minutes)} Videominuten` : `${TRIAL.minutes} Sprachminuten`} und ${TRIAL.conversations} Textgespräche. Keine Karte nötig.</p>
         <div class="cycle" role="group" aria-label="Abrechnungszeitraum">
           <button type="button" class="cycle-opt is-on" data-cycle="monthly" aria-pressed="true">Monatlich</button>
           <button type="button" class="cycle-opt" data-cycle="annual" aria-pressed="false">
@@ -219,12 +218,14 @@ function applyGeneratedDe(html: string, market: DachMarket): string {
   const phrases = generatedPhrasesDe(market);
   for (const [key, text] of Object.entries(phrases)) {
     const slot = new RegExp(`(<(span|p) class="gen" data-gen="${key}">)[^<]*(</\\2>)`, "g");
+    if (!html.includes(`class="gen" data-gen="${key}">`) && VIDEO_ONLY_PHRASES.has(key)) continue;
     if (!slot.test(html)) throw new Error(`landing.de.html has lost its generated "${key}" text.`);
     html = html.replace(slot, (_m, open: string, _tag: string, close: string) => `${open}${esc(text)}${close}`);
   }
   for (const [question, key] of Object.entries(GENERATED_FAQ_DE)) {
     const name = JSON.stringify(question).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const answer = new RegExp(`("name": ${name}, "acceptedAnswer": \\{ "@type": "Answer", "text": )"(?:[^"\\\\]|\\\\.)*"`);
+    if (!answer.test(html) && VIDEO_ONLY_PHRASES.has(key)) continue;
     if (!answer.test(html)) throw new Error(`landing.de.html's structured data has lost the answer to "${question}".`);
     html = html.replace(answer, (_m, open: string) => `${open}${JSON.stringify(phrases[key])}`);
   }

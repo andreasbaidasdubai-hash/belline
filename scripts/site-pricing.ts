@@ -18,7 +18,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   TRIAL,
+  VIDEO_RECEPTIONIST_TEXT,
   VIDEO_VOICE_MINUTE_RATIO,
+  videoLive,
   videoMinutesFor,
   allowanceFeatures,
   annualMonthsSaved,
@@ -52,15 +54,34 @@ export function videoLine(voiceMinutes: number): string {
   return `Video receptionist · ${videoMinutesOf(voiceMinutes)} video minutes (each uses ${ratioText()} voice minutes)`;
 }
 
+/** The trial, with video minutes only while the video receptionist is live (plans.ts `videoLive`). */
 export function trialLine(): string {
-  return `${TRIAL.days} days, ${TRIAL.minutes} voice or ${videoMinutesOf(TRIAL.minutes)} video minutes and ${TRIAL.conversations} text conversations`;
+  const minutes = videoLive() ? `${TRIAL.minutes} voice or ${videoMinutesOf(TRIAL.minutes)} video minutes` : `${TRIAL.minutes} voice minutes`;
+  return `${TRIAL.days} days, ${minutes} and ${TRIAL.conversations} text conversations`;
 }
 
 function esc(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-const liveTexts = (list: { text: string; status: string }[]) => list.filter((f) => f.status === "live").map((f) => f.text);
+/**
+ * A card's video row, written on the voice row's line, or nothing while video
+ * is not live, like every other line whose feature's `status` is not live.
+ * One line, so src/lib/site-flags.ts can add it or take it away as the app's
+ * server serves a page built with the flag the other way.
+ */
+export function videoRow(line: string): string {
+  return videoLive() ? `<li class="allow-video">${esc(line)}</li>` : "";
+}
+
+/**
+ * The catalogue's own video lines (the feature, and the minutes a pool buys as
+ * video). The card says them in its video row, so they stay out of the rows
+ * under it and out of "Included in every plan".
+ */
+export const isVideoText = (text: string) => text === VIDEO_RECEPTIONIST_TEXT || /^[\d.,’]+ (?:video minutes|Videominuten) \(/.test(text);
+
+const liveTexts = (list: { text: string; status: string }[]) => list.filter((f) => f.status === "live" && !isVideoText(f.text)).map((f) => f.text);
 
 /**
  * The features every plan on the page has, in the first plan's order. They
@@ -130,8 +151,7 @@ function planCard(product: Product, below: Product | undefined, market: Market, 
                   data-annual="${money(periodFee([product.id], market, "annual"))} billed once a year.">Billed monthly. Cancel anytime.</span>
           </div>
           <ul class="plan-allow">
-            <li class="allow-voice">${esc(parts.voice)}</li>
-            <li class="allow-video">${esc(videoLine(product.pools?.minutes ?? 0))}</li>
+            <li class="allow-voice">${esc(parts.voice)}</li>${videoRow(videoLine(product.pools?.minutes ?? 0))}
             <li class="allow-text">${esc(parts.text)}</li>
           </ul>
           <ul class="plan-diff">
@@ -292,16 +312,25 @@ const GENERATED_FAQ: Record<string, string> = {
   "How are video minutes counted?": "faq-video",
 };
 
+/**
+ * Generated phrases only a page with video on carries. The page in public/ is
+ * the flag-off one; src/lib/site-flags.ts puts these in with the flag, and
+ * check-billing pins its words to these.
+ */
+export const VIDEO_ONLY_PHRASES: ReadonlySet<string> = new Set(["video-ratio", "faq-video"]);
+
 function applyGenerated(html: string): string {
   const phrases = generatedPhrases();
   for (const [key, text] of Object.entries(phrases)) {
     const slot = new RegExp(`(<(span|p) class="gen" data-gen="${key}">)[^<]*(</\\2>)`, "g");
+    if (!html.includes(`class="gen" data-gen="${key}">`) && VIDEO_ONLY_PHRASES.has(key)) continue;
     if (!slot.test(html)) throw new Error(`landing.html has lost its generated "${key}" text.`);
     html = html.replace(slot, (_m, open: string, _tag: string, close: string) => `${open}${esc(text)}${close}`);
   }
   for (const [question, key] of Object.entries(GENERATED_FAQ)) {
     const name = JSON.stringify(question).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const answer = new RegExp(`("name": ${name}, "acceptedAnswer": \\{ "@type": "Answer", "text": )"(?:[^"\\\\]|\\\\.)*"`);
+    if (!answer.test(html) && VIDEO_ONLY_PHRASES.has(key)) continue;
     if (!answer.test(html)) throw new Error(`landing.html's structured data has lost the answer to "${question}".`);
     html = html.replace(answer, (_m, open: string) => `${open}${JSON.stringify(phrases[key])}`);
   }
@@ -356,17 +385,20 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public");
   const files = { english: path.join(dir, "landing.html"), german: path.join(dir, "landing.de.html") };
   const before = { english: fs.readFileSync(files.english, "utf8"), german: fs.readFileSync(files.german, "utf8") };
-  const rendered = await refreshSources(before.english, before.german);
-  // The generated blocks are written with \n; a CRLF checkout keeps CRLF throughout, rather than a file of mixed endings.
-  const keep = (source: string, out: string) => (source.includes("\r\n") ? out.replace(/\r?\n/g, "\r\n") : out);
-  const after = { english: keep(before.english, rendered.english), german: keep(before.german, rendered.german) };
-  for (const key of ["english", "german"] as const) {
-    const name = `public/${path.basename(files[key])}`;
-    if (after[key] === before[key]) {
-      console.log(`  ${name} pricing is already current.`);
-    } else {
-      fs.writeFileSync(files[key], after[key], "utf8");
-      console.log(`  ${name} pricing rewritten from src/lib/billing/plans.ts.`);
+  // Not a top-level await: site-pricing-de imports this module, and awaiting it
+  // here while this module is still evaluating never settles.
+  void refreshSources(before.english, before.german).then((rendered) => {
+    // The generated blocks are written with \n; a CRLF checkout keeps CRLF throughout, rather than a file of mixed endings.
+    const keep = (source: string, out: string) => (source.includes("\r\n") ? out.replace(/\r?\n/g, "\r\n") : out);
+    const after = { english: keep(before.english, rendered.english), german: keep(before.german, rendered.german) };
+    for (const key of ["english", "german"] as const) {
+      const name = `public/${path.basename(files[key])}`;
+      if (after[key] === before[key]) {
+        console.log(`  ${name} pricing is already current.`);
+      } else {
+        fs.writeFileSync(files[key], after[key], "utf8");
+        console.log(`  ${name} pricing rewritten from src/lib/billing/plans.ts.`);
+      }
     }
-  }
+  });
 }

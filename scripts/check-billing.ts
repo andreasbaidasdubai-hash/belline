@@ -404,10 +404,28 @@ test("the generated pricing names the v2 plans, their stored annual prices, and 
     assert.match(card, /plan-sub[\s\S]*plan-price[\s\S]*allow-voice[\s\S]*allow-text[\s\S]*plan-diff[\s\S]*>Get started<\/a>/);
   }
   assert.match(html, /<h3 class="plan-shared-h">Included in every plan<\/h3>/);
-  assert.ok(html.includes(`<strong>Trial:</strong> ${TRIAL.days} days, ${TRIAL.minutes} voice or ${Math.floor(TRIAL.minutes / 2.5)} video minutes and ${TRIAL.conversations} text conversations.`));
-  // Video is in every plan, as whole video minutes the voice pool covers at 2.5 voice minutes each.
-  for (const product of sellable("AE")) {
-    assert.ok(html.includes(`Video receptionist · ${Math.floor((product.pools?.minutes ?? 0) / 2.5)} video minutes (each uses 2.5 voice minutes)`), `${product.name} video line`);
+  // Video follows video.avatar, like every feature's status: nothing about it while it is off.
+  assert.ok(!plans.videoLive(), "this check runs with video.avatar off");
+  assert.ok(html.includes(`<strong>Trial:</strong> ${TRIAL.days} days, ${TRIAL.minutes} voice minutes and ${TRIAL.conversations} text conversations.`));
+  assert.doesNotMatch(html, /video/i);
+  // With it on, video is in every plan, as whole video minutes the voice pool covers at 2.5 voice minutes each.
+  const VIDEO_ON = { FLAG_VIDEO_AVATAR: "on", TAVUS_API_KEY: "x", TAVUS_FACE_ID: "x", VIDEO_LLM_SECRET: "x".repeat(40) };
+  const saved = Object.fromEntries(Object.keys(VIDEO_ON).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, VIDEO_ON);
+  try {
+    const on = renderPricing(["AE"]);
+    assert.ok(on.includes(`<strong>Trial:</strong> ${TRIAL.days} days, ${TRIAL.minutes} voice or ${Math.floor(TRIAL.minutes / 2.5)} video minutes and ${TRIAL.conversations} text conversations.`));
+    for (const product of sellable("AE")) {
+      assert.ok(on.includes(`Video receptionist · ${Math.floor((product.pools?.minutes ?? 0) / 2.5)} video minutes (each uses 2.5 voice minutes)`), `${product.name} video line`);
+    }
+    // Said once per card, in its video row: not again under it, nor in "Included in every plan".
+    assert.equal(on.match(/video minutes \(each uses/g)?.length, sellable("AE").length);
+    assert.doesNotMatch(on, /<li>Video receptionist on your website<\/li>/);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
   }
   assert.match(html, /Prices exclude VAT where it applies\./);
 });
@@ -655,10 +673,10 @@ test("the legal pages claim nothing that is not live", () => {
 console.log("\nWhat the German pages are allowed to say\n");
 
 const de = await import("../src/lib/billing/speak-de");
-const { applyPricingDe, renderPricingDe, GERMAN_PAGES } = await import("./site-pricing-de");
+const { applyPricingDe, renderPricingDe, generatedPhrasesDe, GERMAN_PAGES } = await import("./site-pricing-de");
 const { renderGermanLanding, renderGermanLegal } = await import("./site-locale");
-const { refreshSources } = await import("./site-pricing");
-const { calendarConnectionText, calendarConnectionTextDe } = await import("../src/lib/site-flags");
+const { refreshSources, generatedPhrases } = await import("./site-pricing");
+const { applySiteFlags, calendarConnectionText, calendarConnectionTextDe } = await import("../src/lib/site-flags");
 const DACH = ["DE", "AT", "CH"] as const;
 const germanSource = (file: string) => fs.readFileSync(path.join(ROOT, "public", file), "utf8");
 const landingDe = germanSource("landing.de.html");
@@ -730,6 +748,49 @@ test("on every German page the visible FAQ and the structured-data FAQ say exact
     assert.deepEqual(faq, visible, `${market}: the FAQ structured data differs from the visible FAQ`);
     const offers = graph.find((g) => g["@type"] === "SoftwareApplication")!.offers!;
     assert.deepEqual(offers.map((o) => [o.price, o.priceCurrency]), plans.offered(market).map((p) => [String(priceOf(p.id, market) / 100), market === "CH" ? "CHF" : "EUR"]));
+  }
+});
+
+test("with video.avatar on, the pages' video copy is what the catalogue renders, and each FAQ still matches its structured data", () => {
+  const VIDEO_ON = { FLAG_VIDEO_AVATAR: "on", TAVUS_API_KEY: "x", TAVUS_FACE_ID: "x", VIDEO_LLM_SECRET: "x".repeat(40) };
+  const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const decode = (s: string) =>
+    s.replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&amp;/g, "&").trim();
+  const faqsAgree = (html: string, what: string) => {
+    const visible = [...html.matchAll(/<summary>([\s\S]*?)<\/summary>\s*<div class="answer">([\s\S]*?)<\/div>/g)].map((m) => ({ q: decode(m[1]), a: decode(m[2]) }));
+    const graph = JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1])["@graph"] as { "@type": string; mainEntity?: { name: string; acceptedAnswer: { text: string } }[] }[];
+    assert.deepEqual(graph.find((g) => g["@type"] === "FAQPage")!.mainEntity!.map((e) => ({ q: e.name, a: e.acceptedAnswer.text })), visible, what);
+    return visible.length;
+  };
+  const offCount = faqsAgree(applyPricing(landing), "flag off");
+  const saved = Object.fromEntries(Object.keys(VIDEO_ON).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, VIDEO_ON);
+  try {
+    assert.ok(plans.videoLive(), "the video flag did not come on");
+    // Built with video on (the catalogue renders the rows and the trial), and
+    // the committed flag-off page with the flag's copy put in: the same page.
+    const built = applySiteFlags("landing.html", applyPricing(landing), VIDEO_ON);
+    assert.equal(lf(applySiteFlags("landing.html", landing, VIDEO_ON)), lf(built), "the flag's copy in site-flags.ts differs from a build with the flag on");
+    for (const key of ["video-ratio", "faq-video"]) assert.ok(built.includes(`data-gen="${key}">${escHtml(generatedPhrases()[key])}<`), `site-flags.ts's "${key}" is not the catalogue's`);
+    const rows = renderPricing().split("\n").filter((l) => l.includes("allow-video")).map((l) => l.trim());
+    assert.equal(rows.length, 3, "the catalogue renders no video rows with the flag on");
+    for (const row of rows) assert.ok(built.includes(row), `site-flags.ts's card row differs from the catalogue's: ${row}`);
+    assert.equal(faqsAgree(built, "flag on"), offCount + 2);
+    for (const market of DACH) {
+      const html = renderGermanLanding(landingDe, market, VIDEO_ON);
+      const spell = (s: string) => (market === "CH" ? s.replace(/ß/g, "ss") : s);
+      for (const key of ["video-ratio", "faq-video"]) assert.ok(html.includes(`data-gen="${key}">${spell(escHtml(generatedPhrasesDe(market)[key]))}<`), `${market}: site-flags.ts's "${key}" is not the catalogue's`);
+      const deRows = renderPricingDe(market).split("\n").filter((l) => l.includes("allow-video")).map((l) => l.trim());
+      assert.equal(deRows.length, 3, `${market}: no video rows with the flag on`);
+      for (const row of deRows) assert.ok(html.includes(spell(row)), `${market}: site-flags.ts's card row differs from the catalogue's: ${row}`);
+      assert.equal(html.split("Videominuten und").length, 2, `${market}: the trial has no video minutes`);
+      faqsAgree(html, `${market} flag on`);
+    }
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
   }
 });
 
