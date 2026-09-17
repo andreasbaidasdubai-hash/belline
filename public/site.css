@@ -3065,16 +3065,24 @@ footer a { color: var(--bl-ink-900); }
 .chat-fab::after,
 .wa-fab::after { border-color: var(--bl-blue); }
 .chat-fab,
-.wa-fab {
+.wa-fab,
+.video-fab {
   background: #FFFFFF;
   color: var(--bl-ink-900);
   border: 1px solid var(--bl-rule-strong);
   box-shadow: 0 0 0 4px #FFFFFF, var(--site-shadow-fab-soft);
 }
 .chat-fab svg,
-.wa-fab svg { color: var(--bl-blue); }
+.wa-fab svg,
+.video-fab svg { color: var(--bl-blue); }
 .chat-dock,
-.call-dock { border-color: var(--card-line); border-radius: var(--card-radius); }
+.call-dock,
+.video-dock { border-color: var(--card-line); border-radius: var(--card-radius); }
+.video-frame { border-radius: var(--card-radius); }
+@media (max-width: 620px) {
+  .video-dock,
+  .video-frame { border-radius: 0; }
+}
 
 /* --- Trade pages and legal pages: same bands and cards --------------------- */
 .knows { gap: 20px; border-top: 0; }
