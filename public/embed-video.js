@@ -50,17 +50,27 @@
     "color:var(--bl-blue-lit,#8FB0FF);background:var(--bl-navy-card,#253041);border:2px solid var(--bl-navy-line,rgba(255,255,255,.12));" +
     "animation:bvb-breathe 2.6s ease-in-out infinite}" +
     "@keyframes bvb-breathe{0%,100%{box-shadow:0 0 0 0 var(--bl-navy-line,rgba(255,255,255,.12))}50%{box-shadow:0 0 0 12px var(--bl-navy-line,rgba(255,255,255,.12))}}" +
-    ".bvb-caption{display:block;position:absolute;left:8%;right:8%;bottom:9%;margin:0;padding:5px 8px;border-radius:10px;text-align:center;" +
-    "font-size:calc(var(--bvb-size,200px)*.058);line-height:1.25;background:var(--bl-navy-card,#253041);color:var(--bl-on-navy,#FFFFFF)}" +
-    ".bvb-ai{position:absolute;top:9%;left:50%;transform:translateX(-50%);white-space:nowrap;padding:3px 8px;border-radius:999px;" +
-    "font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;" +
-    "background:var(--bl-blue-tint,#EEF3FF);color:var(--bl-accent-text,#1A4FD6)}" +
-    ".bvb-mock{position:absolute;top:23%;left:50%;transform:translateX(-50%);white-space:nowrap;padding:2px 7px;border-radius:999px;" +
+    // The greeting, as a speech card beside the face: readable at any bubble size.
+    ".bvb-caption{position:absolute;right:calc(100% + 12px);top:calc(var(--bvb-size,200px)/2);transform:translateY(-50%);" +
+    "width:max-content;max-width:180px;margin:0;padding:9px 12px;border-radius:14px 14px 4px 14px;text-align:left;" +
+    "font-size:13px;line-height:1.35;background:var(--bl-ground,#FFFFFF);color:var(--bl-ink-900,#1B2735);" +
+    "border:1px solid var(--bl-blue-line,#DDE3F5);box-shadow:var(--bl-elev-float,0 12px 32px -16px rgba(27,39,53,.35));pointer-events:none}" +
+    // The labels sit on the circle's top edge, outside its clip, so they never crop.
+    ".bvb-tags{position:absolute;left:50%;top:0;transform:translate(-50%,-45%);display:flex;flex-direction:column;align-items:center;gap:3px;" +
+    "pointer-events:none;z-index:1}" +
+    ".bvb-ai{white-space:nowrap;padding:3px 8px;border-radius:999px;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;" +
+    "background:var(--bl-blue-tint,#EEF3FF);color:var(--bl-accent-text,#1A4FD6);border:1px solid var(--bl-blue-line,#DDE3F5)}" +
+    ".bvb-mock{position:absolute;left:50%;top:var(--bvb-size,200px);transform:translate(-50%,-50%);z-index:1;pointer-events:none;" +
+    "white-space:nowrap;padding:2px 7px;border-radius:999px;" +
     "font-size:10px;font-weight:700;background:var(--bl-warning-tint,#FFFBEB);color:var(--bl-warning,#B45309);border:1px solid var(--bl-warning,#B45309)}" +
-    ".bvb-talk{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin-top:10px;padding:0 14px;" +
+    ".bvb.bvb-left .bvb-caption{right:auto;left:calc(100% + 12px);border-radius:14px 14px 14px 4px}" +
+    ".bvb.bvb-left .bvb-shut{right:auto;left:-12px}" +
+    ".bvb-mock~.bvb-talk{margin-top:18px}" +
+    ".bvb-talk{position:relative;display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin-top:10px;padding:0 14px;" +
     "border:0;border-radius:999px;cursor:pointer;font:inherit;font-weight:600;font-size:14px;" +
     "background:var(--bl-blue,#2667FF);color:var(--bl-white,#FFFFFF);box-shadow:var(--bl-elev-float,0 12px 32px -16px rgba(27,39,53,.35))}" +
-    ".bvb-shut{position:absolute;top:0;left:0;width:32px;height:32px;display:grid;place-items:center;padding:0;cursor:pointer;" +
+    // The × at the circle's upper outer corner: clear of the labels on top, the caption beside and the badge below.
+    ".bvb-shut{position:absolute;top:calc(var(--bvb-size,200px)*.146 - 14px);right:-12px;width:30px;height:30px;display:grid;place-items:center;padding:0;cursor:pointer;" +
     "border-radius:50%;border:1px solid var(--bl-rule-strong,rgba(27,39,53,.18));background:var(--bl-ground,#FFFFFF);" +
     "color:var(--bl-ink-900,#1B2735);font:18px/1 sans-serif;z-index:2}" +
     ".bvb-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}" +
@@ -132,7 +142,7 @@
       if (state.bubble || state.call) return;
       if (opts.onBubbleShown) opts.onBubbleShown();
 
-      var bubble = el("div", "bvb" + (opts.fixed ? " bvb-fixed" : ""));
+      var bubble = el("div", "bvb" + (opts.fixed ? " bvb-fixed" : "") + (opts.side === "left" ? " bvb-left" : ""));
       bubble.setAttribute("role", "region");
       bubble.setAttribute("aria-label", agent + ", AI concierge");
       bubble.setAttribute("data-belline-video", "bubble");
@@ -183,10 +193,12 @@
         circle.appendChild(ph);
       }
 
-      circle.appendChild(el("span", "bvb-ai", "AI concierge"));
-      if (cfg.mock) circle.appendChild(el("span", "bvb-mock", "MOCK — not a live avatar"));
-      circle.appendChild(el("span", "bvb-caption", "Hi, I'm " + agent + ", the AI concierge. Tap to talk."));
       circle.addEventListener("click", openCall);
+
+      var tags = el("span", "bvb-tags");
+      tags.appendChild(el("span", "bvb-ai", "AI concierge"));
+
+      var caption = el("p", "bvb-caption", "Hi, I'm " + agent + ", the AI concierge. Tap to talk.");
 
       var shut = el("button", "bvb-shut", "×");
       shut.type = "button";
@@ -198,8 +210,11 @@
       talk.addEventListener("click", openCall);
 
       bubble.appendChild(circle);
-      bubble.appendChild(shut);
+      bubble.appendChild(tags);
+      if (cfg.mock) bubble.appendChild(el("span", "bvb-mock", "MOCK — not a live avatar"));
+      bubble.appendChild(caption);
       bubble.appendChild(talk);
+      bubble.appendChild(shut);
       opts.place(bubble);
       state.bubble = bubble;
     }

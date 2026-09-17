@@ -1056,6 +1056,9 @@ await test("close dismisses the bubble and it stays dismissed for the session; t
   const again = mountBubble(next);
   assert.equal(again.ctl.state().bubble, false);
   assert.equal(next.byClass("bvb"), undefined);
+  // Both launchers show their Video button when the bubble did not open.
+  assert.match(read("public/embed.js"), /if \(!videoCtl\.state\(\)\.bubble\) videoFab\.hidden = false;/);
+  assert.match(read("public/site.js"), /if \(!ctl\.state\(\)\.bubble\) fab\.hidden = false;/);
   // The launcher's Video button.
   again.ctl.reopen();
   assert.equal(again.ctl.state().bubble, true);

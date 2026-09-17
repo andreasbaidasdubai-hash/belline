@@ -665,6 +665,8 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
         }
       },
     });
+    // Dismissed earlier this session: no greeting, so the button is the way in.
+    if (!ctl.state().bubble) fab.hidden = false;
   }
 
   fetch(appOrigin + "/api/embed/" + key + "/config", { mode: "cors" })

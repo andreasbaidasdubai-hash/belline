@@ -308,6 +308,7 @@
         origin: origin,
         key: key,
         hostOrigin: location.origin,
+        side: side,
         place: function (bubble) {
           dock.insertBefore(bubble, dock.firstChild);
         },
@@ -344,6 +345,8 @@
           }
         },
       });
+      // Dismissed earlier this session: no greeting, so the button is the way in.
+      if (!videoCtl.state().bubble) videoFab.hidden = false;
     }
 
     if (window.BellineVideo) return ready(window.BellineVideo);
