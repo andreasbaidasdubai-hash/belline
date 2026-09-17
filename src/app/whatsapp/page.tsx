@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { whatsappConfigured, whatsappLink } from "@/lib/whatsapp";
+import { connectedWhatsAppLink } from "@/lib/embed";
+import { siteOrigin } from "@/lib/origin";
+import { seedIfEmpty } from "@/lib/seed";
+import { BELLINE_LOCATION_ID } from "@/lib/seed-belline";
+import { getLocation } from "@/lib/store";
+import { venueWhatsApp } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -13,16 +18,27 @@ export const metadata: Metadata = {
  * Where the "WhatsApp Belle" button goes.
  *
  * A static website cannot know whether a number has been connected since it
- * was built. This page can, so the button on belline.ai points here, and
- * here decides: straight to WhatsApp when the number is live, and a plain
- * page that says it is not — with the two ways that *do* work — when it is
- * not. The one thing it never does is send somebody to a number nobody is
- * answering.
+ * was built. This page can, so the button on the site points here, and here
+ * decides: straight to WhatsApp when Belline's own number is connected and
+ * active — the same test the widget config uses, so the icon and this page
+ * never disagree — and otherwise a page that explains what WhatsApp answering
+ * is and offers the two things that work right now: chatting with Belle on the
+ * website, or getting started. It never sends somebody to a number nobody is
+ * answering, and it is never a dead end.
+ *
+ * Production has the number connected. Staging and previews do not, which is
+ * why they show the page.
  */
-export default function WhatsAppPage() {
-  if (whatsappConfigured()) {
-    redirect(whatsappLink("Hi Belle")!);
+export default async function WhatsAppPage() {
+  seedIfEmpty();
+  const venue = getLocation(BELLINE_LOCATION_ID);
+  const account = venue ? await venueWhatsApp(venue).catch(() => null) : null;
+  const link = connectedWhatsAppLink(account);
+  if (link) {
+    redirect(`${link}?text=${encodeURIComponent("Hi Belle")}`);
   }
+
+  const site = siteOrigin();
 
   return (
     <main
@@ -36,7 +52,7 @@ export default function WhatsAppPage() {
         fontFamily: "var(--bl-font-text)",
       }}
     >
-      <div style={{ maxWidth: 460 }}>
+      <div style={{ maxWidth: 480 }}>
         <p
           style={{
             margin: 0,
@@ -58,17 +74,19 @@ export default function WhatsAppPage() {
             margin: "12px 0 16px",
           }}
         >
-          Not on WhatsApp yet.
+          Belle&rsquo;s WhatsApp isn&rsquo;t connected here.
         </h1>
         <p style={{ fontSize: 16, lineHeight: 1.55, margin: 0, color: "var(--bl-text-2)" }}>
-          The WhatsApp line is built and runs on the same receptionist as everything else, but
-          Meta&rsquo;s business verification has to clear before a number can answer. This
-          page will take you straight to her the day it does. Until then, two ways that work
-          right now:
+          For businesses, Belline answers WhatsApp on a second number you register with it: we set
+          it up with you, and your own WhatsApp stays as it is. It replies from your information
+          and passes requests to your team.
+        </p>
+        <p style={{ fontSize: 16, lineHeight: 1.55, margin: "12px 0 0", color: "var(--bl-text-2)" }}>
+          To see how Belle answers, chat with her on the website. It&rsquo;s the same receptionist.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 24 }}>
           <a
-            href="/call?start=1"
+            href={`${site}/?chat=1`}
             style={{
               padding: "13px 22px",
               borderRadius: 999,
@@ -78,10 +96,10 @@ export default function WhatsAppPage() {
               fontWeight: 500,
             }}
           >
-            Speak to Belle
+            Chat with Belle on the website
           </a>
           <a
-            href="https://belline.ai/?chat=1"
+            href="/checkout"
             style={{
               padding: "13px 22px",
               borderRadius: 999,
@@ -91,11 +109,11 @@ export default function WhatsAppPage() {
               fontWeight: 500,
             }}
           >
-            Write with Belle on belline.ai
+            Get started
           </a>
         </div>
         <p style={{ fontSize: 13, color: "var(--bl-muted)", marginTop: 22 }}>
-          Or ring +1 571 778 5920 — an international call from the UAE.
+          Or <a href="/call?start=1" style={{ color: "inherit" }}>talk to Belle</a> in your browser.
         </p>
       </div>
     </main>
