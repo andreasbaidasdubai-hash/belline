@@ -121,6 +121,15 @@ function niceDay(date: string): string {
   return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
 
+/** Refused by the person or the browser, or simply not there (or in use elsewhere). */
+type MicProblem = "denied" | "unavailable";
+
+/** The browser's reason, sorted into the two things a visitor can do something about. */
+function micProblemOf(err: unknown): MicProblem {
+  const name = err instanceof Error || (typeof DOMException !== "undefined" && err instanceof DOMException) ? (err as Error).name : "";
+  return name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError" ? "denied" : "unavailable";
+}
+
 /** Linear resample to 16 kHz, which is what the speech model wants. */
 function toPcm16(samples: Float32Array, fromRate: number): Int16Array {
   const ratio = fromRate / 16000;
@@ -151,9 +160,19 @@ export default function Console({
   minimal = false,
   logoUrl,
   chatHref,
+  chatInsteadHref,
+  agentName,
   language = "en",
   copy,
 }: {
+  /**
+   * Where "Chat with … instead" goes when the microphone is refused or
+   * missing, for a page with no `chatHref` of its own (Belline's /call, whose
+   * chat lives on the website). `chatHref` wins where both are set.
+   */
+  chatInsteadHref?: string;
+  /** The agent's name for "Chat with Belle instead". Falls back to the venue's name. */
+  agentName?: string;
   locationId: string;
   locationName: string;
   /**
@@ -228,6 +247,8 @@ export default function Console({
   const [status, setStatus] = useState<Status | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  /** Why the microphone could not open, for the call bar's guidance. Null once it opens. */
+  const [micProblem, setMicProblem] = useState<MicProblem | null>(null);
   const [from, setFrom] = useState("");
   /**
    * What the speaker is actually doing. "Cannot hear it" is the worst failure
@@ -584,10 +605,26 @@ export default function Console({
 
       captureRef.current = { ctx, stream };
       setListening(true);
+      setMicProblem(null);
     } catch (err) {
-      setError(`Microphone: ${err instanceof Error ? err.message : String(err)}`);
+      setMicProblem(micProblemOf(err));
+      // The call bar explains in words with a way forward; the operator's
+      // console keeps the browser's own message.
+      if (!minimal) setError(`Microphone: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, []);
+  }, [minimal]);
+
+  /** Retry from the guidance: the tap is a fresh gesture, so the browser may ask again. */
+  const retryMicrophone = useCallback(() => {
+    if (!socketRef.current) {
+      answerAndListen();
+      return;
+    }
+    void primeAudio();
+    void startListening();
+    // primeAudio is stable for this component's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answerAndListen, startListening]);
 
   useEffect(() => () => {
     stopListening();
@@ -632,13 +669,13 @@ export default function Console({
     try {
       if (window.self === window.top) return;
       window.parent.postMessage(
-        { source: "belline-call", height: slots ? 316 : 76 },
+        { source: "belline-call", height: slots ? 316 : micProblem && !listening ? 300 : 76 },
         "*",
       );
     } catch {
       // Cross-origin parent we cannot reach. The dock keeps its default size.
     }
-  }, [slots, minimal]);
+  }, [slots, minimal, micProblem, listening]);
 
   // --- render --------------------------------------------------------------
 
@@ -857,10 +894,40 @@ export default function Console({
           the bell is what this product does that a chat widget does not, and
           this is the escape hatch for the person who cannot use it right now.
         */}
-        {chatHref && (
-          <a className="callbar-swap" href={chatHref}>
-            {tx("call.rather_type", "Rather type? Send a message")}
-          </a>
+        {/*
+          Microphone refused or missing. A status line saying "Microphone off"
+          left people looking at a dead call; this says why, how to allow it,
+          and offers the two ways on: try again, or type instead.
+        */}
+        {micProblem && !listening ? (
+          <div className="callbar-mic" role="alert" data-mic-problem={micProblem}>
+            <strong>{micProblem === "denied" ? tx("call.mic_blocked", "Microphone blocked") : tx("call.mic_missing", "No microphone available")}</strong>
+            <p>
+              {micProblem === "denied"
+                ? tx(
+                    "call.mic_blocked_help",
+                    "To talk, allow the microphone for this site: open the site settings next to the address bar (the lock or settings icon), set Microphone to Allow, then press Retry.",
+                  )
+                : tx("call.mic_missing_help", "Connect a microphone, or close any other app that is using it, then press Retry.")}
+            </p>
+            <div className="callbar-mic-actions">
+              <button type="button" className="callbar-go" onClick={retryMicrophone}>
+                {tx("call.retry", "Retry")}
+              </button>
+              {(chatHref ?? chatInsteadHref) && (
+                // _top: docked in the site, the chat belongs to the page, not to this frame.
+                <a className="callbar-swap" href={chatHref ?? chatInsteadHref} target={chatHref ? undefined : "_top"}>
+                  {tx("call.chat_instead", `Chat with ${agentName ?? locationName} instead`, { name: agentName ?? locationName })}
+                </a>
+              )}
+            </div>
+          </div>
+        ) : (
+          chatHref && (
+            <a className="callbar-swap" href={chatHref}>
+              {tx("call.rather_type", "Rather type? Send a message")}
+            </a>
+          )
         )}
       </div>
     );

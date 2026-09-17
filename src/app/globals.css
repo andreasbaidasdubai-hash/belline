@@ -1645,6 +1645,35 @@ body:has(.callbar) {
 }
 .callbar-swap:hover { color: #FFFFFF; }
 
+/* Microphone refused or missing: why, how to allow it, and the ways on. */
+.callbar-mic {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 420px;
+  margin-top: -10px;
+}
+.callbar-mic strong { font-size: 16px; font-weight: 700; }
+.callbar-mic p { margin: 0; font-size: 14px; line-height: 1.5; color: rgba(255, 255, 255, 0.78); }
+.callbar-mic-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 20px; margin-top: 6px; }
+.callbar-mic-actions .callbar-swap { margin-top: 0; }
+/* The guidance needs the room the waveform had; nothing is being said anyway. */
+.callbar:has(.callbar-mic) { gap: 18px; }
+.callbar:has(.callbar-mic) .callbar-wave { display: none; }
+@media (max-height: 360px) {
+  .callbar:has(.callbar-mic) { padding-top: 16px; padding-bottom: 16px; gap: 12px; }
+  .callbar:has(.callbar-mic) .callbar-text strong { font-size: 22px; }
+  .callbar:has(.callbar-mic) .callbar-mic p { font-size: 12.5px; }
+  .callbar:has(.callbar-mic) .callbar-go,
+  .callbar:has(.callbar-mic) .callbar-end { padding: 9px 20px; font-size: 13.5px; }
+}
+@media (max-height: 220px) {
+  /* Docked at 76px before the site has resized the frame: the status line says it; the guidance waits for room. */
+  .callbar-mic { display: none; }
+}
+
 /* The mark behind the call: the venue's own where we have one, the bell
    otherwise. Enormous and very faint — it is a ground, not a participant, and
    anything louder competes with the only thing on screen that matters. */

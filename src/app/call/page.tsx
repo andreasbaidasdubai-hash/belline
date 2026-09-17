@@ -4,6 +4,7 @@ import { signStreamToken } from "@/lib/auth";
 import { seedIfEmpty } from "@/lib/seed";
 import { getLocation } from "@/lib/store";
 import { BELLINE_LOCATION_ID } from "@/lib/seed-belline";
+import { siteOrigin } from "@/lib/origin";
 import Console from "../(app)/test/Console";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +81,10 @@ export default async function CallPage({
       minimal
       auto={auto}
       logoUrl={location.logoUrl}
+      agentName={location.agent.displayName}
+      // Refused or missing microphone: "Chat with Belle instead" opens the
+      // chat on this environment's website (lib/origin.ts).
+      chatInsteadHref={`${siteOrigin()}/?chat=1`}
     />
   );
 }

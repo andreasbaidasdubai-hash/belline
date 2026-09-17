@@ -1637,6 +1637,25 @@ head("Belle's chat on belline.ai: who she is, and what to ask");
     assert.match(setup, /On the Growth and Scale plans, Belline puts urgent calls through/);
   });
 
+  await test("/call with the microphone refused or missing: guidance, Retry, and Chat with Belle instead", async () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "test", "Console.tsx"), "utf8");
+    assert.match(src, /setMicProblem\(micProblemOf\(err\)\)/, "a refused microphone is not recorded as a problem to explain");
+    assert.match(src, /name === "NotAllowedError" \|\| name === "SecurityError"/);
+    const block = src.slice(src.indexOf('className="callbar-mic"'), src.indexOf("</div>\n        ) : (", src.indexOf('className="callbar-mic"')));
+    assert.match(block, /call\.mic_blocked_help/);
+    assert.match(block, /call\.mic_missing_help/);
+    assert.match(block, /onClick=\{retryMicrophone\}/);
+    assert.match(block, /call\.chat_instead/);
+    const { CALL_KEYS, copyTable } = await import("../src/lib/customer-copy");
+    for (const key of ["call.mic_blocked", "call.mic_blocked_help", "call.mic_missing", "call.mic_missing_help", "call.retry", "call.chat_instead"]) {
+      assert.ok((CALL_KEYS as readonly string[]).includes(key), `${key} is not handed to the call button`);
+    }
+    assert.equal(copyTable("en", CALL_KEYS)["call.chat_instead"].replace("{name}", "Belle"), "Chat with Belle instead");
+    assert.match(copyTable("en", CALL_KEYS)["call.mic_blocked_help"], /allow the microphone/);
+    const page = fs.readFileSync(path.join(process.cwd(), "src", "app", "call", "page.tsx"), "utf8");
+    assert.match(page, /chatInsteadHref=\{`\$\{siteOrigin\(\)\}\/\?chat=1`\}/);
+  });
+
   head("The WhatsApp link only for a connected number");
 
   await test("no connected number, no link — whatever WHATSAPP_NUMBER says", () => {
