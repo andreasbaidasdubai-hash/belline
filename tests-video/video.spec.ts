@@ -30,7 +30,7 @@ const GROW_SETTLE_MS = 700;
 
 const test = base.extend<{ aborted: unknown }>({
   aborted: [
-    async ({ context }, use) => {
+    async ({ context }: { context: BrowserContext }, use: (value: unknown) => Promise<void>) => {
       const aborted = await blockExternal(context);
       // Screenshots are of the product, not of Next's dev-mode badge.
       await context.addInitScript(() => {
