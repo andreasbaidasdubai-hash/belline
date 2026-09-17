@@ -9,6 +9,7 @@ import { raiseException } from "../errors/customer";
 import { destinationOf, serviceLengthsRequired } from "../booking/destination";
 import { PBX_NOTE, forwardingCodes, uaeCarriers } from "../telephony/forwarding";
 import { bellineNumberOf } from "../telephony/number";
+import { venueChip } from "../verticals";
 import { KIND_META, isExceptionKind, openException, ownerTickets } from "../exceptions";
 import { DAYS, dayIndexes } from "./review";
 import { readiness } from "./index";
@@ -649,7 +650,9 @@ function summary(location: Location): string {
     })
     .join("; ");
   const lines = [
-    `Business: ${location.name} (${location.vertical}), ${location.address || "no address yet"}`,
+    // The business's own type, never the engine: a property developer runs on
+    // the diary engine called "salon", and Belle must not call it one.
+    `Business: ${location.name} (${venueChip(location) ?? "type of business not given"}), ${location.address || "no address yet"}`,
     `Hours: ${hours}`,
     location.salon
       ? `Services: ${location.salon.services.map((s) => `${s.name} ${s.durationMin > 0 ? `${s.durationMin}min` : "no length"} ${s.price > 0 ? s.price : "no price"}`).join("; ") || "none"}`

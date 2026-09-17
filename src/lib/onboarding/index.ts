@@ -16,7 +16,8 @@ import { checkShape } from "../leads/email";
 import { extractFromSources, readSite, type Extracted, type ModelCall, type SourceFile } from "../prospect";
 import { TRIAL, checkSelection } from "../billing/plans";
 import { MARKETS, isMarket, marketDefaults, marketOf, type Market } from "../markets";
-import { passwordProblem, tradeFromParam, tradeLabel, verticalForTrade } from "../signup-rules";
+import { passwordProblem, tradeByKey, tradeFromParam, tradeLabel, verticalForTrade } from "../signup-rules";
+import { droppedNote, filterServices, type Dropped } from "./offerings";
 import { DPA_VERSION, TOS_VERSION } from "../legal";
 import { todayIn } from "../time";
 import { copy } from "../customer-copy";
@@ -395,6 +396,12 @@ export interface Draft {
   documents?: number;
   /** Fields the page did not answer, in the order worth asking about. */
   gaps: Gap[];
+  /**
+   * What the reader offered as services and the filter left out
+   * (offerings.ts): projects, branches, listings, people. Said on the review
+   * screen through the services gap, never dropped silently.
+   */
+  dropped?: Dropped[];
 }
 
 export interface Gap {
@@ -408,6 +415,12 @@ export interface Gap {
 export interface SetupSources {
   website?: string;
   files?: SourceFile[];
+  /**
+   * The venue being set up: what the owner said it is (`tradeKey`) and the
+   * engine it runs on. Tells the reader the kind of business, and decides how
+   * hard the service filter looks at what comes back.
+   */
+  venue?: Pick<Location, "vertical" | "tradeKey">;
 }
 
 /** Injectable for the checks, so no test fetches a page or calls a model. */
@@ -433,7 +446,17 @@ export async function draftFromSources(sources: SetupSources, deps: DraftDeps = 
   }
 
   const site = website ? await (deps.readSite ?? readSite)(website) : undefined;
-  const found = await extractFromSources({ site, files }, deps.model);
+  const trade = tradeByKey(sources.venue?.tradeKey);
+  const read = await extractFromSources({ site, files, business: trade?.label }, deps.model);
+  // Whatever the model was told, a project is not a service: filtered in code
+  // (offerings.ts), and what was left out is said under the services below.
+  const { kept, dropped } = filterServices(read.services ?? [], {
+    trade: trade?.key,
+    vertical: sources.venue?.vertical ?? read.vertical,
+    staff: read.staff,
+  });
+  const found: Extracted = { ...read, services: kept };
+  const leftOut = droppedNote(dropped);
   const where = site
     ? files.length
       ? "your site or documents"
@@ -458,20 +481,24 @@ export async function draftFromSources(sources: SetupSources, deps: DraftDeps = 
         found.vertical === "restaurant"
           ? "How long does a table usually turn, by party size?"
           : "What do you offer?",
-      why: "A name is enough. Add how long each takes and what it costs if you like; with no price, Belline says your team will confirm it.",
+      why: [leftOut, "A name is enough. Add how long each takes and what it costs if you like; with no price, Belline says your team will confirm it."]
+        .filter(Boolean)
+        .join(" "),
     });
   } else if (found.services.some((s) => !s.price)) {
     gaps.push({
       field: "services",
       question: `A few of these have no price on ${where}. Add one, or leave it empty.`,
-      why: "With no price, Belline tells the customer your team will confirm it. It never invents one.",
+      why: [leftOut, "With no price, Belline tells the customer your team will confirm it. It never invents one."].filter(Boolean).join(" "),
     });
+  } else if (leftOut) {
+    gaps.push({ field: "services", question: "Is anything missing from this list?", why: leftOut });
   }
   if (found.vertical !== "restaurant" && !found.staff.length) {
     gaps.push({
       field: "staff",
       question: "Who works there, and who does what?",
-      why: "So it only offers somebody who can actually do the treatment asked for.",
+      why: "So it only offers somebody who can actually do what the customer asks for.",
     });
   }
   gaps.push({
@@ -485,7 +512,7 @@ export async function draftFromSources(sources: SetupSources, deps: DraftDeps = 
     why: "Deposits, cancellation, lateness — the rules your team already follow.",
   });
 
-  return { found, sourceUrl: site?.url.href ?? "", documents: files.length, gaps };
+  return { found, sourceUrl: site?.url.href ?? "", documents: files.length, gaps, ...(dropped.length ? { dropped } : {}) };
 }
 
 /**

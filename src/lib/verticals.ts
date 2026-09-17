@@ -1,4 +1,5 @@
 import type { Location, Vertical } from "./types";
+import { tradeByKey } from "./signup-rules";
 
 /**
  * What kind of business this is, and what it calls things.
@@ -25,7 +26,7 @@ export interface Terms {
   booking: string;
   /** The business. */
   venue: string;
-  /** Short label for the venue-type chip in the dashboard. */
+  /** The venue-type chip in the dashboard (`venueChip`), or "" when there should be none. */
   label: string;
 }
 
@@ -65,8 +66,81 @@ const TERMS: Record<Vertical, Terms> = {
   },
 };
 
+/**
+ * The trades whose own words the salon engine already speaks.
+ *
+ * Seventeen trades run on three engines, and the diary engine is called
+ * "salon" because salons came first — not because a property developer, a
+ * tutor or a garage keeps stylists. A trade outside this set that runs on the
+ * diary gets plain words instead ("team", "services", "bookings"): neutral is
+ * never wrong, and "our stylists" on a law firm's line is.
+ */
+const BEAUTY_TRADES = new Set(["salon", "barber"]);
+
+/**
+ * The venue-type chip, short enough for a pill. Keyed by trade (signup-rules.ts
+ * `TRADES`); the list's own labels are written for a select, and "Professional
+ * services (legal, accounting, consulting)" does not fit beside a venue name.
+ */
+const TRADE_CHIPS: Record<string, string> = {
+  salon: "Salon or spa",
+  barber: "Barber",
+  gym: "Gym or studio",
+  clinic: "Clinic",
+  medical: "Medical",
+  vet: "Vet",
+  restaurant: "Restaurant",
+  hotel: "Hotel",
+  events: "Events",
+  home_services: "Home services",
+  trades: "Trades",
+  garage: "Car services",
+  property: "Real estate",
+  professional: "Professional services",
+  education: "Education",
+  retail: "Retail",
+};
+
+const NEUTRAL: Omit<Terms, "label"> = {
+  guest: "client",
+  guests: "clients",
+  staff: "team member",
+  staffPlural: "the team",
+  service: "service",
+  services: "services",
+  booking: "booking",
+  venue: "business",
+};
+
 export function terms(location: Location): Terms {
-  return TERMS[location.vertical];
+  const trade = tradeByKey(location.tradeKey);
+  const chip = venueChip(location) ?? "";
+  // Only a diary venue that told us its trade, and whose trade is not beauty,
+  // is re-worded. Restaurants and clinics keep their words; a venue with no
+  // trade keeps the engine's, because that is what it was set up with and what
+  // its agent has always said.
+  if (location.vertical === "salon" && trade && !BEAUTY_TRADES.has(trade.key)) {
+    return { ...NEUTRAL, label: chip };
+  }
+  return { ...TERMS[location.vertical], label: chip };
+}
+
+/**
+ * What the owner sees on the venue chip: the business's own type, or nothing.
+ *
+ * The trade picked at signup when there is one. Without one, only an engine
+ * that was chosen on purpose is worth showing: "restaurant" and "clinic" are
+ * never anybody's default, but "salon" is what every unknown business runs on
+ * (signup-rules.ts `DEFAULT_VERTICAL`), so a bare "salon" chip would call an
+ * estate agent a salon. A demo line is the exception — Belline built it as the
+ * engine it is, to let a prospect hear their own trade.
+ */
+export function venueChip(location: Pick<Location, "vertical" | "tradeKey" | "demo">): string | null {
+  const trade = tradeByKey(location.tradeKey);
+  if (trade) return TRADE_CHIPS[trade.key] ?? trade.label;
+  if (location.vertical === "restaurant") return "Restaurant";
+  if (location.vertical === "clinic") return "Clinic";
+  return location.demo ? "Salon" : null;
 }
 
 export function isRestaurant(location: Location): boolean {

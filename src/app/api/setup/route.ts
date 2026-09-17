@@ -38,7 +38,17 @@ export async function POST(req: Request) {
   // JSON { website } or multipart website + up to three files. Validation,
   // reading and refusals all live in the library so they can be checked
   // without a request scope; the files are read once there and dropped.
-  const out = await draftFromRequest(req);
+  //
+  // The venue is the one PUT will save to — `?locationId=`, or their only one —
+  // so the reader is told what the owner said the business is. Only its type is
+  // passed on; a venue this person may not edit is not used at all.
+  const asked = new URL(req.url).searchParams.get("locationId") || listLocationsFor(auth.user.tenantId)[0]?.id || "";
+  const venue = getLocation(asked);
+  const out = await draftFromRequest(
+    req,
+    {},
+    venue && canEditAgent(auth.user, venue.id) ? { vertical: venue.vertical, tradeKey: venue.tradeKey } : undefined,
+  );
   return NextResponse.json(out.body, { status: out.status });
 }
 

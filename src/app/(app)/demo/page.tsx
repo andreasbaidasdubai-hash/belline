@@ -7,6 +7,7 @@ import { callsToday, demoLocations, maxCallSeconds } from "@/lib/demo";
 import { callDurationSeconds } from "@/lib/calls";
 import { seedIfEmpty } from "@/lib/seed";
 import { PageHeader } from "@/components/LocationTabs";
+import { venueChip } from "@/lib/verticals";
 
 export const dynamic = "force-dynamic";
 
@@ -96,7 +97,7 @@ export default async function DemoPage() {
                   <tr key={l.id}>
                     <td>
                       <div style={{ fontWeight: 600 }}>{l.name}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>{l.vertical}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{venueChip(l)}</div>
                     </td>
                     <td className="mono" style={{ fontSize: 13 }}>{l.bellineNumber?.number ?? ""}</td>
                     <td>

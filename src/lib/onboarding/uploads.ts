@@ -1,4 +1,4 @@
-import { draftFromSources, type Draft, type DraftDeps } from "./index";
+import { draftFromSources, type Draft, type DraftDeps, type SetupSources } from "./index";
 import type { SourceFile } from "../prospect";
 import { customerError, raiseException } from "../errors/customer";
 import { flag } from "../flags";
@@ -61,7 +61,12 @@ function quoted(name: string): string {
  * POST /api/setup, after sign-in: JSON `{ website }` or multipart
  * `website` + `files`. Returns the status and body to send; writes nothing.
  */
-export async function draftFromRequest(req: Request, deps: DraftDeps = {}): Promise<SetupPostResult> {
+export async function draftFromRequest(
+  req: Request,
+  deps: DraftDeps = {},
+  /** The venue being set up, so the reader knows what kind of business it is. */
+  venue?: SetupSources["venue"],
+): Promise<SetupPostResult> {
   const type = req.headers.get("content-type") ?? "";
   let website = "";
   const files: SourceFile[] = [];
@@ -126,7 +131,7 @@ export async function draftFromRequest(req: Request, deps: DraftDeps = {}): Prom
   }
 
   try {
-    const draft = await draftFromSources({ website: website || undefined, files }, deps);
+    const draft = await draftFromSources({ website: website || undefined, files, venue }, deps);
     return { status: 200, body: { ok: true, draft } };
   } catch (err) {
     // A typo, a site behind a login, a scan too faint to read: those were
