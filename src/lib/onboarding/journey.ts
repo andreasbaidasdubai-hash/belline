@@ -106,6 +106,11 @@ const WAYS_IN: readonly StepId[] = ["website", "phone"];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** A step's title and button, as the rail shows them. For Belle's knowledge base (belle/knowledge.ts). */
+export function stepMeta(id: StepId): { title: string; action: string } {
+  return META[id];
+}
+
 export function stepUrl(id: StepId): string {
   return `/setup/${id}`;
 }

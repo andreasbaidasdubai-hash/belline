@@ -154,8 +154,11 @@ await test("staging's own origin opens Belline's own site widget, and only that 
   assert.equal(originAllowed(ours, "https://belline-staging.up.railway.app", staging), true);
   // A customer's widget never trusts our origin.
   assert.equal(originAllowed(venue.embed!, "https://belline-staging.up.railway.app", staging), false);
-  // Production and anything not https add nothing.
-  assert.equal(originAllowed(ours, "https://app.belline.ai", { PUBLIC_ORIGIN: "https://app.belline.ai" }), false);
+  // Production's app origin opens it too: Belle's launcher on the checkout,
+  // /verify and /login frames our own chat from our own pages. Anything not
+  // https (except localhost) adds nothing, and a customer's widget never.
+  assert.equal(originAllowed(ours, "https://app.belline.ai", { PUBLIC_ORIGIN: "https://app.belline.ai" }), true);
+  assert.equal(originAllowed(venue.embed!, "https://app.belline.ai", { PUBLIC_ORIGIN: "https://app.belline.ai" }), false);
   assert.equal(originAllowed(ours, "http://belline-staging.up.railway.app", { PUBLIC_ORIGIN: "http://belline-staging.up.railway.app" }), false);
   assert.equal(originAllowed(ours, "https://evil.example", staging), false);
   assert.equal(originAllowed({ ...ours, enabled: false }, "https://belline-staging.up.railway.app", staging), false);

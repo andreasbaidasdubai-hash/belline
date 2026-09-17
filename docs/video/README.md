@@ -114,6 +114,7 @@ All placeholders are in `.env.example`.
 | `VIDEO_MAX_SESSIONS_PER_DAY` | optional | Website sessions a day per customer venue, default 20 |
 | `VIDEO_MAX_SESSIONS_PER_DAY_BELLINE` | optional | Website sessions a day on Belline's own venue (`loc_belline`, the homepage bubble), default 300 |
 | `VIDEO_DEMO_MAX_SESSIONS_PER_DAY` | optional | Personalised demo-link sessions a day, all links together, default 200. Never counted against a venue's website ceiling; each link also has `VIDEO_DEMO_SESSIONS_PER_DAY` (3) |
+| `VIDEO_SUPPORT_MAX_SESSIONS_PER_DAY` | optional | Owners talking to Belle on video from the dashboard's Ask Belle, default 100 (1–5000). Run on Belline's own venue (`loc_belline`) and paid from Belline's support budget: counted apart from its website and demo sessions, never against the customer's allowance. A session starts only when the owner presses Start. |
 | `VIDEO_MAX_CONCURRENT_PER_VENUE` | optional | Default 2 |
 | `VIDEO_TAVUS_PAL_MODE` | optional | `shared` (default: one PAL per venue and face, made and kept by Belline, pre-warmed) or `per_session` (a PAL per call; the rollback) |
 | `VIDEO_FAST_MODEL` | optional | Video small talk on this model first, any tool turn on the venue's model. Default `claude-haiku-4-5`; `off` disables |

@@ -166,7 +166,7 @@ export function originAllowed(config: EmbedConfig, origin: string | null, env: R
   const asked = origin ? normaliseOrigin(origin) : null;
   if (!asked) return false;
   const strip = (o: string) => o.replace("://www.", "://");
-  if (config.key === BELLINE_SITE_EMBED_KEY && asked === ownSiteOrigin(env)) return true;
+  if (config.key === BELLINE_SITE_EMBED_KEY && (asked === ownSiteOrigin(env) || asked === ownAppOrigin(env))) return true;
   return config.allowedOrigins.some((allowed) => strip(allowed) === strip(asked));
 }
 
@@ -186,6 +186,21 @@ function ownSiteOrigin(env: Record<string, string | undefined>): string | null {
   if (!own || !own.startsWith("https://")) return null;
   const host = new URL(own).hostname;
   return host === "belline.ai" || host.endsWith(".belline.ai") ? null : own;
+}
+
+/**
+ * The app's own origin (app.belline.ai in production), for Belline's own
+ * widget only: Belle's launcher on the checkout, /verify and /login frames our
+ * chat from our own pages (components/BelleLauncher.tsx). https, or http on
+ * localhost for a local run. A customer's widget never trusts it.
+ */
+function ownAppOrigin(env: Record<string, string | undefined>): string | null {
+  const raw = (env.PUBLIC_APP_URL || env.PUBLIC_ORIGIN || "https://app.belline.ai").trim();
+  const own = normaliseOrigin(raw);
+  if (!own) return null;
+  if (own.startsWith("https://")) return own;
+  const host = new URL(own).hostname;
+  return host === "localhost" || host === "127.0.0.1" ? own : null;
 }
 
 export interface EmbedGate {

@@ -4,6 +4,7 @@ import { hasNoUsers } from "@/lib/store";
 import { currentUser } from "@/lib/auth-server";
 import { seedIfEmpty } from "@/lib/seed";
 import LoginForm from "./LoginForm";
+import BelleForVisitors from "@/components/BelleForVisitors";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export default async function LoginPage({
   const firstRun = hasNoUsers();
 
   return (
+    <>
     <main className="auth-shell">
       <div className="auth-card">
         <div className="auth-brand">
@@ -60,5 +62,8 @@ export default async function LoginPage({
         </p>
       </div>
     </main>
+    {/* "I can't sign in": Belle, told this is the sign-in page. */}
+    <BelleForVisitors page="login" />
+    </>
   );
 }

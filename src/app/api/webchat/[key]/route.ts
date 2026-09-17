@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cleanClientId, resolveVisitor, visitorCatchUp, visitorTurn } from "@/lib/webchat-turn";
 import { widgetOpenFor } from "@/lib/embed-preview";
+import { parsePageHint } from "@/lib/belle/knowledge";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request, ctx: { params: Promise<{ key: string }> }) {
   const { key } = await ctx.params;
 
-  let body: { token?: string; text?: string; clientId?: string };
+  let body: { token?: string; text?: string; clientId?: string; page?: unknown; plan?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -37,7 +38,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
   const clientId = cleanClientId(body.clientId);
   if (!clientId) return NextResponse.json({ error: "Missing message id." }, { status: 400 });
 
-  return visitorTurn(visitor, { text, clientId });
+  // Where Belle's chat was opened on Belline's own pages: a closed set, or nothing.
+  return visitorTurn(visitor, { text, clientId, hint: parsePageHint(body.page, body.plan) });
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ key: string }> }) {

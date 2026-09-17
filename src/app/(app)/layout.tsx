@@ -9,6 +9,7 @@ import { VIEW_AS_EXIT_PATH, viewAsState } from "@/lib/staff/view-as";
 import { listLocations, listLocationsFor } from "@/lib/store";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import BelleDock from "@/app/setup/BelleDock";
+import { belleFaceUrl, supportVideoOn } from "@/lib/belle/identity";
 import { attentionFor } from "@/lib/attention";
 import { recallSummary } from "@/lib/booking/recall";
 import SignOutButton from "@/components/SignOutButton";
@@ -56,13 +57,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const shape = navFor(user, visible, { outstanding, dueBack });
   const groups = [shape.diary, shape.staff].filter((g) => g !== null);
 
-  // The venue Belle works on, as /setup/assistant chooses it: this account's
-  // own, and only one this person may change. Nobody else gets the bell.
   // Belline staff viewing this dashboard as the customer (lib/staff/view-as.ts).
   // Said at the top of every page, with the way out, for as long as it lasts.
   const view = viewAsState((await cookies()).get(SESSION_COOKIE)?.value);
 
-  // Not while viewing as the customer: Belle changes things, and the view cannot.
+  // The venue Belle works on, as /setup/assistant chooses it: this account's
+  // own, and only one this person may change. Nobody else gets the bell, and
+  // nobody on a read-only view-as session: Belle saves, opens tickets and
+  // starts video, and a view can do none of them (belle/identity.ts). The view
+  // is the one already read for the banner — the same state, read once.
   const belleVenue = view ? undefined : listLocationsFor(user.tenantId).find((l) => canEditAgent(user, l.id));
 
   const content = (
@@ -130,7 +133,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
 
       {belleVenue ? (
-        <BelleDock locationId={belleVenue.id} greeting={setupGreeting(belleVenue)} storageKey="belline.app.belle-dock">
+        <BelleDock locationId={belleVenue.id} greeting={setupGreeting(belleVenue)} storageKey="belline.app.belle-dock" faceUrl={belleFaceUrl()} video={supportVideoOn()}>
           {content}
         </BelleDock>
       ) : (

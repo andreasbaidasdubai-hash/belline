@@ -2534,6 +2534,24 @@ body:has(.callbar) {
   .belle-fab, .belle-fab svg, .belle-fab::after { animation: none; transition: none; }
   .belle-fab:hover { transform: none; }
 }
+/* Belle's face in the bell and the window header (belle/identity.ts), and the
+   frame her chat or video fills the window with (BelleLauncher.tsx, BelleDock.tsx). */
+.belle-face { width: 28px; height: 28px; border-radius: 999px; object-fit: cover; display: block; flex: none; background: var(--bl-white); }
+.belle-face-lg { width: 36px; height: 36px; }
+.belle-launch-frame { flex: 1 1 auto; width: 100%; min-height: 0; border: 0; display: block; background: var(--panel); }
+.belle-launch-frame[hidden] { display: none; }
+/* On Belline's public pages (checkout, /verify, /login): room at the end of the
+   page so the last button can always be scrolled clear of the bell. */
+.belle-fab-spacer { height: 96px; }
+/* With the window open on a wide screen, the checkout steps left of it so no
+   field or button sits under it. Narrower than this the window overlays, as a
+   chat does, and closes with its own button or Escape. */
+@media (min-width: 1300px) {
+  .checkout { transition: margin 0.18s ease; }
+  html[data-belle-open] .checkout { margin-left: max(0px, calc((100vw - 420px - 880px) / 2)); margin-right: auto; }
+}
+@media (min-width: 1300px) and (prefers-reduced-motion: reduce) { .checkout { transition: none; } }
+
 /* Room for the bell, so it never sits on a page's own buttons: space below
    the last thing on the page, and a clear right-hand end on the bars that
    stick to the bottom of the screen. The live notice moves up above it. */

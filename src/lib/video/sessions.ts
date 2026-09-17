@@ -10,7 +10,7 @@ import { openException } from "../exceptions";
 import { BELLINE_TENANT_ID } from "../tenancy";
 import { BELLINE_LOCATION_ID, BELLINE_VIDEO_GREETING } from "../seed-belline";
 import { answersIn } from "../language";
-import { videoAvailability, type VideoOffReason } from "./availability";
+import { videoAvailability, type VideoOffReason, type VideoSessionKind } from "./availability";
 import type { VideoConfig } from "./config";
 import { venueVideoSettings } from "./control";
 import { videoBackground } from "./backgrounds";
@@ -90,6 +90,11 @@ export interface VideoSession {
    * only by the demo's own session route, from the link's stored snapshot.
    */
   demo?: { linkId: string; briefing: string };
+  /**
+   * An owner's support call from the dashboard's Ask Belle: whose it is, and
+   * the account briefing written server-side from their own tenant.
+   */
+  support?: { userId: string; tenantId: string; briefing: string };
   /** Told once, after the call record is closed. Never sent anywhere. */
   onEnded?: (info: { session: VideoSession; call: Call | undefined; seconds: number }) => void | Promise<void>;
 }
@@ -101,6 +106,14 @@ export interface VideoDemoStart {
   /** The personalised opening, spoken by the provider before the model is asked anything. */
   greeting: string;
   onEnded?: VideoSession["onEnded"];
+}
+
+/** What an owner's support call adds to a start (app/api/belle/video). */
+export interface VideoSupportStart {
+  userId: string;
+  tenantId: string;
+  briefing: string;
+  greeting: string;
 }
 
 /** What the panel receives. The room, a short-lived token, and the limits — nothing else. */
@@ -177,11 +190,14 @@ export function videoGreeting(location: Location): string {
 export async function startVideoSession(
   location: Location,
   visitorId: string,
-  opts: { env?: Env; preview?: boolean; provider?: VideoAvatarProvider; demo?: VideoDemoStart } = {},
+  opts: { env?: Env; preview?: boolean; provider?: VideoAvatarProvider; demo?: VideoDemoStart; support?: VideoSupportStart } = {},
 ): Promise<StartResult> {
   const env = opts.env ?? process.env;
-  // A demo link's session counts against the demo ceilings, never the website's.
-  const available = videoAvailability(location, { env, skipLive: opts.preview, kind: opts.demo ? "demo" : "website" });
+  // Each kind is counted against its own ceiling: a demo link's session against
+  // the demo one, an owner's support call against the support one, and neither
+  // against the website's — nor against the customer's own allowance.
+  const kind: VideoSessionKind = opts.demo ? "demo" : opts.support ? "support" : "website";
+  const available = videoAvailability(location, { env, skipLive: opts.preview, kind });
   if (!available.on) {
     const status = available.reason === "daily_limit" ? 429 : 403;
     return { ok: false, reason: available.reason, retryable: false, status };
@@ -192,7 +208,11 @@ export async function startVideoSession(
   const reg = registry();
   // A demo visitor is keyed by the link as well: the same browser on two
   // prospects' links is two conversations with two different briefings.
-  const visitorKey = opts.demo ? `${location.id}:demo:${opts.demo.linkId}:${visitorId}` : `${location.id}:${visitorId}`;
+  const visitorKey = opts.demo
+    ? `${location.id}:demo:${opts.demo.linkId}:${visitorId}`
+    : opts.support
+      ? `${location.id}:support:${opts.support.userId}`
+      : `${location.id}:${visitorId}`;
 
   // The double click, and the retry after a slow network: the same visitor
   // gets the session already being made, or the one already live.
@@ -215,7 +235,7 @@ export async function startVideoSession(
   if (limit === null) return { ok: false, reason: "not_entitled", retryable: false, status: 403 };
   const config = limit === available.config.maxCallSeconds ? available.config : { ...available.config, maxCallSeconds: limit, warnBeforeSeconds: Math.min(available.config.warnBeforeSeconds, Math.floor(limit / 2)) };
 
-  const creation = create(location, visitorKey, config, provider, env, opts.demo);
+  const creation = create(location, visitorKey, config, provider, env, opts.demo, opts.support);
   reg.pending.set(visitorKey, creation);
   try {
     return await creation;
@@ -253,13 +273,19 @@ async function create(
   provider: VideoAvatarProvider,
   env: Env,
   demo?: VideoDemoStart,
+  support?: VideoSupportStart,
 ): Promise<StartResult> {
   const reg = registry();
   const sessionId = `vs_${crypto.randomBytes(9).toString("base64url")}`;
   const startedAt = Date.now();
 
   const call = startCall(location, "embed", "website");
-  call.video = { provider: provider.name, sessionId, ...(demo ? { demoLinkId: demo.linkId } : {}) };
+  call.video = {
+    provider: provider.name,
+    sessionId,
+    ...(demo ? { demoLinkId: demo.linkId } : {}),
+    ...(support ? { support: true } : {}),
+  };
   // Our own venue and our demo lines are ours to pay for, never a customer's.
   if (location.internal || location.demo?.enabled) call.isDemo = true;
   saveCall(call);
@@ -278,7 +304,7 @@ async function create(
     createdAt: startedAt,
     llmToken: signVideoToken("llm", sessionId, location.id, tokenTtl, env),
     clientToken: signVideoToken("client", sessionId, location.id, tokenTtl, env),
-    greeting: demo?.greeting.trim() || videoGreeting(location),
+    greeting: demo?.greeting.trim() || support?.greeting.trim() || videoGreeting(location),
     maxCallSeconds: config.maxCallSeconds,
     warnBeforeSeconds: config.warnBeforeSeconds,
     timers: [],
@@ -286,6 +312,7 @@ async function create(
     greenscreen: look.greenscreen,
     backgroundId: look.background.id,
     ...(demo ? { demo: { linkId: demo.linkId, briefing: demo.briefing }, onEnded: demo.onEnded } : {}),
+    ...(support ? { support: { userId: support.userId, tenantId: support.tenantId, briefing: support.briefing } } : {}),
   };
   reg.sessions.set(sessionId, session);
   recordVideoMetric(location, { name: "session_create_started", sessionId });

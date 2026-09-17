@@ -1,4 +1,4 @@
-import type { Location } from "../types";
+import type { Call, Location } from "../types";
 import { flagState } from "../flags";
 import { listCalls } from "../store";
 import { dateIn, todayIn } from "../time";
@@ -23,9 +23,10 @@ import { BELLINE_LOCATION_ID } from "../seed-belline";
  *   5. The venue's website widget is switched on.
  *   6. The venue has gone live (a signed-in owner previews through the page).
  *   7. The venue's plan includes the web voice button, and is answering.
- *   8. Today's video sessions are under the ceiling: the website's (Belline's
- *      own venue has a higher one), or for a personalised demo the demo-wide
- *      one, so neither can use up the other.
+ *   8. Today's video sessions are under the ceiling for their kind: the
+ *      website's (Belline's own venue has a higher one), the demo-wide one for
+ *      a personalised demo link, or the support one for an owner's call from
+ *      Ask Belle. No kind can use up another's.
  *
  * Deliberately not part of this: the bell's own daily ceiling. A busy day of
  * spoken calls must not switch video off, and video must not use up the bell.
@@ -55,19 +56,39 @@ export function venueAllowlisted(location: Pick<Location, "id">, config: VideoCo
   return config.venues.includes(location.id);
 }
 
-/** A website visitor's video call, or one opened from a personalised demo link. */
-export type VideoSessionKind = "website" | "demo";
+/**
+ * Who a video call is for, and therefore whose budget pays for it:
+ *
+ *   - `website`  a visitor on the venue's own site (the customer's allowance,
+ *                or Belline's homepage bubble on `loc_belline`);
+ *   - `demo`     a personalised sales demo link (sales/video-demo);
+ *   - `support`  an owner's call with Belle from the dashboard's Ask Belle.
+ *
+ * Demo and support calls both run on Belline's own venue and are paid for by
+ * Belline. Each kind is counted and capped on its own, so none of the three can
+ * use up another's ceiling — and neither demo nor support ever touches a
+ * customer's allowance.
+ */
+export type VideoSessionKind = "website" | "demo" | "support";
+
+/** Which budget an already-recorded call belongs to. */
+export function videoCallKind(video: NonNullable<Call["video"]>): VideoSessionKind {
+  if (video.demoLinkId) return "demo";
+  if (video.support) return "support";
+  return "website";
+}
 
 export function videoSessionsToday(location: Location, kind: VideoSessionKind = "website"): number {
   const today = todayIn(location.timezone);
   return listCalls(location.id).filter(
-    (c) => c.video && Boolean(c.video.demoLinkId) === (kind === "demo") && dateIn(c.startedAt, location.timezone) === today,
+    (c) => c.video && videoCallKind(c.video) === kind && dateIn(c.startedAt, location.timezone) === today,
   ).length;
 }
 
 /** Today's ceiling for this kind of session on this venue. */
 export function dailyVideoLimit(location: Pick<Location, "id">, config: VideoConfig, kind: VideoSessionKind = "website"): number {
   if (kind === "demo") return config.maxDemoSessionsPerDay;
+  if (kind === "support") return config.maxSupportSessionsPerDay;
   return location.id === BELLINE_LOCATION_ID ? config.maxSessionsPerDayBelline : config.maxSessionsPerDay;
 }
 

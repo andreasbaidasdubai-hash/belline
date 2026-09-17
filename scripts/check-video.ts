@@ -2234,8 +2234,9 @@ await test("daily ceilings: a customer venue's website, Belline's own website, a
   } finally {
     demoFull();
   }
-  // A demo session is marked as one on its call record.
-  assert.match(read("src/lib/video/sessions.ts"), /kind: opts\.demo \? "demo" : "website"/);
+  // A demo session is marked as one on its call record. One session-kind
+  // decision covers all three: a demo link, an owner's support call, a visitor.
+  assert.match(read("src/lib/video/sessions.ts"), /const kind: VideoSessionKind = opts\.demo \? "demo" : opts\.support \? "support" : "website";/);
   assert.match(read("src/lib/video/sessions.ts"), /\.\.\.\(demo \? \{ demoLinkId: demo\.linkId \} : \{\}\)/);
 });
 

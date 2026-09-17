@@ -261,7 +261,7 @@ function agentFor(session: VideoSession, location: Location): VideoAgent {
           fastModel: videoFastModel(location),
           // A personalised demo's prospect context, written server-side from
           // the link's stored research when the session was created.
-          briefing: session.demo?.briefing,
+          briefing: session.demo?.briefing ?? session.support?.briefing,
         });
   session.agent = agent;
   return agent;

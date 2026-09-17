@@ -10,6 +10,7 @@ import { stripeEnabled } from "@/lib/billing/stripe";
 import { paymentsSoonSentence } from "@/lib/billing/trial-end";
 import { siteOrigin } from "@/lib/origin";
 import Order from "./Order";
+import BelleForVisitors from "@/components/BelleForVisitors";
 import { cycleFromParam } from "./order-state";
 
 export const dynamic = "force-dynamic";
@@ -104,6 +105,8 @@ export default async function CheckoutPage({
           included={Object.fromEntries(sellable(market).map((p) => [p.id, publicLines(p)]))}
         />
       </main>
+      {/* Questions? Ask Belle: Belline's own chat, told this is the checkout and which plan is selected. */}
+      <BelleForVisitors page="checkout" plan={initial[0]} />
     </div>
   );
 }

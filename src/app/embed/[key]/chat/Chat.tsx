@@ -83,6 +83,7 @@ export default function Chat({
   logoUrl = null,
   opener,
   starterPrompts = [],
+  pageHint,
 }: {
   embedKey: string;
   freshToken: string;
@@ -97,6 +98,12 @@ export default function Chat({
    * the prompt's own words, exactly as if typed.
    */
   starterPrompts?: string[];
+  /**
+   * Belle on Belline's own pages (checkout, /verify, /login): which page, and
+   * the plan selected. Sent with each message as a closed-set hint the server
+   * parses again (belle/knowledge.ts); never shown and never free text.
+   */
+  pageHint?: { page: string; plan?: string };
   /**
    * The venue's uploaded logo (logo.ts `logoUrlFor`), shown in the header in
    * place of the bell. Absent, or failing to load, keeps the bell.
@@ -240,7 +247,7 @@ export default function Chat({
       const res = await fetch(`/api/webchat/${encodeURIComponent(embedKey)}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: token.current, text, clientId }),
+        body: JSON.stringify({ token: token.current, text, clientId, ...(pageHint ? { page: pageHint.page, plan: pageHint.plan } : {}) }),
       });
 
       if (res.status === 401) {

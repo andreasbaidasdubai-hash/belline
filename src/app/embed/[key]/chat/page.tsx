@@ -14,6 +14,7 @@ const CHAT = { channel: "web_chat" } as const;
 import { CHAT_KEYS, copyTable } from "@/lib/customer-copy";
 import { logoUrlFor } from "@/lib/logo";
 import Chat from "./Chat";
+import { BELLE_DISCLOSURE, PAGE_STARTERS, parsePageHint } from "@/lib/belle/knowledge";
 
 export const dynamic = "force-dynamic";
 
@@ -43,11 +44,11 @@ export default async function ChatPage({
   searchParams,
 }: {
   params: Promise<{ key: string }>;
-  searchParams: Promise<{ o?: string }>;
+  searchParams: Promise<{ o?: string; page?: string; plan?: string }>;
 }) {
   seedIfEmpty();
   const { key } = await params;
-  const { o } = await searchParams;
+  const { o, page, plan } = await searchParams;
 
   const location = listLocations({ includeInternal: true }).find(
     (l) => l.embed?.enabled && l.embed.key === key,
@@ -78,9 +79,15 @@ export default async function ChatPage({
     return <Refused reason={gate.message ?? lineFor(location, "embed.unavailable")} />;
   }
 
+  // Belle on Belline's own pages (components/BelleLauncher.tsx): the page's
+  // own questions, and the page as a hint the chat route parses again. Only
+  // for Belline's own venue; a customer's widget ignores both.
+  const hint = location.internal ? parsePageHint(page, plan) : null;
+
   return (
     <Chat
       embedKey={key}
+      pageHint={hint ?? undefined}
       // A fresh identity on every render. The browser keeps the one it already
       // has for this session and uses this only when it has none — otherwise
       // reloading the venue's page would abandon a half-finished booking and
@@ -89,8 +96,14 @@ export default async function ChatPage({
       venueName={location.name}
       agentName={location.agent.displayName}
       logoUrl={logoUrlFor(location)}
-      opener={location.agent.chatGreeting?.trim() ? inHouseSpelling(location, location.agent.chatGreeting.trim()) : undefined}
-      starterPrompts={starterPromptsFor(location.agent)}
+      opener={
+        hint
+          ? `Hi, I'm ${BELLE_DISCLOSURE}. Ask me about plans, signing up or your account, and I'll help you through it.`
+          : location.agent.chatGreeting?.trim()
+            ? inHouseSpelling(location, location.agent.chatGreeting.trim())
+            : undefined
+      }
+      starterPrompts={hint ? PAGE_STARTERS[hint.page] : starterPromptsFor(location.agent)}
       /** The 2-in-1: offered only where the venue has the bell on as well. */
       voiceHref={voiceAllowed(location.embed) ? voiceUrl(key, o) : undefined}
       // Only for a venue not answered in English; English keeps the lines written in Chat.tsx.
