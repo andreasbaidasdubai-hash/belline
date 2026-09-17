@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Vertical } from "@/lib/types";
 import {
   CONFIDENCE_LABEL,
@@ -40,6 +42,15 @@ import { COUNTRIES, readStoredPhone } from "@/lib/phone";
  *
  * Setting up by hand opens the same form, filled with what the venue already
  * has. There is one form, so the hand-typed path cannot drift from the read one.
+ *
+ * And the dashboard's business page is that form again (`mode="dashboard"`),
+ * opened on what is saved: saving stays on the page and says so, rather than
+ * moving the owner on to a setup step they finished weeks ago.
+ *
+ * Services are a plain list — a name, and if the owner likes a length, a price
+ * and a line saying what it is. "Who works there" is the diary's question: it
+ * is asked only where Belline fits bookings into a day itself, because a
+ * property developer taking requests has no stylists to name.
  */
 
 interface Draft {
@@ -100,6 +111,9 @@ export default function SetupWizard({
   start,
   lengthsRequired,
   country = "AE",
+  diary = false,
+  mode = "setup",
+  locationId,
 }: {
   vertical: Vertical;
   /** The business's own market (ISO): the country a phone typed without its code is read with. */
@@ -112,22 +126,43 @@ export default function SetupWizard({
    */
   lengthsRequired: boolean;
   current: CurrentVenue;
-  /** "review" opens the form straight away, from what is saved. */
-  start: "ask" | "review";
+  /** "review" opens the form straight away, from what is saved. The dashboard always does. */
+  start?: "ask" | "review";
+  /**
+   * Is the venue on Belline's own diary (booking/destination.ts
+   * `onBellineDiary`)? Unset is no, which is right for a new signup. The team
+   * list shows for a diary venue, and wherever lengths are required: a Google
+   * or Outlook calendar Belline books into runs on the same engine, and it
+   * offers no time without somebody to do the service.
+   */
+  diary?: boolean;
+  /** "setup" moves on to the next step after saving; "dashboard" stays and says it saved. */
+  mode?: "setup" | "dashboard";
+  /**
+   * The venue this form was rendered for. Sent with the save, so an account
+   * with several locations saves to the one on screen, not to its first.
+   */
+  locationId?: string;
 }) {
-  const [stage, setStage] = useState<Stage>(start);
+  const dashboard = mode === "dashboard";
+  const opening = dashboard ? "review" : (start ?? "ask");
+  const router = useRouter();
+  const [stage, setStage] = useState<Stage>(opening);
   const [website, setWebsite] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [form, setForm] = useState<ReviewForm | null>(start === "review" ? formFromDraft(null, "typed", current) : null);
+  const [form, setForm] = useState<ReviewForm | null>(opening === "review" ? formFromDraft(null, "typed", current) : null);
   const [fileName, setFileName] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   /** Problems with particular inputs on the review, shown under each one. */
   const [errors, setErrors] = useState<FieldError[]>([]);
   const [fallback, setFallback] = useState<string | null>(null);
   const [newStaff, setNewStaff] = useState("");
+  /** "Saved." after a dashboard save, until the next change. */
+  const [saved, setSaved] = useState(false);
   const isRestaurant = vertical === "restaurant";
+  const showStaff = !isRestaurant && (diary || lengthsRequired);
 
   function addFiles(event: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(event.target.files ?? []);
@@ -192,7 +227,7 @@ export default function SetupWizard({
           body: JSON.stringify({ website }),
         };
       }
-      const res = await fetch("/api/setup", init);
+      const res = await fetch(locationId ? `/api/setup?locationId=${encodeURIComponent(locationId)}` : "/api/setup", init);
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; draft?: Draft; error?: string; fallback?: string };
       if (!res.ok || !body.draft) {
         setError(body.error ?? (files.length ? "Belline could not read those." : "Belline could not read that page."));
@@ -237,7 +272,8 @@ export default function SetupWizard({
 
   async function save() {
     if (!form) return;
-    const check = payloadFromForm(form, { lengthsRequired, country });
+    // A menu has no minutes to ask for, on the diary or not (api/setup says the same).
+    const check = payloadFromForm(form, { lengthsRequired: lengthsRequired && !isRestaurant, country, staffShown: showStaff });
     if (!check.ok) {
       showErrors(check.errors);
       return;
@@ -245,12 +281,15 @@ export default function SetupWizard({
     setStage("saving");
     setError(null);
     setErrors([]);
+    setSaved(false);
     try {
       const res = await fetch("/api/setup", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...check.body,
+          ...(locationId ? { locationId } : {}),
+          ...(dashboard ? { from: "dashboard" } : {}),
           website: draft?.sourceUrl ?? "",
           // A count for the version note. The files themselves are long gone.
           documents: draft?.documents ?? 0,
@@ -265,6 +304,15 @@ export default function SetupWizard({
         const id = row >= 0 ? REVIEW_IDS.serviceMinutes(row) : body.field;
         if (body.error && id) showErrors([{ id, message: body.error }]);
         else setError(body.error ?? "That could not be saved. Try again. Nothing you typed has been lost.");
+        return;
+      }
+      if (dashboard) {
+        // A settings page: stay on it, say so, and re-read the server's view so
+        // the version history and anything else on the page show the save.
+        // `next` is the setup journey's, and means nothing here.
+        setStage("review");
+        setSaved(true);
+        router.refresh();
         return;
       }
       // On to the step the journey gives, read from the venue as it was just
@@ -284,6 +332,7 @@ export default function SetupWizard({
   function edit(patch: (f: ReviewForm) => ReviewForm, field?: string) {
     setForm((f) => (f ? patch(f) : f));
     setError(null);
+    setSaved(false);
     setErrors((list) => (field ? list.filter((e) => e.id !== field) : []));
   }
 
@@ -312,12 +361,21 @@ export default function SetupWizard({
 
     return (
       <div>
-        <p className="muted" style={eyebrow}>
-          Check what Belline will say
-        </p>
-        <h1 style={{ ...serif, fontSize: 32, letterSpacing: "-0.02em", lineHeight: 1.12, margin: "0 0 14px" }}>
-          {draft ? "Here's what I understood." : "Tell Belline about the business."}
-        </h1>
+        {dashboard ? (
+          // Under the page's own "Your business" heading, as one section of it.
+          <h2 style={{ ...serif, fontSize: 24, letterSpacing: "-0.01em", lineHeight: 1.2, margin: "0 0 10px" }}>
+            Details, hours, services and questions
+          </h2>
+        ) : (
+          <>
+            <p className="muted" style={eyebrow}>
+              Check what Belline will say
+            </p>
+            <h1 style={{ ...serif, fontSize: 32, letterSpacing: "-0.02em", lineHeight: 1.12, margin: "0 0 14px" }}>
+              {draft ? "Here's what I understood." : "Tell Belline about the business."}
+            </h1>
+          </>
+        )}
         <p style={{ color: "var(--text-2)", fontSize: 15.5, lineHeight: 1.6, maxWidth: "56ch" }}>
           {draft ? `Read from ${readFrom(draft)}. ` : ""}Change anything that is wrong — Belline
           will say exactly what is on this screen, so a price that is out of date here is a
@@ -441,8 +499,8 @@ export default function SetupWizard({
               (isRestaurant
                 ? "Belline answers questions about the menu. Guests book a table, not a dish."
                 : lengthsRequired
-                  ? "Belline books these into your diary, so each one needs its length in minutes. The price is optional."
-                  : "A name is enough. Minutes and price are optional: with no price, Belline says your team will confirm it.")
+                  ? "Belline books these into your diary, so each one needs its length in minutes. The price and a short description are optional."
+                  : "A name is enough. Minutes, price and a short description are optional: with no price, Belline says your team will confirm it.")
             }
           >
             <div style={{ display: "grid", gap: 10 }}>
@@ -504,6 +562,29 @@ export default function SetupWizard({
                     </button>
                   </div>
                   {!isRestaurant && message(REVIEW_IDS.serviceMinutes(i))}
+                  {/* What it is, in the owner's words: what the agent says when a
+                      caller asks what "Consultation" involves. A restaurant's
+                      menu keeps its own wording and has no such line. */}
+                  {!isRestaurant && (
+                    <label style={{ display: "grid", gap: 4, fontSize: 12, textTransform: "none", letterSpacing: 0, marginTop: 8 }}>
+                      <span className="muted">Description · optional</span>
+                      <textarea
+                        id={REVIEW_IDS.serviceDescription(i)}
+                        rows={2}
+                        aria-label={`Service ${i + 1} description`}
+                        placeholder="What it is, in a line a receptionist would say."
+                        value={s.description ?? ""}
+                        {...invalid(REVIEW_IDS.serviceDescription(i))}
+                        onChange={(e) =>
+                          edit(
+                            (f) => ({ ...f, services: f.services.map((x, j) => (j === i ? { ...x, description: e.target.value, source: "typed" } : x)) }),
+                            REVIEW_IDS.serviceDescription(i),
+                          )
+                        }
+                      />
+                    </label>
+                  )}
+                  {!isRestaurant && message(REVIEW_IDS.serviceDescription(i))}
                 </div>
               ))}
               <div>
@@ -511,7 +592,7 @@ export default function SetupWizard({
                   type="button"
                   className="btn"
                   style={{ padding: "8px 14px", fontSize: 13 }}
-                  onClick={() => edit((f) => ({ ...f, services: [...f.services, { name: "", durationMin: 0, price: 0, source: "typed" }] }))}
+                  onClick={() => edit((f) => ({ ...f, services: [...f.services, { name: "", durationMin: 0, price: 0, description: "", source: "typed" }] }))}
                 >
                   {isRestaurant ? "Add a dish" : "Add a service"}
                 </button>
@@ -519,7 +600,7 @@ export default function SetupWizard({
             </div>
           </Section>
 
-          {!isRestaurant && (
+          {showStaff && (
             <Section label="Who works there" hint={why("staff")} htmlFor="review-staff">
               {form.staff.length > 0 && (
                 <ul aria-label="Staff" style={{ listStyle: "none", padding: 0, margin: "0 0 10px", display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -655,21 +736,35 @@ export default function SetupWizard({
           }}
         >
           <button className="btn btn-accent" onClick={save} disabled={stage === "saving"} style={{ padding: "12px 22px" }}>
-            {stage === "saving" ? "Saving…" : "That's right — save it"}
+            {stage === "saving" ? "Saving…" : dashboard ? "Save changes" : "That's right — save it"}
           </button>
-          <button
-            className="btn"
-            onClick={() => {
-              setDraft(null);
-              setForm(null);
-              setError(null);
-              setStage("ask");
-              showStep("import");
-            }}
-            style={{ padding: "12px 18px" }}
-          >
-            {draft ? "Try a different page" : "Read my website instead"}
-          </button>
+          {dashboard ? (
+            // Reading again is the setup step's, where what was read is checked
+            // before anything is saved; this page only edits what is saved.
+            <Link className="btn" href="/setup/import" style={{ padding: "12px 18px" }}>
+              Read your website again
+            </Link>
+          ) : (
+            <button
+              className="btn"
+              onClick={() => {
+                setDraft(null);
+                setForm(null);
+                setError(null);
+                setStage("ask");
+                showStep("import");
+              }}
+              style={{ padding: "12px 18px" }}
+            >
+              {draft ? "Try a different page" : "Read my website instead"}
+            </button>
+          )}
+          {dashboard && (
+            // Always in the page, so a screen reader hears it when it fills.
+            <p role="status" style={{ margin: 0, fontSize: 13.5, color: "var(--ok)" }}>
+              {saved && stage === "review" ? "Saved." : ""}
+            </p>
+          )}
           {/* Beside the button that did nothing, one short line and a way to
               the next problem. The messages themselves are under their inputs;
               repeating them all here made this sticky bar half a phone screen
