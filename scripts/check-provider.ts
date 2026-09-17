@@ -321,14 +321,14 @@ await test("a clinic can set up and test, but Go live waits for the clinic flag"
   assert.ok(!on.blockers.some((b) => b.step === "golive"));
 });
 
-await test("the bookings step shows calendars from their flags, and the integrations subtitle follows the destination", () => {
+await test("the bookings step shows calendars from their flags, and the calendars page follows the destination", () => {
   const page = source("src/app/setup/[step]/page.tsx");
   assert.match(page, /flag\("booking\.google"\)/);
   assert.match(page, /flag\("booking\.outlook"\)/);
   assert.match(page, /Coming soon/);
   // Google is only ever "available" behind a working connection (check:google covers the rest).
   assert.match(page, /if \(googleUsable\(venue\)\)/);
-  assert.match(source("src/app/(app)/integrations/page.tsx"), /takesRequestsOnly\(location\)/);
+  assert.match(source("src/app/(app)/calendars/page.tsx"), /takesRequestsOnly\(venue\)/);
 });
 
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });

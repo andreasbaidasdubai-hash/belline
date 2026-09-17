@@ -133,9 +133,9 @@ await test("the auth URL asks for offline access with those scopes, and the stat
 });
 
 await test("a state verifies once, for the same user and browser, and never twice", () => {
-  const { state, nonce } = google.signState({ locationId: salonBase.id, userId: "user_owner", returnTo: "integrations" });
+  const { state, nonce } = google.signState({ locationId: salonBase.id, userId: "user_owner", returnTo: "calendars" });
   const first = google.verifyState(state, { userId: "user_owner", cookieNonce: nonce });
-  assert.deepEqual(first, { ok: true, locationId: salonBase.id, returnTo: "integrations" });
+  assert.deepEqual(first, { ok: true, locationId: salonBase.id, returnTo: "calendars" });
   const again = google.verifyState(state, { userId: "user_owner", cookieNonce: nonce });
   assert.ok(!again.ok && again.reason === "used");
 });
@@ -191,7 +191,7 @@ await test("a connection whose record is gone fails gracefully: back where it st
   });
   assert.ok(checked && !checked.ok && checked.reason === "used" && checked.returnTo === "setup");
   const route = source("src/app/api/integrations/google/route.ts");
-  assert.match(route, /if \(!checked\.ok\) \{[\s\S]{0,200}land\(request, checked\.returnTo \?\? "integrations", undefined, "google_failed"\)/);
+  assert.match(route, /if \(!checked\.ok\) \{[\s\S]{0,200}land\(request, checked\.returnTo \?\? "calendars", undefined, "google_failed"\)/);
   assert.equal(google.returnPath("setup", undefined, "google_failed"), "/setup/bookings?google=google_failed");
   assert.match(integrationErrorText("google_failed")!, /Please connect again/);
   // The setup step shows that sentence for this code.
@@ -201,7 +201,7 @@ await test("a connection whose record is gone fails gracefully: back where it st
 await test("a decline lands on the bookings step with 'No problem — requests for now', never on Google", () => {
   const setup = google.returnPath("setup", salonBase.id, "declined");
   assert.equal(setup, "/setup/bookings?google=declined");
-  assert.equal(google.returnPath("integrations", salonBase.id, "declined"), `/integrations?loc=${salonBase.id}&error=google_declined`);
+  assert.equal(google.returnPath("calendars", salonBase.id, "declined"), `/calendars?loc=${salonBase.id}&error=google_declined`);
   assert.match(integrationErrorText("google_declined")!, /^No problem — requests for now\./);
   const page = source("src/app/setup/[step]/page.tsx");
   assert.match(page, /code === "declined"\) return integrationErrorText\("google_declined"\)/);
@@ -752,13 +752,13 @@ await test("Google can be chosen with a working connection, is refused unconnect
   }
 });
 
-await test("the bookings step and integrations page read the flag and the connection, and keep 'Coming soon' with it off", () => {
+await test("the bookings step and calendars page read the flag and the connection, and keep 'Coming soon' with it off", () => {
   const page = source("src/app/setup/[step]/page.tsx");
   assert.match(page, /if \(!flag\("booking\.google"\)\) \{\s*return \{ id: "google", title, state: "soon"/);
-  const integrations = source("src/app/(app)/integrations/page.tsx");
+  const integrations = source("src/app/(app)/calendars/page.tsx");
   assert.match(integrations, /const googleOn = flag\("booking\.google"\)/);
   assert.match(integrations, /GOOGLE_EXPIRED_TEXT/);
-  assert.match(integrations, /GoogleCalendarControls/);
+  assert.match(integrations, /endpoint="\/api\/integrations\/google"/);
 });
 
 // ---------------------------------------------------------------------------
@@ -1018,7 +1018,7 @@ await test("an owner Google stops at 'Access blocked' (not a test user) never re
   // The owner presses Connect; Google shows "Access blocked" and nothing comes back.
   google.signState({ locationId: venue.id, userId: "user_owner", returnTo: "setup" }, started);
   // Another owner connects normally: no exception for that one.
-  const other = google.signState({ locationId: restaurantBase.id, userId: "user_owner", returnTo: "integrations" }, started);
+  const other = google.signState({ locationId: restaurantBase.id, userId: "user_owner", returnTo: "calendars" }, started);
   assert.ok(google.verifyState(other.state, { userId: "user_owner", cookieNonce: other.nonce, now: started }).ok);
 
   assert.equal(google.sweepAbandonedConnects(new Date(started + 5 * 60_000)), 0, "raised before the ten minutes were up");
@@ -1036,7 +1036,7 @@ await test("an owner Google stops at 'Access blocked' (not a test user) never re
   // The owner's words, on the page they come back to.
   assert.match(google.GOOGLE_ABANDONED_TEXT, /access is blocked/);
   assert.doesNotMatch(google.GOOGLE_ABANDONED_TEXT, /403|OAuth|consent screen|test user/i);
-  const page = source("src/app/(app)/integrations/page.tsx");
+  const page = source("src/app/(app)/calendars/page.tsx");
   assert.match(page, /googleVenue\.googleConnectAbandonedAt && \([\s\S]{0,300}\{GOOGLE_ABANDONED_TEXT\}/);
   // A decline that does come back is still "requests for now", and logged.
   const route = source("src/app/api/integrations/google/route.ts");
@@ -1146,9 +1146,9 @@ await test("in the app, the destination step, integrations and channels read the
   const setup = source("src/app/setup/[step]/page.tsx");
   assert.match(setup, /function googleCard\(venue: Location\): DestinationOption \{[\s\S]{0,120}if \(!flag\("booking\.google"\)\) \{\s*return \{ id: "google", title, state: "soon"/);
   assert.match(source("src/app/(app)/channels/page.tsx"), /const googleOn = flag\("booking\.google"\);[\s\S]{0,200}!googleOn \? "soon"/);
-  assert.match(source("src/app/(app)/integrations/page.tsx"), /\{googleOn \? \(/);
+  assert.match(source("src/app/(app)/calendars/page.tsx"), /\{googleOn \? \(/);
   // Nowhere in the app is Google "coming soon" in fixed text outside a flag branch.
-  for (const file of ["src/app/setup/[step]/page.tsx", "src/app/(app)/channels/page.tsx", "src/app/(app)/integrations/page.tsx"]) {
+  for (const file of ["src/app/setup/[step]/page.tsx", "src/app/(app)/channels/page.tsx", "src/app/(app)/calendars/page.tsx"]) {
     const text = source(file);
     for (const m of text.matchAll(/Google Calendar[^"\n]{0,80}(?:coming soon|isn.t available|not available)/gi)) {
       const before = text.slice(Math.max(0, m.index! - 600), m.index);

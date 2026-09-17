@@ -19,7 +19,13 @@ import { mutateOAuthStates, type OAuthStateRow } from "../store";
  */
 
 export type OAuthProvider = "google" | "outlook";
-export type ReturnTo = "setup" | "integrations";
+/**
+ * Where the owner goes back to: the setup step they started from, or the
+ * Calendars page. Calendars used to live on /integrations, whose token was
+ * "integrations"; a state signed before the move still verifies and lands on
+ * Calendars, because anything that is not "setup" does.
+ */
+export type ReturnTo = "setup" | "calendars";
 
 export const STATE_TTL_MS = 10 * 60_000;
 
@@ -105,7 +111,7 @@ export function verifyOAuthState(
   } catch {
     return { ok: false, reason: "malformed" };
   }
-  const returnTo: ReturnTo = payload.r === "setup" ? "setup" : "integrations";
+  const returnTo: ReturnTo = payload.r === "setup" ? "setup" : "calendars";
   // Consumed on first sight, whatever happens next: a state is never good twice.
   // Unknown — used already, or its record lost with the data — is refused the
   // same way, and the route sends the owner back to connect again.

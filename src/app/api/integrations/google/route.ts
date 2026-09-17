@@ -77,7 +77,7 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
 
   if (!state) {
-    const returnTo: ReturnTo = url.searchParams.get("from") === "setup" ? "setup" : "integrations";
+    const returnTo: ReturnTo = url.searchParams.get("from") === "setup" ? "setup" : "calendars";
     const location = getLocation(url.searchParams.get("locationId") ?? "");
     if (!location || !canEditAgent(auth.user, location.id)) {
       return NextResponse.json({ error: "Not your venue." }, { status: 403 });
@@ -98,7 +98,7 @@ export async function GET(request: Request) {
   const checked = verifyState(state, { userId: auth.user.id, cookieNonce: jar.get(STATE_COOKIE)?.value });
   if (!checked.ok) {
     customerError("google", `oauth state refused: ${checked.reason}`, "failed");
-    return land(request, checked.returnTo ?? "integrations", undefined, "google_failed");
+    return land(request, checked.returnTo ?? "calendars", undefined, "google_failed");
   }
   const location = getLocation(checked.locationId);
   if (!location || !canEditAgent(auth.user, location.id)) {

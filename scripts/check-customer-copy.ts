@@ -127,8 +127,8 @@ await test("no route an owner calls puts a raw error message in a body or a redi
   assert.deepEqual(hits, []);
 });
 
-await test("the integrations page shows a sentence for a code, never the query string itself", () => {
-  const page = said(path.join(ROOT, "src/app/(app)/integrations/page.tsx"));
+await test("the calendars page shows a sentence for a code, never the query string itself", () => {
+  const page = said(path.join(ROOT, "src/app/(app)/calendars/page.tsx"));
   assert.ok(page.includes("integrationErrorText(error)"));
   assert.ok(!/\{error\}/.test(page), "the raw ?error= value is rendered");
 });

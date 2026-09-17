@@ -88,7 +88,7 @@ export async function GET(request: Request) {
   if (auth.response) return auth.response;
 
   if (!state) {
-    const returnTo: ReturnTo = url.searchParams.get("from") === "setup" ? "setup" : "integrations";
+    const returnTo: ReturnTo = url.searchParams.get("from") === "setup" ? "setup" : "calendars";
     const location = getLocation(url.searchParams.get("locationId") ?? "");
     if (!location || !canEditAgent(auth.user, location.id)) {
       return NextResponse.json({ error: "Not your venue." }, { status: 403 });
@@ -108,7 +108,7 @@ export async function GET(request: Request) {
   const checked = verifyOutlookState(state, { userId: auth.user.id, cookieNonce: jar.get(OUTLOOK_STATE_COOKIE)?.value });
   if (!checked.ok) {
     customerError("outlook", `oauth state refused: ${checked.reason}`, "failed");
-    return land(checked.returnTo ?? "integrations", undefined, "outlook_failed");
+    return land(checked.returnTo ?? "calendars", undefined, "outlook_failed");
   }
   const location = getLocation(checked.locationId);
   if (!location || !canEditAgent(auth.user, location.id)) {

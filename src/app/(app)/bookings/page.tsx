@@ -10,6 +10,9 @@ import Progress from "./Progress";
 import CancelBooking from "./CancelBooking";
 import DepositActions from "./DepositActions";
 import { depositsReady } from "@/lib/billing/deposits";
+import { redirect } from "next/navigation";
+import { destinationOf, googleUsable, onBellineDiary, outlookUsable } from "@/lib/booking/destination";
+import CalendarBookings from "./CalendarBookings";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +29,19 @@ export default async function BookingsPage({
   const { loc } = await searchParams;
   const location = await resolveLocation(user, loc);
   if (!location) return <p className="muted">No venues are assigned to your account yet.</p>;
+
+  // Three kinds of venue, three answers. The diary's own table below is for
+  // venues on Belline's diary. A venue booking into a connected calendar gets
+  // the list of what Belline booked into it. Anybody else takes requests, and
+  // their page is Requests: an empty bookings table would read as "nothing
+  // came in" when requests did.
+  if (!onBellineDiary(location)) {
+    const kind = destinationOf(location);
+    if (kind === "google" && googleUsable(location)) return <CalendarBookings location={location} service="google" />;
+    if (kind === "outlook" && outlookUsable(location)) return <CalendarBookings location={location} service="outlook" />;
+    redirect(`/requests?loc=${encodeURIComponent(location.id)}`);
+  }
+
   const t = terms(location);
   const canSendDeposits = depositsReady(location);
 
