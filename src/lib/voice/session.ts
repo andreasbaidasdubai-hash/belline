@@ -2,6 +2,7 @@ import type { Call, DateStr, Location, ToolTrace, VenueLanguage } from "../types
 import { AgentSession } from "../agent/runtime";
 import { createSttStream, type SttFinalMeta, type SttLanguage, type SttStream } from "../providers/stt";
 import { speak, speakClip, ttsEnabled, ttsLanguageCodeOf, voiceIdFor, type TtsFormat } from "../providers/tts";
+import { voiceChoice } from "../providers/voice-choice";
 import { answersIn, languageChannelOf, languagesFor, lineFor, variantOf, type LanguageChannel } from "../language";
 import { copy } from "../customer-copy";
 import { LanguagePick, askGreetingParts, sttLanguageFor } from "./language-pick";
@@ -165,10 +166,15 @@ export function voiceParams(
   language: VenueLanguage = answersIn(location),
 ) {
   const languageCode = ttsLanguageCodeOf(language);
+  // ElevenLabs as always, or the video receptionist's voice on Cartesia where
+  // `voice.unify` is on (providers/voice-choice.ts, docs/video/voice.md).
+  const voice = voiceChoice(location, voiceIdFor(location.agent, language, process.env, variantOf(location, language)), language);
   return {
     text: spoken.text,
-    voiceId: voiceIdFor(location.agent, language, process.env, variantOf(location, language)),
-    modelId: location.agent.voiceModel,
+    voiceId: voice.voiceId,
+    modelId: voice.engine === "cartesia" ? voice.modelId : location.agent.voiceModel,
+    // Only when not ElevenLabs, so the request and the clip cache key are otherwise unchanged.
+    ...(voice.engine === "cartesia" ? { engine: "cartesia" as const } : {}),
     // A venue's configured pace shifts the whole range rather than overriding
     // it, so "slower for numbers" survives being tuned.
     speed: spoken.speed * ((location.agent.voiceSpeed ?? 1.05) / 1.05),

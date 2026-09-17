@@ -141,6 +141,11 @@ export type TtsFormat = "pcm_16000" | "ulaw_8000" | "mp3_44100_128";
 
 export interface SpeakOptions {
   voiceId: string;
+  /**
+   * Which engine speaks. Unset is ElevenLabs. `cartesia` only ever comes from
+   * voice-choice.ts, which picks it only where Cartesia is usable.
+   */
+  engine?: "elevenlabs" | "cartesia";
   format: TtsFormat;
   modelId?: string;
   signal?: AbortSignal;
@@ -226,7 +231,7 @@ export function ttsRequest(text: string, opts: SpeakOptions): { url: string; bod
 }
 
 export function ttsEnabled(): boolean {
-  return Boolean(process.env.ELEVENLABS_API_KEY);
+  return Boolean(process.env.ELEVENLABS_API_KEY || process.env.CARTESIA_API_KEY);
 }
 
 /**
@@ -237,6 +242,23 @@ export async function* speak(
   text: string,
   opts: SpeakOptions,
 ): AsyncGenerator<Buffer> {
+  if (opts.engine === "cartesia") {
+    // Loaded here, not at the top: the dashboard's editor imports this module
+    // for its voice list, and has no business carrying a second vendor.
+    //
+    // Not metered through `onBilled`: that meter prices ElevenLabs credits,
+    // and Cartesia's rates are not on Belline's rate card (docs/video/voice.md).
+    const { speakCartesia } = await import("./tts-cartesia");
+    yield* speakCartesia(text, {
+      voiceId: opts.voiceId,
+      format: opts.format,
+      modelId: opts.modelId,
+      speed: opts.speed,
+      languageCode: opts.languageCode,
+      signal: opts.signal,
+    });
+    return;
+  }
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key || !text.trim()) return;
 
@@ -296,6 +318,8 @@ const clipCache = new Map<string, Buffer>();
 
 export async function speakClip(text: string, opts: SpeakOptions): Promise<Buffer> {
   const key = [
+    // Only when not ElevenLabs, so every existing key is what it was.
+    ...(opts.engine === "cartesia" ? ["cartesia"] : []),
     opts.voiceId,
     opts.modelId ?? DEFAULT_VOICE_MODEL,
     opts.format,
