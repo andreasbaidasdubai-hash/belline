@@ -60,7 +60,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
         >
           {poster && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={poster} width={size} height={size} style={{ position: "absolute", top: 0, left: 0, width: size, height: size, objectFit: "cover", objectPosition: "46% 50%" }} alt="" />
+            <img src={poster} width={size} height={size} style={{ position: "absolute", top: 0, left: 0, width: size, height: size, objectFit: "cover", objectPosition: "center" }} alt="" />
           )}
           {/* A soft shade under the button, so white reads on any poster. */}
           <div style={{ position: "absolute", width: 170, height: 170, borderRadius: 85, background: "rgba(0,0,0,0.16)", display: "flex" }} />
