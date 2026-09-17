@@ -1,0 +1,84 @@
+# Belline CI: the full gate on fast Linux machines, in parallel.
+#
+# Runs on every push to a feature branch (not main — main is what production
+# and the website are built from, and it only ever receives tested merges) and
+# on demand. No secrets are needed or used: every suite runs against stubs, the
+# e2e server runs with FLAG_STUBS=on and an unreachable database, and
+# DATABASE_URL is forced empty so nothing can reach a real database.
+name: ci
+
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: ""
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  build:
+    name: typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npm run site
+      - run: npx next build
+
+  checks:
+    name: checks ${{ matrix.shard }}/4
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # Some suites build the site into a temp folder or read site/.
+      - run: npm run site
+      - run: node scripts/ci-checks.mjs ${{ matrix.shard }} 4
+
+  e2e:
+    name: e2e ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [zero-touch, video]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm run site
+      - name: run
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npx playwright test --config playwright.${{ matrix.suite }}.config.ts
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-${{ matrix.suite }}-results
+          path: test-results/
+          retention-days: 7
