@@ -259,7 +259,7 @@ const pending = await selfServe("Unconfirmed Salon");
 
 await test("every route that spends money asks the gate first", () => {
   const gated: [string, RegExp][] = [
-    ["src/app/api/setup/route.ts", /paidWorkRefusal\(user, venue\)[\s\S]*draftFromRequest\(req, \{\}, screen\)/],
+    ["src/app/api/setup/route.ts", /paidWorkRefusal\(user, venue\)[\s\S]*draftFromRequest\(\s*req,\s*\{\},[^;]*,\s*screen,?\s*\)/],
     ["src/app/api/setup/assistant/route.ts", /paidWorkRefusal\(user[\s\S]*runSetupTurn\(/],
     ["src/app/api/setup/selftest/route.ts", /paidWorkRefusal\(auth\.user, location\)[\s\S]*runSelftest\(/],
     ["src/app/api/phone/number/route.ts", /paidWorkRefusal\(auth\.user, location\)[\s\S]*assignNumber\(/],

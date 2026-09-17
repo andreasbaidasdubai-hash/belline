@@ -389,7 +389,7 @@ console.log("\nHow it looks — the venue's choices, within the guidelines\n");
     assert.equal(cfg.ring, true);
     assert.ok(!JSON.stringify(cfg).includes("secret.example"));
     const route = fs.readFileSync(path.join(process.cwd(), "src", "app", "api", "embed", "[key]", "config", "route.ts"), "utf8");
-    assert.match(route, /widgetConfig\(location\.embed, link, answersIn\(location\), logoUrlFor\(location\)\)/);
+    assert.match(route, /widgetConfig\(location\.embed, link, answersIn\(location\), languageNotice\(location\), logoUrlFor\(location\)\)/);
   });
 
   await test("embed.js draws only a Belline-served logo, decoratively, and puts the bell back if it fails", () => {
