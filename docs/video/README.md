@@ -209,6 +209,41 @@ The mock panel says **"MOCK — not a live avatar"** and lets you type what you
 would say; replies go through the real model route and tools (a scripted
 receptionist stands in for the model).
 
+### This harness builds first, and must stay that way
+
+Unlike the other Playwright configs, `playwright.video.config.ts` runs
+`next build` and serves it with `--prod`. That costs a build per run; it buys a
+suite that tests what a customer actually gets. Do not switch it back to dev to
+save the minutes.
+
+The reason is a latent fragility worth knowing about on its own:
+`src/app/embed/[key]/video/page.tsx` re-derives `framedBy` from the `Origin` /
+`Referer` header **on every render**, and refuses the page when that origin is
+not on the venue's allowlist. On the initial framing navigation the Referer is
+the embedding site, so it passes. But a *re-render* of the same page carries
+the page's own Referer — this app's origin, not the embedding site's — so the
+check refuses a page it had already allowed, and a live call is replaced by
+"This page can only be opened from the website it belongs to".
+
+In dev, Next's HMR does exactly that: an RSC re-render arrives with `rsc: 1`
+and `Referer: <this app>/embed/…`, and the call dies mid-test. In a built app
+nothing re-fetches this route — no router link, no `router.refresh()` — so it
+cannot happen in production today.
+
+**If any embed surface ever gains a router refresh, a client-side link, or
+anything else that re-renders it, this becomes a real bug.** The fix then is a
+proof-of-grant token: the granted render mints a short-lived signed token bound
+to the embed key and the verified framing origin, the client puts it in the URL
+(`history.replaceState`), and a re-render accepts that token instead of
+re-reading the Referer. A refused render mints nothing, so a refused page
+cannot refresh its way into a granted one.
+
+Do **not** "fix" it by trusting the `o` query parameter, or by skipping the
+check for same-origin requests: both let a site that was refused reload itself
+into an allowed one, which is the whole thing the allowlist prevents.
+`src/app/embed/[key]/chat/page.tsx` checks the same way and has the same
+property.
+
 ## Staging (Railway)
 
 The main session deploys. For reference, from a directory linked to the

@@ -65,11 +65,31 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
     },
   ],
+  /**
+   * A production build, deliberately — do not put this back on dev.
+   *
+   * The embed page re-derives who is framing it from the Origin/Referer header
+   * on every render (src/app/embed/[key]/video/page.tsx). In dev, Next
+   * re-renders server components over HMR, and an RSC re-render carries the
+   * page's *own* Referer rather than the embedding site's, so the origin check
+   * refuses a page it had already allowed: mid-call the live call was replaced
+   * by "This page can only be opened from the website it belongs to", and
+   * video-look failed on a chroma canvas that never settled because the whole
+   * tree had gone. Nothing re-fetches this route in a built app, so it is a
+   * dev-only path — and a built app is what a customer actually runs.
+   * docs/video/README.md has the latent fragility written down.
+   *
+   * The build is its own process because it must not inherit the harness's
+   * `NODE_ENV=development` (scripts/build-e2e.ts). The server keeps that env
+   * and is switched over with `--prod`: FLAG_STUBS refuses to boot under
+   * `NODE_ENV=production` (lib/flags.ts), which is what that flag is for.
+   */
   webServer: {
-    command: "node --import tsx server.ts",
+    command: "node --import tsx scripts/build-e2e.ts && node --import tsx server.ts --prod",
     url: `http://localhost:${VIDEO_PORT}/login`,
     reuseExistingServer: false,
-    timeout: 240_000,
+    // The build runs inside this command, so the window has to cover it.
+    timeout: 600_000,
     env,
   },
 });
