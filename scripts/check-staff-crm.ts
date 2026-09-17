@@ -571,6 +571,8 @@ await test("inside a view's request, every store write is refused before it chan
   assert.equal(store.getTenant(tenantId)!.name, "Marina Smiles Dental");
   // Housekeeping is skipped, never an error, and reads work.
   readonly.runReadOnly(ctx, () => {
+    // Every customer page starts with the boot-time migrations; on a view they are skipped, not refused.
+    seedIfEmpty();
     store.pruneSessions();
     store.deleteSessions({ userId: owner.id });
     assert.equal(store.getUser(owner.id)!.id, owner.id);

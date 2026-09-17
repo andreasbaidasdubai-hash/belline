@@ -4,7 +4,7 @@ import { listExceptions, KIND_META } from "../exceptions";
 import { clientBook, totalsOf } from "../sales/clients";
 import { phoneCostPerMinuteFils } from "../billing/cost";
 import { todayIn, addDays } from "../time";
-import { allLeads, leadHref, SOURCE_LABEL, type LeadDbPort, realDbPort } from "./leads";
+import { allLeads, humanDay, leadHref, SOURCE_LABEL, type LeadDbPort, realDbPort } from "./leads";
 import { draftsAwaitingReview } from "./drafts";
 
 /**
@@ -132,7 +132,7 @@ export async function todayAttention(port: LeadDbPort = realDbPort, now = new Da
       items: trials.slice(0, SHOW).map((l) => ({
         key: l.id,
         title: tenants.get(l.tenantId)?.name ?? l.name,
-        detail: `${l.name} · ends ${l.subscription!.trial!.endsOn}`,
+        detail: `${l.name} · ends ${humanDay(l.subscription!.trial!.endsOn!)}`,
         href: `/sales/customers/${encodeURIComponent(l.tenantId)}`,
       })),
       empty: "No trial ends this week.",

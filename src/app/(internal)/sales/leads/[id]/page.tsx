@@ -55,7 +55,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       ["Free to talk", row.availability],
       ["Timezone", row.timezone],
       ["Email check", row.emailCheck.mx === null ? "Domain could not be checked when this came in" : row.emailCheck.role ? "A shared mailbox, not a person" : undefined],
-      ["Came from", row.source],
+      // The form's page name says which button they pressed; Belle's and the waitlist's are already the source tag.
+      ["Came from", lead.source === "enquiry" ? `The website form (${row.source})` : SOURCE_LABEL[lead.source]],
     ];
   } else {
     const row = await getDbLead(parsed.id);

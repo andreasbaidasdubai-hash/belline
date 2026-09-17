@@ -246,12 +246,13 @@ export default async function CustomerPage({ params }: { params: Promise<{ tenan
                       {l.name}
                       {u.period && <span className="muted" style={{ fontWeight: 400 }}> · {day(u.period.start)} to {day(u.period.end)}</span>}
                     </div>
-                    {u.meters.length === 0 ? (
-                      <p className="staff-note">No allowance is counted for this location yet.</p>
-                    ) : (
-                      <KeyValues rows={u.meters.map((m) => [m.name, `${m.used} of ${m.included ?? "uncounted"} ${m.unit}${m.pct !== null ? ` (${m.pct}%)` : ""}`])} />
-                    )}
-                    <KeyValues rows={[["What it cost us", aed(u.costFils)]]} />
+                    {u.meters.length === 0 && <p className="staff-note">No allowance is counted for this location yet.</p>}
+                    <KeyValues
+                      rows={[
+                        ...u.meters.map((m): [string, string] => [m.name, `${m.used} of ${m.included ?? "uncounted"} ${m.unit}${m.pct !== null ? ` (${m.pct}%)` : ""}`]),
+                        ["What it cost us", aed(u.costFils)],
+                      ]}
+                    />
                   </div>
                 );
               })}

@@ -368,6 +368,12 @@ export function recordLeadEvent(
   return saved;
 }
 
+/** "2026-09-18" as "18 Sept 2026", for words shown to people. */
+export function humanDay(date: string): string {
+  const d = new Date(`${date.slice(0, 10)}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
+
 export type Outcome<T = undefined> = { ok: true; value: T } | { ok: false; status: number; error: string };
 
 const actorOf = (user: User) => `user:${user.id}`;
@@ -438,7 +444,7 @@ export async function setNextAction(
   if (due && !clean) return { ok: false, status: 422, error: "Say what the next step is." };
   const row = crmRow(compositeId);
   saveLeadCrm({ ...row, nextAction: clean || undefined, nextActionDue: clean ? due ?? undefined : undefined, updatedAt: new Date().toISOString() });
-  recordLeadEvent(compositeId, { type: "next_action", summary: clean ? `Next: ${clean}${due ? ` by ${due}` : ""}` : "Next step cleared", actor: actorOf(user) });
+  recordLeadEvent(compositeId, { type: "next_action", summary: clean ? `Next: ${clean}${due ? ` by ${humanDay(due)}` : ""}` : "Next step cleared", actor: actorOf(user) });
   await staffAudit({ actor: user, action: "lead_next_action_set", entity: "lead", entityId: compositeId, before: { nextAction: row.nextAction ?? null, due: row.nextActionDue ?? null }, after: { nextAction: clean || null, due: clean ? due : null } });
   return { ok: true, value: undefined };
 }

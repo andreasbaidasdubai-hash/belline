@@ -2731,7 +2731,7 @@ body:has(.callbar) {
 
 .staff-table td, .staff-table th { vertical-align: top; }
 .staff-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.staff-table .sub { font-size: 11.5px; color: var(--bl-muted); margin-top: 2px; }
+.staff-shell .sub { font-size: 11.5px; color: var(--bl-muted); margin-top: 2px; line-height: 1.5; }
 
 .staff-draft textarea { font-family: inherit; font-size: 13.5px; line-height: 1.55; }
 .staff-draft pre { white-space: pre-wrap; font-family: inherit; font-size: 13.5px; line-height: 1.6; margin: 0; background: var(--bl-ground); border: 1px solid var(--bl-rule); border-radius: 10px; padding: 14px 16px; }
