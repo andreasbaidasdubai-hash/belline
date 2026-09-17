@@ -331,6 +331,71 @@ label {
   margin-bottom: 7px;
 }
 
+/* Radios and checkboxes are not text fields.
+   The `input` rule above is written for boxes you type into: full width,
+   padding, a panel background and a focus ring drawn with box-shadow. On a
+   radio that turned into a blue square sitting inside a stretched control
+   (billing's "When an allowance runs out"). Undo all of it and let the
+   browser draw the real control in the accent colour. `input:focus` removes
+   the outline for text fields, so keyboard focus is given back here with a
+   selector specific enough to win. Inline sizes (22px toggles) still apply. */
+input[type="radio"],
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+input[type="radio"]:focus,
+input[type="checkbox"]:focus {
+  box-shadow: none;
+}
+input[type="radio"]:focus-visible,
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+input[type="radio"]:disabled,
+input[type="checkbox"]:disabled {
+  cursor: default;
+}
+
+/* A label that is a sentence, not a field caption: a choice beside its radio,
+   or a question. The small capitals above suit "NAME" over a box; a whole
+   option in capitals reads as shouting and is harder to scan. */
+label.label-plain,
+label.choice {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+  margin-bottom: 0;
+}
+label.choice {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+label.choice:has(input:checked) {
+  border-color: var(--text);
+}
+label.choice input {
+  margin-top: 2px;
+}
+
 /* --- tables -------------------------------------------------------------- */
 
 table {

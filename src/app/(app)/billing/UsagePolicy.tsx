@@ -96,17 +96,15 @@ export default function UsagePolicy({
         </p>
       )}
       <div role="radiogroup" aria-label="When an allowance runs out" style={{ display: "grid", gap: 8 }}>
+        {/* `choice` (globals.css): a sentence-case option beside a real radio.
+            The global text-field styles once drew these as stretched boxes
+            with a blue square inside, and every option in capitals. */}
         {options.map((o) => (
           <label
             key={o.value}
+            className="choice"
             style={{
-              display: "grid",
-              gridTemplateColumns: "18px 1fr",
-              gap: 8,
-              alignItems: "start",
-              padding: "10px 12px",
-              borderRadius: 9,
-              border: `1px solid ${choice === o.value ? "var(--text)" : "var(--border)"}`,
+              borderColor: choice === o.value ? "var(--text)" : "var(--border)",
               cursor: canEdit ? "pointer" : "default",
             }}
           >
@@ -117,7 +115,6 @@ export default function UsagePolicy({
               checked={choice === o.value}
               disabled={!canEdit || busy}
               onChange={() => setChoice(o.value)}
-              style={{ marginTop: 3 }}
             />
             <span>
               <strong style={{ fontSize: 13 }}>{o.title}</strong>
@@ -130,7 +127,7 @@ export default function UsagePolicy({
       </div>
 
       {choice === "packs" && (
-        <label style={{ display: "grid", gap: 4, fontSize: 12.5 }}>
+        <label className="label-plain" style={{ display: "grid", gap: 4, fontSize: 12.5 }}>
           <span>Monthly spending cap for packs, in AED (leave empty for no cap)</span>
           <input
             type="number"
