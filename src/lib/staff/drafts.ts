@@ -281,6 +281,7 @@ export async function decideDraft(
     }
   }
 
+  const activity = { type: action === "approve" ? "approved" : "rejected" } as const;
   const [lead] = await query<{ domain: string | null }>(`select c.domain from sales.lead l join sales.company c on c.id = l.company_id where l.id = $1`, [draft.leadId]);
 
   await tx(async (c) => {
@@ -307,7 +308,7 @@ export async function decideDraft(
         draft.companyId,
         draft.agentId,
         actor,
-        action === "approve" ? "approved" : "rejected",
+        activity.type,
         (action === "approve" ? `Approved: ${draft.subject}` : `Rejected${action === "reject_suppress" ? ", do not contact" : ""}: ${reason ?? ""}`).slice(0, 500),
         JSON.stringify({ messageId, action, reason }),
       ],

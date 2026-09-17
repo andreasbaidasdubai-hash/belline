@@ -136,9 +136,9 @@ function staffNav(user: User): NavGroup | null {
   return {
     title: "Belline staff",
     items: [
-      { href: "/sales", label: "Sales console" },
-      { href: "/demo", label: "Demo line" },
-      { href: "/prospects", label: "Personalised demos" },
+      // One door. Demo lines and the demo builder live inside the console
+      // (Settings, and Leads), so the customer shell carries nothing else of ours.
+      { href: "/sales", label: "Staff console" },
     ],
   };
 }

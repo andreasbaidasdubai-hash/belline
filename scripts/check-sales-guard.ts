@@ -166,20 +166,38 @@ const LIVE_EFFECTS = [
   {
     what: "a venue's phone number",
     route: path.join("src", "app", "api", "sales", "clients", "number", "route.ts"),
-    cell: path.join("src", "app", "(internal)", "sales", "clients", "NumberCell.tsx"),
+    cell: path.join("src", "app", "(internal)", "sales", "customers", "NumberCell.tsx"),
   },
   {
     what: "a venue's WhatsApp",
     route: path.join("src", "app", "api", "sales", "whatsapp", "route.ts"),
-    cell: path.join("src", "app", "(internal)", "sales", "clients", "WhatsAppCell.tsx"),
+    cell: path.join("src", "app", "(internal)", "sales", "customers", "WhatsAppCell.tsx"),
   },
 ];
 
+/**
+ * Asking first, in the page. Since 2026-09-17 the console confirms with an
+ * in-page step (`role="alertdialog"` with the question in
+ * `staff-action-question`) rather than `window.confirm`, which could not say
+ * which customer a button belonged to.
+ */
+const ASKS = /role="alertdialog"[\s\S]{0,400}staff-action-question/;
+
 test("nothing with a live effect happens without asking first", () => {
-  const silent = LIVE_EFFECTS.filter(
-    (l) => !/window\.confirm/.test(fs.readFileSync(l.cell, "utf8")),
-  ).map((l) => l.what);
+  const silent = LIVE_EFFECTS.filter((l) => !ASKS.test(fs.readFileSync(l.cell, "utf8"))).map((l) => l.what);
   assert.deepEqual(silent, [], `changed without asking: ${silent.join(", ")}`);
+});
+
+test("the console never asks through a browser dialog", () => {
+  const offenders = files
+    .concat(
+      fs
+        .readdirSync(path.join("src", "app", "(internal)"), { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile() && /\.tsx?$/.test(e.name))
+        .map((e) => path.join(e.parentPath, e.name)),
+    )
+    .filter((f) => /window\.(confirm|prompt|alert)\s*\(/.test(code(fs.readFileSync(f, "utf8"))));
+  assert.deepEqual([...new Set(offenders)], [], `browser dialogs in: ${offenders.join(", ")}`);
 });
 
 test("the confirmation names the venue", () => {
@@ -195,7 +213,7 @@ test("connecting WhatsApp asks, not only pausing it", () => {
   // Pausing already asked before it stopped answering. Starting to answer a
   // real number in a customer's name did not.
   const cell = fs.readFileSync(LIVE_EFFECTS[1].cell, "utf8");
-  const asks = (cell.match(/window\.confirm/g) ?? []).length;
+  const asks = (cell.match(/role="alertdialog"/g) ?? []).length;
   assert.ok(asks >= 2, `only ${asks} confirmation(s) in WhatsAppCell`);
 });
 

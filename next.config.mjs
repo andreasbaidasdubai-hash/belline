@@ -31,6 +31,22 @@ const nextConfig = {
       { source: "/settings", destination: "/locations", permanent: false },
       // The setup step "Phone and website" became two steps.
       { source: "/setup/channels", destination: "/setup/website", permanent: false },
+
+      // The staff console was rebuilt on 2026-09-17 around Today, Leads,
+      // Customers, Issues, Revenue and Settings. Old bookmarks land on the
+      // page that does the same job now.
+      { source: "/sales/clients", destination: "/sales/customers", permanent: false },
+      { source: "/sales/enquiries", destination: "/sales/leads?source=enquiry", permanent: false },
+      { source: "/sales/approvals", destination: "/sales/leads?view=drafts", permanent: false },
+      { source: "/sales/exceptions", destination: "/sales/issues", permanent: false },
+      { source: "/sales/abuse", destination: "/sales/customers?view=flagged", permanent: false },
+      { source: "/sales/activity", destination: "/sales/settings/activity", permanent: false },
+      { source: "/sales/video", destination: "/sales/settings/video", permanent: false },
+      { source: "/sales/agents/:id", destination: "/sales/settings/agents/:id", permanent: false },
+      // Staff tools that sat in the customer dashboard. Exactly /demo: the
+      // public demo pages under /demo/<slug> are untouched.
+      { source: "/demo", destination: "/sales/settings/demo-lines", permanent: false },
+      { source: "/prospects", destination: "/sales/leads?build=1", permanent: false },
     ];
   },
 

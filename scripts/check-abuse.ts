@@ -463,13 +463,17 @@ await test("staff suspend a trial: paid work stops and the receptionist stops an
   assert.equal(serviceState(getLocation(second.location.id)!, today, { channel: "phone" }).answering, true);
 });
 
-await test("the sales console has the review list, its actions, and is staff only", () => {
-  assert.match(source("src/app/(internal)/layout.tsx"), /href: "\/sales\/abuse"/);
-  const page = source("src/app/(internal)/sales/abuse/page.tsx");
+await test("the staff console has the review list (Customers, Flagged signups), its actions, and is staff only", () => {
+  // The review moved from its own page into Customers on 2026-09-17; /sales/abuse redirects there.
+  assert.match(source("src/app/(internal)/StaffNav.tsx"), /href: "\/sales\/customers"/);
+  assert.match(source("next.config.mjs"), /source: "\/sales\/abuse", destination: "\/sales\/customers\?view=flagged"/);
+  const page = source("src/app/(internal)/sales/customers/page.tsx");
   assert.match(page, /isBellineStaff\(user\)/);
+  assert.match(page, /view === "flagged"/);
+  assert.match(page, /<AbuseActions /);
   const route = source("src/app/api/sales/abuse/route.ts");
   assert.match(route, /isBellineStaff\(auth\.user\)/);
-  for (const action of ["allow", "note", "suspend"]) assert.match(source("src/app/(internal)/sales/abuse/AbuseActions.tsx"), new RegExp(`act\\("${action}"\\)`));
+  for (const action of ["allow", "note", "suspend"]) assert.match(source("src/app/(internal)/sales/customers/AbuseActions.tsx"), new RegExp(`act\\("${action}"\\)`));
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

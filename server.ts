@@ -248,17 +248,18 @@ keepAlive(twilioWss);
 server.on("upgrade", (req, socket, head) => {
   const { pathname, query } = parse(req.url ?? "/", true);
 
+  // A read-only view of a customer's dashboard (lib/staff/view-as.ts) never
+  // opens a socket that starts a call.
+  if (pathname === "/ws/voice" && isViewAsSession(sessionIdFromCookieHeader(req.headers.cookie))) {
+    socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
   if (pathname === "/ws/voice") {
     // The test console starts real, metered calls. Anyone who can open this
     // socket can spend money, so it needs the same session as the dashboard.
-    const sessionId = sessionIdFromCookieHeader(req.headers.cookie);
-    // A read-only view of a customer's dashboard never starts a call.
-    if (isViewAsSession(sessionId)) {
-      socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
-      socket.destroy();
-      return;
-    }
-    const user = userForSession(sessionId);
+    const user = userForSession(sessionIdFromCookieHeader(req.headers.cookie));
     if (!user) {
       socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       socket.destroy();

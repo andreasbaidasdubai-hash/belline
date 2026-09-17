@@ -88,7 +88,7 @@ try {
   console.log(`  flagged     ${result.flagged}  (held back from the approval queue)`);
   console.log(`  skipped     ${result.skipped.length}`);
   console.log(`  cost        $${result.costUsd.toFixed(4)}`);
-  console.log(`\n  Review at /sales/approvals\n`);
+  console.log(`\n  Review at /sales/leads?view=drafts\n`);
 } catch (err) {
   console.error(`\n  ${(err as Error).message}\n`);
   process.exitCode = 1;

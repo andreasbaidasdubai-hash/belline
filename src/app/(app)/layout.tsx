@@ -3,7 +3,9 @@ import Brand from "@/components/Brand";
 import BackToSetup from "@/components/BackToSetup";
 import { navFor } from "@/lib/nav";
 import { requireUser } from "@/lib/auth-server";
-import { canEditAgent, canSeeLocation } from "@/lib/auth";
+import { SESSION_COOKIE, canEditAgent, canSeeLocation } from "@/lib/auth";
+import { cookies } from "next/headers";
+import { VIEW_AS_EXIT_PATH, viewAsState } from "@/lib/staff/view-as";
 import { listLocations, listLocationsFor } from "@/lib/store";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import BelleDock from "@/app/setup/BelleDock";
@@ -56,10 +58,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // The venue Belle works on, as /setup/assistant chooses it: this account's
   // own, and only one this person may change. Nobody else gets the bell.
-  const belleVenue = listLocationsFor(user.tenantId).find((l) => canEditAgent(user, l.id));
+  // Belline staff viewing this dashboard as the customer (lib/staff/view-as.ts).
+  // Said at the top of every page, with the way out, for as long as it lasts.
+  const view = viewAsState((await cookies()).get(SESSION_COOKIE)?.value);
+
+  // Not while viewing as the customer: Belle changes things, and the view cannot.
+  const belleVenue = view ? undefined : listLocationsFor(user.tenantId).find((l) => canEditAgent(user, l.id));
 
   const content = (
     <main className="content">
+      {view && (
+        <div className="view-as-banner" role="status">
+          <strong>Viewing as {view.businessName} — read-only</strong>
+          <span>Nothing can be changed from here. Ends in {view.minutesLeft} min.</span>
+          <a href={VIEW_AS_EXIT_PATH} className="btn btn-row">
+            Exit view
+          </a>
+        </div>
+      )}
       <Suspense fallback={null}>
         <BackToSetup />
       </Suspense>
