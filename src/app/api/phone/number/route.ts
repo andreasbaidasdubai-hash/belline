@@ -3,6 +3,7 @@ import { requireApiUser } from "@/lib/auth-server";
 import { canEditAgent } from "@/lib/auth";
 import { getLocation, listLocationsFor } from "@/lib/store";
 import { assignNumber } from "@/lib/telephony/pool";
+import { paidWorkRefusal } from "@/lib/abuse/gate";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not your venue." }, { status: 403 });
   }
   if (location.demo?.enabled) return NextResponse.json({ error: "That is a demo venue." }, { status: 400 });
+  // A number is rented every month: not before the owner's email is confirmed.
+  const held = paidWorkRefusal(auth.user, location);
+  if (held) return NextResponse.json({ error: held.error, fix: held.fix, code: held.code }, { status: held.status });
 
   const out = assignNumber(location);
   if (out.state === "assigned") return NextResponse.json({ ok: true, state: "assigned", number: out.number });

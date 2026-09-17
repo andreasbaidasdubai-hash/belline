@@ -3,6 +3,7 @@ import { getLocation } from "@/lib/store";
 import { requireApiUser } from "@/lib/auth-server";
 import { speak, ttsEnabled } from "@/lib/providers/tts";
 import { languageChoiceOpen } from "@/lib/language";
+import { verifyRefusal } from "@/lib/abuse/gate";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ export async function POST(request: Request) {
   // though it only returns audio.
   const auth = await requireApiUser();
   if (auth.response) return auth.response;
+  const held = verifyRefusal(auth.user);
+  if (held) return NextResponse.json({ error: held.error, fix: held.fix, code: held.code }, { status: held.status });
 
   if (!ttsEnabled()) {
     return NextResponse.json(

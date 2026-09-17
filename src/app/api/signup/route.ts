@@ -1,9 +1,12 @@
+import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { signUp } from "@/lib/onboarding";
 import { clientKey, createSignupLimiter } from "@/lib/onboarding/limit";
 import { seedIfEmpty } from "@/lib/seed";
 import { SESSION_COOKIE, login } from "@/lib/auth";
 import { sessionCookieOptions } from "@/lib/auth-server";
+import { DEVICE_COOKIE, screenSignup } from "@/lib/abuse/review";
+import { sendVerificationCode } from "@/lib/email-verify";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +24,11 @@ export const dynamic = "force-dynamic";
  *   counted strictly; refused attempts get a far higher ceiling, so a person
  *   fighting the password rule is never locked out by it.
  *
+ *   Screened for trial abuse (abuse/review.ts): a throwaway mailbox is
+ *   refused, and so is a fourth trial in a month from one network or a third
+ *   from one browser (the `belline_device` cookie), each recorded for staff
+ *   review in the sales console.
+ *
  *   Validated in the library, not here. `signUp` checks every field and
  *   returns which one failed, so the browser can put the message next to the
  *   right input rather than at the top of the page.
@@ -28,11 +36,15 @@ export const dynamic = "force-dynamic";
  *   Terms recorded. The box on the form is required here too, and `signUp`
  *   stores the versions it agreed to.
  *
- *   Signed in on success. A customer who has just typed a password should not
- *   be asked for it again on the next screen.
+ *   Signed in on success, with the email still to confirm. The owner lands on
+ *   /verify with a 6-digit code on its way (email-verify.ts). Nothing that
+ *   costs Belline money runs until they type it; the dashboard and setting up
+ *   by hand do not wait for it.
  */
 
 const limiter = createSignupLimiter();
+
+const DEVICE = new RegExp(`(?:^|;\\s*)${DEVICE_COOKIE}=([A-Za-z0-9_-]{16,64})`);
 
 export async function POST(req: Request) {
   seedIfEmpty();
@@ -52,12 +64,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Send JSON." }, { status: 400 });
   }
 
+  // The browser's own id, set on its first signup and kept a year. Clearing
+  // cookies resets it, so it is one cheap signal among several, never proof.
+  const known = DEVICE.exec(req.headers.get("cookie") ?? "")?.[1];
+  const device = known ?? randomBytes(18).toString("base64url");
+
   if (body.acceptTerms !== true) {
     limiter.record(key, false);
     return NextResponse.json(
       { field: "terms", error: "Tick the box to agree to the Terms and Privacy policy." },
       { status: 422 },
     );
+  }
+
+  const screen = screenSignup({ ip: key, device: known, email: String(body.email ?? "").trim().toLowerCase() });
+  if (!screen.ok) {
+    limiter.record(key, false);
+    return NextResponse.json({ error: screen.error, signIn: "/login" }, { status: 429 });
   }
 
   let result: Awaited<ReturnType<typeof signUp>>;
@@ -77,6 +100,7 @@ export async function POST(req: Request) {
       market: body.market ? String(body.market) : undefined,
       emailConfirmed: body.emailConfirmed === true,
       acceptedTerms: true,
+      selfServe: { ip: key, device },
     });
   } catch (err) {
     // signUp has already removed anything it wrote. The detail is for us.
@@ -98,8 +122,11 @@ export async function POST(req: Request) {
   }
   limiter.record(key, true);
 
-  // Straight in. No confirmation email standing between somebody who has just
-  // paid us attention and the thing they came for.
+  // The code (or, with email off, the team's ticket) goes out in the
+  // background; the next screen says which.
+  const sent = sendVerificationCode(result.user.id);
+  if (sent.ok) void sent.delivery;
+
   const session = login(
     result.user.email,
     String(body.password),
@@ -109,13 +136,14 @@ export async function POST(req: Request) {
   const response = NextResponse.json({
     ok: true,
     locationId: result.location.id,
-    next: "/setup",
+    next: "/verify",
   });
 
   if (session.ok) {
     const maxAge = Math.floor((Date.parse(session.session.expiresAt) - Date.now()) / 1000);
     response.cookies.set(SESSION_COOKIE, session.session.id, sessionCookieOptions(maxAge));
   }
+  response.cookies.set(DEVICE_COOKIE, device, sessionCookieOptions(365 * 24 * 3600));
 
   return response;
 }

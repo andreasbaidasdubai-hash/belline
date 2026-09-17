@@ -4,6 +4,8 @@ import { canEditAgent } from "@/lib/auth";
 import { listLocationsFor } from "@/lib/store";
 import { runSetupTurn, type SetupMessage } from "@/lib/onboarding/assistant";
 import { isStepId } from "@/lib/onboarding/journey";
+import { paidWorkRefusal } from "@/lib/abuse/gate";
+import { getLocation } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,9 @@ export async function POST(req: Request) {
   if (!locationId || !canEditAgent(user, locationId)) {
     return NextResponse.json({ error: "Not your venue." }, { status: 403 });
   }
+  // Belle is a model call: not before the owner's email is confirmed.
+  const held = paidWorkRefusal(user, getLocation(locationId));
+  if (held) return NextResponse.json({ error: held.error, fix: held.fix, code: held.code }, { status: held.status });
 
   const messages: SetupMessage[] = (Array.isArray(body.messages) ? body.messages : [])
     .filter(

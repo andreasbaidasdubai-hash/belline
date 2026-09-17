@@ -11,6 +11,8 @@ import { customerError } from "@/lib/errors/customer";
 import { serviceLengthsRequired } from "@/lib/booking/destination";
 import { normaliseOrigin } from "@/lib/embed";
 import { venueMarket } from "@/lib/onboarding/rules";
+import { paidWorkRefusal } from "@/lib/abuse/gate";
+import { screenTrial } from "@/lib/abuse/review";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +36,22 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const auth = await requireApiUser();
   if (auth.response) return auth.response;
+  const user = auth.user;
+
+  // Reading is a model call: never for an unconfirmed email or a paused trial,
+  // and never for a website another account's trial or plan already has.
+  const venue = listLocationsFor(user.tenantId)[0];
+  const held = paidWorkRefusal(user, venue);
+  if (held) return NextResponse.json({ error: held.error, fix: held.fix, code: held.code }, { status: held.status });
+  const screen = (website: string) => {
+    const refused = venue && website ? screenTrial(venue, "import", { website }) : null;
+    return refused ? { status: refused.status, body: { error: refused.error, fix: refused.fix, code: refused.code } } : null;
+  };
 
   // JSON { website } or multipart website + up to three files. Validation,
   // reading and refusals all live in the library so they can be checked
   // without a request scope; the files are read once there and dropped.
-  const out = await draftFromRequest(req);
+  const out = await draftFromRequest(req, {}, screen);
   return NextResponse.json(out.body, { status: out.status });
 }
 
@@ -70,6 +83,11 @@ export async function PUT(req: Request) {
   const checked = cleanConfirmed(body, { lengthsRequired: serviceLengthsRequired(location), country: venueMarket(location) });
   // With the field it is about, so the page can show it under that input.
   if (!checked.ok) return NextResponse.json({ error: checked.error, field: checked.field, service: checked.service }, { status: 422 });
+
+  // One free trial per business: a website or phone another account's trial or
+  // plan already has is refused before it is saved, and recorded for review.
+  const duplicate = screenTrial(location, "review", { website: String(body.website ?? ""), phone: checked.confirmed.phone });
+  if (duplicate) return NextResponse.json({ error: duplicate.error, fix: duplicate.fix, code: duplicate.code }, { status: duplicate.status });
 
   let updated;
   try {

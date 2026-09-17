@@ -42,7 +42,7 @@ export function sniff(bytes: Uint8Array): SourceFile["mime"] | null {
 
 export interface SetupPostResult {
   status: number;
-  body: { ok?: true; draft?: Draft; error?: string; fallback?: string };
+  body: { ok?: true; draft?: Draft; error?: string; fallback?: string; fix?: string; code?: string };
 }
 
 const FALLBACK = "You can skip this and tell Belline about the business yourself.";
@@ -61,7 +61,12 @@ function quoted(name: string): string {
  * POST /api/setup, after sign-in: JSON `{ website }` or multipart
  * `website` + `files`. Returns the status and body to send; writes nothing.
  */
-export async function draftFromRequest(req: Request, deps: DraftDeps = {}): Promise<SetupPostResult> {
+export async function draftFromRequest(
+  req: Request,
+  deps: DraftDeps = {},
+  /** Asked with the website before anything is read: a refusal here costs nothing (abuse/review.ts). */
+  screen?: (website: string) => SetupPostResult | null,
+): Promise<SetupPostResult> {
   const type = req.headers.get("content-type") ?? "";
   let website = "";
   const files: SourceFile[] = [];
@@ -116,6 +121,9 @@ export async function draftFromRequest(req: Request, deps: DraftDeps = {}): Prom
     website = String(body?.website ?? "").trim();
     if (!website) return refuse("Paste the address of your website.");
   }
+
+  const refused = screen?.(website);
+  if (refused) return refused;
 
   // No model to read with. Said honestly, and logged once for the team, rather
   // than letting the SDK complain about a missing key to the owner.

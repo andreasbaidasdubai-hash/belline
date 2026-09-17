@@ -99,7 +99,7 @@ export default function CheckoutForm({
         return;
       }
 
-      window.location.href = body.next ?? "/setup";
+      window.location.href = body.next ?? "/verify";
     } catch {
       setError({ message: "Could not reach Belline. Check your connection and try again." });
       setBusy(false);
@@ -287,7 +287,7 @@ export default function CheckoutForm({
       </button>
 
       <p className="muted" style={{ fontSize: 10.5, margin: 0, textAlign: "center", lineHeight: 1.6 }}>
-        No card. Next: paste your website and Belline reads your business off it.
+        No card. Next: confirm your email with the code we send, then paste your website and Belline reads your business off it.
       </p>
     </form>
   );

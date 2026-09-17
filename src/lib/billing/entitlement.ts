@@ -1,5 +1,6 @@
 import type { Location } from "../types";
-import { getTenant } from "../store";
+import { getBusiness, getTenant, listLocations } from "../store";
+import { keysOf } from "../abuse/business-key";
 import { answersIn, lineFor } from "../language";
 import { accountFor, isPooledTrial, meterFor, periodFor, productsOf } from "./usage";
 import { channelsOf, grandfatherExpires, poolOf, poolPlaces, type Channel, type Pool } from "./plans";
@@ -49,7 +50,7 @@ import { applyUsagePolicy, governs, markAlertsSent, notifyAlerts, packsHeldPools
  */
 
 export type Lapse = "trial_ended" | "trial_minutes_used" | "cancelled" | "legacy_plan_ended";
-export type Refusal = Lapse | "not_in_plan" | "trial_conversations_used" | "allowance_exhausted";
+export type Refusal = Lapse | "not_in_plan" | "trial_conversations_used" | "allowance_exhausted" | "trial_suspended";
 
 export interface ServiceState {
   /** Whether this venue — on this channel, if one was asked about — should be answered right now. */
@@ -80,8 +81,9 @@ export function lapseOf(location: Location, today: string): Lapse | null {
     // A 2026-10 trial caps pooled voice minutes; an older one, phone minutes.
     const voice = account?.usage.meters.find((m) => m.id === (isPooledTrial(sub) ? "minutes" : "phone"));
     const allowance = sub.trial?.minutes ?? 0;
-    if (voice && allowance > 0 && voice.used >= allowance) return "trial_minutes_used";
-    if (sub.trial && today > sub.trial.endsOn) return "trial_ended";
+    if (voice && allowance > 0 && voice.used + businessTrialUsage(location, today, voice.id) >= allowance) return "trial_minutes_used";
+    // No end date until Go live: a venue still setting up never expires.
+    if (sub.trial?.endsOn && today > sub.trial.endsOn) return "trial_ended";
     return null;
   }
 
@@ -103,7 +105,33 @@ export function lapseOf(location: Location, today: string): Lapse | null {
 
 function trialPastEnd(location: Location, today: string): boolean {
   const sub = location.subscription;
-  return Boolean(sub?.status === "trialing" && sub.trial && today > sub.trial.endsOn);
+  return Boolean(sub?.status === "trialing" && sub.trial?.endsOn && today > sub.trial.endsOn);
+}
+
+/**
+ * The same business's usage on other accounts' trials.
+ *
+ * A trial's caps belong to the business, not the login: a second account for
+ * the same website, phone or card (one staff allowed, or one set up before its
+ * duplicate was noticed) draws down the same 30 voice minutes and 50 text
+ * conversations rather than starting a fresh set. Only other tenants' trials
+ * count, and never our own or demo venues.
+ */
+export function businessTrialUsage(location: Location, today: string, meterId: string): number {
+  const mine = keysOf(location, getBusiness(location.tenantId, location.businessId));
+  if (!mine.domains.length && !mine.phones.length && !mine.cards.length) return 0;
+  let used = 0;
+  for (const other of listLocations({ includeArchived: true })) {
+    if (other.tenantId === location.tenantId || other.subscription?.status !== "trialing" || exempt(other)) continue;
+    const theirs = keysOf(other, getBusiness(other.tenantId, other.businessId));
+    const shared =
+      mine.domains.some((d) => theirs.domains.includes(d)) ||
+      mine.phones.some((p) => theirs.phones.includes(p)) ||
+      mine.cards.some((c) => theirs.cards.includes(c));
+    if (!shared) continue;
+    used += accountFor(other, today)?.usage.meters.find((m) => m.id === meterId)?.used ?? 0;
+  }
+  return used;
 }
 
 /** Does the venue's plan include this channel? A trial includes all of them. */
@@ -121,7 +149,7 @@ export function unitRefusal(location: Location, today: string, channel: Channel)
   if (isPooledTrial(sub) && poolOf(channel) === "conversations") {
     const account = accountFor(location, today);
     const m = account && meterFor(account, channel);
-    if (m && m.included !== null && m.used >= m.included) return "trial_conversations_used";
+    if (m && m.included !== null && m.used + businessTrialUsage(location, today, m.id) >= m.included) return "trial_conversations_used";
   }
   if (governs(location) && poolExhausted(location, today, poolOf(channel))) return "allowance_exhausted";
   return null;
@@ -192,6 +220,11 @@ export function serviceState(
     callerMessage: messageFor(location, opts.channel),
   });
 
+  // Staff suspended this account's free trial in the abuse review: nothing is
+  // answered on it until they lift it or the owner chooses a plan.
+  if (!exempt(location) && location.subscription?.status === "trialing" && getTenant(location.tenantId)?.abuse?.trialSuspendedAt) {
+    return refuse("trial_suspended");
+  }
   if (lapsed && (enforce || isUsageCap(lapsed))) {
     // Voice minutes used up stop the voice channels. Chat and WhatsApp draw on
     // the trial's text conversations and keep going while those last (checked
@@ -271,6 +304,13 @@ export interface OwnerNotice {
 export function ownerNotice(location: Location, today: string): OwnerNotice | null {
   if (exempt(location)) return null;
   const service = serviceState(location, today);
+  if (service.refused === "trial_suspended") {
+    return {
+      sentence: "The free trial on this account is paused, so Belline is not answering. Contact us and we'll sort it out.",
+      choosePlan: canChoosePlan(),
+      stopped: true,
+    };
+  }
   const conversations = unitRefusal(location, today, "chat") === "trial_conversations_used";
   const choosePlan = canChoosePlan();
   if (service.lapsed === "trial_minutes_used" && conversations) {

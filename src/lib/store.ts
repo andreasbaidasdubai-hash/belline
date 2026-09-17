@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import type {
+  AbuseRecord,
   Booking,
   Business,
   Call,
@@ -55,6 +56,8 @@ interface Db {
   stripeEvents: StripeEventRow[];
   /** Calendar connections started and not yet back from Google or Microsoft. See integrations/oauth-state.ts. */
   oauthStates: OAuthStateRow[];
+  /** What the signup abuse screening noticed, for staff review. See abuse/review.ts. */
+  abuse: AbuseRecord[];
 }
 
 /**
@@ -86,6 +89,7 @@ export interface StripeEventRow {
 const STRIPE_EVENTS_KEPT = 5000;
 
 const EMPTY: Db = {
+  abuse: [],
   oauthStates: [],
   stripeEvents: [],
   numberPool: [],
@@ -555,6 +559,19 @@ export function mutateOAuthStates<T>(fn: (rows: OAuthStateRow[]) => { rows: OAut
 }
 
 // --- support exceptions ----------------------------------------------------
+
+export function listAbuseRows(): AbuseRecord[] {
+  return load().abuse;
+}
+
+export function saveAbuseRow(row: AbuseRecord): AbuseRecord {
+  const db = load();
+  const i = db.abuse.findIndex((r) => r.id === row.id);
+  if (i >= 0) db.abuse[i] = row;
+  else db.abuse.push(row);
+  persist("abuse");
+  return row;
+}
 
 export function listExceptionRows(): SupportException[] {
   return load().exceptions;
