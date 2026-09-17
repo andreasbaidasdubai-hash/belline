@@ -98,7 +98,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
                 border: "1px solid #d2d2d7",
               }}
             >
-              ▶ Watch · Belle, Belline&apos;s AI receptionist
+              Watch · Belle, Belline&apos;s AI receptionist
             </div>
           </div>
         </div>
