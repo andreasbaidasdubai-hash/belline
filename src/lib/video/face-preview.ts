@@ -23,8 +23,9 @@ const OK_TTL_MS = 6 * 60 * 60 * 1000;
 const FAIL_TTL_MS = 5 * 60 * 1000;
 const TIMEOUT_MS = 4000;
 
-let cache: { key: string; at: number; value: FacePreview | null } | null = null;
-let pending: Promise<FacePreview | null> | null = null;
+/** Per face: venues may each choose their own (faces.ts). A handful of entries at most. */
+const cache = new Map<string, { at: number; value: FacePreview | null }>();
+const pending = new Map<string, Promise<FacePreview | null>>();
 
 /** Only an https address with nothing a page could be tricked into running. */
 function safeHttps(raw: unknown): string {
@@ -35,16 +36,20 @@ export async function facePreview(
   config: VideoConfig,
   fetchImpl: typeof fetch = (input, init) => fetch(input, init),
   now: number = Date.now(),
+  /** The venue's own face (faces.ts `venueLook`); the deployment's by default. */
+  faceId: string = config.tavus.faceId,
 ): Promise<FacePreview | null> {
-  if (config.provider !== "tavus" || !config.tavus.apiKey || !config.tavus.faceId) return null;
-  const key = `${config.tavus.apiBase}|${config.tavus.faceId}`;
-  if (cache && cache.key === key && now - cache.at < (cache.value ? OK_TTL_MS : FAIL_TTL_MS)) return cache.value;
-  if (pending) return pending;
+  if (config.provider !== "tavus" || !config.tavus.apiKey || !faceId) return null;
+  const key = `${config.tavus.apiBase}|${faceId}`;
+  const kept = cache.get(key);
+  if (kept && now - kept.at < (kept.value ? OK_TTL_MS : FAIL_TTL_MS)) return kept.value;
+  const inFlight = pending.get(key);
+  if (inFlight) return inFlight;
 
-  pending = (async () => {
+  const lookup = (async () => {
     let value: FacePreview | null = null;
     try {
-      const res = await fetchImpl(`${config.tavus.apiBase}/v2/faces/${encodeURIComponent(config.tavus.faceId)}`, {
+      const res = await fetchImpl(`${config.tavus.apiBase}/v2/faces/${encodeURIComponent(faceId)}`, {
         headers: { "x-api-key": config.tavus.apiKey },
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
@@ -60,18 +65,19 @@ export async function facePreview(
     } catch (err) {
       console.warn(`[video] face preview lookup failed: ${err instanceof Error ? err.name : "error"}`);
     }
-    cache = { key, at: now, value };
+    cache.set(key, { at: now, value });
     return value;
   })();
+  pending.set(key, lookup);
   try {
-    return await pending;
+    return await lookup;
   } finally {
-    pending = null;
+    pending.delete(key);
   }
 }
 
 /** Tests only. */
 export function resetFacePreviewCache(): void {
-  cache = null;
-  pending = null;
+  cache.clear();
+  pending.clear();
 }

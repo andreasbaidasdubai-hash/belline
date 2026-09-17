@@ -7,7 +7,7 @@ import { chatAllowed, newVisitorId, voiceAllowed } from "@/lib/webchat";
 import { widgetOpenFor } from "@/lib/embed-preview";
 import { isActivated } from "@/lib/onboarding/journey";
 import { lineFor } from "@/lib/language";
-import { videoAvailability, videoBubbleConfig } from "@/lib/video/availability";
+import { videoAvailability, videoBubbleConfig, venueFaceId } from "@/lib/video/availability";
 import { facePreview } from "@/lib/video/face-preview";
 import { venueByEmbedKey } from "@/lib/video/http";
 import VideoPanel from "./VideoPanel";
@@ -82,7 +82,7 @@ export default async function VideoPage({
     const own = videoBubbleConfig(location);
     preview = { clipUrl: own.clipUrl, posterUrl: own.posterUrl };
     if (!own.mock && (!own.clipUrl || !own.posterUrl)) {
-      const face = await facePreview(availability.config);
+      const face = await facePreview(availability.config, undefined, undefined, venueFaceId(location, availability.config));
       if (face) preview = { clipUrl: own.clipUrl || face.clipUrl, posterUrl: own.posterUrl || face.posterUrl };
     }
   }

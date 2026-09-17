@@ -6,6 +6,7 @@ import { channelIncluded, serviceState } from "../billing/entitlement";
 import { isActivated } from "../onboarding/journey";
 import { videoConfig, missingVideoConfig, type VideoConfig } from "./config";
 import { readVideoControl } from "./control";
+import { venueLook } from "./faces";
 
 /**
  * May this venue offer the video receptionist, right now?
@@ -46,7 +47,8 @@ export type VideoAvailability =
 
 export function venueAllowlisted(location: Pick<Location, "id">, config: VideoConfig): boolean {
   const entry = readVideoControl().venues[location.id];
-  if (entry) return entry.enabled;
+  // Only staff's switch counts; an owner's saved face or background is not one.
+  if (typeof entry?.enabled === "boolean") return entry.enabled;
   return config.venues.includes(location.id);
 }
 
@@ -100,6 +102,11 @@ export function videoBubbleConfig(location: Location, env: Env = process.env) {
     posterUrl: pick(own?.greetingPosterUrl, config.greetingPosterUrl),
     mock: config.provider === "mock",
   };
+}
+
+/** The face a venue's bubble and calls show: its own curated pick, else `TAVUS_FACE_ID` (faces.ts). */
+export function venueFaceId(location: Pick<Location, "id">, config: VideoConfig): string {
+  return venueLook(readVideoControl().venues[location.id], config).faceId;
 }
 
 /** What the widget's public config says: offered or not, and nothing about why. */

@@ -61,6 +61,7 @@ export default function AgentEditor({
   initialLanguage = "en",
   languageOpen = false,
   languageSettings,
+  videoSettings,
 }: {
   locationId: string;
   initial: AgentConfig;
@@ -72,6 +73,8 @@ export default function AgentEditor({
   languageOpen?: boolean;
   /** The languages panel (LanguageSettings.tsx), which saves itself. */
   languageSettings?: React.ReactNode;
+  /** The video face and background (VideoLook.tsx), which saves itself. Only where video is on for the venue. */
+  videoSettings?: React.ReactNode;
 }) {
   const language = initialLanguage;
   const transfer = useRef<PhoneFieldHandle | null>(null);
@@ -291,6 +294,8 @@ export default function AgentEditor({
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
           <audio ref={audioRef} preload="none" style={{ display: "none" }} />
         </Field>
+
+        {videoSettings}
 
         <Field
           label={`Speaking pace — ${(agent.voiceSpeed ?? DEFAULT_VOICE_SPEED).toFixed(2)}×`}

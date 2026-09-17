@@ -21,7 +21,8 @@ import { dataDir } from "../store";
  */
 
 export interface VenueVideoSettings {
-  enabled: boolean;
+  /** Staff's switch. Absent: the environment's list decides (an owner choosing a face never switches video on or off). */
+  enabled?: boolean;
   /** The owner's pick from the curated stock faces (faces.ts); unset means `TAVUS_FACE_ID`. */
   faceId?: string;
   /** One of `VIDEO_BACKGROUNDS` (backgrounds.ts); unset means the face's own. */
@@ -109,7 +110,7 @@ export function setVenueLook(
   by: string,
 ): VenueVideoSettings {
   const control = readVideoControl();
-  const current: VenueVideoSettings = control.venues[locationId] ?? { enabled: false };
+  const current: VenueVideoSettings = control.venues[locationId] ?? {};
   const next: VenueVideoSettings = { ...current, updatedBy: by, updatedAt: new Date().toISOString() };
   if (look.faceId !== undefined) {
     if (look.faceId) next.faceId = look.faceId;

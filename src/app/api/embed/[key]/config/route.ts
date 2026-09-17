@@ -6,7 +6,7 @@ import { answersIn, languageNotice } from "@/lib/language";
 import { venueWhatsApp, whatsappLink } from "@/lib/whatsapp";
 import { isActivated } from "@/lib/onboarding/journey";
 import { logoUrlFor } from "@/lib/logo";
-import { videoBubbleConfig, videoOffered } from "@/lib/video/availability";
+import { videoBubbleConfig, videoOffered, venueFaceId } from "@/lib/video/availability";
 import { videoConfig } from "@/lib/video/config";
 import { facePreview } from "@/lib/video/face-preview";
 
@@ -51,7 +51,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   let videoBubble = video ? videoBubbleConfig(location) : null;
   // No clip of our own: the chosen face's own Tavus preview, so the circle shows her.
   if (videoBubble && !videoBubble.mock && (!videoBubble.clipUrl || !videoBubble.posterUrl)) {
-    const preview = await facePreview(videoConfig());
+    const config = videoConfig();
+    // The venue's own face when the owner chose one (Your business → Agent).
+    const preview = await facePreview(config, undefined, undefined, venueFaceId(location, config));
     if (preview) {
       videoBubble = {
         ...videoBubble,

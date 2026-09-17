@@ -964,6 +964,191 @@ await test("the guards are unchanged under routing: authority rules before any m
 });
 
 // ---------------------------------------------------------------------------
+console.log("\n  The face and the background");
+
+const { venueLook, CURATED_FACES, confirmedFaces, resetFaceCache } = await import("../src/lib/video/faces");
+const { VIDEO_BACKGROUNDS, DEFAULT_BACKGROUND_ID } = await import("../src/lib/video/backgrounds");
+const { readLook, saveLook } = await import("../src/lib/video/look-settings");
+const { setVenueLook, venueVideoSettings } = await import("../src/lib/video/control");
+const { venueAllowlisted } = await import("../src/lib/video/availability");
+const { listUsers } = await import("../src/lib/store");
+const { canEditAgent } = await import("../src/lib/auth");
+const chroma = await import("../src/lib/video/client/chroma");
+
+const PHOENIX4_RUBY = "rcc28da86847";
+
+await test("the look: a Phoenix-4 face takes the Belline background by default; Phoenix-4.5 and unknown faces keep their room; bad ids fall back", () => {
+  const tavus = videoConfig({ ...TAVUS_ENV });
+  assert.ok(CURATED_FACES.length >= 8 && CURATED_FACES.length <= 12);
+  assert.equal(new Set(CURATED_FACES.map((f) => f.id)).size, CURATED_FACES.length);
+  assert.ok(VIDEO_BACKGROUNDS.filter((b) => b.src).length >= 3 && VIDEO_BACKGROUNDS.length <= 6);
+  for (const b of VIDEO_BACKGROUNDS.filter((x) => x.src)) {
+    const file = path.join(ROOT, "public", b.src);
+    assert.ok(fs.existsSync(file), b.src);
+    assert.ok(fs.statSync(file).size < 120 * 1024, `${b.src} is small`);
+  }
+  assert.deepEqual(
+    (({ faceId, greenscreen, background }) => ({ faceId, greenscreen, bg: background.id }))(venueLook(undefined, tavus)),
+    { faceId: "rf90eb925bd8", greenscreen: false, bg: "original" },
+    "the deployment's Phoenix-4.5 face: Tavus cannot key it",
+  );
+  const p4 = venueLook({ faceId: PHOENIX4_RUBY }, tavus);
+  assert.equal(p4.faceId, PHOENIX4_RUBY);
+  assert.equal(p4.greenscreen, true);
+  assert.equal(p4.background.id, DEFAULT_BACKGROUND_ID);
+  assert.equal(venueLook({ faceId: PHOENIX4_RUBY, backgroundId: "original" }, tavus).greenscreen, false);
+  assert.equal(venueLook({ faceId: PHOENIX4_RUBY, backgroundId: "evening-navy" }, tavus).background.id, "evening-navy");
+  // Something not curated in the file (edited by hand, or a face since removed) is never used.
+  assert.equal(venueLook({ faceId: "r_arbitrary_1", backgroundId: "javascript:x" }, tavus).faceId, "rf90eb925bd8");
+  assert.equal(venueLook({ faceId: PHOENIX4_RUBY, backgroundId: "javascript:x" }, tavus).background.id, DEFAULT_BACKGROUND_ID);
+});
+
+await test("a Phoenix-4 face asks Tavus for the green screen and hands the panel its background; a Phoenix-4.5 face does neither", async () => {
+  const restore = setEnv({ ...TAVUS_ENV, FLAG_STUBS: undefined });
+  try {
+    setVenueLook(A.id, { faceId: PHOENIX4_RUBY, backgroundId: "belline-light" }, "check");
+    const fake = fakeTavus(tavusHappyPath);
+    const provider = new TavusProvider(videoConfig(), fake.fetchImpl);
+    const keyed = await sessions.startVideoSession(getLocation(A.id)!, "visitor-look-1", { provider });
+    assert.ok(keyed.ok);
+    if (!keyed.ok) return;
+    const convo = fake.calls.find((c) => c.url.endsWith("/v2/conversations"))!;
+    assert.equal(convo.body.face_id, PHOENIX4_RUBY);
+    assert.equal(convo.body.properties.apply_greenscreen, true);
+    assert.deepEqual(keyed.client.background, { id: "belline-light", src: "/video/backgrounds/belline-light.jpg", tone: "light" });
+
+    setVenueLook(A.id, { faceId: "rf90eb925bd8" }, "check");
+    const plain = fakeTavus(tavusHappyPath);
+    const raw = await sessions.startVideoSession(getLocation(A.id)!, "visitor-look-2", { provider: new TavusProvider(videoConfig(), plain.fetchImpl) });
+    assert.ok(raw.ok);
+    if (!raw.ok) return;
+    assert.equal("apply_greenscreen" in plain.calls.find((c) => c.url.endsWith("/v2/conversations"))!.body.properties, false);
+    assert.equal(raw.client.background, undefined);
+  } finally {
+    setVenueLook(A.id, { faceId: null, backgroundId: null }, "check");
+    restore();
+  }
+});
+
+await test("owners choose from the curated faces and known backgrounds only, for their own venue only; saving never switches video on or off", async () => {
+  const person = (location: typeof A, role = "owner") => ({ ...(listUsers()[0] ?? {}), id: `u_check_${location.id}`, tenantId: location.tenantId, role, locationIds: [location.id], name: "Check Owner", email: `owner@${location.id}.example` }) as any;
+  const owner = person(A);
+  assert.ok(owner, "a fixture owner who can edit A");
+  const foreign = ["loc_belline", B.id, OFF.id].find((id) => !canEditAgent(owner, id));
+  const confirmedNone = async () => null;
+  const deps = { config: videoConfig({ ...TAVUS_ENV }), faces: confirmedNone, prewarm: () => undefined };
+
+  // Nobody signed in, staff at the venue, another venue.
+  assert.equal((await readLook(null, A.id, deps)).status, 401);
+  assert.equal((await saveLook({ ...owner, role: "staff" }, { locationId: A.id, faceId: PHOENIX4_RUBY }, deps)).status, 403);
+  if (foreign) {
+    assert.equal((await readLook(owner, foreign, deps)).status, 403, "another tenant's venue is not readable");
+    assert.equal((await saveLook(owner, { locationId: foreign, faceId: PHOENIX4_RUBY }, deps)).status, 403);
+    assert.equal(venueVideoSettings(foreign)?.faceId, undefined);
+  }
+
+  // Never arbitrary.
+  for (const faceId of ["r_not_curated", "", 42, "rf90eb925bd8; drop"]) {
+    const out = await saveLook(owner, { locationId: A.id, faceId }, deps);
+    assert.equal(out.status, 422, String(faceId));
+  }
+  for (const backgroundId of ["/etc/passwd", "https://evil.example/x.jpg", "neon"]) {
+    assert.equal((await saveLook(owner, { locationId: A.id, backgroundId }, deps)).status, 422, backgroundId);
+  }
+  // When Tavus answers, the face must be one it confirms on this account.
+  const onlyRuby45 = async () => [{ id: "rf90eb925bd8", name: "Ruby · Office", model: "phoenix-4.5", backgrounds: false, clipUrl: "", posterUrl: "" }];
+  assert.equal((await saveLook(owner, { locationId: A.id, faceId: PHOENIX4_RUBY }, { ...deps, faces: onlyRuby45 })).status, 422);
+
+  // A good save: stored, pre-warmed, and it neither allows nor removes video.
+  let warmed = "";
+  const ok = await saveLook(owner, { locationId: A.id, faceId: PHOENIX4_RUBY, backgroundId: "warm-lounge" }, { ...deps, prewarm: (l) => (warmed = l.id) });
+  assert.equal(ok.status, 200);
+  assert.equal(warmed, A.id);
+  assert.equal(venueVideoSettings(A.id)?.faceId, PHOENIX4_RUBY);
+  assert.equal(venueVideoSettings(A.id)?.enabled, true, "A's staff switch is untouched");
+  const stored = await readLook(owner, A.id, deps);
+  assert.deepEqual((stored.body as { current: unknown }).current, { faceId: PHOENIX4_RUBY, backgroundId: "warm-lounge" });
+  assert.equal((stored.body as { confirmed: boolean }).confirmed, false);
+  // An owner at a venue that only the environment lists keeps it listed after saving a look.
+  const envOwner = canEditAgent(person(OFF), OFF.id) ? person(OFF) : null;
+  if (envOwner) {
+    const control = readVideoControl();
+    delete control.venues[OFF.id];
+    fs.writeFileSync(path.join(process.env.DATA_DIR!, "video.json"), JSON.stringify(control));
+    await saveLook(envOwner, { locationId: OFF.id, backgroundId: "plain-white" }, deps);
+    assert.equal(venueAllowlisted(getLocation(OFF.id)!, videoConfig({ VIDEO_AVATAR_VENUES: OFF.id })), true);
+  }
+  setVenueLook(A.id, { faceId: null, backgroundId: null }, "check");
+
+  // The page offers the picker only where video is on for the venue, and names the consent route for a custom face.
+  const page = read("src/app/(app)/agents/page.tsx");
+  assert.match(page, /flag\("video\.avatar"\) && venueAllowlisted\(location, videoConfig\(\)\)/);
+  const ui = read("src/app/(app)/agents/VideoLook.tsx");
+  assert.match(ui, /written consent/);
+  assert.equal(/<button[^>]*>\s*(Upload|Create) (your )?(own )?face/i.test(ui), false, "a note, not a fake button");
+  assert.equal(/var\(--(?!bl-)[a-z]/.test(ui), false, "brand tokens only");
+});
+
+await test("stock faces are confirmed with Tavus server-side, by id, cached; unusable rows and addresses are dropped", async () => {
+  resetFaceCache();
+  const calls: string[] = [];
+  const fake = (async (url: string | URL | Request) => {
+    calls.push(String(url));
+    return new Response(
+      JSON.stringify({
+        data: [
+          { face_id: PHOENIX4_RUBY, face_name: "Ruby - Office", status: "completed", model_name: "phoenix-4", thumbnail_video_url: "https://cdn.example/r.mp4" },
+          { face_id: "rf90eb925bd8", status: "completed", model_name: "phoenix-4.5", thumbnail_video_url: "javascript:alert(1)" },
+          { face_id: "rc9cff32ceba", status: "error" },
+          { face_id: "r_not_curated", status: "completed" },
+        ],
+        total_count: 4,
+      }),
+      { status: 200 },
+    );
+  }) as typeof fetch;
+  const config = videoConfig({ TAVUS_API_KEY: "tvs_x", TAVUS_FACE_ID: "rf90eb925bd8" });
+  const faces = (await confirmedFaces(config, fake, 1_000))!;
+  assert.deepEqual(faces.map((f) => f.id), ["rf90eb925bd8", PHOENIX4_RUBY], "curated order, completed, curated only");
+  assert.equal(faces[1].backgrounds, true);
+  assert.equal(faces[0].backgrounds, false);
+  assert.equal(faces[0].clipUrl, "", "a non-https preview never reaches the page");
+  const url = new URL(calls[0]);
+  assert.equal(url.pathname, "/v2/faces");
+  assert.equal(url.searchParams.get("face_type"), "system");
+  assert.ok(url.searchParams.get("face_ids")!.split(",").includes(PHOENIX4_RUBY));
+  await confirmedFaces(config, fake, 2_000);
+  assert.equal(calls.length, 1, "cached");
+  assert.equal(await confirmedFaces(videoConfig({ VIDEO_AVATAR_PROVIDER: "mock" }), fake), null, "the mock asks nobody");
+  resetFaceCache();
+});
+
+await test("the chroma key: Tavus's green goes, the face stays, a stream with no green is left alone, and a slow device falls back", () => {
+  assert.equal(chroma.keyAlpha(0, 255, 155), 0, "the documented green");
+  assert.equal(chroma.keyAlpha(0, 200, 120), 0, "the same green in shadow");
+  assert.equal(chroma.keyAlpha(201, 165, 140), 1, "skin");
+  assert.equal(chroma.keyAlpha(58, 65, 80), 1, "a dark jacket");
+  assert.equal(chroma.keyAlpha(255, 255, 255), 1, "a white shirt");
+  const frame = (fill: [number, number, number]) => {
+    const data = new Uint8ClampedArray(48 * 48 * 4);
+    for (let i = 0; i < data.length; i += 4) [data[i], data[i + 1], data[i + 2], data[i + 3]] = [...fill, 255];
+    return data;
+  };
+  assert.equal(chroma.looksKeyed(frame([0, 255, 155]), 48, 48), true);
+  assert.equal(chroma.looksKeyed(frame([120, 110, 100]), 48, 48), false, "an office: show the stream as it is");
+  assert.equal(chroma.median([3, 50, 4, 5, 6]), 5);
+  assert.ok(chroma.BUDGET_MS.webgl <= 16 && chroma.BUDGET_MS["2d"] <= 16, "inside one 60 Hz frame");
+  const source = read("src/lib/video/client/chroma.ts");
+  assert.match(source, /visibilitychange/, "paused while hidden");
+  assert.match(source, /IntersectionObserver/, "paused while off screen");
+  assert.match(source, /prefers-reduced-motion/);
+  assert.match(source, /getBattery/);
+  const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
+  assert.match(panel, /<Greenscreen /);
+  assert.match(panel, /faceVisible && !keyed/, "the plain video returns whenever keying stops");
+});
+
+// ---------------------------------------------------------------------------
 console.log("\n  What the visitor meets");
 
 await test("8. a refused microphone is explained, with the chat offered, and any session made beside the prompt is ended", () => {
