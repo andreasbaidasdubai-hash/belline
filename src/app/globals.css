@@ -2229,46 +2229,86 @@ body:has(.callbar) {
   .setup-assistant > aside { order: -1; }
 }
 
-/* Belle docked beside the setup step. Closed, the dock costs the step nothing:
-   the toggle sits in the right margin and the step keeps the whole width. Open,
-   the panel takes its own column and the step column narrows — the fields are
-   capped at 520px, so they keep their width rather than reflowing. Which side
-   of 1024px the owner is on is decided in BelleDock.tsx; below it nothing here
-   renders at all. */
-.setup-dock { display: flex; align-items: flex-start; }
-.setup-dock-main { flex: 1; min-width: 0; }
-.setup-dock-panel {
-  flex: none;
-  width: 340px;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+/* --- Belle, the chat window over the page ----------------------------------
+   Opened by the bell (BelleDock.tsx), anchored just above it bottom right like
+   a support chat. Fixed, so it overlays the page and never takes width from
+   it: the step or dashboard underneath renders exactly as it does with Belle
+   closed. It replaced a docked column that squeezed the page from 1024px up.
+   Closed it is `hidden`, not unmounted, so the conversation survives. */
+.belle-host { min-width: 0; }
+/* In the dashboard shell the host wraps the content column beside the sidebar. */
+.shell > .belle-host { flex: 1 1 auto; }
+.belle-pop {
+  position: fixed;
+  right: 24px;
+  bottom: 96px; /* the bell's 24px + 56px, and a 16px gap */
+  z-index: 41;
+  width: 380px;
+  height: min(640px, calc(100vh - 120px));
   display: flex;
   flex-direction: column;
   background: var(--panel);
-  border-left: 1px solid var(--border);
-  animation: belle-dock-in 160ms ease-out;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -20px rgba(27, 39, 53, 0.45);
+  overflow: hidden;
+  transform-origin: bottom right;
+  animation: belle-pop-in 160ms ease-out;
 }
-@keyframes belle-dock-in { from { transform: translateX(18px); opacity: 0; } to { transform: none; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .setup-dock-panel { animation: none; } }
-.setup-dock-head {
+.belle-pop[hidden] { display: none; }
+.belle-pop:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@keyframes belle-pop-in { from { transform: scale(0.96) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+.belle-pop-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 14px 12px 14px 16px;
   border-bottom: 1px solid var(--border);
 }
-.setup-dock-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* In the dashboard shell the dock wraps the content column beside the sidebar. */
-.shell > .setup-dock { flex: 1 1 auto; min-width: 0; }
+.belle-pop-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.belle-pop-close svg { width: 18px; height: 18px; }
+.belle-pop-close:hover { background: var(--panel-2); }
+.belle-pop-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The round bell sits at 16px from 600px to 1023px, so the window follows it
+   and never runs off a narrow laptop or tablet. */
+@media (max-width: 1023px) {
+  .belle-pop { right: 16px; bottom: 84px; width: min(380px, calc(100vw - 32px)); height: min(640px, calc(100vh - 100px)); }
+}
+/* A phone: the whole screen, over the bell, inside the notch and home bar,
+   with its own close button in the header. Modal here (see BelleDock.tsx). */
+@media (max-width: 599px) {
+  .belle-pop {
+    inset: 0;
+    width: auto;
+    height: auto;
+    z-index: 60;
+    border: 0;
+    border-radius: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    transform-origin: bottom center;
+  }
+}
+@media (prefers-reduced-motion: reduce) { .belle-pop { animation: none; } }
 
 /* --- Belle, the floating bell -----------------------------------------------
    Belline's signature button, as the website's "Speak to Belline" bell
    (public/site.css .bell-fab): the brand blue with white, a pill, the bell
    mark, a ring of page colour round it. It rings once when the page opens,
    not forever: this is a page people work in, not one they land on. Out of
-   the flow, so opening Belle is the only thing that narrows the page. */
+   the flow, and so is the window it opens, so nothing ever narrows the page. */
 .belle-fab {
   position: fixed;
   right: 24px;
@@ -2317,8 +2357,8 @@ body:has(.callbar) {
   0% { transform: scale(1); opacity: 0.55; }
   55%, 100% { transform: scale(1.28); opacity: 0; }
 }
-/* A phone or a laptop too narrow to dock: the round bell alone, named for
-   screen readers by the same words. */
+/* A phone, tablet or narrow laptop: the round bell alone, named for screen
+   readers by the same words. */
 @media (max-width: 1023px) {
   .belle-fab { right: 16px; bottom: 16px; width: 56px; padding: 0; justify-content: center; }
   .belle-fab-say { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
