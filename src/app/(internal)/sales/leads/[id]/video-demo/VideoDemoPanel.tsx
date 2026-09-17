@@ -16,6 +16,9 @@ type Props = {
   storeKind: "postgres" | "memory";
 };
 
+/** The dirham's fixed peg: money on every console page is AED. */
+const USD_TO_AED = 3.6725;
+
 async function api(body: Record<string, unknown>) {
   const res = await fetch("/api/sales/video-demos", {
     method: "POST",
@@ -67,8 +70,12 @@ export default function VideoDemoPanel({ leadId, preview, unavailable, links: in
     setDraft({ link, draft: data.draft });
   }
 
+  // No browser dialog (the console's rule): the first click asks in the row, the second revokes.
+  const [confirming, setConfirming] = useState<string | null>(null);
+
   async function revoke(link: LinkView) {
-    if (!window.confirm(`Revoke the demo link for ${link.businessName}? The page stops working at once.`)) return;
+    if (confirming !== link.id) return setConfirming(link.id);
+    setConfirming(null);
     setBusy(`revoke:${link.id}`);
     const { ok, data } = await api({ action: "revoke", id: link.id });
     setBusy(null);
@@ -213,7 +220,7 @@ export default function VideoDemoPanel({ leadId, preview, unavailable, links: in
                         {l.stats.topics.length ? ` · ${l.stats.topics.join(", ")}` : ""}
                         {l.stats.outcomes.length ? ` · outcome: ${l.stats.outcomes.join(", ")}` : ""}
                         {l.stats.getStartedClicks ? ` · Get started ×${l.stats.getStartedClicks}` : ""}
-                        {` · video cost $${l.stats.costUsd.toFixed(2)}`}
+                        {` · video cost about AED ${(l.stats.costUsd * USD_TO_AED).toFixed(2)}`}
                       </div>
                     </td>
                     <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
@@ -223,9 +230,17 @@ export default function VideoDemoPanel({ leadId, preview, unavailable, links: in
                       <button type="button" className="btn" onClick={() => void showDraft(l)} disabled={busy !== null}>
                         Email draft
                       </button>{" "}
-                      <button type="button" className="btn" onClick={() => void revoke(l)} disabled={l.status !== "active" || busy !== null}>
-                        Revoke
+                      <button type="button" className={confirming === l.id ? "btn btn-danger" : "btn"} onClick={() => void revoke(l)} disabled={l.status !== "active" || busy !== null}>
+                        {confirming === l.id ? "Revoke: the page stops working at once" : "Revoke"}
                       </button>
+                      {confirming === l.id && (
+                        <>
+                          {" "}
+                          <button type="button" className="btn" onClick={() => setConfirming(null)}>
+                            Cancel
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -340,7 +355,7 @@ function DraftPreview({
         <iframe
           title="Email preview"
           sandbox=""
-          srcDoc={`<!doctype html><html><body style="margin:0;padding:16px;background:#fff">${draft.html}</body></html>`}
+          srcDoc={["<!doctype html><html><body style=\"margin:0;padding:16px;background:#fff\">", draft.html, "</body></html>"].join("")}
           style={{ width: "100%", height: 560, border: "1px solid var(--border)", borderRadius: 8, background: "#fff" }}
         />
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

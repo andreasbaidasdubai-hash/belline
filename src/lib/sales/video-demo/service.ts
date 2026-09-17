@@ -23,6 +23,7 @@ import { demoLinkTtlDays, demoLinkUrl, newDemoLinkId, signDemoLinkToken, verifyD
 import { resolvePublicOrigin } from "../outreach/templates";
 import { TAVUS_BUSINESS_PER_MIN_USD } from "../../billing/cost";
 import { buildVideoDemoEmail, type EmailDraft } from "./email";
+import { recordLeadEvent } from "../../staff/leads";
 
 /**
  * Personalised video demos, end to end: preview, create, resolve, count,
@@ -358,6 +359,7 @@ export async function recordDemoEvent(
     return { ...link, stats: s, daily };
   });
   if (!updated) return null;
+  const turnedHot = !wasHot && isHot(updated.stats);
 
   // The first open of the day is worth a row; the tenth is noise.
   const quietOpen = event === "opened" && (updated.daily[utcDay(now)]?.opens ?? 0) > 1;
@@ -388,9 +390,25 @@ export async function recordDemoEvent(
         ...(questions ? { questions } : {}),
         ...(outcomes.length ? { outcomes } : {}),
         ...(cost ? { costUsd: Math.round(cost * 10_000) / 10_000 } : {}),
-        ...(!wasHot && isHot(updated.stats) ? { hot: true } : {}),
+        ...(turnedHot ? { hot: true } : {}),
       },
     });
+  }
+  if (turnedHot) {
+    // The staff console's hot mechanism: the lead list, Today and the lead
+    // page read `demo_watched` from the lead's CRM events (lib/staff/leads.ts).
+    // Tracking must never fail a visitor's request, so a failure is logged only.
+    try {
+      const s = updated.stats;
+      recordLeadEvent(`db:${updated.leadId}`, {
+        type: "demo_watched",
+        summary: `${updated.facts.businessName} ${s.questions > 0 ? `asked Belle ${s.questions} question${s.questions === 1 ? "" : "s"}` : `watched the video demo for ${Math.max(s.longestVideoSeconds, s.videoSeconds)}s`}`,
+        actor: "system",
+        data: { videoDemo: linkId, seconds: s.videoSeconds, questions: s.questions },
+      }, new Date(now));
+    } catch (err) {
+      console.error("[video-demo] could not mark the lead hot:", err instanceof Error ? err.message : String(err));
+    }
   }
   return updated;
 }

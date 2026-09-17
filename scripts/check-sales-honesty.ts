@@ -100,7 +100,10 @@ const ACTIVITY_TYPES = (() => {
   return new Set([...block[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]));
 })();
 
-const writerCode = [...walk(SALES_LIB, /\.ts$/), ...walk(SALES_API, /\.ts$/)]
+/** The staff console's own writers (drafts edited, approved and marked sent by hand) live here. */
+const STAFF_LIB = path.join(process.cwd(), "src", "lib", "staff");
+
+const writerCode = [...walk(SALES_LIB, /\.ts$/), ...walk(SALES_API, /\.ts$/), ...walk(STAFF_LIB, /\.ts$/)]
   .map(read)
   .join("\n");
 
@@ -118,7 +121,7 @@ for (const stmt of writerCode.matchAll(/insert\s+into\s+sales\.activity[\s\S]{0,
 }
 
 /** The filters the activity page offers. */
-const activityPage = read(path.join(CONSOLE_DIR, "sales", "activity", "page.tsx"));
+const activityPage = read(path.join(CONSOLE_DIR, "sales", "settings", "activity", "page.tsx"));
 const offeredTypes = (() => {
   const block = activityPage.match(/const TYPES = \[([\s\S]*?)\];/);
   assert.ok(block, "could not find the TYPES array on the activity page");
@@ -161,12 +164,13 @@ test("no send language while there is no sender", () => {
 
 test("the page says plainly that nothing can be sent", () => {
   if (senderExists) return;
-  // Not merely the absence of a lie — the queue has to say what it is.
-  const approvals = read(path.join(CONSOLE_DIR, "sales", "approvals", "page.tsx"));
+  // Not merely the absence of a lie — the draft has to say what it is. The
+  // approval queue became the "Email draft" section of a lead's page.
+  const draft = read(path.join(CONSOLE_DIR, "sales", "leads", "[id]", "EmailDraft.tsx"));
   assert.match(
-    approvals,
+    code(draft),
     /Nothing here can be sent/,
-    "the draft queue must state that there is no sender",
+    "the email draft must state that there is no sender",
   );
 });
 

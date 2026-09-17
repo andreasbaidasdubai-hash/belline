@@ -1,5 +1,6 @@
 import type { AgentConfig, Location, StaffMember, WeeklyHours } from "./types";
 import { isEmpty, listCalls, listLocations, listPoolRows, replaceAll, upsertLocation } from "./store";
+import { readOnlyContext } from "./staff/readonly";
 import { splitLegacyPhone, type LegacyVenue, type PhoneSplit } from "./telephony/number";
 import { backfillOnboarding, factsFrom } from "./onboarding/journey";
 import { BELLINE_TENANT_ID } from "./tenancy";
@@ -700,6 +701,10 @@ function refreshInternalVenues(): void {
 
 /** Populate the store the first time the app runs. Idempotent. */
 export function seedIfEmpty(): void {
+  // A read-only request (staff viewing as a customer, staff/readonly.ts) never
+  // migrates anything: the boot and every ordinary request already have, and
+  // some of the steps below write on every run.
+  if (readOnlyContext()) return;
   if (isEmpty()) {
     replaceAll({ locations: FIXTURES, bookings: [], calls: [] });
     ensureLanguage();

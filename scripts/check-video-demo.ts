@@ -495,6 +495,15 @@ await test("created, opened, started, ended with topics and outcome: counters, t
   // Topics and counts, never words.
   const everything = JSON.stringify({ rows, stats: stored.stats });
   assert.ok(!/How much does it cost|work with our WhatsApp|layla@/.test(everything), "conversation words reached the CRM");
+
+  // Hot reaches the staff console's lead list through its hook, once.
+  const { getLeadCrm } = await import("../src/lib/store");
+  const crm = getLeadCrm(`db:${link.leadId}`);
+  const watched = crm?.events.filter((e) => e.type === "demo_watched") ?? [];
+  assert.equal(watched.length, 1, "the lead was not marked hot through recordLeadEvent");
+  assert.ok(!/How much does it cost|layla@/.test(JSON.stringify(watched)));
+  await service.recordDemoEvent(link.id, "video_ended", { seconds: 90 });
+  assert.equal(getLeadCrm(`db:${link.leadId}`)!.events.filter((e) => e.type === "demo_watched").length, 1, "already hot: not recorded again");
 });
 
 await test("a question alone makes a lead Hot; a short silent watch does not", () => {
@@ -570,9 +579,12 @@ await test("building a draft writes nothing; only the explicit copy or mail-app 
 await test("the staff route refuses anyone who is not Belline staff", () => {
   const route = read("src/app/api/sales/video-demos/route.ts");
   assert.match(route, /!isBellineStaff\(/);
-  for (const page of ["src/app/(internal)/sales/leads/[id]/video-demo/page.tsx", "src/app/(internal)/sales/video-demos/page.tsx"]) {
+  for (const page of ["src/app/(internal)/sales/leads/[id]/video-demo/page.tsx", "src/app/(internal)/sales/leads/page.tsx", "src/app/(internal)/sales/leads/[id]/page.tsx"]) {
     assert.match(read(page), /!isBellineStaff\(/);
   }
+  // The old list redirects into Leads; nothing is left behind it.
+  assert.match(read("next.config.mjs"), /source: "\/sales\/video-demos", destination: "\/sales\/leads\?view=video-demos"/);
+  assert.ok(!fs.existsSync(path.join(ROOT, "src/app/(internal)/sales/video-demos/page.tsx")));
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

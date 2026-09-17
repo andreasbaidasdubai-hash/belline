@@ -1,195 +1,205 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth-server";
 import { isBellineStaff } from "@/lib/auth";
-import { PageHeader } from "@/components/LocationTabs";
-import { agentSummaries, setupState, STAGE_ORDER, pipelineCounts } from "@/lib/sales/kpi/overview";
-import { listLeads } from "@/lib/sales/kpi/leads";
-import Setup from "../Setup";
-import { statusTone } from "../ui";
+import { seedIfEmpty } from "@/lib/seed";
+import { SOURCE_LABEL, allLeads, filterLeads, leadHref, staffUsers, type LeadFilter, type SourceTag } from "@/lib/staff/leads";
+import { STAGES, STAGE_LABEL, isStage } from "@/lib/staff/stages";
+import { ConsoleHeader, EmptyState, FilterChips, Pill, SearchBox, ago, day } from "../ui";
+import DemoBuilder from "./DemoBuilder";
+import VideoDemoList from "./VideoDemoList";
+import { ensureStubProspect } from "@/lib/sales/video-demo/fixture";
+import { demoStore } from "@/lib/sales/video-demo/store";
 
 export const dynamic = "force-dynamic";
 
 /**
- * The pipeline.
+ * Every lead, from every source, in one list.
  *
- * Ordered by score, then by review count — so the most valuable prospect is
- * the first thing on screen rather than the most recently found. Research
- * summaries are shown inline: the point of this page is to see what the agents
- * concluded, not to click into thirty of them one at a time.
+ * Enquiries, Belle's leads, the DACH waitlist and the prospects the agents
+ * researched used to be three pages over two stores. They are one list now
+ * (lib/staff/leads.ts), filtered by chips that are links, so any view can be
+ * bookmarked. "Drafts to review" is the old approval queue; "Video demos" is
+ * every personalised video-demo link (was /sales/video-demos).
  */
-export default async function LeadsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ stage?: string; agent?: string }>;
-}) {
+
+type Params = { source?: string; stage?: string; country?: string; owner?: string; hot?: string; view?: string; q?: string; build?: string };
+
+const SOURCES = Object.keys(SOURCE_LABEL) as SourceTag[];
+
+export default async function LeadsPage({ searchParams }: { searchParams: Promise<Params> }) {
+  seedIfEmpty();
   const user = await requireUser();
-  // Belt and braces behind the layout — but the tenant, not the role: an
-  // owner is what every self-serve signup is.
-  if (!isBellineStaff(user)) return null;
+  if (!isBellineStaff(user)) return <p className="muted">Belline staff only.</p>;
 
-  const state = await setupState();
-  if (state !== "ready") {
-    return (
-      <>
-        <PageHeader title="Pipeline" />
-        <Setup state={state} />
-      </>
-    );
-  }
-
-  const { stage, agent } = await searchParams;
-  const agentId = agent ? Number(agent) : undefined;
-
-  const [leads, agents, counts] = await Promise.all([
-    listLeads({ stage, agentId: Number.isFinite(agentId) ? agentId : undefined }),
-    agentSummaries(),
-    pipelineCounts(),
-  ]);
-
-  const byStage = new Map(counts.map((c) => [c.stage, c.n]));
-  const total = counts.reduce((n, c) => n + c.n, 0);
-  const researched = leads.filter((l) => l.researched).length;
-
-  const href = (s?: string) => {
-    const p = new URLSearchParams();
-    if (s) p.set("stage", s);
-    if (agent) p.set("agent", agent);
-    const q = p.toString();
-    return q ? `/sales/leads?${q}` : "/sales/leads";
+  const p = await searchParams;
+  const { leads, pipelineRead } = await allLeads();
+  const staff = staffUsers();
+  const filter: LeadFilter = {
+    source: SOURCES.includes(p.source as SourceTag) ? (p.source as SourceTag) : undefined,
+    stage: isStage(p.stage) ? p.stage : undefined,
+    country: p.country || undefined,
+    owner: p.owner === "me" ? user.id : p.owner || undefined,
+    hot: p.hot === "1",
+    drafts: p.view === "drafts",
+    q: p.q,
   };
+  const shown = filterLeads(leads, filter);
+  const videoView = p.view === "video-demos";
+  await ensureStubProspect();
+  const demoLinks = await demoStore()
+    .list({ limit: 200 })
+    .catch(() => []);
+
+  const href = (next: Partial<Params>) => {
+    const merged: Params = { source: p.source, stage: p.stage, country: p.country, owner: p.owner, hot: p.hot, view: p.view, q: p.q, ...next };
+    const qs = new URLSearchParams(Object.entries(merged).filter(([, v]) => v) as [string, string][]).toString();
+    return qs ? `/sales/leads?${qs}` : "/sales/leads";
+  };
+  const countries = [...new Map(leads.filter((l) => l.country).map((l) => [l.country!.toUpperCase(), l.countryName ?? l.country!])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const anyFilter = Boolean(filter.source || filter.stage || filter.country || filter.owner || filter.hot || filter.drafts || filter.q);
 
   return (
     <>
-      <PageHeader
-        title="Pipeline"
-        subtitle={`${total} lead${total === 1 ? "" : "s"} · ${researched} of ${leads.length} shown have been researched`}
+      <ConsoleHeader
+        title="Leads"
+        subtitle={`${shown.length} of ${leads.length} lead${leads.length === 1 ? "" : "s"}${pipelineRead ? "" : " · researched prospects hidden: the sales database is not connected"}`}
+        actions={
+          p.build ? (
+            <Link href={href({})} className="btn">
+              Close demo builder
+            </Link>
+          ) : (
+            <Link href={href({ build: "1" })} className="btn btn-accent">
+              Build demo from website
+            </Link>
+          )
+        }
       />
 
-      <div className="loc-tabs" style={{ marginBottom: 16 }}>
-        <Chip label={`All ${total}`} href={href()} on={!stage} />
-        {STAGE_ORDER.filter((s) => (byStage.get(s) ?? 0) > 0).map((s) => (
-          <Chip
-            key={s}
-            label={`${s.replace(/_/g, " ")} ${byStage.get(s)}`}
-            href={href(s)}
-            on={stage === s}
-          />
-        ))}
-      </div>
+      {p.build && <DemoBuilder />}
 
-      {leads.length === 0 ? (
-        <div className="panel" style={{ padding: "30px 26px" }}>
-          <p className="muted" style={{ fontSize: 13.5, margin: 0, lineHeight: 1.6 }}>
-            Nothing here yet. Find companies with{" "}
-            <code className="mono">npm run discover -- &quot;UAE Dental&quot;</code>, then research
-            them with <code className="mono">npm run research -- &quot;UAE Dental&quot;</code>.
-          </p>
+      <FilterChips
+        label="Show"
+        items={[
+          { label: "All", href: href({ hot: undefined, view: undefined }), on: !filter.hot && !filter.drafts && !videoView },
+          { label: "Hot", href: href({ hot: "1", view: undefined }), on: Boolean(filter.hot), count: leads.filter((l) => l.hot).length },
+          { label: "Drafts to review", href: href({ view: "drafts", hot: undefined }), on: Boolean(filter.drafts), count: leads.filter((l) => l.drafts > 0).length },
+          { label: "Video demos", href: "/sales/leads?view=video-demos", on: videoView, count: demoLinks.length },
+        ]}
+      />
+      {videoView ? (
+        <div className="panel">
+          <VideoDemoList links={demoLinks} />
         </div>
       ) : (
-        <div className="panel">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left" }}>Company</th>
-                <th style={{ width: 70, textAlign: "right" }}>Score</th>
-                <th style={{ width: 110 }}>Stage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map((lead) => (
-                <tr key={lead.lead_id}>
-                  <td>
-                    <Link href={`/sales/leads/${lead.lead_id}`} style={{ fontWeight: 600 }}>
-                      {lead.name}
-                    </Link>
-                    <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-                      {[
-                        lead.city,
-                        lead.branches > 1 ? `${lead.branches} locations` : null,
-                        lead.rating ? `${lead.rating}★ ${lead.review_count ?? 0}` : null,
-                        lead.domain,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </div>
-                    {lead.summary && (
-                      // The first sentence of the research is the agent's own
-                      // one-line answer to "why is this a good prospect" — the
-                      // most useful thing that fits on a list row.
-                      <div style={{ fontSize: 12.5, marginTop: 5, color: "var(--text)", opacity: 0.85 }}>
-                        {lead.summary.split(". ")[0]}.
-                      </div>
-                    )}
-                    {lead.use_cases && lead.use_cases.length > 0 && (
-                      <div style={{ marginTop: 6, display: "flex", gap: 5, flexWrap: "wrap" }}>
-                        {lead.use_cases.map((u) => (
-                          <span
-                            key={u}
-                            className="pill"
-                            style={{ fontSize: 10.5, padding: "2px 7px" }}
-                          >
-                            {u.replace(/_/g, " ")}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td
-                    className="mono"
-                    style={{
-                      textAlign: "right",
-                      verticalAlign: "top",
-                      fontVariantNumeric: "tabular-nums",
-                      color:
-                        lead.priority === "hot"
-                          ? "var(--ok)"
-                          : lead.priority === "low"
-                            ? "var(--muted)"
-                            : "var(--text)",
-                    }}
-                  >
-                    {lead.current_score ?? "—"}
-                    {lead.priority && (
-                      <div className="muted" style={{ fontSize: 10.5, marginTop: 2 }}>
-                        {lead.priority}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ verticalAlign: "top", textAlign: "right" }}>
-                    <span className="pill" style={statusTone(lead.stage)}>
-                      {lead.stage.replace(/_/g, " ")}
-                    </span>
-                    {!lead.researched && (
-                      <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>
-                        not researched
-                      </div>
-                    )}
-                  </td>
+        <>
+      <FilterChips
+        label="Stage"
+        items={[
+          { label: "Any", href: href({ stage: undefined }), on: !filter.stage },
+          ...STAGES.map((s) => ({ label: STAGE_LABEL[s], href: href({ stage: s }), on: filter.stage === s, count: leads.filter((l) => l.stage === s).length })),
+        ]}
+      />
+      <FilterChips
+        label="Source"
+        items={[
+          { label: "Any", href: href({ source: undefined }), on: !filter.source },
+          ...SOURCES.filter((s) => leads.some((l) => l.source === s) || filter.source === s).map((s) => ({ label: SOURCE_LABEL[s], href: href({ source: s }), on: filter.source === s, count: leads.filter((l) => l.source === s).length })),
+        ]}
+      />
+      <FilterChips
+        label="Owner"
+        items={[
+          { label: "Anyone", href: href({ owner: undefined }), on: !p.owner },
+          { label: "Me", href: href({ owner: "me" }), on: p.owner === "me" },
+          { label: "Nobody yet", href: href({ owner: "none" }), on: p.owner === "none" },
+          ...staff.filter((s) => s.id !== user.id).map((s) => ({ label: s.name || s.email, href: href({ owner: s.id }), on: p.owner === s.id })),
+        ]}
+      />
+      {countries.length > 1 && (
+        <FilterChips
+          label="Country"
+          items={[{ label: "Any", href: href({ country: undefined }), on: !filter.country }, ...countries.map(([code, name]) => ({ label: name, href: href({ country: code }), on: filter.country?.toUpperCase() === code }))]}
+        />
+      )}
+      <SearchBox action="/sales/leads" q={p.q} keep={{ source: p.source, stage: p.stage, country: p.country, owner: p.owner, hot: p.hot, view: p.view }} placeholder="Search name, email, phone or website" />
+
+      <div className="panel">
+        {shown.length === 0 ? (
+          anyFilter ? (
+            <EmptyState title="No lead matches these filters" action={<Link href="/sales/leads" className="btn btn-row">Clear filters</Link>} />
+          ) : (
+            <EmptyState title="No leads yet">
+              Enquiries from the website, people Belle talks to and the DACH waitlist land here on their own. To add
+              researched prospects, run discovery from Settings, or build a demo from a prospect&apos;s website above.
+            </EmptyState>
+          )
+        ) : (
+          <div className="table-wrap" tabIndex={0}>
+            <table className="staff-table">
+              <thead>
+                <tr>
+                  <th>Lead</th>
+                  <th>Source</th>
+                  <th>Country</th>
+                  <th>Stage</th>
+                  <th className="num">Score</th>
+                  <th>Owner</th>
+                  <th>Next step</th>
+                  <th>Last activity</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {shown.map((l) => (
+                  <tr key={l.id}>
+                    <td style={{ minWidth: 200 }}>
+                      <Link href={leadHref(l.id)} style={{ fontWeight: 600 }}>
+                        {l.name}
+                      </Link>
+                      {l.hot && (
+                        <>
+                          {" "}
+                          <Pill tone="warn">Hot</Pill>
+                        </>
+                      )}
+                      <div className="sub">{[l.contactName, l.email, l.city].filter(Boolean).join(" · ")}</div>
+                      {l.drafts > 0 && (
+                        <div className="sub">
+                          <Link href={`${leadHref(l.id)}#email-draft`}>Email draft waiting</Link>
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <Pill>{SOURCE_LABEL[l.source]}</Pill>
+                    </td>
+                    <td style={{ fontSize: 12.5 }}>{l.countryName ?? <span className="muted">—</span>}</td>
+                    <td>
+                      <Pill tone={l.stage === "customer" ? "ok" : l.stage === "demo_watched" ? "warn" : l.stage === "lost" || l.stage === "do_not_contact" ? undefined : "accent"}>{STAGE_LABEL[l.stage]}</Pill>
+                    </td>
+                    <td className="num">{l.score ?? <span className="muted">—</span>}</td>
+                    <td style={{ fontSize: 12.5 }}>{l.ownerName ?? <span className="muted">Nobody</span>}</td>
+                    <td style={{ fontSize: 12.5, minWidth: 140 }}>
+                      {l.nextAction ? (
+                        <>
+                          {l.nextAction}
+                          {l.nextActionDue && <div className="sub">by {day(l.nextActionDue)}</div>}
+                        </>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                    <td className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                      {ago(l.lastActivityAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+        </>
       )}
     </>
-  );
-}
-
-function Chip({ label, href, on }: { label: string; href: string; on: boolean }) {
-  return (
-    <Link
-      href={href}
-      className="pill"
-      style={{
-        padding: "5px 12px",
-        fontSize: 11.5,
-        textTransform: "capitalize",
-        background: on ? "var(--accent)" : "var(--panel)",
-        color: on ? "#fff" : "var(--muted)",
-        borderColor: on ? "var(--accent)" : "var(--border)",
-      }}
-    >
-      {label}
-    </Link>
   );
 }

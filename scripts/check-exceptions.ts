@@ -176,13 +176,16 @@ await test("the API and the page refuse anybody but Belline staff", () => {
   assert.match(api, /status: 403/);
   assert.match(api, /requireApiUser/);
   assert.equal((api.match(/const who = await staff\(\)/g) ?? []).length, 2, "GET and POST both check");
-  const page = source("src/app/(internal)/sales/exceptions/page.tsx");
+  // Exceptions are "Issues" in the staff console since 2026-09-17; the old address redirects.
+  const page = source("src/app/(internal)/sales/issues/page.tsx");
   assert.match(page, /if \(!isBellineStaff\(user\)\) return/);
-  assert.match(source("src/app/(internal)/layout.tsx"), /\/sales\/exceptions/);
+  assert.match(source("src/app/(internal)/StaffNav.tsx"), /\/sales\/issues/);
+  assert.match(source("next.config.mjs"), /source: "\/sales\/exceptions", destination: "\/sales\/issues"/);
 });
 
-await test("the page shows reason, next action, contact and a resolve form", () => {
-  const page = source("src/app/(internal)/sales/exceptions/page.tsx");
+await test("the page shows reason, next action, contact and a resolve form, and never raw JSON", () => {
+  const page = source("src/app/(internal)/sales/issues/page.tsx");
+  assert.doesNotMatch(page, /JSON\.stringify/);
   for (const bit of ["r.reason", "meta.next", "mailto:", "ExceptionActions", "humanMinutes"]) assert.ok(page.includes(bit), bit);
   assert.ok(EXCEPTION_KINDS.every((k) => KIND_META[k].label && KIND_META[k].next));
 });

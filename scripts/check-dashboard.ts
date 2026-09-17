@@ -199,16 +199,18 @@ await test("the retired pages are nowhere in the menu, for anybody", () => {
 });
 
 await test("the demo line and Belline's tools are for Belline staff only", async () => {
-  const demo = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "demo", "page.tsx"), "utf8");
-  assert.match(demo, /if \(!isBellineStaff\(user\)\) notFound\(\);/, "the demo line opens for customers");
-  assert.doesNotMatch(demo, /canManageUsers\(user\)\) notFound/);
+  // The demo lines moved into the staff console (Settings) on 2026-09-17; /demo redirects there.
+  const demo = fs.readFileSync(path.join(process.cwd(), "src", "app", "(internal)", "sales", "settings", "demo-lines", "page.tsx"), "utf8");
+  assert.match(demo, /if \(!isBellineStaff\(user\)\) return/, "the demo line opens for customers");
+  assert.doesNotMatch(demo, /canManageUsers\(user\)\)/);
   const { getTenant, saveTenant } = await import("../src/lib/store");
   const staffOwner = await signUp({ businessName: "Belline Staff Desk", email: "staff@bellinedesk.test", password: "Correct-Horse-Battery-9", vertical: "salon", timezone: "Asia/Dubai" });
   assert.ok(staffOwner.ok);
   if (!staffOwner.ok) return;
   saveTenant({ ...getTenant(staffOwner.user.tenantId)!, internal: true });
   const staff = navFor(staffOwner.user, [staffOwner.location], {}).staff;
-  assert.deepEqual(hrefs(staff?.items ?? []), ["/sales", "/demo", "/prospects"]);
+  // One door into the staff console; the demo tools live inside it.
+  assert.deepEqual(hrefs(staff?.items ?? []), ["/sales"]);
   assert.ok(!searchEverything(owner, "demo").some((h) => h.href === "/demo"), "search offers a customer the demo line");
 });
 

@@ -235,7 +235,7 @@ async function notifyTeam(row: SupportException): Promise<boolean> {
     ``,
     `Why: ${row.reason}`,
     `Next: ${meta.next}`,
-    `Ticket ${row.ticket}, opened by ${row.source}. Queue: /sales/exceptions`,
+    `Ticket ${row.ticket}, opened by ${row.source}. Queue: /sales/issues`,
   ].join("\n");
   try {
     const out = await deliverEmail({

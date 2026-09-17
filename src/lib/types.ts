@@ -588,7 +588,18 @@ export interface Subscription {
      */
     extendedFrom?: DateStr;
     extendedAt?: string;
+    /**
+     * Extensions Belline staff gave by hand from the staff console, oldest
+     * first. Separate from `extendedFrom`, which is the one automatic extension
+     * while payments are closed: a staff extension never uses that up.
+     */
+    staffExtensions?: { at: string; by: string; days: number; from: DateStr; to: DateStr; reason: string }[];
   };
+  /**
+   * Plan changes Belline staff recorded from the staff console, oldest first.
+   * A record, not a charge: nothing here talks to Stripe.
+   */
+  staffPlanChanges?: { at: string; by: string; from: ProductId[]; to: ProductId[]; reason: string }[];
   /**
    * What one billing period was sold at, in the market's minor unit — the
    * monthly fee, or the annual one. Stamped by the webhook from the checkout.
@@ -1736,6 +1747,70 @@ export interface Session {
   createdAt: string;
   expiresAt: string;
   userAgent?: string;
+  /**
+   * Set on a "View as customer" session: a member of Belline staff looking at
+   * a customer's dashboard as its owner. Read-only, enforced by the server for
+   * every request on it, and short-lived. See staff/view-as.ts.
+   */
+  viewAs?: ViewAsGrant;
+}
+
+export interface ViewAsGrant {
+  staffUserId: string;
+  tenantId: string;
+  startedAt: string;
+  /** Thirty minutes after `startedAt`; the session itself expires with it. */
+  expiresAt: string;
+  /** The staff member's own session, given back on exit. */
+  returnSessionId?: string;
+  reason: string;
+}
+
+/**
+ * One thing a member of Belline staff changed from the staff console: who,
+ * what, when and why. Append-only, in the JSON store beside the data it
+ * describes, and mirrored to `sales.audit_log` where the sales database exists.
+ * See staff/audit.ts.
+ */
+export interface StaffAuditRow {
+  id: string;
+  at: string;
+  actorId: string;
+  actorName: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  reason?: string;
+  before?: unknown;
+  after?: unknown;
+}
+
+/** Something that happened to a lead, for its timeline. See staff/leads.ts `recordLeadEvent`. */
+export interface LeadEvent {
+  id: string;
+  at: string;
+  /** "note", "stage_changed", "owner_changed", "next_action", "marked_sent", "demo_watched", … */
+  type: string;
+  summary: string;
+  /** `user:<id>`, `agent:<id>` or `system`. */
+  actor: string;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * The staff CRM's own fields for one lead, whichever store the lead lives in.
+ * Keyed by the composite id (`json:<id>` or `db:<id>`), so no lead record had
+ * to be migrated to carry an owner, a next step or notes.
+ */
+export interface LeadCrmRow {
+  id: string;
+  ownerUserId?: string;
+  nextAction?: string;
+  /** YYYY-MM-DD. */
+  nextActionDue?: string;
+  notes: { id: string; at: string; by: string; byName: string; text: string }[];
+  events: LeadEvent[];
+  updatedAt: string;
 }
 
 // ---------------------------------------------------------------------------

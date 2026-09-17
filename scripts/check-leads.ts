@@ -484,8 +484,9 @@ test("the route runs this handler, the German pages post to it, and nothing on t
   const page = fs.readFileSync(path.join(root, "public", "landing.de.html"), "utf8");
   assert.match(page, /<form class="book-form waitlist" id="warteliste" action="https:\/\/app\.belline\.ai\/api\/leads\/waitlist" method="post"/);
   for (const field of ["name", "email", "company", "country", "businessType", "website2", "page"]) assert.match(page, new RegExp(`name="${field}"`), field);
-  const enquiries = fs.readFileSync(path.join(root, "src", "app", "(internal)", "sales", "enquiries", "page.tsx"), "utf8");
-  assert.match(enquiries, /isWaitlistLead\(lead\)/, "staff cannot tell a waitlist entry on the Enquiries screen");
+  // Enquiries became a source on the staff console's Leads list (2026-09-17): the waitlist is its own tag there.
+  const leadList = fs.readFileSync(path.join(root, "src", "lib", "staff", "leads.ts"), "utf8");
+  assert.match(leadList, /if \(isWaitlistLead\(lead\)\) return "waitlist_dach";/, "staff cannot tell a waitlist entry on the Leads list");
 });
 
 queue.then(() => {
