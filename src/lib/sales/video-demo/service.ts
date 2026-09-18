@@ -394,6 +394,21 @@ export async function recordDemoEvent(
       },
     });
   }
+  // A click into the demo ends the sequence. The cold email's entire job was
+  // to earn that click; a follow-up afterwards asking whether they saw it is
+  // a machine talking over somebody who is already listening. Best effort —
+  // tracking must never fail a visitor's request — but the stop is also
+  // re-checked by the gate before every send, so a failure here delays it by
+  // one pass rather than losing it.
+  if (event === "opened" || event === "video_started" || event === "chat_started") {
+    try {
+      const { demoOpened } = await import("../sending/replies");
+      await demoOpened(updated.leadId);
+    } catch (err) {
+      console.error("[video-demo] could not stop the sequence:", err instanceof Error ? err.message : String(err));
+    }
+  }
+
   if (turnedHot) {
     // The staff console's hot mechanism: the lead list, Today and the lead
     // page read `demo_watched` from the lead's CRM events (lib/staff/leads.ts).

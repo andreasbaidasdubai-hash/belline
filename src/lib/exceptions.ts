@@ -61,6 +61,8 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "calendly_booking_failed",
   "calendly_cancel_failed",
   "email_unverified",
+  "sending_domain_unhealthy",
+  "sending_mailbox_paused",
 ];
 
 interface KindMeta {
@@ -204,6 +206,16 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
   email_unverified: {
     label: "New owner's email not confirmed, email off",
     next: "Write to the address on the account. When they reply, mark the email confirmed in Abuse review; until then Belline does no paid setup work for them.",
+    belle: false,
+  },
+  sending_domain_unhealthy: {
+    label: "Outreach domain's health has dropped",
+    next: "Open Outreach, then Domains. Bounces or complaints have crossed the threshold on this sending domain. Stop the affected mailboxes, find out what the list had in it, and do not resume until the rate is back under control — a domain that keeps sending through this does not recover.",
+    belle: false,
+  },
+  sending_mailbox_paused: {
+    label: "Outreach mailbox stopped itself",
+    next: "Open Outreach, then Domains. The engine paused this mailbox because its bounce or complaint rate crossed the line. Check what it was sending before resuming it.",
     belle: false,
   },
 };

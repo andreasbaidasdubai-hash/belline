@@ -1798,7 +1798,9 @@ export type ExceptionKind =
   | "calendly_rate_limited"
   | "calendly_booking_failed"
   | "calendly_cancel_failed"
-  | "email_unverified";
+  | "email_unverified"
+  | "sending_domain_unhealthy"
+  | "sending_mailbox_paused";
 
 export interface SupportException {
   id: string;

@@ -32,6 +32,28 @@ export const HANDLERS: Record<string, Handler> = {
   always_fails: async () => {
     throw new Error("this handler always fails, by design");
   },
+
+  /**
+   * Send whatever an approved batch has scheduled for now, then check health.
+   *
+   * Safe to run twice: `dispatchDue` only picks items still in `planned` or
+   * `queued`, moves each to `sending` before the provider call and to `sent`
+   * after, and the unique index on (lead_id, step) means a retry that races
+   * cannot produce a second message to the same person.
+   *
+   * With no credentials it returns immediately having done nothing, which is
+   * the correct behaviour for a worker running every few minutes in an
+   * environment where the engine is not set up.
+   */
+  outreach_send: async () => {
+    const { dispatchDue } = await import("../../sending/dispatch");
+    const { watchHealth } = await import("../../sending/watch");
+    const origin = (process.env.PUBLIC_ORIGIN ?? "").trim().replace(/\/+$/, "");
+    if (!origin) throw new Error("PUBLIC_ORIGIN is not set, so no unsubscribe link could be built.");
+    const result = await dispatchDue({ origin });
+    if (result.inert) return;
+    await watchHealth();
+  },
 };
 
 export function isKnownType(type: string): boolean {
