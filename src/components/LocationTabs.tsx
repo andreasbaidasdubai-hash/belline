@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { visibleLocations } from "@/lib/auth";
+import { canManageUsers, visibleLocations } from "@/lib/auth";
 import { requireUser } from "@/lib/auth-server";
 import { venueChip } from "@/lib/verticals";
 
@@ -10,7 +10,28 @@ export async function LocationTabs({ base, active }: { base: string; active: str
 
   // Only the venues this person is allowed to open — a manager at one salon
   // should not even see that the other exists.
-  const locations = visibleLocations(await requireUser());
+  const user = await requireUser();
+  const locations = visibleLocations(user);
+
+  /*
+    "If I needed to add another location, where and how?" (founder, f6.)
+
+    The answer was the Settings menu item, whose first tab happens to be
+    Locations: findable once somebody has told you, which is not the same as
+    discoverable. The row of venue names at the top of every page is where an
+    owner looks when they are thinking about their venues, so the way to a new
+    one ends that row and lands with the form already open
+    (locations/LocationsManager.tsx reads `?add=1`).
+
+    Owners only, because only an owner may add one (lib/locations.ts
+    `addAllowance`). The page itself explains the plan rule; what it will not
+    do is offer a button to somebody it is about to refuse.
+  */
+  const addLocation = canManageUsers(user) ? (
+    <Link href="/locations?add=1" className="pill loc-tabs-add">
+      <span aria-hidden="true">+</span> Add a location
+    </Link>
+  ) : null;
 
   // With nothing to switch between there is no switcher, but the page still
   // has to say which venue you are looking at.
@@ -25,10 +46,11 @@ export async function LocationTabs({ base, active }: { base: string; active: str
             </span>
           )}
         </span>
+        {addLocation}
       </div>
     );
   }
-  if (locations.length === 0) return null;
+  if (locations.length === 0) return addLocation ? <div className="loc-tabs">{addLocation}</div> : null;
   return (
     <div className="loc-tabs">
       {locations.map((l) => {
@@ -57,6 +79,7 @@ export async function LocationTabs({ base, active }: { base: string; active: str
           </Link>
         );
       })}
+      {addLocation}
     </div>
   );
 }

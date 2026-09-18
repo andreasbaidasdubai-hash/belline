@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import PhoneField, { type PhoneFieldHandle } from "@/components/PhoneField";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Vertical, WeeklyHours } from "@/lib/types";
 import type { RemovalBlock } from "@/lib/locations";
 import { TRADES, TRADE_GROUPS, tradeLabel } from "@/lib/signup-rules";
@@ -70,7 +70,13 @@ export default function LocationsManager({
   add: AddState;
 }) {
   const router = useRouter();
-  const [editing, setEditing] = useState<Venue | "new" | null>(null);
+  // `?add=1` opens the drawer on arrival. The venue switcher at the top of
+  // every page now ends in "Add a location" and comes here (LocationTabs.tsx);
+  // the founder's question was "if I needed another location, where and how?",
+  // and a link that lands on a page with a button still to find only answers
+  // the where.
+  const openAdd = useSearchParams().get("add") === "1" && canManage && add.allowed;
+  const [editing, setEditing] = useState<Venue | "new" | null>(openAdd ? "new" : null);
   const [removing, setRemoving] = useState<{ venue: Venue; intent: "archive" | "delete" } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const active = venues.filter((v) => !v.archivedAt);

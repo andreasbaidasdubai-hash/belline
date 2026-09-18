@@ -172,6 +172,27 @@ html .page-title {
   display: none;
 }
 
+/* The way to another venue, at the end of the row of venues (founder, f6).
+   Quieter than the venues themselves — it is a way out of this row, not one
+   more thing in it — and dashed, so it does not read as a venue called "Add a
+   location". It never shrinks away when the row scrolls. */
+.loc-tabs-add {
+  flex: none;
+  padding: 6px 13px;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border-style: dashed;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.loc-tabs-add:hover,
+.loc-tabs-add:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+  border-style: solid;
+}
+
 /* --- controls ------------------------------------------------------------ */
 
 .btn {

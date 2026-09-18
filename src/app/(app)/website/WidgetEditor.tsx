@@ -90,6 +90,7 @@ export default function WidgetEditor({
   logoUrl: logoUrlAtLoad = null,
   video = false,
   videoRatio,
+  facePicker = false,
   chatLink,
   chatLinkLive = false,
 }: {
@@ -123,6 +124,13 @@ export default function WidgetEditor({
   video?: boolean;
   /** Voice minutes a video minute costs (plans.ts `VIDEO_VOICE_MINUTE_RATIO`). */
   videoRatio: number;
+  /**
+   * The face picker is on Your business → Agent for this venue — the same
+   * condition that decides whether it renders there. Only then is it linked
+   * to from here: a link to a control that is not on the page is worse than
+   * no link at all.
+   */
+  facePicker?: boolean;
   /** The venue's shareable chat link, or null until it has made one. */
   chatLink: string | null;
   /** Is the venue answering yet? The link exists either way; only one of them is answered. */
@@ -377,6 +385,22 @@ export default function WidgetEditor({
             your words, your colours, our mark or your logo
           </span>
         </div>
+        {/*
+          "Where can I change the face of the Agent?" (founder, f6.) On Your
+          business → Agent, and this is where somebody who is deciding how the
+          widget looks goes to find it. Only where that picker is actually on
+          that page, so the link is never a dead end.
+        */}
+        {facePicker && (
+          <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6, margin: "0 18px", padding: "14px 0 0" }}>
+            This is the button. Belline&rsquo;s <strong style={{ fontWeight: 600 }}>face and background on a video call</strong> are
+            chosen under{" "}
+            <a href="/agents" style={{ color: "var(--accent)" }}>
+              Your business → Agent
+            </a>
+            .
+          </p>
+        )}
         <div style={{ padding: 18, display: "grid", gap: 18, gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }} className="widget-look">
           <div style={{ display: "grid", gap: 14 }}>
             {(
