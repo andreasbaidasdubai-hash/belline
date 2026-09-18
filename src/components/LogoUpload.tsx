@@ -33,6 +33,14 @@ export default function LogoUpload({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  // The name of the file that is on the button now.
+  //
+  // The browser's own file input went on saying "No file chosen" after a
+  // successful upload (founder, f6), and it was telling the truth: the upload
+  // finishes by clearing the input, so that choosing the same file again after
+  // a refusal tries again rather than doing nothing. The input is now hidden
+  // behind a real button, and this is what is read beside it.
+  const [chosen, setChosen] = useState<string | null>(null);
 
   function settle(url: string | null, note: string) {
     setLogoUrl(url);
@@ -61,6 +69,7 @@ export default function LogoUpload({
         setError(data.error ?? "That didn't upload. Try again in a moment.");
         return;
       }
+      setChosen(file.name);
       settle(data.logoUrl, "Logo saved.");
     } catch {
       setError("That didn't upload. Try again in a moment.");
@@ -82,6 +91,7 @@ export default function LogoUpload({
         setError(data.error ?? "That didn't remove it. Try again in a moment.");
         return;
       }
+      setChosen(null);
       settle(null, "Logo removed.");
     } catch {
       setError("That didn't remove it. Try again in a moment.");
@@ -98,9 +108,17 @@ export default function LogoUpload({
           {logoUrl ? <img src={logoUrl} alt="Your logo" /> : <span className="muted">No logo yet</span>}
         </span>
         <div className="logo-upload-actions">
+          {/*
+            The input itself is off screen, not `display: none`: hidden that
+            way it stops being focusable and the label stops reaching it, and
+            the only way to a logo would be a mouse. Here it is still a file
+            input with a label, still reachable by keyboard, and the button
+            below is what is actually drawn.
+          */}
           <input
             ref={input}
             id={inputId}
+            className="logo-upload-input"
             type="file"
             accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg"
             aria-describedby={hintId}
@@ -110,6 +128,12 @@ export default function LogoUpload({
               if (file) void upload(file);
             }}
           />
+          <label htmlFor={inputId} className={`btn logo-upload-pick${busy ? " is-busy" : ""}`}>
+            {busy ? "Uploading…" : logoUrl ? "Replace logo" : "Choose a file"}
+          </label>
+          <span className="muted logo-upload-name" title={chosen ?? undefined}>
+            {chosen ?? (logoUrl ? "Your saved logo" : "No file chosen yet")}
+          </span>
           {logoUrl && (
             <button type="button" className="btn" onClick={remove} disabled={busy}>
               Remove logo

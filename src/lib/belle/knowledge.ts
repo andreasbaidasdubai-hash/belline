@@ -74,9 +74,9 @@ export const PAGE_GUIDE: Record<string, string> = {
   "/channels/link": "Channels, Chat link tab: a link anyone can open to chat with Belline for your business, no website needed.",
   "/channels/whatsapp": "Channels, WhatsApp tab: set up Belline on a second WhatsApp number for your business.",
   "/calendars": "Calendars: where bookings go, connecting Google Calendar or Outlook, and who on your team uses which.",
-  "/locations": "Settings, Locations tab: every branch of the business.",
+  "/locations": "Settings, Locations tab: every branch of the business, and where a new one is added. While a location is still empty, what kind of business it is can be changed there too.",
   "/team": "Settings, Team tab: add people, choose their role (manager or staff) and which locations they see.",
-  "/billing": "Settings, Billing and usage tab: your plan, what you have used this period, what happens when an allowance runs out, and choosing or changing a plan.",
+  "/billing": "Billing, its own item in the menu: your plan, what you have used this period, payment details, what happens when an allowance runs out, and choosing or changing a plan.",
   "/setup": "Setup: picks up at your next setup step.",
 };
 

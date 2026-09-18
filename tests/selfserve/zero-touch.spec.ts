@@ -50,6 +50,8 @@ interface SavedVenue {
   id: string;
   tenantId: string;
   name: string;
+  /** The engine it runs on, which the venue's own card can still change while it is empty. */
+  vertical: string;
   currency: string;
   phone?: string;
   embed?: { key?: string };
@@ -133,17 +135,14 @@ async function anonymousVisit(browser: Browser, url: string) {
 
 // ── Steps shared by both personas ────────────────────────────────────────────
 
-async function signUp(page: Page, j: Journey, opts: { name: string; email: string; trade: string }) {
+async function signUp(page: Page, j: Journey, opts: { name: string; email: string }) {
   await j.step("signup", async () => {
-    await page.goto(`/checkout?trade=${opts.trade}`);
-    // The landing page's trade only prefills; nothing offers an email address instead.
-    // #trade, not #vertical: the field was renamed when the list widened from
-    // three trades to seventeen, and the trade key is deliberately not an
-    // engine vertical — check-backend asserts a trade like "garage" is refused
-    // as one. The rename and this spec landed on separate branches and merged
-    // cleanly without anyone reconciling them, which is why this journey had
-    // never once run past its first assertion.
-    await expect(page.locator("#trade")).toHaveValue(opts.trade);
+    await page.goto("/checkout");
+    // The checkout asks four things and no longer asks what kind of business it
+    // is (founder, f6): that is set from the venue's own card once the account
+    // exists, and `setKind` below is the step that does it. Nothing here offers
+    // an email address instead of a form.
+    await expect(page.locator("#trade")).toHaveCount(0);
     await expect(page.getByText(/Email us/i)).toHaveCount(0);
 
     await page.getByLabel("Business name").fill(opts.name);
@@ -186,6 +185,26 @@ async function signUp(page: Page, j: Journey, opts: { name: string; email: strin
     // The free month has not started: it starts at Go live.
     expect(venue.subscription?.trial?.endsOn).toBeFalsy();
     expect(readJson<{ email: string; emailVerifiedAt?: string }>("users").find((u) => u.email === opts.email)?.emailVerifiedAt).toBeTruthy();
+  });
+}
+
+/**
+ * What kind of business this is, on the venue's own card.
+ *
+ * The checkout stopped asking (founder, f6), so every account starts on the
+ * appointment engine. Settings → Locations is where a clinic or a restaurant
+ * says otherwise, and it may while the venue is still empty. Done before
+ * anything is saved against the venue, which is also the only time it works.
+ */
+async function setKind(page: Page, j: Journey, opts: { name: string; trade: string; vertical: string }) {
+  await j.step("kind of business", async () => {
+    await page.goto("/locations");
+    await page.getByRole("button", { name: `Edit ${opts.name}` }).click();
+    const drawer = page.getByRole("dialog", { name: `Edit ${opts.name}` });
+    await drawer.getByLabel("Kind of business").selectOption({ label: opts.trade });
+    await drawer.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText(`${opts.name} saved.`)).toBeVisible();
+    expect(venueNamed(opts.name).vertical).toBe(opts.vertical);
   });
 }
 
@@ -297,7 +316,7 @@ test("salon-requests: signup to live, then billing and a password reset, with no
   let chatLinkPath = "";
 
   try {
-    await signUp(page, j, { name, email, trade: "salon" });
+    await signUp(page, j, { name, email });
     await reviewByHand(page, j, { name, service: "Blow-dry" });
 
     await j.step("destination", async () => {
@@ -537,7 +556,8 @@ test("clinic: every step done, the checks pass, and Go live stays shut", async (
   const site = await fixtureSite();
 
   try {
-    await signUp(page, j, { name, email: `owner+ztclinic${run}@example.com`, trade: "clinic" });
+    await signUp(page, j, { name, email: `owner+ztclinic${run}@example.com` });
+    await setKind(page, j, { name, trade: "Clinic or surgery", vertical: "clinic" });
     await reviewByHand(page, j, { name, service: "Consultation" });
 
     await j.step("destination", async () => {

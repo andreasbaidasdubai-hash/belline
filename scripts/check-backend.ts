@@ -99,7 +99,7 @@ await test("bad details are refused with the field named", () => {
   }
 });
 
-await test("the basics can be changed — name, hours, closures — but never the kind of business", () => {
+await test("the basics can be changed — name, hours, closures", () => {
   const hours = { 0: [], 1: [{ start: 480, end: 1200 }], 2: [{ start: 480, end: 1200 }], 3: [], 4: [], 5: [], 6: [] };
   const out = updateLocationBasics(me(), branch, { name: "Palm Clinic Marina", hours, closures: ["2026-12-02", "2026-12-02", "2026-12-03"] });
   assert.ok(out.ok, out.ok ? "" : out.error);
@@ -107,8 +107,47 @@ await test("the basics can be changed — name, hours, closures — but never th
   assert.equal(loc.name, "Palm Clinic Marina");
   assert.deepEqual(loc.hours[1], [{ start: 480, end: 1200 }]);
   assert.deepEqual(loc.closures, ["2026-12-02", "2026-12-03"]);
-  assert.equal(updateLocationBasics(me(), branch, { vertical: "restaurant" }).ok, false);
   assert.equal(updateLocationBasics(me(), branch, { hours: { 1: [{ start: 900, end: 600 }] } }).ok, false);
+});
+
+// The checkout no longer asks what kind of business it is (founder, f6), so a
+// venue that arrives knowing nothing about itself starts on the appointment
+// engine. It has to be able to say otherwise — but only while there is
+// nothing saved against it that a different engine would keep differently.
+await test("the kind of business can change while the location is empty, and never once it is not", () => {
+  const empty = createLocation(me(), { name: "Palm Kitchen", vertical: "clinic" });
+  assert.ok(empty.ok, empty.ok ? "" : empty.error);
+  const id = empty.ok ? empty.location.id : "";
+
+  const swapped = updateLocationBasics(me(), id, { trade: "restaurant" });
+  assert.ok(swapped.ok, swapped.ok ? "" : swapped.error);
+  const now = getLocation(id)!;
+  assert.equal(now.vertical, "restaurant", "the engine did not follow the trade");
+  assert.equal(now.tradeKey, "restaurant");
+  // The shape follows the engine: a restaurant keeps tables and a menu, and
+  // the salon side of the venue is gone rather than left behind, half-read.
+  assert.ok(now.restaurant, "a restaurant with no restaurant to run");
+  assert.equal(now.salon, undefined, "the appointment side was left behind");
+  // Everything that identifies the venue survives the swap.
+  assert.equal(now.name, "Palm Kitchen");
+  assert.equal(now.id, id);
+  assert.equal(now.timezone, getLocation(branch)!.timezone);
+
+  // And back, while it is still empty.
+  assert.ok(updateLocationBasics(me(), id, { trade: "salon" }).ok);
+  assert.equal(getLocation(id)!.vertical, "salon");
+  assert.ok(getLocation(id)!.salon, "a salon with no diary to run");
+  assert.equal(getLocation(id)!.restaurant, undefined);
+
+  // Once it offers something, the kind is fixed: the answer is words, not a
+  // silent no-op, and nothing about the venue changes.
+  upsertLocation({ ...getLocation(id)!, salon: { services: [{ id: "s1", name: "Cut", durationMin: 30, bufferMin: 0, price: 100 }], staff: [], resources: [], slotMinutes: 15 } });
+  const refused = updateLocationBasics(me(), id, { trade: "restaurant" });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.ok ? "" : refused.field, "vertical");
+  assert.match(refused.ok ? "" : refused.error, /add a new location/i);
+  assert.equal(getLocation(id)!.vertical, "salon", "a refused change still changed the venue");
+  assert.ok(deleteLocation(me(), id, "Palm Kitchen").ok);
 });
 
 await test("archiving hides a location everywhere and keeps it restorable", () => {

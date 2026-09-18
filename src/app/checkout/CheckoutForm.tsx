@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { ProductId } from "@/lib/billing/plans";
 import { MARKETS, type Market } from "@/lib/markets";
-import { PASSWORD_HINT, PASSWORD_MIN_LENGTH, TRADES, TRADE_GROUPS, passwordProblem } from "@/lib/signup-rules";
+import { PASSWORD_HINT, PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/signup-rules";
 
 /**
  * A few fields, on the same page as the price.
@@ -17,9 +17,15 @@ import { PASSWORD_HINT, PASSWORD_MIN_LENGTH, TRADES, TRADE_GROUPS, passwordProbl
  * plan from their dashboard, never here. What they picked on this page is
  * remembered on the trial, so the end of it can offer the same thing back.
  *
- * The country decides the currency and the clock, not the browser. The kind
- * of business is optional: a landing page's `?trade=` prefills it, and empty
- * is a fine answer.
+ * The country decides the currency and the clock, not the browser.
+ *
+ * There is no "What do you do?" here any more (founder, f6). It was the one
+ * question on the page whose answer we can read for ourselves off the website
+ * the very next screen asks for, and it was seventeen options deep on a phone
+ * between a business name and an email address. What kind of business it is
+ * still decides the engine; it is set from the venue's own card under
+ * Settings → Locations, and until Belline has taken a booking or a call there
+ * it can still be changed (lib/locations.ts).
  */
 
 interface Failure {
@@ -33,7 +39,6 @@ export default function CheckoutForm({
   products,
   market,
   markets,
-  trade,
   siteOrigin,
   verifyBy,
 }: {
@@ -41,8 +46,6 @@ export default function CheckoutForm({
   market: Market;
   /** The countries a business can sign up in today. */
   markets: Market[];
-  /** Preselected from the link's `?trade=`, or "" for nothing chosen. */
-  trade: string;
   /** Where the terms and privacy policy are, for this environment (lib/origin.ts). */
   siteOrigin: string;
   /** How the address is confirmed here: by an emailed code, or by the team. */
@@ -73,9 +76,6 @@ export default function CheckoutForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           businessName: form.get("businessName"),
-          // What they picked from the list. Never an engine `vertical`: the
-          // server works that out, so "garage" can never arrive as one.
-          trade: form.get("trade") ?? "",
           email,
           emailConfirmed: confirmed,
           password: form.get("password"),
@@ -124,6 +124,11 @@ export default function CheckoutForm({
     >
       <div>
         <label htmlFor="businessName">Business name</label>
+        {/*
+          The placeholder asks the question again rather than naming a
+          business. "Marina Hair Studio" read as a value already filled in,
+          and it named one trade to everybody who is not in it (founder, f6).
+        */}
         <input
           id="businessName"
           name="businessName"
@@ -131,7 +136,7 @@ export default function CheckoutForm({
           required
           maxLength={120}
           autoComplete="organization"
-          placeholder="Marina Hair Studio"
+          placeholder="Your business name"
           style={bad("businessName")}
         />
       </div>
@@ -140,8 +145,13 @@ export default function CheckoutForm({
         The country, not the browser's clock: a UAE business set up from
         Zurich still opens at nine in Dubai and is billed in dirhams.
 
-        A select with one option is a question with one answer. While only
-        one market is open it is said as a fact, and still sent as `market`.
+        A select with one option is a question with one answer, and a line of
+        read-only text saying the answer is a line nobody needs to read
+        (founder, f6). While only one market is open there is nothing on the
+        page at all — the market still travels, as a hidden field, and the
+        server still refuses any other. The control comes back on its own the
+        day a second market's `status` in lib/markets.ts turns "live"; nothing
+        here has to be remembered or undone.
       */}
       {markets.length > 1 ? (
         <div>
@@ -155,39 +165,8 @@ export default function CheckoutForm({
           </select>
         </div>
       ) : (
-        <div data-market-fixed>
-          <span id="market-label" className="label" style={{ display: "block", fontSize: 11, fontWeight: 600, letterSpacing: "0.045em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 7 }}>
-            Where the business is
-          </span>
-          <p aria-labelledby="market-label" style={{ margin: 0, fontSize: 14 }}>
-            {MARKETS[markets[0] ?? market].name}
-            <span className="muted" style={{ fontSize: 12 }}> · Belline is open to businesses here today</span>
-          </p>
-          <input type="hidden" name="market" value={markets[0] ?? market} />
-        </div>
+        <input type="hidden" name="market" value={markets[0] ?? market} data-market-fixed />
       )}
-
-      <div>
-        <label htmlFor="trade">What do you do?</label>
-        {/*
-          Grouped, because seventeen options in one flat list is a scroll on a
-          phone. The engine only tells a table from an appointment; the rest
-          of the difference is kept for reports, so the list can be as long as
-          it needs to be without the engine growing a case for each entry.
-        */}
-        <select id="trade" name="trade" defaultValue={trade} style={bad("vertical")}>
-          <option value="">Something else, or skip</option>
-          {TRADE_GROUPS.map((group) => (
-            <optgroup key={group} label={group}>
-              {TRADES.filter((t) => t.group === group).map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </div>
 
       <div>
         <label htmlFor="email">Your email</label>

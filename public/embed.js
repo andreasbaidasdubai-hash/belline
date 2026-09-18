@@ -87,10 +87,14 @@
     ".belline-fab:focus-visible,.belline-shut:focus-visible{outline:2px solid #0071E3;outline-offset:3px}" +
     ".belline-fab svg{width:24px;height:24px;color:var(--belline-accent-mark);display:block;flex:none}" +
     // The second and third buttons are the quieter ones: paper rather than
-    // the accent, so the set reads as one offer with a primary in it.
-    ".belline-fab.belline-second{background:#FFFFFF;color:#1D1D1F;border:1px solid #D2D2D7;" +
+    // the accent, so the set reads as one offer with a primary in it. The
+    // message button may be given a colour of its own (EmbedAppearance
+    // `chatAccent`), which arrives as these variables on that button alone;
+    // the paper here is what everybody who never picked one keeps.
+    ".belline-fab.belline-second{background:var(--belline-second,#FFFFFF);color:var(--belline-second-text,#1D1D1F);" +
+    "border:1px solid var(--belline-second-line,#D2D2D7);" +
     "box-shadow:0 10px 26px -14px rgba(0,0,0,.42)}" +
-    ".belline-fab.belline-second svg{color:#0071E3}" +
+    ".belline-fab.belline-second svg{color:var(--belline-second-mark,#0071E3)}" +
     // Round: the mark alone, as on a phone, at every width.
     ".belline-dock.belline-round .belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
     ".belline-dock.belline-round .belline-fab span:not(.belline-logo){display:none}" +
@@ -112,13 +116,19 @@
     // The venue's logo in place of the mark: always in a white circle, with
     // room around it, so a dark logo on a dark accent (or a white one on
     // white) still reads. Contained, never cropped — a wordmark stays whole.
-    ".belline-logo{display:block;flex:none;width:30px;height:30px;box-sizing:border-box;padding:3px;" +
+    //
+    // The circle is the logo plus a hair, not a saucer under it (founder, f6).
+    // The white used to be a third wider than the picture in it, which on a
+    // coloured button read as a sticker stuck on rather than the venue's mark.
+    // 1px of padding on the pill and 2px round is enough to keep a white logo
+    // off a white background, and no more.
+    ".belline-logo{display:block;flex:none;width:28px;height:28px;box-sizing:border-box;padding:1px;" +
     "border-radius:999px;background:#FFFFFF;box-shadow:0 0 0 1px rgba(29,29,31,.1);overflow:hidden}" +
     ".belline-logo img{display:block;width:100%;height:100%;object-fit:contain;border-radius:999px}" +
-    ".belline-fab.belline-has-logo{padding-top:11px;padding-bottom:11px;padding-left:12px}" +
-    ".belline-dock.belline-round .belline-logo{width:46px;height:46px;padding:5px}" +
+    ".belline-fab.belline-has-logo{padding-top:12px;padding-bottom:12px;padding-left:14px}" +
+    ".belline-dock.belline-round .belline-logo{width:40px;height:40px;padding:2px}" +
     "@media (max-width:520px){.belline-fab.belline-has-logo{padding:0}" +
-    ".belline-fab .belline-logo{width:46px;height:46px;padding:5px}}" +
+    ".belline-fab .belline-logo{width:40px;height:40px;padding:2px}}" +
     // Ringing, as the bell on belline.ai rings (site.css bell-shake, bell-nudge,
     // bell-ring, value for value): the mark swings, the button nudges, a ring
     // runs outwards. Only while the dock carries .belline-ringing, which the
@@ -328,6 +338,18 @@
       dock.style.setProperty("--belline-accent", cfg.accent);
       dock.style.setProperty("--belline-accent-text", cfg.accentText);
       dock.style.setProperty("--belline-accent-mark", cfg.accentMark || "#FFFFFF");
+    }
+    // The message button's own colour, where the venue gave it one, and only
+    // where it is the second button — on its own it is the main one and wears
+    // the accent already. Not the WhatsApp button: that one is WhatsApp's. The
+    // stylesheet keeps the quiet paper button as the fallback, so a venue that
+    // never picked a colour is unchanged. The border follows the fill, or the
+    // hairline would sit round a coloured pill as a ring.
+    if (cfg.chatAccent && cfg.chatAccentText && fabs.chat && fabs.chat.className.indexOf("belline-second") >= 0) {
+      fabs.chat.style.setProperty("--belline-second", cfg.chatAccent);
+      fabs.chat.style.setProperty("--belline-second-text", cfg.chatAccentText);
+      fabs.chat.style.setProperty("--belline-second-line", cfg.chatAccent);
+      fabs.chat.style.setProperty("--belline-second-mark", cfg.chatAccentMark || cfg.chatAccentText);
     }
     if (cfg.shape === "round") dock.classList.add("belline-round");
     if (!attrSide && cfg.corner === "left") {

@@ -68,6 +68,56 @@ export function applyHeroLanguages(html: string, env: Env = process.env): string
 }
 
 /**
+ * The channels the hero's eyebrow may name, in the order it names them.
+ *
+ * The website is the product itself — the widget is what every plan starts
+ * with, and it needs no credential to be true. The telephone and WhatsApp are
+ * claims about a connection, so each is named only while its own flag is on:
+ * `channel.phone` needs Twilio and the speech providers, WhatsApp needs Meta
+ * (either route to it counts). On an environment with neither, the eyebrow
+ * says "for your website" and nothing more, which is what a build of this
+ * repo with no credentials renders.
+ */
+export function heroChannels(pageLanguage: "en" | "de", env: Env = process.env): string[] {
+  const phone = publicFlag("channel.phone", env);
+  const whatsapp = publicFlag("channel.whatsapp.selfserve", env) || publicFlag("channel.whatsapp.embedded", env);
+  const words =
+    pageLanguage === "en"
+      ? { site: "your website", phone: "telephone", whatsapp: "WhatsApp" }
+      : { site: "Ihre Website", phone: "Telefon", whatsapp: "WhatsApp" };
+  return [words.site, ...(phone ? [words.phone] : []), ...(whatsapp ? [words.whatsapp] : [])];
+}
+
+/** "AI receptionist for your website, telephone & WhatsApp" — as many channels as are actually live. */
+export function heroEyebrowText(pageLanguage: "en" | "de", env: Env = process.env): string {
+  const names = heroChannels(pageLanguage, env);
+  // "a, b & c": an ampersand rather than "and" so the line stays one breath
+  // wide on a phone, where the eyebrow sits above a display headline.
+  const list = names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`;
+  return pageLanguage === "en" ? `AI receptionist for ${list}` : `KI-Empfang für ${list}`;
+}
+
+const HERO_EYEBROW = /(<p class="eyebrow rise">)[^<]*(<\/p>)/;
+
+/**
+ * The hero's eyebrow, written from the flags rather than from the file.
+ *
+ * It used to be one of `video.avatar`'s swaps ("AI video receptionist for your
+ * website"). The founder's line names the three channels instead of the
+ * medium, and three channels cannot be a swap: a swap's `off` has to be the
+ * page exactly as the earlier flags left it, and phone and WhatsApp are two
+ * independent flags, so there would be four `off` strings to write and keep in
+ * step. Computed here it is one sentence built from the flags that are on,
+ * like the hero's language line above it, and it can never claim a channel the
+ * environment has not got.
+ */
+export function applyHeroEyebrow(html: string, env: Env = process.env): string {
+  const pageLanguage = /<html lang="de/.test(html) ? "de" : "en";
+  const text = heroEyebrowText(pageLanguage, env);
+  return html.replace(HERO_EYEBROW, (_m, open: string, close: string) => `${open}${text}${close}`);
+}
+
+/**
  * The public website's copy for capabilities behind a flag.
  *
  * The pages in `public/` are written as every flag-off build renders them:
@@ -191,8 +241,8 @@ function outlookSwaps(file: string, w: Words): SiteSwap[] {
 /**
  * The video receptionist on the landing pages (`video.avatar`, as the
  * catalogue's `videoLive` reads it). The pages in `public/` say nothing about
- * video; with the flag on they lead with it: the eyebrow, the hero's lead and
- * Belle's caption, "What Belline does" with video first, the pricing lead,
+ * video; with the flag on they lead with it: the hero's lead and Belle's
+ * caption, "What Belline does" with video first, the pricing lead,
  * each card's video row and the trial's video minutes, the two video
  * questions in the FAQ and in its structured data, and the footer.
  *
@@ -202,9 +252,12 @@ function outlookSwaps(file: string, w: Words): SiteSwap[] {
  * renders, and check-billing holds them to it, so a catalogue change cannot
  * leave them behind. Every `on` is one line, so a CRLF checkout serves the
  * same page.
+ *
+ * The eyebrow is not one of these. It names the channels Belline answers
+ * rather than the medium it answers them in, and `applyHeroEyebrow` writes it
+ * from the phone and WhatsApp flags.
  */
 const VIDEO_EN = {
-  eyebrow: ["AI receptionist for your website", "AI video receptionist for your website"],
   lead: ["Belline puts an AI receptionist on your website chat and voice button,", "Belline puts an AI receptionist on your website, on video, plus chat,"],
   caption: [
     '<span class="hv-title">Belle on your website</span> <span class="state state-available">Available</span>',
@@ -238,7 +291,6 @@ const VIDEO_EN = {
 };
 
 const VIDEO_DE: typeof VIDEO_EN = {
-  eyebrow: ["KI-Empfang für Ihre Website", "KI-Video-Empfang für Ihre Website"],
   lead: ["Belline setzt einen KI-Empfang auf Ihren Website-Chat und Sprach-Button,", "Belline setzt einen KI-Empfang auf Ihre Website, per Video, dazu Chat,"],
   caption: [
     '<span class="hv-title">Belle auf Ihrer Website</span> <span class="state state-available">In den VAE verfügbar</span>',
@@ -278,7 +330,6 @@ const VIDEO_PLANS: [voice: number, video: number][] = [
 function videoSwaps(file: string, w: typeof VIDEO_EN): SiteSwap[] {
   const pair = ([off, on]: string[]): SiteSwap => ({ file, off, on });
   return [
-    pair(w.eyebrow),
     pair(w.lead),
     pair(w.caption),
     pair(w.ratio),
@@ -399,7 +450,7 @@ export function applySiteFlags(file: string, html: string, env: Env = process.en
   const flags = Object.entries(SITE_FLAG_COPY) as [FlagName, SiteSwap[]][];
   let out =
     file === "landing.html" ? applyCalendarPricing(html, env) : file === "landing.de.html" ? applyCalendarPricing(html, env, "de") : html;
-  if (file === "landing.html" || file === "landing.de.html") out = applyHeroLanguages(out, env);
+  if (file === "landing.html" || file === "landing.de.html") out = applyHeroEyebrow(applyHeroLanguages(out, env), env);
   // Back to the page as written: last flag first, each swap in reverse.
   for (const [, swaps] of [...flags].reverse()) {
     for (const s of [...swaps].reverse()) if (s.file === file) out = swap(out, spelling(s.on), spelling(s.off));

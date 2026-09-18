@@ -5,7 +5,6 @@ import { seedIfEmpty } from "@/lib/seed";
 import { LEGACY_TO_BUNDLE, TRIAL, checkSelection, publicLines, recommendedPlan, sellable, videoLive, type BillingCycle } from "@/lib/billing/plans";
 import { productsOf, subscriptionMarket } from "@/lib/billing/usage";
 import { MARKETS, liveMarkets, marketOf } from "@/lib/markets";
-import { tradeFromParam } from "@/lib/signup-rules";
 import { stripeEnabled } from "@/lib/billing/stripe";
 import { paymentsSoonSentence } from "@/lib/billing/trial-end";
 import { siteOrigin } from "@/lib/origin";
@@ -48,7 +47,6 @@ export default async function CheckoutPage({
     cycle?: string;
     market?: string;
     cancelled?: string;
-    trade?: string;
   }>;
 }) {
   seedIfEmpty();
@@ -76,9 +74,11 @@ export default async function CheckoutPage({
   const cycle: BillingCycle = cycleFromParam(params.cycle);
   const site = siteOrigin();
 
-  // A campaign link can say who it is for — /checkout?trade=dentist. Anything
-  // we do not recognise selects nothing, rather than guessing at their trade.
-  const trade = tradeFromParam(params.trade);
+  // `?trade=` no longer does anything here. The question it prefilled has gone
+  // from the form (founder, f6), and a hidden field carrying a campaign link's
+  // guess would be the same question asked where nobody could correct it.
+  // What kind of business a venue is is set on its own card under
+  // Settings → Locations, for as long as the venue is still empty.
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
@@ -98,7 +98,6 @@ export default async function CheckoutPage({
           coveredNote={paymentsSoonSentence(venue)}
           cancelled={Boolean(params.cancelled)}
           markets={liveMarkets()}
-          trade={trade}
           siteOrigin={site}
           video={videoLive()}
           // Read here, like the flags below: a deployment that cannot send

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { EmbedAppearance, EmbedMode } from "@/lib/types";
 import { APPEARANCE_RULES, EMBED_PALETTE, accentHex, contrastRatio, textOn } from "@/lib/embed-look";
 import LogoUpload from "@/components/LogoUpload";
+import ChatLinkCard from "../channels/ChatLinkCard";
 import InstallGuide from "./InstallGuide";
 import InstallCheck from "./InstallCheck";
 
@@ -24,26 +25,54 @@ import InstallCheck from "./InstallCheck";
  * saving, so a typo is visible rather than inferred.
  */
 
-const MODES: { id: EmbedMode; title: string; what: string; costs: string }[] = [
-  {
-    id: "both",
-    title: "Both",
-    what: "A bell and a message button, and messages always take voice notes too. The visitor picks.",
-    costs: "Most sites want this. Neither button costs anything until somebody uses it.",
-  },
-  {
-    id: "voice",
-    title: "Talking only",
-    what: "A bell. Tapping it starts a real conversation, out loud.",
-    costs: "Uses voice minutes from your plan, the same as a phone call.",
-  },
-  {
-    id: "chat",
-    title: "Messages only",
-    what: "A message button. The visitor types, or holds the microphone to send a voice note; Belline writes back.",
-    costs: "No voice minutes: a voice note is written down and counts as a message. For visitors who will not hold a conversation out loud."
-  },
-];
+/**
+ * What the widget can offer, in the words for what it is.
+ *
+ * "Bell", "talking only" and "messages only" were our words for our own
+ * buttons rather than the customer's words for what they are buying (founder,
+ * f6). The two things on offer are a receptionist with a face who speaks, and
+ * one who types: video and chat.
+ *
+ * Which of the two the first one is depends on the venue, so it is an argument
+ * rather than written in. `video` is `video.avatar` and this venue's own
+ * availability (video/availability.ts `videoOffered`) — the same question the
+ * widget itself asks. Where it is off, that button starts a spoken call with
+ * no face, and calling it "Video" here would sell something the visitor will
+ * not get. It says Voice, which is true, and becomes Video the day video is
+ * live for the venue, with no edit on this screen.
+ *
+ * `videoRatio` is the catalogue's own (plans.ts), so the cost sentence cannot
+ * drift from what is billed.
+ */
+export function modesFor(video: boolean, videoRatio: number): { id: EmbedMode; title: string; what: string; costs: string }[] {
+  const spoken = video ? "Video" : "Voice";
+  const talks = video
+    ? "Belline appears with a face and answers out loud, in the visitor's own browser — it uses their microphone, never their camera."
+    : "Belline answers out loud, in the visitor's own browser, using their microphone.";
+  const talkCost = video
+    ? `Uses voice minutes from your plan; each video minute uses ${videoRatio} of them.`
+    : "Uses voice minutes from your plan, the same as a phone call.";
+  return [
+    {
+      id: "both",
+      title: `${spoken} and chat`,
+      what: `Two buttons and the visitor picks: one to talk, one to write — and messages always take voice notes too. ${talks}`,
+      costs: `Most sites want this. Neither button costs anything until somebody uses it. ${talkCost} Messages use none.`,
+    },
+    {
+      id: "voice",
+      title: `${spoken} only`,
+      what: `One button. Tapping it starts a conversation out loud. ${talks}`,
+      costs: talkCost,
+    },
+    {
+      id: "chat",
+      title: "Chat only",
+      what: "One button. The visitor types, or holds the microphone to send a voice note; Belline writes back. Nobody has to talk out loud.",
+      costs: "No voice minutes: a voice note is written down and counts as a message.",
+    },
+  ];
+}
 
 export default function WidgetEditor({
   locationId,
@@ -59,6 +88,11 @@ export default function WidgetEditor({
   whatsappNumber,
   detectedAt,
   logoUrl: logoUrlAtLoad = null,
+  video = false,
+  videoRatio,
+  facePicker = false,
+  chatLink,
+  chatLinkLive = false,
 }: {
   locationId: string;
   enabled: boolean;
@@ -82,6 +116,25 @@ export default function WidgetEditor({
    * it the logo can still be uploaded right here.
    */
   logoUrl?: string | null;
+  /**
+   * Belline answers this venue's website on video (video/availability.ts
+   * `videoOffered`) — the same question the widget asks. It decides whether
+   * the spoken option is called Video or Voice, and nothing else on the page.
+   */
+  video?: boolean;
+  /** Voice minutes a video minute costs (plans.ts `VIDEO_VOICE_MINUTE_RATIO`). */
+  videoRatio: number;
+  /**
+   * The face picker is on Your business → Agent for this venue — the same
+   * condition that decides whether it renders there. Only then is it linked
+   * to from here: a link to a control that is not on the page is worse than
+   * no link at all.
+   */
+  facePicker?: boolean;
+  /** The venue's shareable chat link, or null until it has made one. */
+  chatLink: string | null;
+  /** Is the venue answering yet? The link exists either way; only one of them is answered. */
+  chatLinkLive?: boolean;
 }) {
   const router = useRouter();
   const [enabled, setEnabled] = useState(enabledAtLoad);
@@ -99,6 +152,9 @@ export default function WidgetEditor({
   const [customHex, setCustomHex] = useState(
     appearance.accent && !EMBED_PALETTE[appearance.accent] ? appearance.accent : "",
   );
+  const [customChatHex, setCustomChatHex] = useState(
+    appearance.chatAccent && !EMBED_PALETTE[appearance.chatAccent] ? appearance.chatAccent : "",
+  );
   const [logoUrl, setLogoUrl] = useState<string | null>(logoUrlAtLoad);
   // As the widget resolves it: the logo only when chosen *and* uploaded.
   const showsLogo = look.buttonMark === "logo" && Boolean(logoUrl);
@@ -109,6 +165,17 @@ export default function WidgetEditor({
   const accentMark = accentText;
   const contrast = Math.max(contrastRatio(accent, "#FFFFFF"), contrastRatio(accent, "#1D1D1F"));
   const tooPale = contrast < APPEARANCE_RULES.minContrast;
+  // The message button's own colour, where the venue gave it one. Null is the
+  // quiet paper button, which is what everybody starts with.
+  const chatAccent = look.chatAccent ? (accentHex(look.chatAccent) ?? null) : null;
+  const chatAccentText = chatAccent ? textOn(chatAccent) : "#1D1D1F";
+  const chatContrast = chatAccent ? Math.max(contrastRatio(chatAccent, "#FFFFFF"), contrastRatio(chatAccent, "#1D1D1F")) : Infinity;
+  const chatTooPale = chatContrast < APPEARANCE_RULES.minContrast;
+
+  // The word for the spoken option on this venue, so the labels, the status
+  // line and the preview all use the one the buyer will actually get.
+  const MODES = modesFor(video, videoRatio);
+  const spokenWord = video ? "video" : "voice";
 
   // voiceAllowed/chatAllowed, off the saved mode rather than off a server prop
   // captured before the save. Read from the prop, an owner who switched the
@@ -215,10 +282,10 @@ export default function WidgetEditor({
           {enabled && (
             <span className="muted" style={{ fontWeight: 400 }}>
               {offering.voice && offering.chat
-                ? " · talking and messages"
+                ? ` · ${spokenWord} and chat`
                 : offering.chat
-                  ? " · messages"
-                  : " · talking"}
+                  ? " · chat"
+                  : ` · ${spokenWord}`}
             </span>
           )}
         </div>
@@ -232,7 +299,7 @@ export default function WidgetEditor({
                     <strong>
                       {used.voice} <span>of {limits.voice}</span>
                     </strong>
-                    <span className="muted">conversations today, by voice</span>
+                    <span className="muted">spoken conversations today</span>
                   </div>
                 )}
                 {offering.chat && (
@@ -240,7 +307,7 @@ export default function WidgetEditor({
                     <strong>
                       {used.chat} <span>of {limits.chat}</span>
                     </strong>
-                    <span className="muted">message threads today</span>
+                    <span className="muted">chat threads today</span>
                   </div>
                 )}
               </div>
@@ -248,7 +315,7 @@ export default function WidgetEditor({
                 A daily ceiling, so an unattended tab on a slow afternoon cannot
                 run up a bill. Past it, visitors are asked to ring you instead.
                 {minutesCount && offering.voice
-                  ? " Spoken conversations come out of your plan's voice minutes; messages do not."
+                  ? ` Spoken conversations come out of your plan's voice minutes${video ? ` — a video minute uses ${videoRatio} of them` : ""}; chat threads do not.`
                   : ""}
               </p>
               <button
@@ -274,6 +341,20 @@ export default function WidgetEditor({
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head">What it offers</div>
         <div style={{ padding: 18 }}>
+          {/*
+            Said once, plainly, on the screen where somebody decides to put
+            this on their own website (founder, f6). It is not a disclaimer —
+            it is what they are buying, and it is what their visitors are told
+            too: the video call carries an "AI concierge" label on the circle,
+            and the agent is instructed never to claim or imply it is a person,
+            in any language (lib/agent/prompt.ts).
+          */}
+          <p style={{ fontSize: 13.5, lineHeight: 1.6, margin: "0 0 16px", maxWidth: "68ch" }}>
+            <strong style={{ fontWeight: 600 }}>Belline is an AI assistant, not a human receptionist.</strong>{" "}
+            Your visitors see that too — the call is labelled as AI, and if anyone asks whether they are
+            talking to a person, it says plainly that it is not. What it cannot decide on its own, it
+            passes to your team.
+          </p>
           <div className="widget-modes" role="radiogroup" aria-label="What the widget offers">
             {MODES.map((m) => {
               const on = pick === m.id;
@@ -301,15 +382,31 @@ export default function WidgetEditor({
         <div className="panel-head">
           How it looks
           <span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>
-            your words, your colour, the bell or your logo
+            your words, your colours, our mark or your logo
           </span>
         </div>
+        {/*
+          "Where can I change the face of the Agent?" (founder, f6.) On Your
+          business → Agent, and this is where somebody who is deciding how the
+          widget looks goes to find it. Only where that picker is actually on
+          that page, so the link is never a dead end.
+        */}
+        {facePicker && (
+          <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6, margin: "0 18px", padding: "14px 0 0" }}>
+            This is the button. Belline&rsquo;s <strong style={{ fontWeight: 600 }}>face and background on a video call</strong> are
+            chosen under{" "}
+            <a href="/agents" style={{ color: "var(--accent)" }}>
+              Your business → Agent
+            </a>
+            .
+          </p>
+        )}
         <div style={{ padding: 18, display: "grid", gap: 18, gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }} className="widget-look">
           <div style={{ display: "grid", gap: 14 }}>
             {(
               [
-                ["voiceLabel", "The bell says", "Talk to us", pick !== "chat"],
-                ["chatLabel", "The message button says", "Chat with us", pick !== "voice"],
+                ["voiceLabel", `The ${spokenWord} button says`, "Talk to us", pick !== "chat"],
+                ["chatLabel", "The chat button says", "Chat with us", pick !== "voice"],
                 ["whatsappLabel", "The WhatsApp button says", "WhatsApp us", Boolean(whatsappNumber)],
               ] as const
             )
@@ -331,52 +428,70 @@ export default function WidgetEditor({
               ))}
 
             <div>
-              <label>Colour of the main button</label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                {Object.entries(EMBED_PALETTE).map(([name, hex]) => {
-                  const on = (look.accent ?? "ink") === name;
-                  return (
-                    <button
-                      key={name}
-                      type="button"
-                      aria-label={name}
-                      aria-pressed={on}
-                      title={name}
-                      onClick={() => {
-                        setCustomHex("");
-                        setLook((prev) => ({ ...prev, accent: name }));
-                      }}
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 999,
-                        background: hex,
-                        border: on ? "3px solid var(--text)" : "3px solid transparent",
-                        boxShadow: "0 0 0 1px var(--border)",
-                        cursor: "pointer",
-                      }}
-                    />
-                  );
-                })}
-                <input
-                  value={customHex}
-                  placeholder="#2F4A3A"
-                  aria-label="Your own colour, as a hex"
-                  maxLength={7}
-                  style={{ maxWidth: 110, fontFamily: "var(--mono, ui-monospace, monospace)" }}
-                  onChange={(e) => {
-                    const v = e.target.value.trim();
-                    setCustomHex(v);
-                    if (/^#[0-9a-f]{6}$/i.test(v)) setLook((prev) => ({ ...prev, accent: v.toUpperCase() }));
-                  }}
-                />
-              </div>
+              <label id="accent-label">Colour of the main button</label>
+              <Swatches
+                labelledBy="accent-label"
+                name="main"
+                picked={look.accent}
+                custom={customHex}
+                onPick={(value) => {
+                  setCustomHex("");
+                  setLook((prev) => ({ ...prev, accent: value }));
+                }}
+                onCustom={(v) => {
+                  setCustomHex(v);
+                  if (/^#[0-9a-f]{6}$/i.test(v)) setLook((prev) => ({ ...prev, accent: v.toUpperCase() }));
+                }}
+              />
               <div style={{ fontSize: 11.5, marginTop: 6, color: tooPale ? "var(--bad)" : "var(--muted)" }}>
                 {tooPale
                   ? "Not enough contrast for the words to be read. Try a deeper or a lighter shade."
                   : `Words in ${accentText === "#FFFFFF" ? "white" : "ink"} on it — ${contrast.toFixed(1)}:1, readable.`}
               </div>
             </div>
+
+            {/*
+              The message button's own colour (founder, f6/12). Only where it
+              is the second button: on its own it *is* the main button and the
+              colour above is already its colour, so offering a second one here
+              would be two controls for one thing. "Plain white" is the
+              default and the way back, because a pair where both buttons
+              shout has no primary in it.
+            */}
+            {pick === "both" && (
+              <div>
+                <label id="chat-accent-label">Colour of the message button</label>
+                <Swatches
+                  labelledBy="chat-accent-label"
+                  name="message"
+                  picked={look.chatAccent}
+                  custom={customChatHex}
+                  plain={{
+                    on: !look.chatAccent,
+                    label: "Plain white",
+                    onPick: () => {
+                      setCustomChatHex("");
+                      setLook((prev) => ({ ...prev, chatAccent: undefined }));
+                    },
+                  }}
+                  onPick={(value) => {
+                    setCustomChatHex("");
+                    setLook((prev) => ({ ...prev, chatAccent: value }));
+                  }}
+                  onCustom={(v) => {
+                    setCustomChatHex(v);
+                    if (/^#[0-9a-f]{6}$/i.test(v)) setLook((prev) => ({ ...prev, chatAccent: v.toUpperCase() }));
+                  }}
+                />
+                <div style={{ fontSize: 11.5, marginTop: 6, color: chatTooPale ? "var(--bad)" : "var(--muted)" }}>
+                  {chatTooPale
+                    ? "Not enough contrast for the words to be read. Try a deeper or a lighter shade."
+                    : chatAccent
+                      ? `Words in ${chatAccentText === "#FFFFFF" ? "white" : "ink"} on it — ${chatContrast.toFixed(1)}:1, readable.`
+                      : "White with ink words, so the two buttons read as one offer with a main one in it."}
+                </div>
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
               <div>
@@ -445,7 +560,7 @@ export default function WidgetEditor({
               <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 4 }}>
                 {(
                   [
-                    ["bell", "Belline's bell"],
+                    ["bell", "Belline's mark"],
                     ["logo", "Your logo"],
                   ] as const
                 ).map(([value, text]) => {
@@ -473,8 +588,8 @@ export default function WidgetEditor({
               </div>
               <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
                 {logoUrl
-                  ? "Your logo sits in a white circle, so it reads on any colour. If it ever fails to load, visitors see the bell."
-                  : "Upload your logo above to put it on the button. Until then, the button shows the bell."}
+                  ? "Your logo sits on a thin white disc, so it reads on any colour. If it ever fails to load, visitors see Belline's mark."
+                  : "Upload your logo above to put it on the button. Until then, the button shows Belline's mark."}
               </div>
             </fieldset>
 
@@ -496,14 +611,23 @@ export default function WidgetEditor({
             </div>
           </div>
 
-          {/* The preview: the buttons exactly as the widget will draw them. */}
+          {/*
+            The preview: the buttons exactly as the widget will draw them.
+
+            A card of its own height, not a column stretched to whatever the
+            controls beside it happen to need. Stretched, its bottom-right
+            corner ran the length of the page — and Belle's own bell is fixed
+            in that corner, so the two sat on each other at almost any scroll
+            position (founder, f6/4: she must not overlap the page).
+          */}
           <div
             aria-label="Preview"
             style={{
               borderRadius: 12,
               border: "1px solid var(--border)",
               background: "repeating-linear-gradient(45deg, var(--panel-2) 0 10px, var(--panel) 10px 20px)",
-              minHeight: 260,
+              height: 300,
+              alignSelf: "start",
               position: "relative",
             }}
           >
@@ -525,10 +649,16 @@ export default function WidgetEditor({
                 <PreviewFab
                   label={look.chatLabel || "Chat with us"}
                   round={look.shape === "round"}
-                  quiet={pick === "both"}
+                  quiet={pick === "both" && !chatAccent}
                   mark="bubble"
-                  accent={pick === "chat" ? { bg: accent, fg: accentText, mark: accentMark } : undefined}
-                  // In "Messages only" this is the main button: it carries the logo and rings.
+                  accent={
+                    pick === "chat"
+                      ? { bg: accent, fg: accentText, mark: accentMark }
+                      : chatAccent
+                        ? { bg: chatAccent, fg: chatAccentText, mark: chatAccentText }
+                        : undefined
+                  }
+                  // In "Chat only" this is the main button: it carries the logo and rings.
                   logoUrl={pick === "chat" && showsLogo ? logoUrl : null}
                   ring={pick === "chat" && Boolean(look.ring)}
                 />
@@ -549,9 +679,9 @@ export default function WidgetEditor({
         <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6, margin: "0 18px 18px", maxWidth: "68ch" }}>
           Saved with the button below (your logo itself saves as soon as you upload it). Changes
           reach your website within a minute — nothing to paste again. The words are limited to{" "}
-          {APPEARANCE_RULES.labelMaxChars} characters and the colour has to keep the words readable.
-          The bell and the message bubble themselves do not change; the only other mark the main
-          button can carry is your own logo.
+          {APPEARANCE_RULES.labelMaxChars} characters and every colour has to keep the words readable.
+          Belline&rsquo;s own marks do not change; the only other picture a button can carry is your
+          own logo.
         </p>
       </div>
 
@@ -565,7 +695,7 @@ export default function WidgetEditor({
             rows={3}
             value={sites}
             onChange={(e) => setSites(e.target.value)}
-            placeholder={"marinahair.ae\nwww.marinahair.ae"}
+            placeholder={"yourbusiness.ae\nwww.yourbusiness.ae"}
             spellCheck={false}
             style={{ fontFamily: "inherit" }}
           />
@@ -574,9 +704,9 @@ export default function WidgetEditor({
             will refuse anywhere else — this is what stops somebody copying your
             line of HTML onto their own site and spending your minutes.
             {" "}
-            <strong style={{ fontWeight: 500 }}>marinahair.ae</strong> and
+            <strong style={{ fontWeight: 500 }}>yourbusiness.ae</strong> and
             {" "}
-            <strong style={{ fontWeight: 500 }}>www.marinahair.ae</strong> count
+            <strong style={{ fontWeight: 500 }}>www.yourbusiness.ae</strong> count
             as the same site; a staging address does not, so add that too if you
             test there.
           </p>
@@ -625,7 +755,110 @@ export default function WidgetEditor({
        * panel that is not on screen is not polling.
        */}
       {enabled && <InstallCheck locationId={locationId} detectedAt={detectedAt} />}
+
+      {/*
+        The same chat, for the places that are not a website (founder, f6/14).
+        It was only on the Channels → Link tab, which is a tab you find by
+        looking for it; somebody who has just set the chat up on their site is
+        exactly the person who wants the link for their Instagram bio, and this
+        is where they are. One card, the same component the Link tab renders,
+        so there is one implementation of making and copying it.
+      */}
+      <div className="panel" style={{ marginTop: 16 }}>
+        <div className="panel-head">
+          Your chat link
+          <span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>
+            the same chat, with no website needed
+          </span>
+        </div>
+        <div style={{ padding: 18 }}>
+          <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.65, margin: "0 0 4px", maxWidth: "62ch" }}>
+            A link that opens this chat on its own page. Put it in your Instagram bio, your Google
+            Business Profile, your WhatsApp status or an email signature — anywhere you cannot paste
+            a line of HTML. It answers from the same information as the button on your website, and
+            its threads count the same way.
+          </p>
+          <ChatLinkCard locationId={locationId} url={chatLink} live={chatLinkLive} />
+        </div>
+      </div>
     </>
+  );
+}
+
+/**
+ * The palette, a free hex, and optionally "plain white".
+ *
+ * One component because the main button and the message button choose their
+ * colour the same way and by the same contrast rule, and two copies of a
+ * swatch row is how they end up disagreeing about what "picked" looks like.
+ */
+function Swatches({
+  labelledBy,
+  name,
+  picked,
+  custom,
+  plain,
+  onPick,
+  onCustom,
+}: {
+  labelledBy: string;
+  /** Names this row's buttons apart for a screen reader: "forest, main button". */
+  name: string;
+  picked: string | undefined;
+  custom: string;
+  /** The no-colour option, where there is one. */
+  plain?: { on: boolean; label: string; onPick: () => void };
+  onPick: (value: string) => void;
+  onCustom: (value: string) => void;
+}) {
+  return (
+    <div role="group" aria-labelledby={labelledBy} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      {plain && (
+        <button
+          type="button"
+          aria-pressed={plain.on}
+          title={plain.label}
+          aria-label={`${plain.label}, ${name} button`}
+          onClick={plain.onPick}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 999,
+            background: "#FFFFFF",
+            border: plain.on ? "3px solid var(--text)" : "3px solid transparent",
+            boxShadow: "0 0 0 1px var(--border)",
+            cursor: "pointer",
+          }}
+        />
+      )}
+      {Object.entries(EMBED_PALETTE).map(([swatch, hex]) => (
+        <button
+          key={swatch}
+          type="button"
+          aria-label={`${swatch}, ${name} button`}
+          aria-pressed={picked === swatch}
+          title={swatch}
+          onClick={() => onPick(swatch)}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 999,
+            background: hex,
+            border: picked === swatch ? "3px solid var(--text)" : "3px solid transparent",
+            boxShadow: "0 0 0 1px var(--border)",
+            cursor: "pointer",
+          }}
+        />
+      ))}
+      <input
+        value={custom}
+        placeholder="#2F4A3A"
+        aria-label={`Your own colour for the ${name} button, as a hex`}
+        maxLength={7}
+        style={{ maxWidth: 110, fontFamily: "var(--mono, ui-monospace, monospace)" }}
+        onChange={(e) => onCustom(e.target.value.trim())}
+      />
+    </div>
   );
 }
 
@@ -665,7 +898,7 @@ function PreviewFab({
         alignItems: "center",
         justifyContent: "center",
         gap: 10,
-        padding: round ? 0 : logo ? "11px 22px 11px 12px" : "14px 22px 14px 18px",
+        padding: round ? 0 : logo ? "12px 22px 12px 14px" : "14px 22px 14px 18px",
         width: round ? 58 : undefined,
         height: round ? 58 : undefined,
         borderRadius: 999,
@@ -682,9 +915,9 @@ function PreviewFab({
           style={{
             display: "block",
             flex: "none",
-            width: round ? 46 : 30,
-            height: round ? 46 : 30,
-            padding: round ? 5 : 3,
+            width: round ? 40 : 28,
+            height: round ? 40 : 28,
+            padding: round ? 2 : 1,
             boxSizing: "border-box",
             borderRadius: 999,
             background: "#FFFFFF",

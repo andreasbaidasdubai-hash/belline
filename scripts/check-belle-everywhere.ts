@@ -75,6 +75,7 @@ const { fakeModel, toolReply } = await import("../src/lib/testing/stubs");
 const { staticPrompt } = await import("../src/lib/agent/prompt");
 const { navFor, INBOX_TABS, CHANNEL_TABS, SETTINGS_TABS, businessTabs } = await import("../src/lib/nav");
 const { BELLINE_LOCATION_ID } = await import("../src/lib/seed-belline");
+const { BELLINE_TENANT_ID } = await import("../src/lib/tenancy");
 
 seedIfEmpty();
 
@@ -358,21 +359,34 @@ await test("owner video has its own daily ceiling, VIDEO_SUPPORT_MAX_SESSIONS_PE
 head("Not on a read-only view-as session");
 
 await test("a view-as session gets no Ask Belle, and every Belle route refuses it", () => {
-  const venues = listLocationsFor(alpha.user.tenantId);
   // The staff console's own session and grant shapes, not a stand-in for them.
   const normal: Session = { id: "s1", userId: alpha.user.id, createdAt: "", expiresAt: "" };
   const view: Session = {
     ...normal,
     viewAs: { staffUserId: "staff", tenantId: alpha.user.tenantId, startedAt: "", expiresAt: "", reason: "checking" },
   };
-  assert.equal(identity.dashboardBelleVenue(alpha.user, venues, normal)?.id, alpha.location.id);
-  assert.equal(identity.dashboardBelleVenue(alpha.user, venues, view), undefined);
-  assert.equal(identity.dashboardBelleVenue(alpha.user, listLocationsFor(bravo.user.tenantId), normal), undefined, "Belle offered on another tenant's venue");
+  assert.equal(identity.dashboardBelleVenue(alpha.user, normal)?.id, alpha.location.id);
+  assert.equal(identity.dashboardBelleVenue(alpha.user, view), undefined);
+  assert.equal(identity.dashboardBelleVenue(bravo.user, normal)?.id, bravo.location.id, "Belle is not offered on this tenant's own venue");
+  assert.notEqual(identity.dashboardBelleVenue(alpha.user, normal)?.id, bravo.location.id, "Belle offered on another tenant's venue");
+  // Belline's own account gets the bell on its own venue, which is marked
+  // internal and so is missing from every customer-facing list. Written out in
+  // the shell as `listLocationsFor(user.tenantId)` it was dropped, and every
+  // Belline login had no bell on any dashboard page (founder, f6).
+  const belline = listLocationsFor(BELLINE_TENANT_ID, { includeInternal: true })[0];
+  assert.ok(belline?.internal, "the Belline venue is no longer internal; this test proves nothing");
+  const bellineStaff = { ...alpha.user, tenantId: BELLINE_TENANT_ID, locationIds: [] };
+  assert.equal(identity.dashboardBelleVenue(bellineStaff, normal)?.id, belline.id, "a Belline login still gets no Belle");
+
   // The shell reads the view once — the staff console's own state — and it
-  // decides both the banner and whether Belle is there at all.
+  // decides both the banner and whether Belle is there at all. The venue
+  // itself comes from the one definition, so the shell and the video frame
+  // cannot answer that question differently.
   const shell = source("src/app/(app)/layout.tsx");
   assert.match(shell, /const view = viewAsState\(/);
-  assert.match(shell, /const belleVenue = view \? undefined : listLocationsFor\(user\.tenantId\)\.find/);
+  assert.match(shell, /const belleVenue = view \? undefined : dashboardBelleVenue\(user, null\)/);
+  assert.doesNotMatch(shell, /listLocationsFor/, "the shell works Belle's venue out for itself again");
+  assert.match(source("src/app/embed/belle/video/page.tsx"), /dashboardBelleVenue\(user, null\)/);
   assert.match(source("src/app/setup/[step]/page.tsx"), /<BelleDock [^>]*off=\{await onViewAs\(\)\}/);
   assert.match(source("src/app/setup/BelleDock.tsx"), /if \(off\) return <div className="belle-host">\{children\}<\/div>;/);
   assert.match(source("src/lib/belle/server.ts"), /if \(isViewAs\(session\)\)/);

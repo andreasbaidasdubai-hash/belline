@@ -426,8 +426,15 @@ await test("the floating bell is the one way to Belle, on the setup steps and th
   assert.match(shell, /has-belle-fab/);
   assert.doesNotMatch(shell, /label: "Belle"/, "Belle is still an item in the sidebar");
   assert.doesNotMatch(css, /setup-ask-narrow|setup-dock-tab/);
-  // Only for somebody who may change the venue she would change.
-  assert.match(shell, /canEditAgent\(user, l\.id\)/);
+  // Only for somebody who may change the venue she would change. The rule
+  // itself moved into belle/identity.ts (founder, f6): written out in the
+  // shell it listed the tenant's venues the way a customer's own list does,
+  // which drops one marked internal — so a Belline login, whose only venue is
+  // Belline's own, had no bell on any dashboard page.
+  assert.match(shell, /const belleVenue = view \? undefined : dashboardBelleVenue\(user, null\)/);
+  const identity = source("src/lib/belle/identity.ts");
+  assert.match(identity, /canEditAgent\(user, l\.id\)/);
+  assert.match(identity, /includeInternal: true/);
 });
 
 globalThis.fetch = realFetch;

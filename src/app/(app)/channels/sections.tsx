@@ -17,6 +17,10 @@ import { flag } from "@/lib/flags";
 import { CODES_EXPLAINED, DIAGNOSIS, PBX_NOTE, PHONE_OPTIONAL, UNVERIFIED_NOTE, forwardingCodes, uaeCarriers } from "@/lib/telephony/forwarding";
 import { verificationState } from "@/lib/telephony/verify";
 import { chatLinkUrl } from "@/lib/chat-link";
+import { venueAllowlisted, videoOffered } from "@/lib/video/availability";
+import { videoConfig } from "@/lib/video/config";
+import { VIDEO_VOICE_MINUTE_RATIO } from "@/lib/billing/plans";
+import { isActivated } from "@/lib/onboarding/journey";
 import { logoUrlFor } from "@/lib/logo";
 import WidgetEditor from "../website/WidgetEditor";
 import PhoneSetup from "../golive/PhoneSetup";
@@ -67,6 +71,20 @@ export async function WebsiteSection({ location }: { location: Location }) {
       whatsappNumber={whatsapp?.phoneE164 ?? null}
       detectedAt={location.onboarding?.channels.web?.detectedAt ?? null}
       logoUrl={logoUrlFor(location)}
+      // Whether the spoken button is a face or a voice, asked the way the
+      // widget itself asks it, so the screen cannot sell video where the
+      // visitor would get a voice (founder, f6).
+      video={videoOffered(location)}
+      videoRatio={VIDEO_VOICE_MINUTE_RATIO}
+      // "Where can I change the face of the Agent?" (founder, f6). It is on
+      // Your business → Agent, and this is where somebody setting up the
+      // website looks for it. The same condition that decides whether the
+      // picker renders there ((app)/agents/page.tsx), not a near-enough one:
+      // a link to a control that is not on the page is worse than no link.
+      facePicker={flag("video.avatar") && venueAllowlisted(location, videoConfig())}
+      // The same chat, for the places that are not a website.
+      chatLink={chatLinkUrl(location)}
+      chatLinkLive={isActivated(location)}
     />
   );
 }

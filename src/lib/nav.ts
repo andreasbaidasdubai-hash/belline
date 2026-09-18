@@ -86,7 +86,17 @@ export function notOnDiaryHome(location: Location): string {
 
 export const INBOX_MATCH = ["/requests", "/conversations", "/inbox", "/calls", "/attention"];
 export const BUSINESS_MATCH = ["/venue", "/agents"];
-export const SETTINGS_MATCH = ["/locations", "/team", "/billing", "/settings"];
+/**
+ * Settings, without Billing.
+ *
+ * Billing is its own menu item (founder, f6): "where do I add payment
+ * details?" has to be answerable from the menu, not by knowing that the third
+ * tab under a thing called Settings is where the money lives. It keeps its
+ * place in `SETTINGS_TABS`, because from Locations or Team it is still the
+ * neighbouring page — but the sidebar marks Billing and not Settings when you
+ * are on it, or two menu items light up at once.
+ */
+export const SETTINGS_MATCH = ["/locations", "/team", "/settings"];
 
 function mainNav(user: User, locations: Location[], counts: NavCounts): NavItem[] {
   const { outstanding = 0 } = counts;
@@ -103,7 +113,12 @@ function mainNav(user: User, locations: Location[], counts: NavCounts): NavItem[
           { href: "/calendars", label: "Calendars" },
         ]
       : []),
-    ...(canManageUsers(user) ? [{ href: "/locations", label: "Settings", match: SETTINGS_MATCH }] : []),
+    ...(canManageUsers(user)
+      ? [
+          { href: "/locations", label: "Settings", match: SETTINGS_MATCH },
+          { href: "/billing", label: "Billing" },
+        ]
+      : []),
   ];
 }
 

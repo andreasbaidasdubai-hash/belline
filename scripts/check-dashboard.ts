@@ -125,14 +125,18 @@ const requestVenue = () => ({ ...venue(), onboarding: { ...venue().onboarding!, 
 /** The same venue, on Belline's own diary, as the pilots and fixtures are. */
 const diaryVenue = () => ({ ...venue(), onboarding: { ...venue().onboarding!, destination: { kind: "belline" as const, setAt: at } } });
 const hrefs = (items: { href: string }[]) => items.map((i) => i.href);
-const OWNER_MENU = ["/", "/requests", "/guests", "/venue", "/channels", "/calendars", "/locations"];
+// Billing is its own menu item (founder, f6): "where do I add payment
+// details?" has to be answerable from the menu. It keeps its place in
+// SETTINGS_TABS, but SETTINGS_MATCH no longer claims it, or Settings and
+// Billing would both light up on it.
+const OWNER_MENU = ["/", "/requests", "/guests", "/venue", "/channels", "/calendars", "/locations", "/billing"];
 
-await test("an owner's menu is Home, Inbox, Customers, Your business, Channels, Calendars, Settings", () => {
+await test("an owner's menu is Home, Inbox, Customers, Your business, Channels, Calendars, Settings, Billing", () => {
   const shape = navFor(owner, [requestVenue()], {});
   assert.deepEqual(hrefs(shape.items), OWNER_MENU);
   assert.deepEqual(
     shape.items.map((i) => i.label),
-    ["Home", "Inbox", "Customers", "Your business", "Channels", "Calendars", "Settings"],
+    ["Home", "Inbox", "Customers", "Your business", "Channels", "Calendars", "Settings", "Billing"],
   );
   assert.equal(shape.diary, null, "a request venue was shown the diary");
   assert.equal(shape.staff, null, "a customer was shown Belline's staff tools");
@@ -232,8 +236,58 @@ await test("each destination is marked current from any of its tabs", () => {
   assert.deepEqual(on("/agents"), ["Your business"]);
   assert.deepEqual(on("/venue/rules"), ["Your business"]);
   assert.deepEqual(on("/channels/phone"), ["Channels"]);
-  assert.deepEqual(on("/billing"), ["Settings"]);
+  // Exactly one menu item lights up on Billing, now that it has its own.
+  assert.deepEqual(on("/billing"), ["Billing"]);
   assert.deepEqual(on("/team"), ["Settings"]);
+});
+
+// Three questions the founder asked of the built dashboard (f6/15-17), each of
+// which had an answer you could only find by already knowing it.
+await test("adding a location, the agent's face and payment details are reachable from where the question is asked", () => {
+  const read = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
+
+  // "If I needed to add another location, where and how?" — the row of venue
+  // names at the top of every page ends in the way to a new one, and it lands
+  // with the form already open. Owners only: only an owner may add one.
+  const tabs = read("src/components/LocationTabs.tsx");
+  assert.match(tabs, /href="\/locations\?add=1"/);
+  assert.match(tabs, /canManageUsers\(user\) \? \(/);
+  assert.match(tabs, /Add a location/);
+  // Shown for a business with one venue too — that is the whole case.
+  assert.match(tabs, /if \(locations\.length === 1\) \{[\s\S]{0,700}\{addLocation\}/);
+  const manager = read("src/app/(app)/locations/LocationsManager.tsx");
+  assert.match(manager, /useSearchParams\(\)\.get\("add"\) === "1" && canManage && add\.allowed/);
+
+  // "Where can I change the face of the Agent?" — linked from the website
+  // settings, and only where that picker is really on the agent page.
+  const sections = read("src/app/(app)/channels/sections.tsx");
+  assert.match(sections, /facePicker=\{flag\("video\.avatar"\) && venueAllowlisted\(location, videoConfig\(\)\)\}/);
+  assert.match(read("src/app/(app)/agents/page.tsx"), /flag\("video\.avatar"\) && venueAllowlisted\(location, videoConfig\(\)\)/, "the link's condition and the picker's have drifted apart");
+  const editor = read("src/app/(app)/website/WidgetEditor.tsx");
+  assert.match(editor, /\{facePicker && \(/);
+  assert.match(editor, /href="\/agents"/);
+
+  // Billing is its own menu item, not the third tab under something called
+  // Settings — and still a neighbour of Locations and Team from those pages.
+  const items = navFor(owner, [requestVenue()], {}).items;
+  assert.ok(items.some((i) => i.href === "/billing" && i.label === "Billing"), "Billing is not in the menu");
+  assert.deepEqual(hrefs(SETTINGS_TABS), ["/locations", "/team", "/billing"]);
+});
+
+await test("payment details say what can be done today, and never draw a card form", () => {
+  const panel = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "billing", "PaymentDetails.tsx"), "utf8");
+  // Three states, each true of itself. The closed one is the one that is true
+  // today: billing.stripe is off, so there is nothing to add, and it says so.
+  assert.match(panel, /Card payments are not open yet/);
+  assert.match(panel, /nothing is being charged/);
+  assert.match(panel, /Belline never sees or stores a card number/);
+  // No card form in any state: not a field, not a form, nowhere for a card
+  // number to be typed into Belline at all.
+  assert.doesNotMatch(panel, /<input|<form|autoComplete="cc-|cardNumber|cvc/i, "a card form on a page with no processor behind it");
+  const page = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "billing", "page.tsx"), "utf8");
+  assert.match(page, /paymentsOpen=\{stripeEnabled\(\)\}/);
+  // On the no-plan page too: "where do I add a card?" comes before a plan.
+  assert.equal(page.split("<PaymentDetails").length, 3, "payment details are on only one of the two billing states");
 });
 
 await test("the tabs inside each destination are the approved ones", () => {

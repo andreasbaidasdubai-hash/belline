@@ -18,13 +18,14 @@ import { extendTrialIfPaymentsClosed, raisePacksHeldIfPaymentsClosed, raiseTrial
 import { ALERT_THRESHOLDS, CHANNELS, isPooled, money, nextPlanUp, productById, videoLive } from "@/lib/billing/plans";
 import { packsSentence } from "@/lib/billing/speak";
 import { canManageUsers } from "@/lib/auth";
+import { stripeEnabled } from "@/lib/billing/stripe";
 import UsagePolicy from "./UsagePolicy";
 import { MARKETS } from "@/lib/markets";
 import { listCalls } from "@/lib/store";
 import { addDays, dateToSpoken, todayIn } from "@/lib/time";
 import { LocationTabs, PageHeader } from "@/components/LocationTabs";
 
-import ManageBilling from "./ManageBilling";
+import PaymentDetails from "./PaymentDetails";
 import SectionTabs from "@/components/SectionTabs";
 import { SETTINGS_TABS } from "@/lib/nav";
 
@@ -155,7 +156,7 @@ export default async function BillingPage({
   if (!account) {
     return (
       <>
-        <PageHeader title="Settings" subtitle={location.name} />
+        <PageHeader title="Billing" subtitle={location.name} />
         <LocationTabs base="/billing" active={location.id} />
         <SectionTabs tabs={SETTINGS_TABS} label="Settings" />
         <div className="panel" style={{ padding: "26px 24px" }}>
@@ -167,6 +168,11 @@ export default async function BillingPage({
           <Link href="/checkout" className="btn btn-accent" style={{ marginTop: 16, display: "inline-block" }}>
             Choose a plan
           </Link>
+        </div>
+        {/* Here too: "where do I add a card?" is a question somebody asks
+            before they are on a plan, not only after (founder, f6). */}
+        <div style={{ marginTop: 14 }}>
+          <PaymentDetails locationId={venue.id} paymentsOpen={stripeEnabled()} hasCustomer={Boolean(venue.stripe?.customerId)} />
         </div>
       </>
     );
@@ -211,7 +217,7 @@ export default async function BillingPage({
   return (
     <>
       <PageHeader
-        title="Settings"
+        title="Billing"
         subtitle={`${location.name} · ${name}${subscription.cycle === "annual" && !trialing ? ", annual" : ""}`}
       />
       <LocationTabs base="/billing" active={location.id} />
@@ -336,12 +342,21 @@ export default async function BillingPage({
               >
                 {trialing ? "Choose a plan" : "Change plan"}
               </Link>
-              {location.stripe?.customerId && (
-                // Stripe's own portal: change the card, download invoices, cancel.
-                <ManageBilling locationId={location.id} />
-              )}
             </div>
           </div>
+
+          {/*
+            Payment details, as their own panel rather than a button at the
+            bottom of "What you pay" (founder, f6). It says what can be done
+            today, which while card payments are closed is nothing — and says
+            that, rather than drawing a card form with nowhere for a card to go.
+          */}
+          <PaymentDetails
+            locationId={venue.id}
+            paymentsOpen={stripeEnabled()}
+            hasCustomer={Boolean(venue.stripe?.customerId)}
+            trialEndsOn={trialing && subscription.trial?.endsOn ? dateToSpoken(subscription.trial.endsOn) : null}
+          />
 
           {/* Shown during the trial too: the choice is made before the first
               invoice, and carries on to the plan (billing/stripe.ts). */}

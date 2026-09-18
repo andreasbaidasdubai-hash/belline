@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth-server";
 import { canManageUsers } from "@/lib/auth";
 import { listLocationsFor } from "@/lib/store";
 import { userCanSeeLocation } from "@/lib/tenancy";
-import { COMMON_TIMEZONES, addAllowance, removalOf } from "@/lib/locations";
+import { COMMON_TIMEZONES, addAllowance, kindBlock, removalOf } from "@/lib/locations";
 import { seedIfEmpty } from "@/lib/seed";
 import { PageHeader } from "@/components/LocationTabs";
 import LocationsManager from "./LocationsManager";
@@ -43,6 +43,10 @@ export default async function LocationsPage() {
         usage: removal.usage,
         archiveBlock: removal.archive,
         deleteBlock: removal.delete,
+        // Why the kind of business can no longer change, or null while it still
+        // can. The checkout stopped asking (founder, f6), so this is where a
+        // venue Belline guessed wrong about is put right.
+        kindBlock: kindBlock(l),
       };
     });
 

@@ -16,6 +16,7 @@ import { userCanSeeLocation } from "./tenancy";
 import { ensureBaseline } from "./brain";
 import { requireE164 } from "./phone";
 import { blankVenue } from "./onboarding";
+import { venueMarket } from "./onboarding/rules";
 import { canChoosePlan } from "./billing/entitlement";
 import { TRIAL } from "./billing/plans";
 import { releaseNumber } from "./telephony/pool";
@@ -330,17 +331,88 @@ export function createLocation(user: User, input: LocationInput): LocationResult
   return { ok: true, location };
 }
 
+/**
+ * Why this venue's kind can no longer change, or `null` while it still can.
+ *
+ * The engine is chosen when a venue is made and decides the shape of what is
+ * saved against it: a restaurant keeps tables, sittings and a menu, everything
+ * else keeps services, staff and a diary. Changing it throws one of those away
+ * and starts the other, so it is only ever safe while there is nothing to
+ * throw away — nothing offered, nobody on the team, no booking, no call.
+ *
+ * It has to be possible at all because the checkout stopped asking (founder,
+ * f6). A venue that signs up saying nothing about itself starts on the
+ * appointment engine, which is right for most of them and wrong for a
+ * restaurant; this is where the restaurant says so, before it has told
+ * Belline anything that would be lost.
+ */
+export function kindBlock(location: Location): string | null {
+  const usage = locationUsage(location);
+  if (usage.bookings > 0 || usage.calls > 0) {
+    return "Belline has already taken bookings or calls here, so the kind of business cannot change. Add a new location instead.";
+  }
+  const offerings =
+    (location.salon?.services.length ?? 0) +
+    (location.salon?.staff.length ?? 0) +
+    (location.restaurant?.services.length ?? 0) +
+    (location.restaurant?.tables.length ?? 0);
+  if (offerings > 0) {
+    return "What this location offers has already been saved, and a different kind of business keeps it differently. Clear it first, or add a new location.";
+  }
+  return null;
+}
+
 export function updateLocationBasics(user: User, locationId: string, input: LocationInput): LocationResult {
   const location = getLocation(locationId);
   // Inside the tenant, too: a manager limited to one branch edits that branch.
   if (!ownVenue(location, user) || !userCanSeeLocation(user, location)) return { ok: false, error: "Not your location." };
   if (user.role === "staff") return { ok: false, error: "Ask a manager to change this location." };
-  if (input.vertical !== undefined && input.vertical !== location.vertical) {
-    return { ok: false, field: "vertical", error: "The kind of business cannot change. Add a new location instead." };
+
+  let current = location;
+  // The kind of business, while the venue is still empty enough for it to be
+  // safe. The form sends `trade`, which is worked back to an engine exactly as
+  // it is when a location is added, so a trade key can never arrive as one.
+  const asked = input.vertical === undefined && input.trade !== undefined ? verticalForTrade(input.trade) : (String(input.vertical ?? location.vertical) as Vertical);
+  if (asked !== location.vertical) {
+    if (!["salon", "clinic", "restaurant"].includes(asked)) {
+      return { ok: false, field: "vertical", error: "Choose what kind of business this location is." };
+    }
+    const blocked = kindBlock(location);
+    if (blocked) return { ok: false, field: "vertical", error: blocked };
+    current = reshaped(location, asked, tradeFromParam(input.trade));
+  } else if (input.trade !== undefined) {
+    const tradeKey = tradeFromParam(input.trade);
+    current = tradeKey ? { ...location, tradeKey } : (({ tradeKey: _gone, ...rest }) => rest as Location)(location);
   }
-  const applied = applyBasics(location, input);
+
+  const applied = applyBasics(current, input);
   if (!applied.ok) return applied;
   return { ok: true, location: upsertLocation(applied.location) };
+}
+
+/**
+ * The same venue on a different engine.
+ *
+ * A fresh blank venue of the new kind supplies the sub-object the engine
+ * reads — `restaurant` for a restaurant, `salon` for everything else — and
+ * everything that identifies the venue or was set by hand is kept over the
+ * top. Built from `blankVenue` rather than written out here, so a new field
+ * on either shape arrives without anybody remembering this function.
+ */
+function reshaped(location: Location, vertical: Vertical, tradeKey: string): Location {
+  const fresh = blankVenue(
+    { businessName: location.name, email: "", password: "", vertical, timezone: location.timezone, market: venueMarket(location) },
+    location.tenantId,
+    location.businessId,
+  );
+  const { salon: _salon, restaurant: _restaurant, tradeKey: _trade, ...kept } = location;
+  return {
+    ...kept,
+    vertical,
+    ...(tradeKey ? { tradeKey } : {}),
+    ...(fresh.restaurant ? { restaurant: fresh.restaurant } : {}),
+    ...(fresh.salon ? { salon: fresh.salon } : {}),
+  };
 }
 
 export function archiveLocation(user: User, locationId: string): LocationResult {

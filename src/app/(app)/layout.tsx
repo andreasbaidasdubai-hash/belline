@@ -6,10 +6,10 @@ import { requireUser } from "@/lib/auth-server";
 import { SESSION_COOKIE, canEditAgent, canSeeLocation } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { VIEW_AS_EXIT_PATH, viewAsState } from "@/lib/staff/view-as";
-import { listLocations, listLocationsFor } from "@/lib/store";
+import { listLocations } from "@/lib/store";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import BelleDock from "@/app/setup/BelleDock";
-import { belleFaceUrl, supportVideoOn } from "@/lib/belle/identity";
+import { belleFaceUrl, dashboardBelleVenue, supportVideoOn } from "@/lib/belle/identity";
 import { attentionFor } from "@/lib/attention";
 import { recallSummary } from "@/lib/booking/recall";
 import SignOutButton from "@/components/SignOutButton";
@@ -64,9 +64,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // The venue Belle works on, as /setup/assistant chooses it: this account's
   // own, and only one this person may change. Nobody else gets the bell, and
   // nobody on a read-only view-as session: Belle saves, opens tickets and
-  // starts video, and a view can do none of them (belle/identity.ts). The view
-  // is the one already read for the banner — the same state, read once.
-  const belleVenue = view ? undefined : listLocationsFor(user.tenantId).find((l) => canEditAgent(user, l.id));
+  // starts video, and a view can do none of them (belle/identity.ts).
+  //
+  // One call rather than the rule written out again here. Written out, it
+  // listed the tenant's venues the way a customer's list does, which drops a
+  // venue marked internal — so a Belline login, whose only venue is Belline's
+  // own, had no bell on any page of the dashboard (founder, f6).
+  const belleVenue = view ? undefined : dashboardBelleVenue(user, null);
 
   const content = (
     <main className="content">

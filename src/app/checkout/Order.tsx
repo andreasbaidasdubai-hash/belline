@@ -87,7 +87,6 @@ export default function Order({
   coveredNote,
   cancelled,
   markets,
-  trade,
   siteOrigin,
   verifyBy,
   video = false,
@@ -107,8 +106,6 @@ export default function Order({
   cancelled: boolean;
   /** The countries a business can sign up in today. */
   markets: Market[];
-  /** Preselected from the link's `?trade=`, or "" for nothing chosen. */
-  trade: string;
   /** The marketing site for this environment (lib/origin.ts `siteOrigin`). */
   siteOrigin: string;
   /** How the address is confirmed here: by an emailed code, or by the team. */
@@ -290,7 +287,7 @@ export default function Order({
                 </li>
               ))}
             </ol>
-            <CheckoutForm products={ids} market={market} markets={markets} trade={trade} siteOrigin={siteOrigin} verifyBy={verifyBy} />
+            <CheckoutForm products={ids} market={market} markets={markets} siteOrigin={siteOrigin} verifyBy={verifyBy} />
           </>
         )}
 
