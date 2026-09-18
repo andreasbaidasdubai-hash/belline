@@ -444,7 +444,7 @@ await test("the call and chat docks move focus to their close button when they o
   for (const after of opens) assert.match(after.slice(0, 200), /shut\.focus\(\)/, "a dock opened without moving focus into it");
   // Video has no dock: the call grows inside Belle's bubble (embed-video.js), which moves focus to its own ×.
   const bubble = fs.readFileSync(path.join(process.cwd(), "public", "embed-video.js"), "utf8");
-  const openCall = bubble.slice(bubble.indexOf("function openCall()"), bubble.indexOf("function markReady("));
+  const openCall = bubble.slice(bubble.indexOf("function openCall("), bubble.indexOf("function markReady("));
   assert.match(openCall, /state\.shut\.focus\(\)/, "the video call opened without moving focus to its close button");
 });
 
@@ -1487,10 +1487,11 @@ await test("the picker is on all four landing pages, before the main button, and
   assert.match(block, /e\.key !== "Escape"/);
   assert.match(block, /!wrap\.contains\(e\.target\)/);
   const templates = [visibleHtml("landing.html"), visibleHtml("landing.de.html")];
+  // The sources keep every country; a build filters them by language.de.
   const { renderLocalePicker } = await import("./site-locale");
   const raw = (f: string) => fs.readFileSync(path.join(process.cwd(), "public", f), "utf8").replace(/\r\n/g, "\n");
-  assert.ok(raw("landing.html").includes(renderLocalePicker("AE")), "public/landing.html's picker is not the generated one");
-  assert.ok(raw("landing.de.html").includes(renderLocalePicker("DE")), "public/landing.de.html's picker is not the generated one");
+  assert.ok(raw("landing.html").includes(renderLocalePicker("AE", COUNTRY_PAGES)), "public/landing.html's picker is not the generated one");
+  assert.ok(raw("landing.de.html").includes(renderLocalePicker("DE", COUNTRY_PAGES)), "public/landing.de.html's picker is not the generated one");
   assert.ok(templates.every((t) => t.includes('<details class="locale"')));
 });
 

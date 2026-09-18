@@ -31,16 +31,19 @@ import { TRIAL } from "../src/lib/billing/plans";
 import { flag } from "../src/lib/flags";
 
 /**
- * Are the German pages part of this build?
+ * Are the German pages part of this build? `SITE_GERMAN=off` leaves them out.
  *
- * `language.de` already decides whether the product answers in German and
- * whether the hero may say so. It decides the pages themselves too: a build
- * with the flag off writes no /de-de, /de-at or /de-ch, and the country picker
- * offers only the countries whose pages exist. Publishing a German page is a
- * legal act in Germany — it needs an Impressum with a real company behind it —
- * so "the pages exist but nobody links them" is not good enough.
+ * Not a product flag: `language.de` says whether Belline answers in German,
+ * which is a different question from whether we publish a German page. A
+ * German page published in Germany owes its reader an Impressum naming a real
+ * company (§5 DDG), and there is no company to name yet — so production builds
+ * with `SITE_GERMAN=off` and the pages simply do not exist. Leaving them up
+ * unlinked is not good enough; a URL that answers is published.
+ *
+ * The picker, the hreflang alternates and the links follow, so a build never
+ * offers a page it did not write (scripts/site-locale.ts `publishedCountries`).
  */
-const GERMAN = flag("language.de");
+const GERMAN = (process.env.SITE_GERMAN ?? "on").toLowerCase() !== "off";
 
 const SOURCE = "public";
 /**

@@ -372,12 +372,15 @@ export function applyPricing(html: string): string {
  * left to the build (scripts/site-locale.ts).
  */
 export async function refreshSources(english: string, german: string): Promise<{ english: string; german: string }> {
-  const { applyLocalePicker } = await import("./site-locale");
+  // The committed sources keep every country in the picker: they are sources,
+  // not published pages. What a build publishes is filtered by language.de
+  // (scripts/site-locale.ts publishedCountries), when the build re-applies it.
+  const { applyLocalePicker, COUNTRY_PAGES } = await import("./site-locale");
   const { applyPricingDe } = await import("./site-pricing-de");
   const { applyIntegrations } = await import("./site-integrations");
   return {
-    english: applyLocalePicker(applyPricing(english), "AE"),
-    german: applyLocalePicker(applyIntegrations(applyPricingDe(german, "DE"), {}, "de"), "DE"),
+    english: applyLocalePicker(applyPricing(english), "AE", COUNTRY_PAGES),
+    german: applyLocalePicker(applyIntegrations(applyPricingDe(german, "DE"), {}, "de"), "DE", COUNTRY_PAGES),
   };
 }
 
