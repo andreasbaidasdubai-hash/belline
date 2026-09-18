@@ -461,6 +461,92 @@ console.log("\nHow it looks — the venue's choices, within the guidelines\n");
     assert.match(editor, /logoUrl\?: string \| null;/, "logoUrl must stay an optional prop");
     const css = fs.readFileSync(path.join(process.cwd(), "src", "app", "globals.css"), "utf8");
     assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.widget-preview-ring,/);
+    // The file input is off screen, not display:none, or the label stops
+    // reaching it and a keyboard can no longer choose a logo at all. The
+    // browser's own "No file chosen" went with it (founder, f6/13): it stayed
+    // there after a successful upload, because the upload clears the input.
+    assert.match(css, /\.logo-upload-input \{[^}]*clip-path: inset\(50%\)/);
+    const upload = fs.readFileSync(path.join(process.cwd(), "src", "components", "LogoUpload.tsx"), "utf8");
+    assert.match(upload, /className="logo-upload-input"/);
+    assert.doesNotMatch(css, /\.logo-upload-input \{[^}]*display: none/);
+    assert.match(upload, /<label htmlFor=\{inputId\} className=\{`btn logo-upload-pick/);
+    assert.match(upload, /\{chosen \?\? \(logoUrl \? "Your saved logo" : "No file chosen yet"\)\}/);
+    assert.match(upload, /setChosen\(file\.name\)/, "the name of the uploaded file is never shown");
+  });
+
+  // Founder, f6/9-14. Each of these is a promise made on the screen where an
+  // owner decides what to put on their own website, so each is held here.
+  await test("the editor says video or voice by what the venue has, not by which word sells better", async () => {
+    const { modesFor } = await import("../src/app/(app)/website/WidgetEditor");
+    const off = modesFor(false, 2.5);
+    const on = modesFor(true, 2.5);
+    assert.deepEqual(off.map((m) => m.title), ["Voice and chat", "Voice only", "Chat only"]);
+    assert.deepEqual(on.map((m) => m.title), ["Video and chat", "Video only", "Chat only"]);
+    // The words changed; what each option saves did not.
+    assert.deepEqual(off.map((m) => m.id), ["both", "voice", "chat"]);
+    assert.deepEqual(on.map((m) => m.id), ["both", "voice", "chat"]);
+    // No face where there is no face, and no promise of one.
+    for (const m of off) assert.doesNotMatch(`${m.title} ${m.what} ${m.costs}`, /video|face/i, `video off: ${m.title}`);
+    assert.match(on[1].what, /appears with a face/);
+    assert.match(on[1].what, /never their camera/);
+    // The cost sentences stay true, and the ratio is the catalogue's.
+    assert.match(off[1].costs, /voice minutes from your plan/);
+    assert.match(on[1].costs, /each video minute uses 2\.5 of them/i);
+    assert.ok(modesFor(true, 3).some((m) => m.costs.includes("3 of them")), "the ratio is written in rather than read");
+    assert.match(off[2].costs, /No voice minutes/);
+    assert.match(off[0].costs, /Messages use none/);
+    // And the old vocabulary is gone from the options entirely.
+    for (const m of [...off, ...on]) assert.doesNotMatch(`${m.title} ${m.what}`, /\bbell\b/i, `"bell" is back in ${m.title}`);
+  });
+
+  await test("the editor says plainly that this is an AI, shows the chat link, and offers both buttons a colour", () => {
+    const editor = fs.readFileSync(path.join(process.cwd(), "src", "app", "(app)", "website", "WidgetEditor.tsx"), "utf8");
+    // Said where the owner decides, not only inside the agent's own prompt.
+    assert.match(editor, /Belline is an AI assistant, not a human receptionist\./);
+    assert.match(editor, /labelled as AI/);
+    // The message button's own colour, offered only where it is the second
+    // button: on its own it is the main one and already wears the accent.
+    assert.match(editor, /Colour of the main button/);
+    assert.match(editor, /\{pick === "both" && \(/);
+    assert.match(editor, /Colour of the message button/);
+    assert.match(editor, /Plain white/, "no way back to the quiet button");
+    // The chat link, on the screen where somebody has just set the chat up.
+    assert.match(editor, /<ChatLinkCard locationId=\{locationId\} url=\{chatLink\} live=\{chatLinkLive\} \/>/);
+    // And no example naming a real-sounding business (founder, f6/6).
+    assert.doesNotMatch(editor, /marinahair|Marina Hair/i);
+  });
+
+  await test("the message button's colour is checked like the main one, reaches only that button, and can be undone", async () => {
+    const { parseAppearance, resolveAppearance } = await import("../src/lib/embed-look");
+    const good = parseAppearance({ accent: "forest", chatAccent: "#5E2434" });
+    assert.ok(good.ok && good.appearance.chatAccent === "#5E2434");
+    // The same contrast rule, named at its own field so the page can show it
+    // under the right control.
+    const pale = parseAppearance({ chatAccent: "#7F7F7F" });
+    assert.equal(pale.ok, false);
+    assert.equal(pale.ok ? "" : pale.problem.field, "chatAccent");
+    assert.equal(parseAppearance({ chatAccent: "not a colour" }).ok, false);
+    // Empty is the way back to the quiet paper button, not an error.
+    const cleared = parseAppearance({ chatAccent: "" });
+    assert.ok(cleared.ok && cleared.appearance.chatAccent === undefined);
+
+    // What the widget is told: null unless the venue picked one, and text that
+    // can be read on it either way.
+    const plain = resolveAppearance({ accent: "forest" });
+    assert.equal(plain.chatAccent, null);
+    assert.equal(plain.chatAccentText, null);
+    const coloured = resolveAppearance({ accent: "forest", chatAccent: "wine" });
+    assert.equal(coloured.chatAccent, "#5E2434");
+    assert.equal(coloured.chatAccentText, "#FFFFFF");
+    assert.equal(coloured.accent, "#2F4A3A", "the main button followed the message button's colour");
+
+    // And in the widget: the message button alone, with the paper button still
+    // the fallback for every venue that never picked a colour.
+    const js = fs.readFileSync(path.join(process.cwd(), "public", "embed.js"), "utf8");
+    assert.match(js, /--belline-second,#FFFFFF/);
+    assert.match(js, /fabs\.chat\.style\.setProperty\("--belline-second", cfg\.chatAccent\)/);
+    assert.match(js, /belline-second"\) >= 0/, "a chat button that is the main button takes the second colour");
+    assert.doesNotMatch(js, /wa\.style\.setProperty\("--belline-second/, "the WhatsApp button took the message colour");
   });
 }
 

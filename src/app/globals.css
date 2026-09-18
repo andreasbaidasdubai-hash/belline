@@ -1554,12 +1554,29 @@ body:has(.callbar) {
 .logo-upload-preview {
   width: 64px; height: 64px; flex: none; display: grid; place-items: center;
   border-radius: 999px; background: #FFFFFF; box-shadow: 0 0 0 1px var(--border);
-  padding: 7px; box-sizing: border-box; overflow: hidden; text-align: center;
+  /* The disc is the logo plus a hair, as embed.js now draws it on the button
+     (founder, f6). At 7px it was a saucer under the picture. */
+  padding: 3px; box-sizing: border-box; overflow: hidden; text-align: center;
 }
 .logo-upload-preview img { width: 100%; height: 100%; object-fit: contain; border-radius: 999px; display: block; }
 .logo-upload-preview .muted { font-size: 10.5px; line-height: 1.2; }
 .logo-upload-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
-.logo-upload-actions input[type="file"] { max-width: 100%; }
+/* The file input is taken off screen rather than hidden, so it keeps its focus
+   and its label; the label beside it is the control anybody sees, and focusing
+   the input rings that label, so tabbing to it looks like tabbing to a button.
+   The browser's own "No file chosen" went with it — it stayed there after a
+   successful upload, because the upload clears the input (founder, f6). */
+.logo-upload-input {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+.logo-upload-pick { cursor: pointer; }
+.logo-upload-pick.is-busy { opacity: 0.6; pointer-events: none; }
+.logo-upload-input:focus-visible + .logo-upload-pick { outline: 2px solid var(--accent); outline-offset: 2px; }
+.logo-upload-name {
+  font-size: 12.5px; min-width: 0; max-width: 22ch;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .widget-preview-ring { position: relative; isolation: isolate; }
 .widget-preview-ring::after {

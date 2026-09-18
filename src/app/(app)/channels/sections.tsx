@@ -17,6 +17,9 @@ import { flag } from "@/lib/flags";
 import { CODES_EXPLAINED, DIAGNOSIS, PBX_NOTE, PHONE_OPTIONAL, UNVERIFIED_NOTE, forwardingCodes, uaeCarriers } from "@/lib/telephony/forwarding";
 import { verificationState } from "@/lib/telephony/verify";
 import { chatLinkUrl } from "@/lib/chat-link";
+import { videoOffered } from "@/lib/video/availability";
+import { VIDEO_VOICE_MINUTE_RATIO } from "@/lib/billing/plans";
+import { isActivated } from "@/lib/onboarding/journey";
 import { logoUrlFor } from "@/lib/logo";
 import WidgetEditor from "../website/WidgetEditor";
 import PhoneSetup from "../golive/PhoneSetup";
@@ -67,6 +70,14 @@ export async function WebsiteSection({ location }: { location: Location }) {
       whatsappNumber={whatsapp?.phoneE164 ?? null}
       detectedAt={location.onboarding?.channels.web?.detectedAt ?? null}
       logoUrl={logoUrlFor(location)}
+      // Whether the spoken button is a face or a voice, asked the way the
+      // widget itself asks it, so the screen cannot sell video where the
+      // visitor would get a voice (founder, f6).
+      video={videoOffered(location)}
+      videoRatio={VIDEO_VOICE_MINUTE_RATIO}
+      // The same chat, for the places that are not a website.
+      chatLink={chatLinkUrl(location)}
+      chatLinkLive={isActivated(location)}
     />
   );
 }
