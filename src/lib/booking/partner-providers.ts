@@ -24,6 +24,7 @@ export const PARTNER_PROVIDERS: Record<PartnerId, BookingProvider> = {
   sevenrooms: partnerProvider(PARTNER_CONNECTORS.sevenrooms),
   eatapp: partnerProvider(PARTNER_CONNECTORS.eatapp),
   booksy: partnerProvider(PARTNER_CONNECTORS.booksy),
+  vagaro: partnerProvider(PARTNER_CONNECTORS.vagaro),
 };
 
 export function partnerProviderFor(id: PartnerId): BookingProvider {

@@ -45,7 +45,8 @@ export type PartnerId =
   | "msbookings"
   | "calcom"
   | "eatapp"
-  | "booksy";
+  | "booksy"
+  | "vagaro";
 
 /** How the partner's own product thinks about a booking. */
 export type PartnerModel =

@@ -491,6 +491,71 @@ export const PARTNERS: Record<PartnerId, PartnerFacts> = {
     ],
   },
 
+  /**
+   * Vagaro: real documentation, and no way to book through it.
+   *
+   * Salons, spas and fitness. Unlike Booksy, Vagaro genuinely publishes
+   * developer documentation at `docs.vagaro.com`, and it is readable. The
+   * problem is what is in it.
+   *
+   * Vagaro's own API introduction names five capability areas — Employee
+   * Management, Locations, Appointments, Customers, Employees — and describes
+   * them in read terms: an appointment can be *retrieved*, with its status,
+   * start time and who is providing the service. There is no availability
+   * search, and there is no documented write path to create, move or cancel an
+   * appointment. The pages that would carry the endpoint reference
+   * (`/public/reference/getting-started`, `/public/reference/authentication`)
+   * are unfilled template stubs, and concrete reference slugs answer 404. No
+   * base URL is published. `developers.vagaro.com` and `sandbox.vagaro.com` do
+   * not resolve at all.
+   *
+   * What *is* properly documented is the webhook side: Appointment, Customer,
+   * FormResponse, Transaction, business location and Employee events, an
+   * envelope of `id`, `createdDate`, `type`, `action` and `payload`, and a
+   * delivery contract of HTTPS POST, 2xx within twenty seconds, five retries
+   * over fifteen minutes with exponential backoff. That is a real integration
+   * surface — but it tells Belline what already happened, which is the opposite
+   * of what a receptionist needs.
+   *
+   * So on what Vagaro publishes, this is an analytics and sync integration, not
+   * a booking one. Belline is not written against it.
+   *
+   * The commercial gate is the sharp part and the founder should know it before
+   * spending a call: access goes through Vagaro's Enterprise Sales team, and
+   * their support material conditions it on the merchant being a paid,
+   * non-trial account **actively using Vagaro's own credit card processing**.
+   * That is not a technical hurdle Belline can clear; it is a requirement on
+   * every salon Belline would want to connect.
+   *
+   * One thing not to confuse: the "Vagaro Marketplace" is the consumer-facing
+   * directory where clients find businesses, not a developer app store. Several
+   * third-party write-ups treat it as the latter. There is no app store.
+   */
+  vagaro: {
+    id: "vagaro",
+    name: "Vagaro",
+    model: "appointments",
+    api: { documented: false, availability: false, create: false, reschedule: false, cancel: false, staffSelection: false, catalogue: false },
+    auth: "Not published in usable form: Vagaro's own authentication page is an unfilled template. Credentials are issued inside a merchant's account after approval.",
+    sandbox: "none",
+    gate: {
+      what:
+        "Contact Vagaro's Enterprise Sales team through the form linked from their APIs and Webhooks page, or from inside a merchant account under Settings → Developers → APIs and Webhooks. Their support material conditions access on the salon being a paid, non-trial Vagaro account that is actively using Vagaro's own credit card processing, with roughly five to seven business days to approval — so the gate is on every salon Belline would connect, not only on Belline.",
+      apply: "https://www.vagaro.com/pro/updates/webhooks",
+      docs: "https://docs.vagaro.com/public/reference/api-introduction",
+    },
+    liveNeeds: [],
+    venueNeeds: [],
+    limits: [
+      "On what Vagaro publishes there is no booking API: no availability search, and no documented endpoint to create, move or cancel an appointment. The five documented capability areas are read-oriented, and the appointment one describes retrieving an appointment rather than making one.",
+      "No base URL and no endpoint paths are published. The reference pages that would carry them are unfilled template stubs, and concrete reference slugs answer 404.",
+      "No sandbox: sandbox.vagaro.com does not resolve, and none is mentioned on any Vagaro page.",
+      "Access is conditioned on the salon using Vagaro's own credit card processing, which is a commercial requirement on every venue rather than a one-off approval for Belline.",
+      "The webhooks are genuinely well documented and are the real integration surface today — but they report what already happened, which cannot answer a caller asking what is free on Tuesday.",
+      "The 'Vagaro Marketplace' is the consumer booking directory, not a developer app store. There is nothing to publish an app into.",
+    ],
+  },
+
   // -------------------------------------------------------------------------
   // The restaurant two. A different model, not a variant of the one above.
   // -------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import { opentableConnector } from "./opentable";
 import { PARTNERS } from "./registry";
 import { sevenroomsConnector } from "./sevenrooms";
 import { treatwellConnector } from "./treatwell";
+import { vagaroConnector } from "./vagaro";
 import { zenotiConnector } from "./zenoti";
 
 /**
@@ -32,6 +33,7 @@ export const PARTNER_CONNECTORS: Record<PartnerId, PartnerConnector> = {
   sevenrooms: sevenroomsConnector,
   eatapp: eatappConnector,
   booksy: booksyConnector,
+  vagaro: vagaroConnector,
 };
 
 export function partnerConnector(id: PartnerId): PartnerConnector {
