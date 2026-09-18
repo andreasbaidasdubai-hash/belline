@@ -97,7 +97,7 @@ export async function GET(request: Request) {
       raiseException("outlook:not_configured", "Outlook connect opened while booking.outlook is off or no sealing key is set");
       return land(returnTo, location.id, "outlook_unavailable");
     }
-    if (location.google) return land(returnTo, location.id, "outlook_in_use");
+    if (location.google || location.calendly) return land(returnTo, location.id, "outlook_in_use");
     const signed = signOutlookState({ locationId: location.id, userId: auth.user.id, returnTo });
     const res = NextResponse.redirect(outlookAuthUrl(signed.state, redirectUri(request)));
     res.cookies.set(OUTLOOK_STATE_COOKIE, signed.nonce, { ...sessionCookieOptions(600), path: OUTLOOK_CALLBACK_PATH });
@@ -138,7 +138,7 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   if (!code) return land(checked.returnTo, location.id, "outlook_failed");
   if (!flag("booking.outlook")) return land(checked.returnTo, location.id, "outlook_unavailable");
-  if (location.google) return land(checked.returnTo, location.id, "outlook_in_use");
+  if (location.google || location.calendly) return land(checked.returnTo, location.id, "outlook_in_use");
 
   try {
     const saved = upsertLocation(await completeOutlookConnection(location, code, redirectUri(request), auth.user.id));

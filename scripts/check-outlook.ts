@@ -234,11 +234,14 @@ await test("under stubs with nothing injected, the auth URL comes straight back 
   }
 });
 
-await test("one calendar per venue: Outlook will not start over a Google connection, nor Google over Outlook", () => {
-  assert.match(source("src/app/api/integrations/microsoft/route.ts"), /if \(location\.google\) return land\(returnTo, location\.id, "outlook_in_use"\)/);
-  assert.match(source("src/app/api/integrations/google/route.ts"), /if \(location\.outlook\) return land\(request, returnTo, location\.id, "google_in_use"\)/);
+await test("one booking connection per venue: no route starts over another one", () => {
+  assert.match(source("src/app/api/integrations/microsoft/route.ts"), /if \(location\.google \|\| location\.calendly\) return land\(returnTo, location\.id, "outlook_in_use"\)/);
+  assert.match(source("src/app/api/integrations/google/route.ts"), /if \(location\.outlook \|\| location\.calendly\) return land\(request, returnTo, location\.id, "google_in_use"\)/);
   assert.match(integrationErrorText("outlook_in_use")!, /Disconnect Google Calendar first/);
   assert.match(integrationErrorText("google_in_use")!, /Disconnect Outlook first/);
+  // Calendly joined them on 2026-09-18: its route refuses the other two the same way.
+  assert.match(source("src/app/api/integrations/calendly/route.ts"), /if \(location\.google \|\| location\.outlook\) return land\(returnTo, location\.id, "calendly_in_use"\)/);
+  assert.match(integrationErrorText("calendly_in_use")!, /one place per venue/);
 });
 
 // ---------------------------------------------------------------------------
@@ -1156,6 +1159,9 @@ const OUTLOOK_OFF = { FLAG_BOOKING_OUTLOOK: "off" } as Record<string, string>;
 const OUTLOOK_ON = { MICROSOFT_CLIENT_ID: "id", MICROSOFT_CLIENT_SECRET: "secret", CREDENTIALS_KEY: "key", FLAG_BOOKING_OUTLOOK: "on" } as Record<string, string>;
 const GOOGLE_ON = { GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "secret", CREDENTIALS_KEY: "key", FLAG_BOOKING_GOOGLE: "on" } as Record<string, string>;
 const BOTH_ON = { ...GOOGLE_ON, ...OUTLOOK_ON };
+/** Calendly joined the other two on 2026-09-18, so "everything live" is now all three. */
+const CALENDLY_ON = { CALENDLY_CLIENT_ID: "id", CALENDLY_CLIENT_SECRET: "secret", CREDENTIALS_KEY: "key", FLAG_BOOKING_CALENDLY: "on" } as Record<string, string>;
+const ALL_ON = { ...BOTH_ON, ...CALENDLY_ON };
 
 await test("Outlook can be chosen with a working connection, is refused unconnected (with the way to connect), and not at all with the flag off", async () => {
   const fresh = { ...salonBase, outlook: undefined, google: undefined, onboarding: { version: 1 as const, channels: {}, reviewedAt: at } };
@@ -1181,7 +1187,7 @@ await test("the bookings step, integrations, channels and requests pages read th
   assert.match(setup, /if \(outlookUsable\(venue\)\)/);
   assert.match(setup, /outlookCard\(venue\)/);
   assert.doesNotMatch(setup, /id: "outlook", title: "Outlook calendar", \.\.\.calendar\(/, "the old never-choosable card is back");
-  assert.match(setup, /notice=\{googleNotice\(google\) \?\? outlookNotice\(outlook\)\}/);
+  assert.match(setup, /notice=\{googleNotice\(google\) \?\? outlookNotice\(outlook\) \?\? calendlyNotice\(calendly\)\}/);
   const integrations = source("src/app/(app)/calendars/page.tsx");
   assert.match(integrations, /const outlookOn = flag\("booking\.outlook"\)/);
   assert.match(integrations, /\{outlookOn \? \(/);
@@ -1203,25 +1209,34 @@ await test("the bookings step, integrations, channels and requests pages read th
 
 await test("Belle says what the website says, by the same flags, in every combination", async () => {
   const belle = await import("../src/lib/seed-belline");
-  // Neither: nothing about Outlook working.
+  // None of the three: nothing about any of them working. "Coming soon" is used
+  // only here — once one works, the rest are "not connected yet", which is what
+  // an operator can act on.
   assert.doesNotMatch(belle.bookingSystemAnswer(OUTLOOK_OFF), /Outlook, yes|connect either/);
-  assert.match(belle.routeLine(OUTLOOK_OFF), /Google Calendar or Outlook: Belline takes requests now/);
-  // Outlook alone.
-  assert.match(belle.bookingSystemAnswer(OUTLOOK_ON), /^Outlook, yes: .*books straight into it\. Google Calendar is coming soon/);
+  assert.match(belle.routeLine(OUTLOOK_OFF), /Google Calendar, Outlook or Calendly: Belline takes requests now/);
+  // Outlook alone: named as working, the other two named as not.
+  assert.match(belle.bookingSystemAnswer(OUTLOOK_ON), /^Outlook, yes: .*books straight into it\./);
+  assert.match(belle.bookingSystemAnswer(OUTLOOK_ON), /Google Calendar and Calendly aren't connected yet/);
   assert.match(belle.routeLine(OUTLOOK_ON), /Outlook: once they connect it, Belline checks it for busy times and books straight into it\./);
   // Google alone: Outlook kept honest.
-  assert.match(belle.bookingSystemAnswer(GOOGLE_ON), /Outlook isn't connected yet/);
-  assert.match(belle.routeLine(GOOGLE_ON), /Outlook: Belline takes requests now/);
-  // Both.
+  assert.match(belle.bookingSystemAnswer(GOOGLE_ON), /Outlook and Calendly aren't connected yet/);
+  assert.match(belle.routeLine(GOOGLE_ON), /Outlook or Calendly: Belline takes requests now/);
+  // Both calendars: still no "soon", because both of them are live.
   assert.match(belle.bookingSystemAnswer(BOTH_ON), /Google Calendar and Outlook, yes/);
-  assert.doesNotMatch(belle.bookingSystemAnswer(BOTH_ON), /soon|not yet|isn't connected/i);
-  assert.doesNotMatch(belle.routeLine(BOTH_ON), /soon|requests now; booking into/i);
+  assert.doesNotMatch(belle.bookingSystemAnswer(BOTH_ON), /soon|not yet/i);
+  // All three: the only state with nothing at all to caveat.
+  assert.match(belle.bookingSystemAnswer(ALL_ON), /Google Calendar, Outlook and Calendly, yes/);
+  assert.doesNotMatch(belle.bookingSystemAnswer(ALL_ON), /soon|not yet|isn't connected|aren't connected/i);
+  assert.doesNotMatch(belle.routeLine(ALL_ON), /soon|requests now/i);
   const features = ["Google Calendar and booking-system integrations", "One Google Calendar or Microsoft Outlook connection", "Something else"];
   assert.deepEqual(belle.notYetForBelle(features, OUTLOOK_OFF), features);
   assert.ok(belle.notYetForBelle(features, OUTLOOK_ON).every((f) => !/Outlook/.test(f)), "Belle would still say Outlook does not work");
-  assert.ok(belle.notYetForBelle(features, OUTLOOK_ON).includes("A Google Calendar connection"), "Belle would say Google Calendar works");
-  assert.ok(belle.notYetForBelle(features, BOTH_ON).every((f) => !/Google Calendar|Outlook/.test(f)), "Belle would still name a working calendar as not working");
-  assert.ok(belle.notYetForBelle(features, GOOGLE_ON).includes("A Microsoft Outlook connection"));
+  assert.ok(belle.notYetForBelle(features, OUTLOOK_ON).includes("A Google Calendar or Calendly connection"), "Belle would say Google Calendar works");
+  assert.ok(
+    belle.notYetForBelle(features, ALL_ON).every((f) => !/Google Calendar|Outlook|Calendly/.test(f)),
+    "Belle would still name a working destination as not working",
+  );
+  assert.ok(belle.notYetForBelle(features, GOOGLE_ON).includes("A Microsoft Outlook or Calendly connection"));
 });
 
 const { applySiteFlags, strandedSiteCopy, SITE_FLAG_COPY } = await import("../src/lib/site-flags");

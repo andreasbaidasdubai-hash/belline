@@ -20,7 +20,7 @@ export default function DestinationSwitch({
   label,
 }: {
   locationId: string;
-  to: "requests" | "google" | "outlook";
+  to: "requests" | "google" | "outlook" | "calendly";
   label: string;
 }) {
   const router = useRouter();

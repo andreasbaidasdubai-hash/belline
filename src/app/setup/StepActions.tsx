@@ -130,7 +130,7 @@ export function RequestIntegration({ id, name, label, requested }: { id: string;
 }
 
 export interface DestinationOption {
-  id: "requests" | "link" | "belline" | "google" | "outlook";
+  id: "requests" | "link" | "belline" | "google" | "outlook" | "calendly";
   title: string;
   body: string;
   /** "connect": the option works once the owner connects an account at `connectUrl`. */

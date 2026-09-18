@@ -865,8 +865,15 @@ const {
   renderIntegrations,
 } = await import("./site-integrations");
 
-const STRIP_NAMES = ["Google Calendar", "Outlook", "Fresha", "SevenRooms", "OpenTable", "Treatwell", "Zenoti", "Mindbody", "Calendly"];
-const PARTNERS = STRIP_NAMES.slice(2);
+const STRIP_NAMES = ["Google Calendar", "Outlook", "Calendly", "Fresha", "SevenRooms", "OpenTable", "Treatwell", "Zenoti", "Mindbody"];
+/**
+ * The partner-gated systems: everything after the three Belline builds itself.
+ *
+ * Calendly moved out of this group on 2026-09-18. Its API is self-serve, so the
+ * adapter exists (src/lib/integrations/calendly.ts) and it follows its own
+ * `booking.calendly` flag rather than a `booking.partner.*` one.
+ */
+const PARTNERS = STRIP_NAMES.slice(3);
 
 const stripOf = (html: string) => {
   const start = html.indexOf('<section id="connects"');
@@ -974,13 +981,13 @@ await test("the committed template is the flag-off strip, generated, never hand-
   assert.deepEqual(tagsIn(stripOf(visibleHtml("landing.html"))), [
     ["Google Calendar", "Coming soon"],
     ["Outlook", "Coming soon"],
+    ["Calendly", "Coming soon"],
     ["Fresha", "On our roadmap"],
     ["SevenRooms", "On our roadmap"],
     ["OpenTable", "On our roadmap"],
     ["Treatwell", "On our roadmap"],
     ["Zenoti", "On our roadmap"],
     ["Mindbody", "On our roadmap"],
-    ["Calendly", "On our roadmap"],
   ]);
 });
 
@@ -989,13 +996,13 @@ await test("built with booking.google off, Google Calendar reads Coming soon and
   assert.deepEqual(tags, [
     ["Google Calendar", "Coming soon"],
     ["Outlook", "Coming soon"],
+    ["Calendly", "Coming soon"],
     ["Fresha", "On our roadmap"],
     ["SevenRooms", "On our roadmap"],
     ["OpenTable", "On our roadmap"],
     ["Treatwell", "On our roadmap"],
     ["Zenoti", "On our roadmap"],
     ["Mindbody", "On our roadmap"],
-    ["Calendly", "On our roadmap"],
   ]);
   assert.doesNotMatch(stripOf(built("off")), /Available|state-available/);
 });
@@ -1004,13 +1011,13 @@ await test("built with booking.google on, Google Calendar reads Available and no
   assert.deepEqual(tagsIn(stripOf(built("on"))), [
     ["Google Calendar", "Available"],
     ["Outlook", "Coming soon"],
+    ["Calendly", "Coming soon"],
     ["Fresha", "On our roadmap"],
     ["SevenRooms", "On our roadmap"],
     ["OpenTable", "On our roadmap"],
     ["Treatwell", "On our roadmap"],
     ["Zenoti", "On our roadmap"],
     ["Mindbody", "On our roadmap"],
-    ["Calendly", "On our roadmap"],
   ]);
   assert.match(stripOf(built("on")), /<span class="state state-available">Available<\/span>/);
   assert.match(stripOf(built("on")), /<h3 class="connects-group-h">Connects today<\/h3>\s*<ul class="connects-list">\s*<li class="connect" data-integration="booking\.google"/);
@@ -1221,6 +1228,16 @@ await test("Outlook and each booking platform follow their own flags, and stubs 
     }),
     "available",
   );
+  // Calendly, like the two calendars, is built rather than partner-gated.
+  assert.equal(byName("Calendly").flag, "booking.calendly");
+  assert.equal(integrationState(byName("Calendly"), {}), "soon");
+  assert.equal(
+    integrationState(byName("Calendly"), {
+      CALENDLY_CLIENT_ID: "x", CALENDLY_CLIENT_SECRET: "x", CREDENTIALS_KEY: "x", FLAG_BOOKING_CALENDLY: "on",
+    }),
+    "available",
+  );
+  assert.equal(integrationState(byName("Calendly"), { FLAG_STUBS: "on", FLAG_BOOKING_CALENDLY: "on" }), "soon");
   for (const name of PARTNERS) {
     const item = byName(name);
     assert.match(item.flag, /^booking\.partner\.[a-z0-9-]+$/);
@@ -1362,6 +1379,7 @@ await test("the German strip follows the flags in German: Demnächst and Geplant
   const expected = (google: string) => [
     ["Google Calendar", google],
     ["Outlook", "Demnächst"],
+    ["Calendly", "Demnächst"],
     ...PARTNERS.map((p) => [p, "Geplant"]),
   ];
   for (const slug of ["de-de", "de-at", "de-ch"]) {

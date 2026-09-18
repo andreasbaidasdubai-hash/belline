@@ -1,6 +1,6 @@
 import type { Location, User } from "./types";
 import { canManageUsers, isBellineStaff } from "./auth";
-import { destinationOf, googleUsable, onBellineDiary, outlookUsable } from "./booking/destination";
+import { calendlyUsable, destinationOf, googleUsable, onBellineDiary, outlookUsable } from "./booking/destination";
 
 /**
  * What an owner sees down the left-hand side.
@@ -69,7 +69,13 @@ export function usesDiary(location: Pick<Location, "onboarding">): boolean {
 /** Does Belline book into a calendar it can see for this venue? Then Bookings is a list worth having. */
 export function booksIntoCalendar(location: Location): boolean {
   const kind = destinationOf(location);
-  return (kind === "google" && googleUsable(location)) || (kind === "outlook" && outlookUsable(location));
+  return (
+    (kind === "google" && googleUsable(location)) ||
+    (kind === "outlook" && outlookUsable(location)) ||
+    // Calendly is not a calendar Belline writes into, but a booking Belline
+    // made there is still a booking with a time, so the list is worth having.
+    (kind === "calendly" && calendlyUsable(location))
+  );
 }
 
 /**

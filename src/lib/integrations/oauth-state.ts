@@ -18,7 +18,7 @@ import { mutateOAuthStates, type OAuthStateRow } from "../store";
  * owner's cookie, and a copy of the data cannot finish anybody's connection.
  */
 
-export type OAuthProvider = "google" | "outlook";
+export type OAuthProvider = "google" | "outlook" | "calendly";
 /**
  * Where the owner goes back to: the setup step they started from, or the
  * Calendars page. Calendars used to live on /integrations, whose token was
@@ -41,6 +41,7 @@ interface StatePayload {
 const KEY_LABEL: Record<OAuthProvider, string> = {
   google: "belline google oauth state v1",
   outlook: "belline outlook oauth state v1",
+  calendly: "belline calendly oauth state v1",
 };
 
 function stateKey(provider: OAuthProvider): Buffer {

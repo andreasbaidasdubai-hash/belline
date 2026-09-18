@@ -8,54 +8,111 @@ import { flag } from "./flags";
 type Env = Record<string, string | undefined>;
 
 /**
+ * The three places Belline can book into, as Belle names them, with the flag
+ * that decides each and the name the pricing catalogue uses.
+ *
+ * One list rather than a branch per pair: adding Calendly to a function written
+ * as `google ? … : outlook ? …` would have been eight sentences to keep true,
+ * and the ninth would have been wrong.
+ */
+const DESTINATIONS = [
+  { flag: "booking.google", name: "Google Calendar", catalogue: "Google Calendar", connect: "Google Calendar" },
+  { flag: "booking.outlook", name: "Outlook", catalogue: "Microsoft Outlook", connect: "your Microsoft 365 or Outlook.com calendar" },
+  { flag: "booking.calendly", name: "Calendly", catalogue: "Calendly", connect: "Calendly" },
+] as const;
+
+const listed = (names: readonly string[], and = "and"): string =>
+  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} ${and} ${names[names.length - 1]}`;
+
+const liveHere = (env: Env) => DESTINATIONS.filter((d) => flag(d.flag, env));
+const offHere = (env: Env) => DESTINATIONS.filter((d) => !flag(d.flag, env));
+
+const PARTNERS =
+  "Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so for those Belline takes the customer's request and your team books it where you always do.";
+
+/**
+ * What Calendly actually is, in one sentence a prospect can act on.
+ *
+ * Deliberately not Google's sentence with the name changed. Calendly is a
+ * booking page, not a diary: it books the owner's own event types, each with a
+ * fixed length, and it will not take a booking without an email address. A
+ * salesperson who says "same as Google Calendar" sells something the product
+ * then has to take back on the customer's first call.
+ */
+const CALENDLY_LINE =
+  "Calendly works a little differently, because it is a booking page rather than a diary: Belline offers the times your Calendly says are open for one of your own event types, and books the customer in there. Calendly's event type decides how long the appointment is, and it needs the customer's email address.";
+
+/**
  * What Belle says about booking systems, from the same flags the product and
- * the website read: Google Calendar is "coming soon" exactly while
- * `booking.google` is off, and Outlook works exactly while `booking.outlook`
- * is on.
+ * the website read. Each of Google Calendar, Outlook and Calendly is named as
+ * working exactly while its own flag is on, and as coming exactly while it is
+ * off. "Coming soon" is used only while none of them works — once one does,
+ * the others are "not connected yet", which is what an operator can act on.
  */
 export function bookingSystemAnswer(env: Env = process.env): string {
-  const google = flag("booking.google", env);
-  const outlook = flag("booking.outlook", env);
-  if (google && outlook) {
-    return "Google Calendar and Outlook, yes: connect either and Belline checks it for times already taken, then books straight into it. Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so for those Belline takes the customer's request and your team books it where you always do. Which system do you use?";
+  const live = liveHere(env);
+  const off = offHere(env);
+  if (live.length === 0) {
+    const [first, ...rest] = DESTINATIONS.map((d) => d.name);
+    return (
+      `Not yet. ${first} is coming soon, and so ${rest.length === 1 ? "is" : "are"} ${listed(rest)}. ` +
+      "Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so I can't give you a date. " +
+      "Today Belline takes the customer's request and your team books it where you always do. Which system do you use? I'll pass that on."
+    );
   }
-  if (outlook) {
-    return "Outlook, yes: connect your Microsoft 365 or Outlook.com calendar and Belline checks it for times already taken, then books straight into it. Google Calendar is coming soon, and Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so for those Belline takes the customer's request and your team books it where you always do. Which system do you use?";
+  const diaries = live.filter((d) => d.name !== "Calendly");
+  const parts = [`${listed(live.map((d) => d.name))}, yes:`];
+  if (diaries.length) {
+    parts.push(`connect ${listed(diaries.map((d) => d.connect), "or")} and Belline checks it for times already taken, then books straight into it.`);
   }
-  return google
-    ? "Google Calendar, yes: connect it and Belline checks it for times already taken, then books straight into it. Outlook isn't connected yet, and Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so for those Belline takes the customer's request and your team books it where you always do. Which system do you use?"
-    : "Not yet. Google Calendar is coming soon. Fresha, SevenRooms and OpenTable need a partner agreement we don't have, so I can't give you a date. Today Belline takes the customer's request and your team books it where you always do. Which system do you use? I'll pass that on.";
+  if (live.some((d) => d.name === "Calendly")) parts.push(diaries.length ? CALENDLY_LINE : CALENDLY_LINE.replace(/^Calendly works/, "it works"));
+  if (off.length) parts.push(`${listed(off.map((d) => d.name))} ${off.length === 1 ? "isn't" : "aren't"} connected yet.`);
+  parts.push(PARTNERS, "Which system do you use?");
+  return parts.join(" ");
 }
 
 export function routeLine(env: Env = process.env): string {
-  const google = flag("booking.google", env);
-  const outlook = flag("booking.outlook", env);
-  const calendars =
-    google && outlook
-      ? "Google Calendar or Outlook: once they connect it, Belline checks it for busy times and books straight into it."
-      : outlook
-        ? "Outlook: once they connect it, Belline checks it for busy times and books straight into it. Google Calendar: Belline takes requests now; booking into Google Calendar is coming soon."
-        : google
-          ? "Google Calendar: once they connect it, Belline checks it for busy times and books straight into it. Outlook: Belline takes requests now."
-          : "Google Calendar or Outlook: Belline takes requests now; booking into Google Calendar is coming soon.";
-  return `Match their route and say only what is true today. A booking platform: Belline answers and takes the request, their team books it in their system; direct connection needs a partner agreement Belline doesn't have. ${calendars} No system: Belline answers, takes messages and requests, and makes sure the right person follows up.`;
+  const live = liveHere(env);
+  const off = offHere(env);
+  const said: string[] = [];
+  if (live.length === 0) {
+    said.push(
+      `${listed(DESTINATIONS.map((d) => d.name), "or")}: Belline takes requests now; booking into ${DESTINATIONS[0].name} is coming soon, ` +
+        `and ${listed(DESTINATIONS.slice(1).map((d) => d.name))} ${DESTINATIONS.length > 2 ? "are" : "is"} coming too.`,
+    );
+  } else {
+    const diaries = live.filter((d) => d.name !== "Calendly");
+    if (diaries.length) {
+      said.push(`${listed(diaries.map((d) => d.name), "or")}: once they connect it, Belline checks it for busy times and books straight into it.`);
+    }
+    if (live.some((d) => d.name === "Calendly")) {
+      said.push("Calendly: once they connect it, Belline offers the times Calendly says are open for one of their event types and books the customer in there; Calendly sets the length and needs an email address.");
+    }
+    if (off.length) said.push(`${listed(off.map((d) => d.name), "or")}: Belline takes requests now.`);
+  }
+  return `Match their route and say only what is true today. A booking platform: Belline answers and takes the request, their team books it in their system; direct connection needs a partner agreement Belline doesn't have. ${said.join(" ")} No system: Belline answers, takes messages and requests, and makes sure the right person follows up.`;
 }
 
 /**
- * The catalogue's not-yet list, as Belle may say it. With a calendar live, the
- * entries that bundle it with what is still missing name only the missing
+ * The catalogue's not-yet list, as Belle may say it. With a destination live,
+ * the entries that bundle it with what is still missing name only the missing
  * part, and an entry with nothing missing goes: Belle never tells a prospect
- * that Google Calendar or Outlook does not work while it does.
+ * that Google Calendar, Outlook or Calendly does not work while it does.
  */
 export function notYetForBelle(features: string[], env: Env = process.env): string[] {
+  const live = liveHere(env);
+  if (live.length === 0) return features;
+  const missing = offHere(env).map((d) => d.catalogue);
   const google = flag("booking.google", env);
-  const outlook = flag("booking.outlook", env);
-  if (!google && !outlook) return features;
-  const rename: Record<string, string | null> = {
-    "Google Calendar and booking-system integrations": google ? "Fresha, SevenRooms, OpenTable and Treatwell integrations" : "Google Calendar and booking-system integrations",
-    "One Google Calendar or Microsoft Outlook connection": google && outlook ? null : google ? "A Microsoft Outlook connection" : "A Google Calendar connection",
-  };
-  return features.flatMap((f) => (f in rename ? (rename[f] === null ? [] : [rename[f]!]) : [f]));
+  return features.flatMap((f) => {
+    // The catalogue's calendar line, whichever shape the flags gave it: it
+    // names what is live, so what is still missing is the rest of the list.
+    if (/^One .* connection$/.test(f)) return missing.length === 0 ? [] : [`A ${listed(missing, "or")} connection`];
+    if (f === "Google Calendar and booking-system integrations") {
+      return [google ? "Fresha, SevenRooms, OpenTable and Treatwell integrations" : f];
+    }
+    return [f];
+  });
 }
 
 /**

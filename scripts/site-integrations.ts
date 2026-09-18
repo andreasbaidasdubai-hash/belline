@@ -2,16 +2,22 @@
  * The integrations strip on the landing page, generated from the flags.
  *
  * Nine systems an operator already books with. None of them is connected when
- * this was written: Google Calendar and Outlook are being built, and Fresha,
- * SevenRooms, OpenTable, Treatwell, Zenoti, Mindbody and Calendly issue
+ * this was written: Google Calendar, Outlook and Calendly are being built, and
+ * Fresha, SevenRooms, OpenTable, Treatwell, Zenoti and Mindbody issue
  * credentials only under a partner agreement Belline does not have. So the strip never says "works with" or
  * "integrates with", and every name carries its state as words, not colour.
  *
+ * Calendly moved out of the partner group on 2026-09-18: unlike the other six
+ * its API is self-serve, so the adapter could be built without an agreement
+ * (src/lib/integrations/calendly.ts). It is "Coming soon" beside the other two
+ * until `booking.calendly` is switched on, which is the same promise the
+ * product makes and no more.
+ *
  * The state comes from `src/lib/flags.ts` at build time and nowhere else:
  * `booking.google` on turns Google Calendar's tag to "Available", and the same
- * for `booking.outlook` and each `booking.partner.<id>`. Nobody edits the tag
- * by hand, so the site cannot say "Available" a day before the product does,
- * or keep saying "Coming soon" a day after.
+ * for `booking.outlook`, `booking.calendly` and each `booking.partner.<id>`.
+ * Nobody edits the tag by hand, so the site cannot say "Available" a day before
+ * the product does, or keep saying "Coming soon" a day after.
  *
  * Each name sits under that company's app icon, at the founder's decision on
  * 2026-09-16 (the trademark question was raised and accepted). The icons are
@@ -41,10 +47,11 @@ export interface Integration {
   pending: Exclude<IntegrationState, "available">;
 }
 
-/** In the order a visitor reads them: the two being built, then the partners. */
+/** In the order a visitor reads them: the three being built, then the partners. */
 export const INTEGRATIONS: readonly Integration[] = [
   { name: "Google Calendar", logo: "google-calendar.png", flag: "booking.google", pending: "soon" },
   { name: "Outlook", logo: "outlook.png", flag: "booking.outlook", pending: "soon" },
+  { name: "Calendly", logo: "calendly.png", flag: "booking.calendly", pending: "soon" },
   { name: "Fresha", logo: "fresha.png", flag: "booking.partner.fresha", pending: "roadmap" },
   { name: "SevenRooms", logo: "sevenrooms.png", flag: "booking.partner.sevenrooms", pending: "roadmap" },
   { name: "OpenTable", logo: "opentable.png", flag: "booking.partner.opentable", pending: "roadmap" },
@@ -52,7 +59,6 @@ export const INTEGRATIONS: readonly Integration[] = [
   // Added 2026-09-16 at the founder's request; which partners to approach is still to be decided.
   { name: "Zenoti", logo: "zenoti.png", flag: "booking.partner.zenoti", pending: "roadmap" },
   { name: "Mindbody", logo: "mindbody.png", flag: "booking.partner.mindbody", pending: "roadmap" },
-  { name: "Calendly", logo: "calendly.png", flag: "booking.partner.calendly", pending: "roadmap" },
 ];
 
 export const INTEGRATIONS_HEADING = "Connecting to the tools you already use";

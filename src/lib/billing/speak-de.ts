@@ -1,4 +1,5 @@
 import { formatMoney, type Market, type PriceLocale } from "../markets";
+import { calendarConnectionText } from "../site-flags";
 import {
   ALERT_THRESHOLDS,
   CHANNELS,
@@ -54,9 +55,16 @@ export const CATALOGUE_DE: Record<string, string> = {
   "Your team can take over any chat from the inbox": "Ihr Team kann jeden Chat aus dem Posteingang übernehmen",
   "Your own words and colours on the website buttons": "Ihre eigenen Texte und Farben auf den Website-Buttons",
   "Video receptionist on your website": "Video-Rezeptionistin auf Ihrer Website",
+  // One line per combination of live destinations: the catalogue names only
+  // what works, so every shape `calendarConnectionText` can produce needs a
+  // German twin, and `germanCatalogueTexts` generates the list to prove it.
   "One Google Calendar connection": "Eine Verbindung zu Google Calendar",
   "One Microsoft Outlook connection": "Eine Verbindung zu Microsoft Outlook",
+  "One Calendly connection": "Eine Verbindung zu Calendly",
   "One Google Calendar or Microsoft Outlook connection": "Eine Verbindung zu Google Calendar oder Microsoft Outlook",
+  "One Google Calendar or Calendly connection": "Eine Verbindung zu Google Calendar oder Calendly",
+  "One Microsoft Outlook or Calendly connection": "Eine Verbindung zu Microsoft Outlook oder Calendly",
+  "One Google Calendar, Microsoft Outlook or Calendly connection": "Eine Verbindung zu Google Calendar, Microsoft Outlook oder Calendly",
   "Deposit links by text, paid into your own Stripe account": "Anzahlungslinks per SMS, bezahlt auf Ihr eigenes Stripe-Konto",
   "Puts urgent calls through to your team, live": "Stellt dringende Anrufe live zu Ihrem Team durch",
   "A reminder text the day before every booking": "Eine Erinnerungs-SMS am Tag vor jeder Buchung",
@@ -86,7 +94,12 @@ export function catalogueDe(english: string): string {
 /** Every catalogue text a German page could need, for the checks: the v2 plans' summaries and all their features. */
 export function germanCatalogueTexts(): { english: string; status: Feature["status"] }[] {
   const plans = PRODUCTS.filter((p) => p.kind === "plan");
-  const calendar = ["One Google Calendar connection", "One Microsoft Outlook connection", "One Google Calendar or Microsoft Outlook connection"];
+  // Every shape the calendar line can take, generated rather than typed, so a
+  // fourth destination cannot be added without its German being missed here.
+  const calendar = [true, false]
+    .flatMap((google) => [true, false].flatMap((outlook) => [true, false].map((calendly) => ({ google, outlook, calendly }))))
+    .filter((on) => on.google || on.outlook || on.calendly)
+    .map((on) => calendarConnectionText(on));
   return [
     ...plans.map((p) => ({ english: p.summary, status: p.status })),
     ...plans.flatMap((p) => p.features.map((f) => ({ english: f.text, status: f.status }))),

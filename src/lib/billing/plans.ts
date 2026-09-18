@@ -311,13 +311,17 @@ const DEPOSITS: Feature = {
 
 /**
  * Whether a calendar connection works, as the public pages may say it: the
- * flags themselves (`booking.google`, `booking.outlook`), read when the
+ * flags themselves (`booking.google`, `booking.outlook`, `booking.calendly`), read when the
  * catalogue is read, never typed here. The website ignores FLAG_STUBS, and so
  * does this. Getters rather than values, so a feature follows the flag it has
  * now: the pricing page (built and served), Belle's not-yet list and the gaps
  * report all read the same answer.
  */
-const calendarsLive = () => ({ google: publicFlag("booking.google"), outlook: publicFlag("booking.outlook") });
+const calendarsLive = () => ({
+  google: publicFlag("booking.google"),
+  outlook: publicFlag("booking.outlook"),
+  calendly: publicFlag("booking.calendly"),
+});
 
 const INTEGRATIONS: Feature = {
   text: "Google Calendar and booking-system integrations",
@@ -332,21 +336,21 @@ const INTEGRATIONS: Feature = {
   },
 };
 
-/** One calendar connection: live while either calendar's flag is on, and naming only what is live. */
+/** One calendar connection: live while any destination's flag is on, and naming only what is live. */
 const CALENDAR_CONNECTION: Feature = {
   get text() {
     return calendarConnectionText(calendarsLive());
   },
   get status(): Feature["status"] {
-    const { google, outlook } = calendarsLive();
-    return google || outlook ? "live" : "not-yet";
+    const { google, outlook, calendly } = calendarsLive();
+    return google || outlook || calendly ? "live" : "not-yet";
   },
   get gap() {
-    const { google, outlook } = calendarsLive();
-    if (google || outlook) return undefined;
+    const { google, outlook, calendly } = calendarsLive();
+    if (google || outlook || calendly) return undefined;
     return (
-      "Google Calendar and Microsoft Outlook are both built and tested (check:google, check:outlook); " +
-      "each goes live when its flag, booking.google or booking.outlook, is switched on in Railway."
+      "Google Calendar, Microsoft Outlook and Calendly are all built and tested (check:google, check:outlook, check:calendly); " +
+      "each goes live when its flag, booking.google, booking.outlook or booking.calendly, is switched on in Railway."
     );
   },
 };
@@ -444,7 +448,7 @@ const V2_SCALE_FEATURES: Feature[] = [
     text: "Several booking and calendar connections on one location",
     status: "not-yet",
     gap:
-      "A venue has one calendar connection today, Google Calendar or Outlook, and the routes refuse a " +
+      "A venue has one booking destination today — Google Calendar, Outlook or Calendly — and the routes refuse a " +
       "second. Several need the partner integrations and availability merged across sources.",
   },
   {

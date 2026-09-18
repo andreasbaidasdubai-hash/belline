@@ -11,6 +11,7 @@ import {
   recheckOutlookMisconfigured,
   sweepAbandonedOutlookConnects,
 } from "./outlook";
+import { recheckCalendlyMisconfigured, retryCalendlyCancellations, sweepAbandonedCalendlyConnects } from "./calendly";
 
 /**
  * Every booking at a venue with a connected calendar, in the calendar.
@@ -122,6 +123,10 @@ async function run(bookingId: string, now = new Date()): Promise<SyncResult> {
   let booking = getBooking(bookingId);
   let sync = booking?.calendarSync;
   if (!booking || !sync) return "skipped";
+  // Calendly is not a calendar and has no connector: a `calendly` mark is a
+  // cancellation Calendly has not taken, retried by integrations/calendly.ts.
+  // Left alone here, or the branch below would wipe it as "disconnected".
+  if (sync.provider === "calendly") return "skipped";
   const location = getLocation(booking.locationId);
   const c = location ? connectorFor(location) : null;
 
@@ -307,11 +312,14 @@ export async function retryCalendarSyncs(now = new Date()): Promise<{ attempted:
  * cleared by a recheck has its waiting bookings written in the same sweep.
  */
 export async function sweepCalendars(now = new Date()) {
-  const abandoned = sweepAbandonedConnects(now) + sweepAbandonedOutlookConnects(now);
-  const recovered = (await recheckMisconfigured()) + (await recheckOutlookMisconfigured());
+  const abandoned = sweepAbandonedConnects(now) + sweepAbandonedOutlookConnects(now) + sweepAbandonedCalendlyConnects(now);
+  const recovered = (await recheckMisconfigured()) + (await recheckOutlookMisconfigured()) + (await recheckCalendlyMisconfigured());
   const refreshed = await keepOutlookTokensFresh(now);
   const bookings = await retryCalendarSyncs(now);
-  return { abandoned, recovered, refreshed, ...bookings };
+  // Calendly's own retry: cancellations the customer has already been told
+  // about that Calendly has not taken yet. See integrations/calendly.ts.
+  const calendly = await retryCalendlyCancellations(now);
+  return { abandoned, recovered, refreshed, ...bookings, calendlyCancellations: calendly };
 }
 
 /** As `syncBooking`, with the sweep's clock. */

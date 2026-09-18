@@ -398,28 +398,46 @@ const swap = (html: string, from: string, to: string) => html.split(from).join(t
  * The pricing catalogue's calendar line, by the flags (billing/plans.ts reads
  * it from here). Live while either calendar works, naming only what works.
  */
-export function calendarConnectionText(on: { google: boolean; outlook: boolean }): string {
-  if (on.google && !on.outlook) return "One Google Calendar connection";
-  if (on.outlook && !on.google) return "One Microsoft Outlook connection";
-  return "One Google Calendar or Microsoft Outlook connection";
+export function calendarConnectionText(on: CalendarsLive): string {
+  return `One ${listed(liveNames(on), "or")} connection`;
+}
+
+/** Where a booking can go, in the order the pages name them. */
+export interface CalendarsLive {
+  google: boolean;
+  outlook: boolean;
+  calendly: boolean;
+}
+
+/**
+ * The names to say, in order. With none of them on the line is not rendered at
+ * all, so the fallback below is the shape of the sentence and not a claim.
+ */
+function liveNames(on: CalendarsLive): string[] {
+  const names = [on.google && "Google Calendar", on.outlook && "Microsoft Outlook", on.calendly && "Calendly"].filter(Boolean) as string[];
+  return names.length ? names : ["Google Calendar", "Microsoft Outlook"];
 }
 
 /**
  * The German calendar line, as speak-de.ts translates `calendarConnectionText`.
  * Kept here, beside the English, so the static server needs no catalogue.
  */
-export function calendarConnectionTextDe(on: { google: boolean; outlook: boolean }): string {
-  if (on.google && !on.outlook) return "Eine Verbindung zu Google Calendar";
-  if (on.outlook && !on.google) return "Eine Verbindung zu Microsoft Outlook";
-  return "Eine Verbindung zu Google Calendar oder Microsoft Outlook";
+export function calendarConnectionTextDe(on: CalendarsLive): string {
+  return `Eine Verbindung zu ${listed(liveNames(on), "oder")}`;
 }
 
 /** The Starter card's last line before the calendar connection, as scripts/site-pricing.ts renders it. */
 const PRICING_ANCHOR = "<li>Your own words and colours on the website buttons</li>";
-const CALENDAR_LINE = /(\r?\n[ \t]*<li>One (?:Google Calendar or Microsoft Outlook|Google Calendar|Microsoft Outlook) connection<\/li>)/g;
+/**
+ * The generated calendar line in any of its shapes. Written loosely on purpose:
+ * how many destinations are live decides how the names are joined, and a
+ * pattern listing every combination would silently stop matching the day a
+ * fourth was added, leaving two lines on the card.
+ */
+const CALENDAR_LINE = /(\r?\n[ \t]*<li>One [^<]{0,90} connection<\/li>)/g;
 /** The same two, on the German pages (scripts/site-pricing-de.ts). */
 const PRICING_ANCHOR_DE = "<li>Ihre eigenen Texte und Farben auf den Website-Buttons</li>";
-const CALENDAR_LINE_DE = /(\r?\n[ \t]*<li>Eine Verbindung zu (?:Google Calendar oder Microsoft Outlook|Google Calendar|Microsoft Outlook)<\/li>)/g;
+const CALENDAR_LINE_DE = /(\r?\n[ \t]*<li>Eine Verbindung zu [^<]{0,90}<\/li>)/g;
 
 /**
  * The pricing cards' calendar line, as the flags say it now.
@@ -431,12 +449,16 @@ const CALENDAR_LINE_DE = /(\r?\n[ \t]*<li>Eine Verbindung zu (?:Google Calendar 
  * have rendered it, without loading the catalogue into the static server.
  */
 export function applyCalendarPricing(html: string, env: Env = process.env, lang: "en" | "de" = "en"): string {
-  const on = { google: publicFlag("booking.google", env), outlook: publicFlag("booking.outlook", env) };
+  const on: CalendarsLive = {
+    google: publicFlag("booking.google", env),
+    outlook: publicFlag("booking.outlook", env),
+    calendly: publicFlag("booking.calendly", env),
+  };
   const anchor = lang === "de" ? PRICING_ANCHOR_DE : PRICING_ANCHOR;
   const line = lang === "de" ? CALENDAR_LINE_DE : CALENDAR_LINE;
   const text = lang === "de" ? calendarConnectionTextDe(on) : calendarConnectionText(on);
   let out = html.split(anchor).map((part, i) => (i === 0 ? part : part.replace(new RegExp(`^${line.source}`), ""))).join(anchor);
-  if (on.google || on.outlook) out = out.split(anchor).join(`${anchor}\n            <li>${text}</li>`);
+  if (on.google || on.outlook || on.calendly) out = out.split(anchor).join(`${anchor}\n            <li>${text}</li>`);
   return out;
 }
 
