@@ -381,6 +381,62 @@ test("a promise that is being kept is left alone", () => {
   assert.equal(promiseLine(300), "Calls end after 5 minutes.");
 });
 
+// ---------------------------------------------------------------------------
+// The same promise, made to a salon owner rather than to a caller
+//
+// Belline does not invent availability, and it does not invent connections
+// either. The website's integrations strip is read by owners deciding whether
+// to buy, and "Available" under a logo is a claim that a salon on that system
+// can be booked into today.
+//
+// A `booking.partner.<id>` flag does not say that. It says this deployment
+// holds a key and somebody switched it on — which is what a *sandbox* key looks
+// like, and what the week after a key arrives looks like while it is still
+// being driven against a fake studio. Four of the six partners have no bookable
+// API at all, so for them it could never say it.
+//
+// So the strip waits for a live production connection, and these are the
+// assertions that keep it waiting. See scripts/site-integrations.ts and
+// src/lib/integrations/partners/registry.ts.
+
+const { INTEGRATIONS, integrationState, partnerOf } = await import("./site-integrations");
+const { PARTNERS: PARTNER_FACTS, PARTNER_IDS, partnerLive } = await import("../src/lib/integrations/partners");
+
+test("a partner flag and a key alone cannot put a logo on the site as Available", () => {
+  for (const item of INTEGRATIONS) {
+    const id = partnerOf(item);
+    if (!id || !PARTNER_FACTS[id]) continue;
+    const upper = id.toUpperCase();
+    const switched = { [`FLAG_BOOKING_PARTNER_${upper}`]: "on", [`PARTNER_${upper}_API_KEY`]: "k" };
+    assert.equal(integrationState(item, switched), "roadmap", `${item.name} went live on a flag`);
+    assert.equal(integrationState(item, { ...switched, [`PARTNER_${upper}_ENV`]: "sandbox" }), "roadmap", `${item.name} went live on a sandbox`);
+    assert.equal(integrationState(item, { ...switched, FLAG_STUBS: "on" }), "roadmap", `${item.name} went live on a stub`);
+  }
+});
+
+test("a partner with no bookable API can never be called live, whatever env says", () => {
+  for (const id of PARTNER_IDS) {
+    if (PARTNER_FACTS[id].api.create) continue;
+    const upper = id.toUpperCase();
+    assert.equal(
+      partnerLive(id, {
+        [`FLAG_BOOKING_PARTNER_${upper}`]: "on",
+        [`PARTNER_${upper}_API_KEY`]: "k",
+        [`PARTNER_${upper}_ENV`]: "live",
+      }),
+      false,
+      `${id} claimed to be live with no API to reach`,
+    );
+  }
+});
+
+test("every partner on the strip is 'On our roadmap' on a build with no credentials", () => {
+  for (const item of INTEGRATIONS) {
+    if (!partnerOf(item)) continue;
+    assert.equal(integrationState(item, {}), "roadmap", item.name);
+  }
+});
+
 console.log(
   failed === 0
     ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n`
