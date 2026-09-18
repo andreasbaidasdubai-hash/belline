@@ -484,6 +484,106 @@ export const PARTNERS: Record<PartnerId, PartnerFacts> = {
   },
 
   /**
+   * Eat App: Dubai-founded, strong in the Gulf, and — unlike the other two
+   * restaurant systems — it actually publishes the API.
+   *
+   * Not on a developer portal: `eatapp.co/developers`, `developers.eatapp.co`
+   * and `docs.eatapp.co` do not resolve at all. The documentation lives as
+   * articles inside their customer help centre at `restaurant.eatapp.co/knowledge/`,
+   * which is why it is easy to conclude there is nothing there. There is.
+   *
+   * Two separate APIs, and which one Belline is on decides what it can do.
+   *
+   * **The Partner API** is the one for booking channels, which is what Belline
+   * is. It is two endpoints:
+   *
+   *   GET  /partners/v2/availability      time_slots for a date and a party size
+   *   POST /partners/v2/reservations
+   *
+   * with `Authorization: Bearer <token>` and a documented sandbox at
+   * `https://api.eat-sandbox.co`, production at `https://api.eatapp.co`, and a
+   * sandbox partner portal to inspect what was booked. That is more than
+   * OpenTable gives an approved partner, whose sandbox excludes booking
+   * entirely.
+   *
+   * **The Concierge API** is the richer one — `POST /concierge/v2/availability/range`,
+   * `POST /concierge/v2/reservations`, `PATCH /concierge/v2/reservations/:id`
+   * for both modifying and cancelling, `GET /resources`, `GET /guests`, and an
+   * `idempotency_token` on create — scoped by an `X-Restaurant-ID` or
+   * `X-Group-ID` header. It is a different grant, issued to restaurants,
+   * groups and vendors syncing data rather than to a booking channel.
+   *
+   * So the honest position: Belline builds on the Partner API, which can quote
+   * and book and nothing else. Moving and cancelling are recorded as `false`,
+   * the agent is given no tool for them, and a guest who rings to cancel is
+   * taken as a message — exactly as for Mindbody. The Concierge `PATCH` is
+   * written down above so that the day Eat App issues a Concierge grant the
+   * work is an afternoon rather than a project, but nothing is built against a
+   * credential nobody has offered.
+   *
+   * ## The restaurant note, tested against a real restaurant API
+   *
+   * Eat App confirms most of what the note at the foot of this file predicts,
+   * from its own help centre: party size is the question (`guests` is required,
+   * `covers` in the Concierge dialect — the two APIs disagree on the word);
+   * the venue sets a slot interval, and 30 minutes is its own example; a shift
+   * is "the range where customers can either make reservations or walk in"
+   * rather than the kitchen's hours; turn time is "adjusted based on the number
+   * of covers"; pacing caps either arrivals per slot or covers per shift; and
+   * there is a notice period.
+   *
+   * But it contradicts the note on one point, and that is the useful finding:
+   * **there is no slot lock.** The note says a partner reservation adapter
+   * "must expect a two-phase hold", because OpenTable and SevenRooms both have
+   * one. Eat App publishes no hold and no lock primitive at all — the only
+   * concurrency protection documented anywhere is the Concierge
+   * `idempotency_token`, and that is on the API Belline is not on. For a voice
+   * agent that is a real limitation: the table cannot be held while the caller
+   * makes up their mind, so a time quoted at the start of a sentence may be
+   * gone by the end of it.
+   */
+  eatapp: {
+    id: "eatapp",
+    name: "Eat App",
+    model: "reservations",
+    api: {
+      documented: true,
+      availability: true,
+      create: true,
+      // Both live on the Concierge API's PATCH /reservations/:id, which is a
+      // different grant from the Partner API Belline would be issued. See the
+      // comment above and `limits`.
+      reschedule: false,
+      cancel: false,
+      // Nobody asks for a waiter.
+      staffSelection: false,
+      // GET /resources is Concierge-only; the Partner API publishes no
+      // catalogue, so Belline is told the restaurant's shape rather than reading it.
+      catalogue: false,
+    },
+    auth: "Authorization: Bearer <api token>, issued by Eat App per partner. The Concierge API adds an X-Restaurant-ID or X-Group-ID scope header.",
+    sandbox: "on-request",
+    gate: {
+      what:
+        "A partner onboarding conversation with Eat App: their become-a-partner page books a 30-minute call, and their integrations page says plainly to reach out for API access. The sandbox at api.eat-sandbox.co and the token are both things Eat App issues — there is no self-serve key generation — and each restaurant must be on a subscription that includes the integration. Write to info@eatapp.co for partnerships or support@eatapp.co for the technical side.",
+      apply: "https://restaurant.eatapp.co/become-a-partner-eat-app",
+      docs: "https://restaurant.eatapp.co/knowledge/using-the-eat-app-partner-api-to-get-and-post-availability",
+    },
+    liveNeeds: [],
+    venueNeeds: ["the restaurant's own Eat App id", "that restaurant enabled on Belline's partner token"],
+    limits: [
+      "Nothing holds a table. Eat App publishes no slot lock or hold on the Partner API, so a time quoted while a caller is still deciding may be gone before they finish. This is the one place the restaurant note's 'expect a two-phase hold' does not hold.",
+      "Moving and cancelling are on the Concierge API (PATCH /concierge/v2/reservations/:id), which is a different grant from the Partner API a booking channel is issued. Until Eat App grants both, a guest who rings to cancel is taken as a message and Belline never says it is done.",
+      "No idempotency key on the Partner API's create. The Concierge API has an idempotency_token and the Partner API does not, so Belline's own key check is the only guard against a retry becoming two tables.",
+      "No catalogue on the Partner API. GET /resources is Concierge-only, so the restaurant's rooms and tables are whatever setup recorded rather than something Belline can read back.",
+      "Party size is required, and the two APIs disagree on the word for it — 'guests' on the Partner API, 'covers' on the Concierge one. A port from one to the other that keeps the field name would silently book parties of nobody.",
+      "The waitlist is a product Eat App sells and does not expose: no waitlist endpoint is published, so Belline cannot put a caller in a real queue or quote them a wait.",
+      "No rate limits are published, so the safe assumption is that a busy evening's availability must be cached rather than polled.",
+      "UNVERIFIED: the exact JSON:API envelope of GET /partners/v2/availability, and how the restaurant is identified on it. The field name time_slots and the 30-minute example values come from Eat App's own help centre, but the surrounding shape was not confirmed against a live sandbox. The adapter refuses anything it does not recognise rather than guessing, and this must be checked before any restaurant is connected.",
+    ],
+  },
+
+  /**
    * SevenRooms: the most closed of the six as of February this year.
    *
    * `api-docs.sevenrooms.com` and `pos-api-docs.sevenrooms.com` are login walls;

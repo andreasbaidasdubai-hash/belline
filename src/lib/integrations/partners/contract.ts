@@ -43,7 +43,8 @@ export type PartnerId =
   | "opentable"
   | "sevenrooms"
   | "msbookings"
-  | "calcom";
+  | "calcom"
+  | "eatapp";
 
 /** How the partner's own product thinks about a booking. */
 export type PartnerModel =
