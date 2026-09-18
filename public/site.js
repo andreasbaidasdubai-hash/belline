@@ -515,11 +515,14 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   if (!fab) return;
 
   var dock = null;
+  var veil = null;
 
   function close() {
     if (!dock) return;
     dock.remove();
     dock = null;
+    if (veil) veil.remove();
+    veil = null;
     fab.hidden = false;
     document.removeEventListener("keydown", onKey);    document.dispatchEvent(new CustomEvent("belline:dock", { detail: { open: false } }));
 
@@ -563,7 +566,45 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     shut.textContent = "×";
     shut.addEventListener("click", close);
 
+    // On a phone the dock is a sheet that slides up over the page (site.css):
+    // the page stays behind it and the visitor stays where they were. The veil
+    // is the "outside" a sheet needs to be dismissible by, and the grab handle
+    // says which way it goes. Neither is drawn on a wide screen, where the
+    // chat is a window in the corner and the page is beside it anyway.
+    veil = document.createElement("div");
+    veil.className = "chat-veil";
+    veil.addEventListener("click", close);
+    document.body.appendChild(veil);
+
+    // A handle, not a second close button: × beside it is the one in the
+    // accessibility tree, and two controls called "Close the chat" is one
+    // control too many for anybody reading the page rather than looking at it.
+    var grab = document.createElement("div");
+    grab.className = "chat-grab";
+    grab.setAttribute("aria-hidden", "true");
+    grab.addEventListener("click", close);
+    // A drag downwards closes it, as a sheet should; a drag up does nothing.
+    var from = null;
+    grab.addEventListener("pointerdown", function (e) {
+      from = e.clientY;
+      try {
+        grab.setPointerCapture(e.pointerId);
+      } catch (err) {
+        /* capture is a nicety */
+      }
+    });
+    grab.addEventListener("pointermove", function (e) {
+      if (from !== null && e.clientY - from > 44) {
+        from = null;
+        close();
+      }
+    });
+    grab.addEventListener("pointerup", function () {
+      from = null;
+    });
+
     dock.appendChild(frame);
+    dock.appendChild(grab);
     dock.appendChild(shut);
     document.body.appendChild(dock);
     // Into the dock, so a keyboard is not left on the page behind it.
@@ -654,23 +695,31 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
    or a poster; no session, no microphone) and, on a tap, grows it into the
    call itself.
 
-   Where she sits (founder, 2026-09-17: Belle is large on load, and only × makes
-   her small):
-   - On every screen her bubble is the hero's demonstration, in the flow of the
-     page, at the call's own size (about 320 px; 240 px on a phone, where it
-     comes straight under the headline and the pills). Under the face: "Hi, I'm
-     Belle — tap to talk" above it, the round chat and WhatsApp icons, and the
-     small included line. There is no button to start the call: the face is
-     the button ("Talk to Belle on video").
-   - × makes her small for the session: the hero's demonstration goes, and a
-     64 px face with the same icons floats bottom right.
-   - The same small face floats while the hero's face is out of view. It is
-     never shown while the hero's face is on screen, and it steps out of the
-     way wherever it would cover the pricing or a button.
-   - A call always happens in the big circle: in the hero when her face is on
-     screen, otherwise floating in the corner (picture in picture stays as
-     embed-video.js builds it). When the call ends she goes back to where she
-     was: the hero, or the small face after ×.
+   One Belle, who travels (founder, 2026-09-18)
+   --------------------------------------------
+   There used to be two of her: a large bubble in the hero, and a separate
+   floating launcher bottom right that appeared once the hero scrolled away.
+   Two objects, one cross-fading into the other, and scrolling left her behind.
+
+   Now there is one object. She rests in the hero at the call's own size, and
+   as the hero's circle scrolls out of view she is carried to the bottom-right
+   corner, shrinking as she goes, and lands there as the small face. Scrolling
+   back up carries her home. While the hero's circle is on screen there is
+   nothing in the corner, because there is nothing else to be there.
+
+   - Tied to scroll position, not to a timer: each frame reads where the hero's
+     slot is now and writes one transform on her and one on her circle. Nothing
+     else changes while she flies — no width, no top, no left, no reflow — so
+     the flight is a compositor job and the page never reflows under it.
+   - `prefers-reduced-motion`: no flight. She is simply in the corner, and the
+     hero keeps its still face and its "Talk to Belle" button.
+   - Never mid-call. While a call is running the flight is off: the call keeps
+     the picture-in-picture behaviour embed-video.js already has, and she never
+     shrinks to a button with somebody talking to her.
+   - × makes her small for the rest of the session: the hero's demonstration
+     goes, and she stays landed in the corner wherever the page is scrolled.
+   - She steps out of the way wherever the landed face (or her icons) would
+     cover the pricing, a button or the hero's own words.
 
    WhatsApp is offered only while the config names a link (`whatsappLink`: a
    connected number, or belline.ai's public one, SITE_WHATSAPP_NUMBER), and it
@@ -689,7 +738,7 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
 
   var ctl = null;
   var bubble = null;
-  var launcher = null;
+  var circle = null;
   var waFab = document.querySelector(".wa-fab");
   /** The config's WhatsApp link, or null while there is no number to offer. */
   var waLink = null;
@@ -698,21 +747,28 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   var heroDemo = figure ? figure.closest(".hero-demo") : null;
   var docked = false;
   var inCall = false;
-  var faceInView = true;
   var poster = "";
+
+  /** The diameter of the landed face. */
+  var SMALL = 64;
+  /** A phone, where the hero is a column rather than two. */
+  var PHONE = "(max-width: 900px)";
+  /**
+   * Does she make the trip on a phone too?
+   *
+   * The founder's guess was no — the hero is too tall there for the flight to
+   * read. Checked at 390x844 before this was written: her circle is 240px in a
+   * 844px screen and the flight takes about 230px of scrolling, a quarter of a
+   * screen, which reads perfectly well; and starting her in the corner costs
+   * the phone its whole hero demonstration, which is the strongest thing on
+   * that screen. So she travels on a phone too. Set this false to try the
+   * other way round — nothing else has to change.
+   */
+  var PHONE_TRAVELS = true;
 
   var WORDS = SITE_DE
     ? { face: "Mit Belle per Video sprechen", caption: "Hallo, ich bin Belle — zum Sprechen tippen", region: "Belle, KI-Empfang" }
     : { face: "Talk to Belle on video", caption: "Hi, I'm Belle — tap to talk", region: "Belle, AI receptionist" };
-
-  var MARK =
-    '<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="#2997FF" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>';
-  var ICONS = {
-    chat:
-      '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 11.2C3 6.9 7.03 3.5 12 3.5s9 3.4 9 7.7c0 4.3-4.03 7.7-9 7.7a11 11 0 0 1-2.4-.26L5.4 20.5l.5-3.2A7.7 7.7 0 0 1 3 11.2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="8.2" cy="11.2" r="1.15" fill="currentColor"/><circle cx="12" cy="11.2" r="1.15" fill="currentColor"/><circle cx="15.8" cy="11.2" r="1.15" fill="currentColor"/></svg>',
-    whatsapp:
-      '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z" fill="currentColor"/></svg>',
-  };
 
   // Until the config names a number, there is no WhatsApp to offer.
   if (waFab) waFab.hidden = true;
@@ -739,157 +795,246 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     return 'url("' + String(url).replace(/["\\\n\r]/g, encodeURIComponent) + '")';
   }
 
+  function query(q) {
+    try {
+      return Boolean(window.matchMedia && window.matchMedia(q).matches);
+    } catch (e) {
+      return false;
+    }
+  }
+
   function inHero() {
     return Boolean(figure && figure.classList.contains("has-bubble"));
   }
 
-  /** × was pressed in this tab's session: Belle is the small face. */
+  /** × was pressed in this tab's session: Belle stays landed in the corner. */
   function small() {
     return Boolean(ctl && ctl.state().dismissed);
   }
 
-  /** Is the whole resting bubble on screen, so a call can grow where it is? */
-  function bubbleOnScreen() {
-    if (!bubble) return false;
-    var r = bubble.getBoundingClientRect();
-    return r.height > 0 && r.top >= 0 && r.bottom <= window.innerHeight;
+  /**
+   * Does she make the trip on this screen at all?
+   *
+   * Reduced motion: never — no flight, she is simply in the corner. A phone:
+   * PHONE_TRAVELS decides, and the hero is tall enough there that the trip is
+   * most of a screen's scrolling; see the note beside it.
+   */
+  function cornerOnly() {
+    if (query("(prefers-reduced-motion: reduce)")) return true;
+    return !PHONE_TRAVELS && query(PHONE);
   }
 
-  function place(root) {
-    bubble = root;
-    root.classList.add("video-bubble");
-    document.body.classList.add("has-video-bubble");
-    if (slot) {
-      slot.appendChild(root);
-      figure.classList.add("has-bubble");
-      if (heroDemo) heroDemo.classList.add("has-video-hero");
-    } else {
-      root.classList.add("vb-parked");
-      document.body.appendChild(root);
-    }
-    // Made small earlier in this session: the small face, not the hero.
-    if (root.getAttribute("data-state") === "mini") shrink();
-  }
+  // --- where she is ----------------------------------------------------------
 
-  /** The hero's demonstration goes, and the small face takes the corner. */
-  function shrink() {
-    if (!bubble) return;
-    bubble.classList.add("vb-parked");
-    // Out of the hero (at rest, so nothing reloads): a call from the small face floats in the corner.
-    document.body.appendChild(bubble);
-    if (figure) figure.classList.remove("has-bubble");
-    if (figure) figure.classList.add("is-small");
-    // site.css keeps the hero's words clear of the corner on a small phone.
-    document.body.classList.add("belle-small");
-    if (heroDemo) heroDemo.classList.remove("has-video-hero");
-  }
+  /** 0 while she rests in the hero, 1 once she has landed in the corner. */
+  var progress = 0;
+  /** "hero" (in the page's flow), "flight" (carried), "corner" (landed). */
+  var where = "hero";
+  /** position:fixed and carried by a transform. False means she is in the hero's flow. */
+  var flying = false;
+  var tucked = false;
+  var away = false;
+  /** The slot's own top padding, so her resting place can be found without measuring her. */
+  var slotPad = 0;
+  /** env(safe-area-inset-bottom), measured once — a corner on an iPhone is not the screen's corner. */
+  var safeBottom = 0;
+  var slotSides = 0;
+  var slotLeftPad = 0;
+  /** What she must not land on. Re-read when the page changes size, not every frame. */
+  var obstacles = [];
+  var heroText = [];
+  var textPad = [];
+  /** The last time the landed face checked what is under it. */
+  var checkedAt = 0;
 
-  // --- the small face --------------------------------------------------------
-
-  function buildLauncher() {
-    launcher = document.createElement("div");
-    launcher.className = "video-launcher";
-    launcher.setAttribute("role", "region");
-    launcher.setAttribute("aria-label", WORDS.region);
-    launcher.hidden = true;
-
-    var main = document.createElement("button");
-    main.type = "button";
-    main.className = "vl-main";
-    main.setAttribute("aria-label", WORDS.face);
-    main.title = WORDS.face;
-    var face = document.createElement("span");
-    face.className = "vl-face";
-    face.setAttribute("aria-hidden", "true");
-    face.innerHTML = MARK;
-    if (poster) {
-      face.style.backgroundImage = cssUrl(poster);
-      face.classList.add("has-poster");
-    }
-    main.appendChild(face);
-    main.addEventListener("click", startCall);
-    launcher.appendChild(main);
-
-    actions().forEach(function (o) {
-      var act = document.createElement("button");
-      act.type = "button";
-      act.className = "vl-act";
-      act.setAttribute("data-kind", o.kind);
-      act.setAttribute("aria-label", o.label);
-      act.title = o.label;
-      act.innerHTML = ICONS[o.kind] || ICONS.chat;
-      act.addEventListener("click", function () {
-        o.run();
-      });
-      launcher.appendChild(act);
-    });
-    document.body.appendChild(launcher);
-  }
-
-  // What the small face must never sit on: the pricing, and any button or form.
+  // What the landed face must never sit on: the pricing, and any button or form.
   var AVOID =
     "#price .sec-head, #price .market-note, #price .price-bar, #price .plans, #price .plan-shared, #price .price-tax, #price .compare, #price .terms, " +
     ".btn, .nav-cta, .cta-row, .roi-result, #warteliste, .chat-dock, .call-dock";
-
-  /**
-   * The hero's words: never under the small face either. Their content box
-   * only, so the room site.css leaves on a small phone (padding-right) counts
-   * as room. Tucked is enough there; it does not send her away.
-   */
+  /** The hero's words: never under her either. Their content box only. */
   var HERO_TEXT = ".hero .lead, .hero-note";
 
-  function coversText() {
-    var box = {
-      left: launcher.offsetLeft,
-      top: launcher.offsetTop,
-      right: launcher.offsetLeft + launcher.offsetWidth,
-      bottom: launcher.offsetTop + launcher.offsetHeight,
-    };
-    return [].some.call(document.querySelectorAll(HERO_TEXT), function (el) {
-      var r = el.getBoundingClientRect();
-      if (!(r.width > 0 && r.height > 0)) return false;
-      var pad = parseFloat(window.getComputedStyle(el).paddingRight) || 0;
-      return overlaps(box, { left: r.left, top: r.top, right: r.right - pad, bottom: r.bottom });
+  function measureOnce() {
+    try {
+      var probe = document.createElement("div");
+      probe.style.cssText = "position:fixed;left:-9999px;bottom:0;width:1px;height:env(safe-area-inset-bottom,0px)";
+      document.body.appendChild(probe);
+      safeBottom = probe.offsetHeight || 0;
+      probe.remove();
+    } catch (e) {
+      safeBottom = 0;
+    }
+  }
+
+  /**
+   * Everything a frame would otherwise have to ask the page for.
+   *
+   * Read when the page changes shape, never inside the flight: a frame that
+   * calls getComputedStyle or querySelectorAll is a frame that can miss.
+   */
+  function remeasure() {
+    var style = slot ? window.getComputedStyle(slot) : null;
+    slotPad = style ? parseFloat(style.paddingTop) || 0 : 0;
+    slotSides = style ? (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0) : 0;
+    slotLeftPad = style ? parseFloat(style.paddingLeft) || 0 : 0;
+    obstacles = [].slice.call(document.querySelectorAll(AVOID)).concat([].slice.call(document.querySelectorAll(HERO_TEXT)));
+    heroText = [].slice.call(document.querySelectorAll(HERO_TEXT));
+    textPad = heroText.map(function (el) {
+      return parseFloat(window.getComputedStyle(el).paddingRight) || 0;
     });
+  }
+
+  function clamp(n) {
+    return n < 0 ? 0 : n > 1 ? 1 : n;
+  }
+
+  /** The circle's laid-out width — its transform scales it, and never this. */
+  function circleWidth() {
+    return (circle && circle.offsetWidth) || 0;
+  }
+
+  /**
+   * How far along the trip the page's scroll has carried her.
+   *
+   * Read from where the hero's slot is right now, so she is carried by the
+   * scroll rather than reacting to it: the flight begins as her circle reaches
+   * the top of the screen and finishes once three quarters of it has gone past.
+   */
+  function progressNow() {
+    if (!slot) return 1;
+    var size = circleWidth();
+    if (!size) return 0;
+    var r = slot.getBoundingClientRect();
+    if (!r.height) return 0;
+    var head = window.innerHeight * 0.06;
+    var span = size * 0.75 + head;
+    return clamp((head - (r.top + slotPad)) / span);
   }
 
   function overlaps(a, b) {
     return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
   }
 
-  /** Where the launcher is laid out, whatever its slide has got to (offsets ignore transforms). */
-  function covers() {
-    var box = {
-      left: launcher.offsetLeft,
-      top: launcher.offsetTop,
-      right: launcher.offsetLeft + launcher.offsetWidth,
-      bottom: launcher.offsetTop + launcher.offsetHeight,
-    };
-    return [].some.call(document.querySelectorAll(AVOID), function (el) {
-      if (launcher.contains(el)) return false;
+  /** Is anything of the page's own under this box? */
+  function hits(box) {
+    for (var i = 0; i < obstacles.length; i++) {
+      var el = obstacles[i];
+      if (bubble && bubble.contains(el)) continue;
       var r = el.getBoundingClientRect();
-      return r.width > 0 && r.height > 0 && overlaps(box, r);
-    });
+      if (!(r.width > 0 && r.height > 0)) continue;
+      // The room site.css leaves beside the hero's words counts as room.
+      var at = heroText.indexOf(el);
+      var pad = at < 0 ? 0 : textPad[at];
+      if (overlaps(box, { left: r.left, top: r.top, right: r.right - pad, bottom: r.bottom })) return true;
+    }
+    return false;
   }
 
-  /**
-   * Step aside: first to the face alone, tucked into the margin; if even that
-   * would cover something (a phone has no margin), out of view until the
-   * content has scrolled past. Back as soon as there is room.
-   */
-  function avoid() {
-    launcher.classList.remove("is-tucked", "is-away");
-    if (!covers() && !coversText()) return;
-    launcher.classList.add("is-tucked");
-    if (covers() || coversText()) launcher.classList.add("is-away");
+  /** How far to the left of the landed face her icons reach. */
+  function rowReach() {
+    var row = bubble ? bubble.querySelector(".bvb-row") : null;
+    return row ? row.offsetWidth + 10 : 0;
+  }
+
+  function travelOn() {
+    if (flying || !bubble) return;
+    // Keep the room she took, measured before she leaves the flow, so the hero
+    // does not jump as she lifts off.
+    if (slot && inHero() && !slot.style.minHeight) slot.style.minHeight = slot.offsetHeight + "px";
+    flying = true;
+    bubble.classList.add("vb-travel");
+  }
+
+  function travelOff() {
+    if (!bubble) return;
+    if (flying) {
+      flying = false;
+      bubble.classList.remove("vb-travel", "vb-tucked", "vb-away");
+      bubble.style.transform = "";
+      if (circle) circle.style.transform = "";
+      if (slot && !bubble.classList.contains("vb-float")) slot.style.minHeight = "";
+    }
+    tucked = false;
+    away = false;
+    if (where !== "hero") {
+      where = "hero";
+      bubble.setAttribute("data-vb", "hero");
+    }
+  }
+
+  /** Write the frame: one transform on her, one on her circle, and nothing else. */
+  function carry(p) {
+    progress = p;
+    if (p <= 0) return travelOff();
+    travelOn();
+
+    var vw = window.innerWidth || 0;
+    var vh = window.innerHeight || 0;
+    var margin = vw <= 900 ? 20 : 24;
+    var size = circleWidth() || SMALL;
+    var landed = p >= 0.999;
+
+    // Where she lands, and whether she has to step aside to do it. Only once
+    // she has landed, and at most ten times a second: she is not moving there,
+    // and measuring forty boxes on every frame of a flight is how a flight
+    // drops below sixty.
+    var cornerX = vw - margin - SMALL;
+    var cornerY = vh - margin - SMALL - safeBottom;
+    if (!landed) {
+      tucked = false;
+      away = false;
+    } else {
+      var now = Date.now();
+      if (where !== "corner" || now - checkedAt > 100) {
+        checkedAt = now;
+        tucked = false;
+        away = false;
+        var withRow = { left: cornerX - rowReach(), top: cornerY, right: cornerX + SMALL, bottom: cornerY + SMALL };
+        if (hits(withRow)) {
+          tucked = true;
+          if (hits({ left: vw - 12 - SMALL, top: cornerY, right: vw - 12, bottom: cornerY + SMALL })) away = true;
+        }
+      }
+      if (tucked) cornerX = vw - 12 - SMALL;
+    }
+
+    var x = cornerX;
+    var y = cornerY + (away ? SMALL + 40 : 0);
+    var s = SMALL / size;
+    if (!landed && slot && inHero()) {
+      // Everything but the slot's own position was read in `remeasure`.
+      var r = slot.getBoundingClientRect();
+      var hx = r.left + slotLeftPad + (r.width - slotSides - bubble.offsetWidth) / 2;
+      var hy = r.top + slotPad;
+      x = hx + (cornerX - hx) * p;
+      y = hy + (cornerY - hy) * p;
+      s = 1 + (SMALL / size - 1) * p;
+    }
+
+    bubble.style.transform = "translate3d(" + Math.round(x) + "px," + Math.round(y) + "px,0)";
+    if (circle) circle.style.transform = "scale(" + s.toFixed(4) + ")";
+    bubble.classList.toggle("vb-tucked", tucked);
+    bubble.classList.toggle("vb-away", away);
+
+    var next = landed ? "corner" : "flight";
+    if (where !== next) {
+      where = next;
+      bubble.setAttribute("data-vb", next);
+    }
   }
 
   function update() {
-    if (!launcher) return;
-    // Never beside the big face: only once × made her small, or her face is out of view.
-    var show = Boolean(ctl) && !inCall && !docked && (small() || !inHero() || !faceInView);
-    launcher.hidden = !show;
-    if (show) avoid();
+    if (!bubble || !ctl) return;
+    // A call keeps whatever embed-video.js is doing with it, including
+    // carrying it as the page scrolls. She is never flown to a button mid-call.
+    //
+    // Hidden behind a dock, she is left exactly as she is: putting her back in
+    // the hero's flow would give the slot's reserved height back, the page
+    // would get shorter under the visitor, and closing the chat would leave
+    // them somewhere they had never scrolled to.
+    if (inCall || docked) return;
+    if (bubble.classList.contains("vb-float")) return;
+    carry(cornerOnly() || small() || !inHero() ? 1 : progressNow());
   }
 
   var queued = false;
@@ -902,6 +1047,61 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     });
   }
 
+  // --- placing her -----------------------------------------------------------
+
+  function place(root) {
+    bubble = root;
+    circle = root.querySelector(".bvb-circle");
+    root.classList.add("video-bubble");
+    root.setAttribute("data-vb", "hero");
+    document.body.classList.add("has-video-bubble");
+    if (slot && !cornerOnly()) {
+      slot.appendChild(root);
+      figure.classList.add("has-bubble");
+      if (heroDemo) heroDemo.classList.add("has-video-hero");
+    } else {
+      document.body.appendChild(root);
+    }
+    remeasure();
+    // Made small earlier in this session: landed, not in the hero.
+    if (root.getAttribute("data-state") === "mini") shrink();
+    update();
+  }
+
+  /** The hero's demonstration goes, and she stays landed in the corner. */
+  function shrink() {
+    if (!bubble) return;
+    if (bubble.parentNode !== document.body) document.body.appendChild(bubble);
+    if (figure) {
+      figure.classList.remove("has-bubble");
+      figure.classList.add("is-small");
+    }
+    // site.css keeps the hero's words clear of the corner on a small phone.
+    document.body.classList.add("belle-small");
+    if (heroDemo) heroDemo.classList.remove("has-video-hero");
+    if (slot) slot.style.minHeight = "";
+  }
+
+  /** The screen changed shape: she may have to change where she lives. */
+  function reconsider() {
+    if (!bubble) return;
+    var corner = cornerOnly() || small();
+    if (corner && inHero()) {
+      travelOff();
+      if (bubble.parentNode !== document.body) document.body.appendChild(bubble);
+      figure.classList.remove("has-bubble");
+      if (heroDemo) heroDemo.classList.remove("has-video-hero");
+      if (slot) slot.style.minHeight = "";
+    } else if (!corner && slot && !inHero() && !figure.classList.contains("is-small")) {
+      travelOff();
+      slot.appendChild(bubble);
+      figure.classList.add("has-bubble");
+      if (heroDemo) heroDemo.classList.add("has-video-hero");
+    }
+    remeasure();
+    update();
+  }
+
   // --- the call ---------------------------------------------------------------
 
   /**
@@ -910,48 +1110,52 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
    */
   function float() {
     if (!bubble || bubble.classList.contains("vb-float")) return;
+    // Back into the hero's flow first, then keep the room she took: travelOff
+    // releases the reserved height, so reserving it before would undo it.
+    travelOff();
     if (slot && inHero()) slot.style.minHeight = slot.offsetHeight + "px";
-    bubble.classList.remove("vb-parked", "vb-leaving");
+    bubble.classList.remove("vb-leaving");
     bubble.classList.add("vb-float");
   }
 
   function startCall() {
     if (!ctl || !bubble) return;
-    if (small() || !(inHero() && bubbleOnScreen())) float();
+    // Grown where she is: in the hero while she is resting there, otherwise
+    // floating in the corner she had travelled to.
+    if (small() || !inHero() || progress > 0.02) float();
     inCall = true;
-    update();
     ctl.openCall();
   }
 
   function callClosed() {
-    var floated = Boolean(bubble && bubble.classList.contains("vb-float"));
     inCall = false;
-    if (bubble && inHero() && !small()) {
-      bubble.classList.remove("vb-float");
+    if (!bubble) return;
+    // A call that happened where she rests: she is already where she belongs,
+    // and the scroll decides the rest.
+    if (!bubble.classList.contains("vb-float")) {
+      if (slot && inHero()) slot.style.minHeight = "";
+      update();
+      return;
+    }
+    // A call that floated: out of sight at once, but still rendered while the
+    // frame ends its session (embed-video.js gives it END_GRACE_MS) — a frame
+    // under display:none may never get to stop the microphone.
+    var leaving = bubble;
+    leaving.classList.add("vb-leaving");
+    window.setTimeout(function () {
+      leaving.classList.remove("vb-leaving");
+      if (inCall) return;
+      leaving.classList.remove("vb-float");
       if (slot) slot.style.minHeight = "";
-    }
-    else if (bubble) {
-      // Out of sight at once, but still rendered while the call frame ends its
-      // session (embed-video.js gives it END_GRACE_MS): a frame under
-      // display:none may never get to stop the microphone.
-      var leaving = bubble;
-      leaving.classList.add("vb-leaving");
-      window.setTimeout(function () {
-        leaving.classList.remove("vb-leaving");
-        if (inCall) return;
-        leaving.classList.remove("vb-float");
-        leaving.classList.add("vb-parked");
-      }, 600);
-    }
-    update();
-    // A call that floated ends where it was: focus goes to the small face, not to a bubble off screen.
-    if (floated && launcher && !launcher.hidden) {
+      // Back to wherever the page's scroll says she should be by now.
+      update();
+      // Where the visitor is, so focus is never sent off screen.
       try {
-        launcher.querySelector(".vl-main").focus({ preventScroll: true });
+        leaving.querySelector(".bvb-circle").focus({ preventScroll: true });
       } catch (e) {
         /* focus is a nicety */
       }
-    }
+    }, 600);
   }
 
   function ready(api) {
@@ -961,7 +1165,7 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       origin: appOrigin,
       key: key,
       hostOrigin: location.origin,
-      // In the hero's flow; site.css floats it for a call away from the hero.
+      // In the hero's flow; this file carries her to the corner and site.css floats a call.
       fixed: false,
       ring: true,
       // The face is the button: no "Talk to Belle" under it.
@@ -980,30 +1184,38 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       onCallClosed: callClosed,
       // Grown back from picture in picture while her place in the hero is off screen: in the corner, not out of view.
       onPip: function (on) {
-        if (!on && inHero() && !bubbleOnScreen()) float();
+        if (!on && inHero() && progressNow() > 0.02) float();
       },
       // "Type instead" during a call: the chat opens where the bubble was.
       onSwitch: function (to) {
         if (to === "chat") chatFab.click();
       },
     });
-    buildLauncher();
-    if (slot && "IntersectionObserver" in window) {
-      new IntersectionObserver(
-        function (entries) {
-          faceInView = entries[0].isIntersecting;
-          update();
-        },
-        { threshold: 0.35 },
-      ).observe(slot);
-    }
+    measureOnce();
+    remeasure();
     window.addEventListener("scroll", soon, { passive: true });
-    window.addEventListener("resize", soon);
+    // A phone's address bar sliding away is a resize, and it arrives with the
+    // scrolling: one frame's worth at a time, never a measurement per event.
+    var resizing = false;
+    window.addEventListener("resize", function () {
+      if (resizing) return;
+      resizing = true;
+      window.requestAnimationFrame(function () {
+        resizing = false;
+        reconsider();
+      });
+    });
+    try {
+      window.matchMedia(PHONE).addEventListener("change", reconsider);
+      window.matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", reconsider);
+    } catch (e) {
+      /* an older browser keeps the screen it loaded with */
+    }
     update();
   }
 
-  // The chat and the voice call dock in the corner: Belle and her small face
-  // step out of their way while one is open, and come back when it closes.
+  // The chat and the voice call dock in the corner: Belle steps out of their
+  // way while one is open, and comes back when it closes.
   document.addEventListener("belline:dock", function (e) {
     docked = Boolean(e.detail && e.detail.open);
     if (ctl) ctl.setHidden(docked);
@@ -1022,6 +1234,25 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       e.preventDefault();
       e.stopPropagation();
       startCall();
+    },
+    true
+  );
+
+  /**
+   * Her own face is the button, and embed-video.js opens the call from it
+   * directly. Caught here first, in the capture phase, so that a call started
+   * while she has travelled grows where the visitor is looking rather than
+   * back up in the hero — and so the frame's own grow-from-here measurement
+   * (embed-video.js `resize`) is taken after she has been put in the corner,
+   * not before.
+   */
+  document.addEventListener(
+    "click",
+    function (e) {
+      if (!ctl || docked || inCall || !bubble) return;
+      var face = e.target && e.target.closest ? e.target.closest(".bvb-circle") : null;
+      if (!face || !bubble.contains(face)) return;
+      if (small() || !inHero() || progress > 0.02) float();
     },
     true
   );

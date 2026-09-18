@@ -35,9 +35,21 @@ and round chat and WhatsApp icons under it (no voice icon: on the web, voice
 is the face). Only the × shrinks it to a small face, for the tab's session
 (sessionStorage); ending a call does not. Closing during a call posts an end
 to the frame, then removes it; the frame's unload beacon is the backstop. On a
-phone, scrolling or tapping outside during a call tucks the same frame into a
-small draggable face in a corner (CSS only, so the call never reloads); a tap
-grows it back.
+phone, scrolling or tapping outside during a call lifts the same frame out of
+the page and **carries it with the visitor at the call's own size** (CSS only,
+so the call never reloads), with mute and end under it and the × on its
+shoulder: it stays large until the visitor closes it. Shrinking her to a button
+while somebody is talking to her was the wrong default (founder, 2026-09-18);
+the 96px version is still there for a host that asks for it, `pip(true)`.
+
+On belline.ai she is **one object that travels** (`public/site.js`): she rests
+in the hero and the page's scroll carries her to the bottom-right corner,
+shrinking as she goes, landing as the 64px face with her icons beside her —
+and scrolling back up carries her home. There is no separate floating launcher
+any more, so there is never a second Belle on the page. The flight is scroll
+position, two transforms and nothing else (no width, no inset, no reflow);
+`prefers-reduced-motion` skips it and she is simply in the corner; and it is
+off for the whole of a call, which leaves the carrying above.
 
 ```
 visitor ─ embed.js / site.js ─ embed-video.js bubble (muted clip, no session)

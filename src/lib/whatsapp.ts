@@ -194,15 +194,52 @@ export async function connectVenueNumber(input: {
   }
 }
 
-/** The venue's WhatsApp number, if one is connected. Null without a database. */
+/**
+ * The venue's WhatsApp number, if one is connected. Null without a database.
+ *
+ * A venue can have more than one active WhatsApp row — a Meta number and a
+ * test connection at the same time — and "the first active one" is whichever
+ * the repository happens to return. On belline.ai that was the Twilio sandbox,
+ * and the public button pointed at a number that ignores everybody who has not
+ * sent it "join <two words>" first. So the pick has an order: a real
+ * Meta-connected number first, then anything else that is not a sandbox, and a
+ * sandbox only if it is all there is — which `venueWhatsAppLink` then refuses
+ * to publish (src/lib/embed.ts).
+ */
 export async function venueWhatsApp(location: Location): Promise<ChannelAccount | null> {
   if (!isConfigured()) return null;
   await migrateReception();
-  return (
-    (await listAccounts(location.tenantId)).find(
-      (a) => a.channel === "whatsapp" && a.locationId === location.id && a.status === "active",
-    ) ?? null
+  const active = (await listAccounts(location.tenantId)).filter(
+    (a) => a.channel === "whatsapp" && a.locationId === location.id && a.status === "active",
   );
+  return active.find((a) => a.provider === "meta") ?? active.find((a) => !isSandboxWhatsApp(a)) ?? active[0] ?? null;
+}
+
+/**
+ * Twilio's shared WhatsApp sandbox number, the same for every Twilio account.
+ * `ensureTwilioSandboxAccount` connects it from `TWILIO_WHATSAPP_FROM`.
+ */
+export const TWILIO_WHATSAPP_SANDBOX = "+14155238886";
+
+/**
+ * Is this account a sandbox or test connection rather than a number the public
+ * may be sent to?
+ *
+ * Two ways of knowing, because either alone has a hole: Twilio's sandbox is
+ * always the same number whatever the row is labelled, and a test number on
+ * this server is whatever `TWILIO_WHATSAPP_FROM` names — the only variable in
+ * this codebase that ever creates a WhatsApp account nobody verified with Meta.
+ */
+export function isSandboxWhatsApp(
+  account: { phoneE164?: string | null; provider?: string } | null | undefined,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  if (!account) return false;
+  const number = (account.phoneE164 ?? "").replace(/[\s-]/g, "");
+  if (!number) return false;
+  if (number === TWILIO_WHATSAPP_SANDBOX) return true;
+  const configured = (env.TWILIO_WHATSAPP_FROM ?? "").replace(/[^\d+]/g, "");
+  return Boolean(configured) && number === configured;
 }
 
 export type WhatsAppStatus =

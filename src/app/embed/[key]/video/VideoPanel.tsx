@@ -1098,6 +1098,10 @@ export default function VideoPanel({
             </button>
           )}
 
+          {/* Inside the circle, not on its edge: every small state clips the
+              frame to the circle (embed-video.js `is-pip`), so a pill straddling
+              the edge is the one that cannot be read at all. Near the top, clear
+              of a thumb, on its own dark paper so it reads on any face. */}
           {state.phase === "live" && (
             <span className="bv-time" aria-label={`${clock(duration.remaining)} left in this call`}>
               {clock(duration.remaining)}
@@ -1334,19 +1338,39 @@ html, body { margin: 0; height: 100%; background: var(--bl-ground) }
   background: var(--bl-navy-card); color: var(--bl-blue-lit); border: 2px solid var(--bl-navy-line);
   transition: box-shadow .2s ease }
 .bv-avatar.is-speaking { box-shadow: 0 0 0 6px var(--bl-navy-line), 0 0 0 12px var(--bl-navy-line) }
-.bv-mock { position: absolute; top: 15%; left: 50%; transform: translateX(-50%); margin: 0; z-index: 2;
+/* Under the timer, never across it: the badge is a development note and the
+   clock is the one thing a visitor in a call needs to be able to read. */
+.bv-mock { position: absolute; top: 24%; left: 50%; transform: translateX(-50%); margin: 0; z-index: 2;
   background: var(--bl-warning-tint); color: var(--bl-warning); border: 1px solid var(--bl-warning);
   font-weight: 700; font-size: 10.5px; letter-spacing: .02em; padding: 2px 8px; border-radius: var(--bl-radius-pill);
   white-space: nowrap; z-index: 2 }
 
-/* The pills on the circle's edges, outside its clip. */
+/* The pill on the circle's top edge, outside its clip. */
 .bv-ai, .bv-time { position: absolute; left: 50%; z-index: 3; white-space: nowrap; border-radius: var(--bl-radius-pill) }
 .bv-ai { top: 0; transform: translate(-50%, -50%); font-size: 10.5px; line-height: 1.3; font-weight: 600;
   letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px;
   color: var(--bl-accent-text); background: var(--bl-blue-tint); border: 1px solid var(--bl-blue-line) }
-.bv-time { bottom: 0; transform: translate(-50%, 50%); font-size: 11.5px; line-height: 1.3; font-weight: 600;
-  font-variant-numeric: tabular-nums; padding: 2px 9px;
-  color: var(--bl-ink-900); background: var(--bl-ground); border: 1px solid var(--bl-blue-line) }
+
+/* How long is left, in every state a call can be in.
+ *
+ * It used to be an 11.5px hairline-bordered pill straddling the circle's
+ * bottom edge: too small to read in the bubble, under the thumb on a phone,
+ * and cut in half by the clip in every small state — a frame carried or tucked
+ * into a corner is clipped to its circle (embed-video.js, is-pip), so
+ * anything on the edge is simply gone. So it is inside the circle, near the
+ * top, well clear of where a thumb rests, on its own dark paper (white on
+ * ~#454545 at worst, about 9:1) so it reads over any face, light or dark. */
+.bv-time { top: 7%; bottom: auto; transform: translateX(-50%);
+  font-size: 14px; line-height: 1.3; font-weight: 700; letter-spacing: .01em;
+  font-variant-numeric: tabular-nums; padding: 4px 12px;
+  color: #FFFFFF; background: rgba(17, 17, 19, .78); border: 1px solid rgba(255, 255, 255, .3);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px) }
+/* The one place the circle is small enough that 14px would crowd it: the 96px
+   button a host can still ask for. Never smaller than 12px. */
+@media (max-width: 220px) {
+  .bv-time { top: 6%; font-size: 12px; padding: 3px 8px }
+}
 .bv-sound { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4;
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 13px;
   border: 0; border-radius: var(--bl-radius-pill); background: var(--bl-ground); color: var(--bl-accent-text);

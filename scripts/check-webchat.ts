@@ -410,7 +410,19 @@ await test("the floating buttons are visible from the first paint, and the hero 
   // Belle rests in the hero's own column (site review, 2026-09-17), and floats only for a call: nothing big covers the page at rest.
   assert.match(css, /\.hero-video \{/, "the hero has lost Belle's column");
   assert.match(css, /\.video-bubble\.vb-float:not\(\.is-pip\) \{\s*position: fixed;/, "Belle no longer floats for a call away from the hero");
-  assert.match(css, /\.video-bubble\.vb-parked \{ display: none; \}/, "a phone shows the big bubble at rest again");
+  // She is one object that travels, not a bubble and a second launcher: the
+  // corner is where the flight lands her, never a copy of her (founder, 2026-09-18).
+  assert.match(css, /\.video-bubble\.vb-travel \{[\s\S]*?position: fixed;/, "Belle is no longer carried to the corner");
+  assert.doesNotMatch(css, /\.video-launcher\b/, "the separate floating launcher is back");
+  assert.doesNotMatch(js, /video-launcher|vl-main|vl-act/, "site.js builds a second Belle again");
+
+  // The chat opens inside the page on a phone: a sheet over it, not a takeover.
+  assert.match(css, /\.chat-dock \{[\s\S]{0,600}?animation: chat-sheet-up/, "the chat is not a sheet on a phone");
+  assert.doesNotMatch(css, /\.chat-dock \{\s*inset: 0;/, "the chat takes the whole screen again");
+  assert.match(css, /\.chat-veil \{[\s\S]{0,400}?animation: chat-veil-in/);
+  assert.match(js, /veil\.addEventListener\("click", close\)/, "there is no outside to tap");
+  assert.match(js, /grab\.addEventListener\("click", close\)/);
+  assert.match(js, /e\.clientY - from > 44/, "a drag down does not put the sheet away");
   // And the footer fix, which the buttons would otherwise cover at the end.
   assert.match(css, /@media \(max-width: 1100px\) \{ footer \{ padding-bottom/, "the footer no longer leaves room for the buttons");
 });
@@ -1921,6 +1933,45 @@ head("Belle's chat on belline.ai: who she is, and what to ask");
       if (had === undefined) delete process.env.SITE_WHATSAPP_NUMBER;
       else process.env.SITE_WHATSAPP_NUMBER = had;
     }
+  });
+
+  await test("a sandbox or test WhatsApp connection is never the public button, and a Meta number is preferred over one", async () => {
+    const { venueWhatsAppLink, connectedWhatsAppLink } = await import("../src/lib/embed");
+    const { isSandboxWhatsApp, TWILIO_WHATSAPP_SANDBOX } = await import("../src/lib/whatsapp");
+    const site = { id: "loc_belline", embed: { key: "be_belline_site" } };
+    const salon = { id: "loc_salon", embed: { key: "be_salon" } };
+
+    // Twilio's shared sandbox: active, connected, and still not publishable.
+    const sandbox = { phoneE164: TWILIO_WHATSAPP_SANDBOX, status: "active", channel: "whatsapp", provider: "twilio" };
+    assert.equal(isSandboxWhatsApp(sandbox, {}), true);
+    assert.equal(connectedWhatsAppLink(sandbox, {}), null, "the Twilio sandbox became the public button");
+    assert.equal(venueWhatsAppLink(site, sandbox, {}), null, "belline.ai published the sandbox — this is what happened");
+    assert.equal(venueWhatsAppLink(salon, sandbox, {}), null);
+
+    // A test number this server was given, whatever it is: TWILIO_WHATSAPP_FROM
+    // is the only variable here that ever connects an unverified number.
+    const tested = { phoneE164: "+14155550123", status: "active", channel: "whatsapp", provider: "twilio" };
+    const env = { TWILIO_WHATSAPP_FROM: "+1 415 555 0123" };
+    assert.equal(isSandboxWhatsApp(tested, env), true);
+    assert.equal(connectedWhatsAppLink(tested, env), null);
+    assert.equal(connectedWhatsAppLink(tested, {}), "https://wa.me/14155550123", "not a test number on a server that names none");
+
+    // Nor from the environment: SITE_WHATSAPP_NUMBER cannot smuggle it in either.
+    assert.equal(venueWhatsAppLink(site, null, { SITE_WHATSAPP_NUMBER: TWILIO_WHATSAPP_SANDBOX }), null);
+
+    // A real Meta number is untouched.
+    const meta = { phoneE164: "+971509999999", status: "active", channel: "whatsapp", provider: "meta" };
+    assert.equal(isSandboxWhatsApp(meta, env), false);
+    assert.equal(connectedWhatsAppLink(meta, env), "https://wa.me/971509999999");
+
+    // And the pick itself: a venue with both rows active hands over the Meta one.
+    const whats = fs.readFileSync(path.join(process.cwd(), "src", "lib", "whatsapp.ts"), "utf8");
+    const pick = whats.slice(
+      whats.indexOf("export async function venueWhatsApp("),
+      whats.indexOf("export const TWILIO_WHATSAPP_SANDBOX"),
+    );
+    assert.match(pick, /active\.find\(\(a\) => a\.provider === "meta"\)/, "the venue's number is whichever row sorts first again");
+    assert.match(pick, /active\.find\(\(a\) => !isSandboxWhatsApp\(a\)\)/);
   });
 
   await test("/whatsapp without a connection explains and offers the chat and getting started, not a dead end", () => {

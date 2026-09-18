@@ -26,12 +26,17 @@
  *   and the live face fades in over it. The live session starts inside the
  *   frame.
  *
- *   **Picture in picture (a phone, in a call).** Scrolling the page or tapping
- *   outside the call shrinks it to a small round face in a corner, still live
- *   and audible. The same frame, positioned and clipped by CSS only: it is
- *   never moved in the page, so the call never reloads or drops. Drag it
- *   anywhere; tap it to grow the call back; press and hold (or hover, or tab
- *   to it) for a tiny mute and end.
+ *   **Carried (a phone, in a call).** Scrolling the page or tapping outside
+ *   the call lifts it out of the page and carries it with the visitor, at the
+ *   call's own size, with mute and end under it and the × on its shoulder. It
+ *   stays large until the visitor closes it: shrinking her to a button while
+ *   somebody is talking to her is the wrong default (founder, 2026-09-18).
+ *   The same frame, positioned and clipped by CSS only: it is never moved in
+ *   the page, so the call never reloads or drops. Drag it anywhere.
+ *
+ *   **Picture in picture (small).** The same machinery at 96px, for a host
+ *   that asks for it with `pip(true)`. Tap it to grow the call back; press and
+ *   hold (or hover, or tab to it) for a tiny mute and end.
  *
  *   **Small.** Only the × does this: the bubble shrinks to a small face beside
  *   the icons for the rest of the tab's session (sessionStorage). Tapping the
@@ -170,6 +175,19 @@
     // Picture in picture: the same frame, fixed in a corner and clipped to the face. Nothing is moved in the page.
     ".bvb.is-pip{--bvb-cur:96px;position:fixed;z-index:2147483000;height:var(--bvb-cur);" +
     "right:calc(" + PIP_MARGIN + "px + env(safe-area-inset-right,0px));bottom:calc(96px + env(safe-area-inset-bottom,0px));left:auto;top:auto;touch-action:none}" +
+    // Carried, not shrunk (founder, 2026-09-18). Scrolling during a call on a
+    // phone used to tuck her into a 96px button while somebody was talking to
+    // her. The same frame is carried instead, at the call's own size, centred
+    // above the thumb, with mute and end always under her and the × still on
+    // her shoulder: she stays large until the visitor closes her.
+    // Centred with `left`, never with a margin: a drag writes `left` inline,
+    // and a margin under it would push her that much further off the screen
+    // than the clamp in `place` believes she is.
+    ".bvb.is-pip.is-pipbig{--bvb-cur:var(--bvb-call);left:calc(50% - var(--bvb-cur) / 2);right:auto;" +
+    "bottom:calc(72px + env(safe-area-inset-bottom,0px))}" +
+    ".bvb.is-pip.is-pipbig .bvb-pipbar{opacity:1;pointer-events:auto}" +
+    ".bvb.is-pip.is-pipbig .bvb-shut{display:grid;top:calc(var(--bvb-cur)*.146 - 14px);right:-12px}" +
+    ".bvb.is-pip.is-pipbig .bvb-pipface{cursor:default}" +
     ".bvb.is-pip .bvb-frame{clip-path:circle(calc(var(--bvb-cur) / 2) at 50% calc(var(--bvb-cur) / 2));pointer-events:none;transition:none}" +
     ".bvb.is-pip .bvb-tags,.bvb.is-pip .bvb-shut,.bvb.is-pip .bvb-caption,.bvb.is-pip .bvb-mock{display:none}" +
     ".bvb-pipface,.bvb-pipbar{display:none}" +
@@ -229,6 +247,8 @@
       mode: null,
       ringing: false,
       pip: false,
+      /** Carried at the call's own size rather than tucked into a 96px button. */
+      pipBig: false,
       pipFace: null,
       pipMute: null,
       muted: false,
@@ -323,7 +343,7 @@
       var theirs = String(state.root.className || "")
         .split(" ")
         .filter(function (c) {
-          return c && !/^(bvb|bvb-fixed|bvb-left|is-call|is-mini|is-growing|is-pip|is-pipctl|is-dragging)$/.test(c);
+          return c && !/^(bvb|bvb-fixed|bvb-left|is-call|is-mini|is-growing|is-pip|is-pipbig|is-pipctl|is-dragging)$/.test(c);
         });
       state.root.className =
         (theirs.length ? theirs.join(" ") + " " : "") +
@@ -331,9 +351,10 @@
         (opts.fixed ? " bvb-fixed" : "") +
         (opts.side === "left" ? " bvb-left" : "") +
         (mode === "call" ? " is-call" : mode === "mini" ? " is-mini" : "") +
-        (mode === "call" && state.pip ? " is-pip" : "");
+        (mode === "call" && state.pip ? " is-pip" : "") +
+        (mode === "call" && state.pip && state.pipBig ? " is-pipbig" : "");
       state.root.setAttribute("data-state", mode);
-      state.root.setAttribute("data-pip", mode === "call" && state.pip ? "on" : "off");
+      state.root.setAttribute("data-pip", mode === "call" && state.pip ? (state.pipBig ? "big" : "on") : "off");
       if (state.circle) {
         state.circle.setAttribute(
           "aria-label",
@@ -810,18 +831,27 @@
       return Number(env.pageYOffset || env.scrollY || 0);
     }
 
-    /** During a call on a phone: scrolling on, or a tap anywhere else, tucks the call into a corner. */
+    /**
+     * During a call on a phone: scrolling on, or a tap anywhere else, carries
+     * the call with the visitor.
+     *
+     * It used to shrink her to a 96px button, which is the wrong default while
+     * somebody is talking to her (founder, 2026-09-18). She is carried at the
+     * call's own size instead — the same frame, never moved in the page, so
+     * the session cannot drop — and stays large until the visitor closes her.
+     * The small button is still there for a host that asks for it (`pip(true)`).
+     */
     function armPip() {
       state.pipArmY = scrollY();
       state.onScroll = function () {
         if (!state.call || state.pip || !pipAllowed()) return;
-        if (Math.abs(scrollY() - state.pipArmY) > PIP_SCROLL_PX) enterPip();
+        if (Math.abs(scrollY() - state.pipArmY) > PIP_SCROLL_PX) enterPip(true);
       };
       state.onOutside = function (e) {
         if (!state.call || state.pip || !pipAllowed()) return;
         var t = e && e.target;
         if (t && state.root && state.root.contains && state.root.contains(t)) return;
-        enterPip();
+        enterPip(true);
       };
       if (env.addEventListener) env.addEventListener("scroll", state.onScroll, { passive: true });
       doc.addEventListener("pointerdown", state.onOutside, true);
@@ -838,7 +868,6 @@
       if (state.pipFace) return;
       var face = el("button", "bvb-pipface");
       face.type = "button";
-      face.setAttribute("aria-label", "Video call with " + agent + ", small. Tap to make it bigger");
       var bar = el("div", "bvb-pipbar");
       var mute = el("button", "bvb-pipbtn");
       mute.type = "button";
@@ -853,6 +882,7 @@
       state.root.appendChild(bar);
       state.pipFace = face;
       state.pipMute = mute;
+      setPipLabel();
       setMuted(state.muted);
 
       mute.addEventListener("click", function () {
@@ -913,6 +943,9 @@
           suppressClick = false;
           return;
         }
+        // A carried call is already at the call's size: a tap on her face
+        // would only take her away from the visitor, so it does nothing.
+        if (state.pipBig) return;
         leavePip();
       });
     }
@@ -954,17 +987,31 @@
       }, PIP_CONTROLS_MS);
     }
 
-    function enterPip() {
+    function enterPip(big) {
       if (!state.call || state.pip || !state.root) return;
+      state.pipBig = big === true;
       buildPip();
       state.pip = true;
       setMode("call");
+      setPipLabel();
       if (opts.onPip) opts.onPip(true);
+    }
+
+    /** A carried call is already big: her face is a handle, not a "make it bigger". */
+    function setPipLabel() {
+      if (!state.pipFace) return;
+      state.pipFace.setAttribute(
+        "aria-label",
+        state.pipBig
+          ? "Video call with " + agent + ", following the page. Drag to move it"
+          : "Video call with " + agent + ", small. Tap to make it bigger",
+      );
     }
 
     function leavePip(quiet) {
       if (!state.pip) return;
       state.pip = false;
+      state.pipBig = false;
       if (state.pipTimer && env.clearTimeout) env.clearTimeout(state.pipTimer);
       state.pipTimer = null;
       if (state.root && state.root.style) {
@@ -1009,9 +1056,13 @@
       },
       closeCall: closeCall,
       dismiss: dismiss,
-      /** Tuck a call into its corner, or grow it back (a phone does this by itself). */
-      pip: function (on) {
-        if (on) enterPip();
+      /**
+       * Tuck a call into its corner, or bring it back. A phone carries a call
+       * by itself as the page scrolls, at the call's own size; `pip(true)` is
+       * the small button, for a host that asks for one.
+       */
+      pip: function (on, big) {
+        if (on) enterPip(big === true);
         else leavePip();
       },
       /** Hide the whole thing while a page opens something else in its place. */
@@ -1024,6 +1075,8 @@
           mini: state.mode === "mini",
           call: Boolean(state.call),
           pip: Boolean(state.call && state.pip),
+          /** Carried at the call's own size: on a phone, scrolling never shrinks her. */
+          pipBig: Boolean(state.call && state.pip && state.pipBig),
           ringing: state.ringing,
           hidden: Boolean(state.root && state.root.hidden),
           dismissed: dismissed(),

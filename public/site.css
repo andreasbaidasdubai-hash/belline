@@ -1122,8 +1122,9 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 .wa-fab:focus-visible svg { animation: none; }
 
 /* Der Chat braucht Höhe, das Gespräch nicht — ein Anruf ist eine Leiste, ein
-   Chat ist ein Fenster. Auf dem Telefon nimmt er den ganzen Schirm: 380 px
-   Chat in einem 390-px-Gerät sind kein Panel, sondern ein Versehen. */
+   Chat ist ein Fenster. Auf dem Telefon ist er ein Blatt, das über die Seite
+   hochfährt (weiter unten): 380 px Chat in einem 390-px-Gerät wären kein
+   Panel, der ganze Schirm wäre ein zweites Fenster. */
 .chat-dock {
   position: fixed;
   right: 26px;
@@ -1141,6 +1142,10 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 /* Die Ecke rundet der Rahmen selbst, nicht der Behälter: mit overflow:hidden
    würde der Schließknopf, der zehn Pixel außerhalb sitzt, weggeschnitten. */
 .chat-frame { width: 100%; height: 100%; border: 0; display: block; border-radius: 14px; }
+/* Das Blatt und sein Griff gibt es nur auf dem Telefon; auf dem Schreibtisch
+   ist der Chat weiter ein Fenster in der Ecke, und die Seite daneben ist ohnehin
+   zu sehen. Die Knoten baut site.js immer — hier sind sie schlicht nicht da. */
+.chat-veil, .chat-grab { display: none; }
 
 /* --- Das Telefon, bevor die Leiste da ist ----------------------------------
  *
@@ -1173,23 +1178,73 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
   .facts-3 .fact { padding-left: 0; padding-right: 0; border-right: 0; border-bottom: 1px solid var(--rule-soft); }
   .facts-3 .fact:last-child { border-bottom: 0; }
 
-  .chat-dock {
+  /* Ein Blatt, das hochfährt — kein zweites Fenster (Gründer, 18.09.2026).
+     Der Chat nahm auf dem Telefon den ganzen Schirm ein: die Seite verschwand,
+     und wer ihn schloss, wusste nicht mehr, wo er gewesen war. Jetzt liegt er
+     als Blatt über der Seite, die Seite bleibt darunter sichtbar und an ihrer
+     Stelle, ein Tippen daneben oder auf den Griff schließt ihn. */
+  .chat-veil {
+    display: block;
+    position: fixed;
     inset: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: 0;
+    z-index: 49;
+    background: rgba(17, 17, 17, 0.38);
+    opacity: 0;
+    animation: chat-veil-in 0.22s ease forwards;
+    -webkit-tap-highlight-color: transparent;
   }
-  .chat-frame { border-radius: 0; }
-  /* Auf dem ganzen Schirm gibt es kein Außerhalb mehr. Die rechte Ecke der
-     Kopfzeile ist frei — auf unserer eigenen Seite steht dort kein "Lieber
-     sprechen?", weil unser Widget nur den Chat anbietet. */
+  .chat-dock {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    /* Hoch genug für ein Gespräch, niedrig genug, dass die Seite darüber zu
+       sehen bleibt: der Besucher bleibt, wo er war. */
+    height: min(86dvh, calc(100dvh - 56px));
+    border-radius: 18px 18px 0 0;
+    border-bottom: 0;
+    transform: translateY(100%);
+    animation: chat-sheet-up 0.26s cubic-bezier(0.22, 0.8, 0.28, 1) forwards;
+    padding-top: 22px;
+    overflow: hidden;
+  }
+  .chat-frame { border-radius: 0; height: 100%; }
+  /* Der Griff: sagt, dass das Blatt zum Schließen ist, und ist selbst die Fläche dafür. */
+  .chat-grab {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    background: var(--paper);
+    cursor: pointer;
+    touch-action: none;
+  }
+  .chat-grab::before {
+    content: "";
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--bl-rule-strong, #D2D2D7);
+  }
   .chat-dock .call-shut {
-    top: 12px;
+    top: 30px;
     right: 12px;
     border-color: var(--rule);
     background: var(--paper);
     color: var(--ink-2);
   }
+}
+@keyframes chat-sheet-up { to { transform: translateY(0); } }
+@keyframes chat-veil-in { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .chat-dock { animation-duration: 0.01ms; }
+  .chat-veil { animation-duration: 0.01ms; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1208,10 +1263,10 @@ footer a { color: var(--ink-2); text-underline-offset: 3px; }
 body.has-video-bubble .wa-fab,
 body.has-video-bubble .chat-fab,
 body.has-video-bubble .bell-fab { display: none; }
-/* site.js: the bubble rests in the hero; it floats in the corner only for a
-   call started while the hero is out of view, and is parked (a phone) until
-   a call starts. See "Belle's launcher" at the end of this file. */
-.video-bubble.vb-parked { display: none; }
+/* site.js: the bubble rests in the hero and is carried to the corner by the
+   scroll (`vb-travel`; see "Belle, carried" at the end of this file). It
+   floats instead — full call size, fixed in the corner — for a call started
+   while the hero's place is out of view. */
 .video-bubble.vb-leaving { visibility: hidden; }
 .video-bubble.vb-float:not(.is-pip) {
   position: fixed;
@@ -3769,82 +3824,76 @@ footer a { color: var(--bl-ink-900); }
 .wa-fab::after { animation-iteration-count: 3; }
 .wa-fab[hidden] { display: none !important; }
 
-/* --- Belle's small face -----------------------------------------------------
-   With video on, this is all that ever floats at rest: Belle's round face,
-   64 px, bottom right, with the chat (and WhatsApp, only when the config names
-   a number) beside it. site.js shows it after × (for the session), and while
-   the hero's face is out of view; never while the big face is on screen. It
-   moves out of the way wherever it would cover a price, a plan or a button.
-   Tapping the face starts the video call in the big circle. */
-.video-launcher {
+/* --- Belle, carried ---------------------------------------------------------
+   One Belle, who travels. There is no second launcher element any more: while
+   the hero's circle is on screen there is nothing in the corner, and what
+   lands there is the same node that was in the hero.
+
+   The flight is written by site.js as two transforms — one on her, one on her
+   circle — and nothing else changes while she is in the air. No width, no
+   inset, no reflow: the page is never laid out again between frames, which is
+   what keeps this at 60fps on a mid-range phone.
+
+   `data-vb` says where she is: "hero" (in the page's flow), "flight" (carried
+   by the scroll) or "corner" (landed, 64 px, with her icons beside her).
+
+   Reduced motion: site.js never starts the flight, so she is simply in the
+   corner from the first paint, and the hero keeps its still face and button. */
+.video-bubble.vb-travel {
   position: fixed;
-  z-index: 40;
-  right: 24px;
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: center;
-  gap: 10px;
+  left: 0;
+  top: 0;
+  margin: 0;
+  z-index: 41;
+  /* The transform is the position: left/top stay at the origin so a frame is
+     one composited write and never a layout. */
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.video-bubble.vb-travel .bvb-circle { will-change: transform; }
+/* In the air: only her face. Her icons, the greeting pill, "AI concierge" and
+   the × belong to a size she is no longer at. */
+.video-bubble[data-vb="flight"] .bvb-row,
+.video-bubble[data-vb="flight"] .bvb-caption,
+.video-bubble[data-vb="flight"] .bvb-tags,
+.video-bubble[data-vb="flight"] .bvb-mock,
+.video-bubble[data-vb="flight"] .bvb-shut,
+.video-bubble[data-vb="corner"] .bvb-caption,
+.video-bubble[data-vb="corner"] .bvb-tags,
+.video-bubble[data-vb="corner"] .bvb-mock,
+.video-bubble[data-vb="corner"] .bvb-shut {
+  opacity: 0;
+  pointer-events: none;
+}
+/* Landed: her icons come back at their own size, beside the small face. They
+   are laid out against her box, which is still the call circle's width, so
+   `right: 100%` is the left edge of the face itself. */
+.video-bubble[data-vb="corner"] {
   transition: transform 0.22s ease, opacity 0.22s ease;
 }
-.video-launcher[hidden] { display: none; }
-.video-launcher.is-away { transform: translateY(calc(100% + 32px)); opacity: 0; pointer-events: none; }
-.vl-main {
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  flex: none;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  cursor: pointer;
-  box-shadow: 0 0 0 3px #FFFFFF, 0 12px 32px -16px rgba(0, 0, 0, 0.45);
+.video-bubble[data-vb="corner"] .bvb-row {
+  position: absolute;
+  margin: 0;
+  width: max-content;
+  top: 8px;
+  bottom: auto;
+  left: auto;
+  right: calc(100% + 10px);
+  opacity: 1;
+  transition: opacity 0.18s ease 0.04s;
 }
-.vl-face {
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: radial-gradient(circle at 50% 38%, var(--bl-navy-card), var(--bl-navy) 72%);
-  background-size: cover;
-  background-position: center;
-}
-.vl-face svg { width: 30px; height: 30px; }
-.vl-face.has-poster svg { display: none; }
-.vl-main:hover .vl-face { filter: brightness(1.06); }
-.vl-act {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  flex: none;
-  padding: 0;
-  border: 1px solid var(--bl-rule-strong);
-  border-radius: 50%;
-  background: #FFFFFF;
-  color: var(--bl-blue);
-  cursor: pointer;
-  box-shadow: 0 0 0 3px #FFFFFF, 0 12px 32px -16px rgba(0, 0, 0, 0.3);
-}
-.vl-act svg { width: 22px; height: 22px; }
-.vl-main:focus-visible,
-.vl-act:focus-visible { outline: 2px solid var(--bl-blue); outline-offset: 3px; }
-@media (max-width: 900px) {
-  .video-launcher { right: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
-  .vl-act { width: 44px; height: 44px; }
-}
+/* Tucked into the margin where her icons would cover something: the face alone. */
+.video-bubble.vb-tucked .bvb-row { opacity: 0; pointer-events: none; }
+/* And out of the way entirely where even the face would (a phone has no margin). */
+.video-bubble.vb-away { opacity: 0; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
-  .video-launcher { transition: none; }
+  .video-bubble[data-vb="corner"],
+  .video-bubble[data-vb="corner"] .bvb-row { transition: none; }
+  .video-bubble .bvb-row,
+  .video-bubble .bvb-caption,
+  .video-bubble .bvb-tags,
+  .video-bubble .bvb-shut { transition: none; }
 }
-/* Tucked into the margin where the icons would cover content: the face alone. */
-.video-launcher.is-tucked { right: 12px; }
-.video-launcher.is-tucked .vl-act { display: none; }
 /* After × on a small phone (375x667), the hero's last lines reach the corner
    where the small face sits. Leave that column free (12px margin + 64px face
    + a gap), so the tucked face sits beside the words, never on them. */
@@ -3853,9 +3902,10 @@ footer a { color: var(--bl-ink-900); }
   body.belle-small .hero-note { padding-right: 80px; }
 }
 /* No entrance animation on Belle's column: an element with a transform
-   animation contains fixed descendants, and the call that floats in the corner
-   would float inside the hero instead. */
+   animation contains fixed descendants, and she is fixed for the whole flight
+   — inside a transformed ancestor she would fly within the hero instead. */
 .hero-video { animation: none; transform: none; }
+.hero-video, .hv-slot { filter: none; perspective: none; }
 /* Equal cards, prices on one line: each card takes the grid's seven rows
    (tag, name, who it suits, price, allowances, what differs, button). An
    earlier rule set the cards to flex, which quietly beat the subgrid. */

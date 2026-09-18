@@ -565,6 +565,17 @@ test("on a venue's page: the bubble opens big with no session, the chat icon und
 
     await chat.click();
     await expect(page.locator("iframe.belline-panel")).toBeVisible();
+    // On a phone the venue's chat is a sheet over their page, not a second
+    // window: the page stays behind it (founder, 2026-09-18).
+    if (viewport.width <= 520) {
+      await page.waitForTimeout(500);
+      const sheet = (await page.locator("iframe.belline-panel").boundingBox())!;
+      expect(Math.round(sheet.y + sheet.height)).toBe(viewport.height);
+      expect(sheet.y, "the venue's chat still takes the whole screen").toBeGreaterThanOrEqual(40);
+      await expect(page.locator(".belline-veil")).toBeVisible();
+      await expect(page.locator(".belline-grab")).toBeVisible();
+      await shot(page, info, "11b-widget-chat-sheet");
+    }
     await page.getByRole("button", { name: "Close chat" }).click();
     await expect(page.locator("iframe.belline-panel")).toHaveCount(0);
     await expect(bubble).toBeVisible();
@@ -684,8 +695,8 @@ test("on belline.ai: Belle rests large in the hero on every screen, her face the
   }
 });
 
-test("on belline.ai, on a phone: scrolling during a call tucks it into a small live face, a tap grows it back, and the call never reloads", async ({ page, context, baseURL }, info) => {
-  test.skip(info.project.name !== "iphone-390", "picture in picture is for a phone");
+test("on belline.ai, on a phone: scrolling during a call carries the same frame at full size, and the call never reloads", async ({ page, context, baseURL }, info) => {
+  test.skip(info.project.name !== "iphone-390", "carrying a call is for a phone");
   const server = await landingSite(baseURL!);
   test.skip(!server, "localhost:4321 is taken on this machine");
   const posts = countSessionPosts(context);
@@ -708,19 +719,22 @@ test("on belline.ai, on a phone: scrolling during a call tucks it into a small l
     const loadsBefore = loads.length;
     expect(loadsBefore).toBeGreaterThanOrEqual(1);
 
+    const before = await box(bubble.locator(".bvb-circle"));
     await page.evaluate(() => window.scrollBy(0, 600));
-    await expect(bubble).toHaveAttribute("data-pip", "on");
+    // Carried, not shrunk: she stays the size she was until × (founder, 2026-09-18).
+    await expect(bubble).toHaveAttribute("data-pip", "big");
     const face = page.locator(".bvb-pipface");
     await expect(face).toBeVisible();
-    const small = await box(bubble.locator(".bvb-circle"));
+    const carried = await box(bubble.locator(".bvb-circle"));
     const viewport = page.viewportSize()!;
-    expect(small.width).toBeLessThanOrEqual(110);
-    expect(small.x).toBeGreaterThanOrEqual(0);
-    expect(small.x + small.width).toBeLessThanOrEqual(viewport.width);
-    expect(small.y + small.height).toBeLessThanOrEqual(viewport.height - 40);
+    expect(carried.width, "the call shrank to a button while somebody was talking to her").toBeGreaterThanOrEqual(before.width - 1);
+    expect(carried.x).toBeGreaterThanOrEqual(0);
+    expect(carried.x + carried.width).toBeLessThanOrEqual(viewport.width);
+    expect(carried.y).toBeGreaterThanOrEqual(0);
+    expect(carried.y + carried.height).toBeLessThanOrEqual(viewport.height - 40);
     await expect(bubbleFrame(page).locator(".bv-status")).toHaveText(/Belle is (speaking|listening)/);
     await page.waitForTimeout(300);
-    await shot(page, info, "20-site-pip");
+    await shot(page, info, "20-site-carried");
 
     // Drag it to the other side: it stays on screen.
     const b = await box(face);
@@ -731,7 +745,7 @@ test("on belline.ai, on a phone: scrolling during a call tucks it into a small l
     const moved = await box(bubble.locator(".bvb-circle"));
     expect(moved.x).toBeLessThan(viewport.width / 2);
     expect(moved.x).toBeGreaterThanOrEqual(0);
-    await expect(bubble).toHaveAttribute("data-pip", "on");
+    await expect(bubble).toHaveAttribute("data-pip", "big");
 
     // Its tiny controls, by keyboard too.
     await page.getByRole("button", { name: "Mute microphone" }).focus();
@@ -742,10 +756,11 @@ test("on belline.ai, on a phone: scrolling during a call tucks it into a small l
     await page.getByRole("button", { name: "Unmute microphone" }).click();
     await expect(bubbleFrame(page).getByRole("button", { name: "Mute microphone" })).toBeVisible();
 
-    // A tap grows it back to the call circle: same frame, same call, no second session.
+    // She is already the call's size, so her face is a handle and a tap on it
+    // does nothing — it would only take her back off the visitor's screen.
     await face.click();
-    await expect(bubble).toHaveAttribute("data-pip", "off");
-    await expectInCall(page);
+    await expect(bubble).toHaveAttribute("data-pip", "big");
+    // Same frame, same call, no second session, all the way through.
     const again = page.frames().find((f) => f.url().includes(`/embed/${KEY}/video`))!;
     expect(await again.evaluate(() => (window as unknown as { __callMark?: number }).__callMark)).toBe(42);
     expect(loads.length, "the call frame reloaded").toBe(loadsBefore);
