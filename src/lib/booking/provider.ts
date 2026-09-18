@@ -20,6 +20,8 @@ import { calendlyUsable, destinationOf, googleUsable, outlookUsable, takesReques
 import { googleCalendarProvider } from "./google-provider";
 import { outlookCalendarProvider } from "./outlook-provider";
 import { calendlyProvider } from "./calendly-provider";
+import { partnerIdOf, partnerUsable } from "../integrations/partners";
+import { partnerProviderFor } from "./partner-providers";
 
 export { takesRequestsOnly } from "./destination";
 
@@ -286,17 +288,31 @@ export const requestOnlyProvider: BookingProvider = {
  * Belline's diary where the venue uses it; Google Calendar or Outlook where the
  * venue chose it and the connection works (see calendar-provider.ts); Calendly
  * where it chose that (calendly-provider.ts, which is a different shape because
- * Calendly is a booking page rather than a diary); requests for everything
- * else. Partner systems have no adapter yet, and a connection that expired
- * falls back to requests on the next call.
+ * Calendly is a booking page rather than a diary); a partner booking system
+ * where the venue chose one and that partner is connected (partner-provider.ts,
+ * one provider per partner in partner-providers.ts); requests for everything
+ * else.
+ *
+ * Every branch is guarded by that destination's own usability question, so a
+ * connection that expired — a calendar token, a Calendly account dropped to the
+ * free plan, a partner that withdrew us — falls back to requests on the next
+ * call rather than failing at the moment of booking.
+ *
+ * Every partner falls to requests today, because none of them has issued
+ * Belline credentials. That is not a placeholder to be tidied away: it is the
+ * product being honest, and it is what the website promises.
  *
  * Belle reads `capabilities` and nothing else, so a Calendly venue that cannot
- * promise a named person, or cannot reschedule, needs no special case anywhere
- * in the agent: the tool is simply not offered.
+ * promise a named person or cannot reschedule, and a Mindbody studio that
+ * cannot cancel, need no special case anywhere in the agent: the tool is simply
+ * not offered.
  */
 export function providerFor(location: Location): BookingProvider {
   if (destinationOf(location) === "google" && googleUsable(location)) return googleCalendarProvider;
   if (destinationOf(location) === "outlook" && outlookUsable(location)) return outlookCalendarProvider;
   if (destinationOf(location) === "calendly" && calendlyUsable(location)) return calendlyProvider(location);
+  if (destinationOf(location) === "partner" && partnerUsable(location)) {
+    return partnerProviderFor(partnerIdOf(location)!);
+  }
   return takesRequestsOnly(location) ? requestOnlyProvider : localProvider;
 }

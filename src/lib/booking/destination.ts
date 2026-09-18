@@ -1,5 +1,6 @@
 import type { DestinationKind, Location } from "../types";
 import { flag } from "../flags";
+import { partnerUsable } from "../integrations/partners";
 
 /**
  * Where this venue's bookings go, without loading the booking engine.
@@ -34,6 +35,7 @@ type Venue = Pick<Location, "onboarding"> & {
   google?: Location["google"];
   outlook?: Location["outlook"];
   calendly?: Location["calendly"];
+  partners?: Location["partners"];
 };
 
 /**
@@ -83,11 +85,21 @@ export function calendlyUsable(location: Venue, env: Record<string, string | und
 /**
  * Does this venue take requests rather than confirmed bookings?
  *
- * Partner systems count as requests until their adapters exist. Google, Outlook
- * and Calendly count as requests whenever their connection is not usable — flag
- * off, never connected, or the token expired — so a calendar Belline cannot
- * see is never booked into. An owner who chose one is not told it works; the
- * agent takes the details and the team confirms.
+ * Google, Outlook and Calendly count as requests whenever their connection is
+ * not usable — flag off, never connected, or the token expired (and, for
+ * Calendly, a free plan or no event type left) — so a calendar or booking page
+ * Belline cannot write into is never booked into. An owner who chose one is not
+ * told it works; the agent takes the details and the team confirms.
+ *
+ * A partner booking system is asked the same question by its own adapter
+ * (integrations/partners): the partner's flag on, this deployment holding
+ * credentials, and this venue connected — its centre id or site id, and in
+ * production the grant its owner issued. Every partner answers no today, so
+ * every partner venue takes requests, which is what the website promises.
+ *
+ * The final `return true` is the rule the whole file exists for: a destination
+ * nobody has taught this function about takes requests. A booking is never lost
+ * silently, so the unknown case is the safe one.
  */
 export function takesRequestsOnly(location: Venue): boolean {
   const kind = destinationOf(location);
@@ -95,6 +107,7 @@ export function takesRequestsOnly(location: Venue): boolean {
   if (kind === "google") return !googleUsable(location);
   if (kind === "outlook") return !outlookUsable(location);
   if (kind === "calendly") return !calendlyUsable(location);
+  if (kind === "partner") return !partnerUsable(location);
   return true;
 }
 

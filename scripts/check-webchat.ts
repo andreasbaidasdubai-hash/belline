@@ -864,6 +864,10 @@ const {
   integrationState,
   renderIntegrations,
 } = await import("./site-integrations");
+const { flag: flagState } = await import("../src/lib/flags");
+type StripFlag = import("../src/lib/flags").FlagName;
+/** The partners with researched facts behind them (integrations/partners/registry.ts). */
+const { PARTNERS: PARTNER_FACTS } = await import("../src/lib/integrations/partners");
 
 const STRIP_NAMES = ["Google Calendar", "Outlook", "Calendly", "Fresha", "SevenRooms", "OpenTable", "Treatwell", "Zenoti", "Mindbody"];
 /**
@@ -1243,7 +1247,15 @@ await test("Outlook and each booking platform follow their own flags, and stubs 
     assert.match(item.flag, /^booking\.partner\.[a-z0-9-]+$/);
     assert.equal(integrationState(item, {}), "roadmap");
     const id = item.flag.slice("booking.partner.".length).toUpperCase().replace(/-/g, "_");
-    assert.equal(integrationState(item, { [`FLAG_BOOKING_PARTNER_${id}`]: "on", [`PARTNER_${id}_API_KEY`]: "k" }), "available");
+    const switched = { [`FLAG_BOOKING_PARTNER_${id}`]: "on", [`PARTNER_${id}_API_KEY`]: "k" };
+    // The product flag is on: this deployment holds a key and somebody asked
+    // for it, so the adapter may try. The website is a different question, and
+    // a key that has not been through a partner agreement is usually a sandbox
+    // key. A researched partner therefore stays on the roadmap until it is
+    // live in production — see scripts/site-integrations.ts and check:partners.
+    assert.equal(flagState(item.flag as StripFlag, switched), true, name);
+    const researched = PARTNER_FACTS[id.toLowerCase() as keyof typeof PARTNER_FACTS];
+    assert.equal(integrationState(item, switched), researched ? "roadmap" : "available", name);
   }
   // A local stubbed run switches flags on without credentials; the public site must not believe it.
   assert.equal(integrationState(byName("Google Calendar"), { FLAG_STUBS: "on", FLAG_BOOKING_GOOGLE: "on" }), "soon");

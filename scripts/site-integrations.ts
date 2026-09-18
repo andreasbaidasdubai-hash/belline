@@ -31,7 +31,9 @@
  */
 
 import type { FlagName } from "../src/lib/flags";
-import { publicFlag } from "../src/lib/site-flags";
+import { publicEnv, publicFlag } from "../src/lib/site-flags";
+import { partnerLive } from "../src/lib/integrations/partners";
+import type { PartnerId } from "../src/lib/integrations/partners/contract";
 
 type Env = Record<string, string | undefined>;
 
@@ -95,13 +97,36 @@ const STATE_CLASS: Record<IntegrationState, string> = {
   roadmap: "state state-roadmap",
 };
 
+/** "booking.partner.fresha" → "fresha"; undefined for Google and Outlook. */
+export function partnerOf(item: Integration): PartnerId | undefined {
+  const m = /^booking\.partner\.([a-z0-9-]+)$/.exec(item.flag);
+  return m ? (m[1] as PartnerId) : undefined;
+}
+
 /**
  * The flags as a public page may read them: without `FLAG_STUBS`, which is a
  * test harness and never a reason to tell the public a connection is
  * available. One definition, shared with the page copy in src/lib/site-flags.ts.
+ *
+ * A partner needs more than its flag, and this is the point of the extra
+ * condition rather than an oversight to be simplified away. `booking.partner.x`
+ * on means this deployment holds a key for x and somebody switched it on —
+ * which is exactly what a *sandbox* key looks like, and what the day after a
+ * key arrives looks like while it is still being tested against a fake studio.
+ * The website is read by salon owners deciding whether to buy, so it waits for
+ * `partnerLive`: an API that can actually take a booking, in production, with
+ * the credentials a partner agreement issues.
+ *
+ * Concretely, today: a partner with no signed agreement stays "On our roadmap"
+ * even with every flag and key in env, and four of the six can never leave it,
+ * because they have no bookable API to connect to at all
+ * (src/lib/integrations/partners/registry.ts).
  */
 export function integrationState(item: Integration, env: Env): IntegrationState {
-  return publicFlag(item.flag, env) ? "available" : item.pending;
+  if (!publicFlag(item.flag, env)) return item.pending;
+  const partner = partnerOf(item);
+  if (partner && !partnerLive(partner, publicEnv(env))) return item.pending;
+  return "available";
 }
 
 function esc(text: string): string {
