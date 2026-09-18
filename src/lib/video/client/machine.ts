@@ -6,8 +6,13 @@
  * session — lives here as plain functions, so `check:video` can pin it without
  * a browser and the component is left with rendering and wiring.
  *
- * No imports: this file is bundled into the visitor's panel.
+ * Nothing server-side is imported: this file is bundled into the visitor's
+ * panel. `end-reason.ts` is import-free for the same reason and is the one
+ * thing pulled in, so the words said about an ended call live in one place
+ * whichever surface is showing them.
  */
+
+import type { VideoEndCause } from "../end-reason";
 
 export type VideoErrorCode =
   | "mic_denied"
@@ -36,6 +41,14 @@ export interface PanelState {
   /** Whose words changed last: the one line under the circle shows theirs. */
   captionLast?: "agent" | "visitor";
   endedReason?: string;
+  /**
+   * Why it ended, as the server classified it — the only thing the end copy is
+   * allowed to branch on. Absent until the end route has answered: the browser
+   * cannot tell our ceiling from the provider's from a room that vanished.
+   */
+  endedCause?: VideoEndCause;
+  /** How long the call actually ran, as the server counted it. */
+  endedSeconds?: number;
   /** The browser refused to play the face's voice without another tap (iOS). */
   audioBlocked?: boolean;
 }
@@ -68,6 +81,8 @@ export type Action =
   | { type: "mute"; muted: boolean }
   | { type: "warn" }
   | { type: "ended"; reason: string }
+  /** The end route's answer, which arrives a moment after the panel has already ended. */
+  | { type: "end_cause"; cause: VideoEndCause; seconds: number }
   | { type: "reset" }
   | { type: "audio_unlocked" };
 
@@ -89,6 +104,11 @@ export function reduce(state: PanelState, action: Action): PanelState {
     case "ended":
       if (state.phase === "error") return state;
       return { ...state, phase: "ended", endedReason: action.reason, agentSpeaking: false, visitorSpeaking: false, reconnecting: false };
+    case "end_cause":
+      // Only ever sharpens an end that has already happened. A late answer
+      // must not resurrect a panel the visitor has since restarted.
+      if (state.phase !== "ended") return state;
+      return { ...state, endedCause: action.cause, endedSeconds: action.seconds };
     case "reset":
       return INITIAL;
     case "audio_unlocked":
@@ -187,6 +207,20 @@ export function durationWords(seconds: number): string {
   const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   if (m === 0) return unit(r, "second");
   return r === 0 ? unit(m, "minute") : `${unit(m, "minute")} ${unit(r, "second")}`;
+}
+
+/**
+ * The intro's promise about how long a call runs.
+ *
+ * `seconds` is what we have actually been delivering (`delivery.ts`), not the
+ * number we ask the provider for — those stopped being the same thing the day
+ * an account tier started cutting calls short. Null means recent calls do not
+ * agree on any length, and a page that cannot keep a promise should not make
+ * one: it says the true thing instead, which is that the chat is always there.
+ */
+export function promiseLine(seconds: number | null): string {
+  if (seconds === null) return "These calls are kept short, and you can carry on in chat whenever one ends.";
+  return `Calls end after ${durationWords(seconds)}.`;
 }
 
 /**

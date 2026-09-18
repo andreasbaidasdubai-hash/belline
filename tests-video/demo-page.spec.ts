@@ -138,6 +138,42 @@ test("the demo page: logo, blue Get started, one tap and Belle talks, packages f
   await page.getByRole("button", { name: "End call" }).click();
 });
 
+test("a call cut short on the demo page: the prospect is told, and the chat picks up what they said", async ({ page, baseURL }, info) => {
+  // The page a founder actually met: the call stopped at 88 of 300 seconds and
+  // said nothing about it. On a sales page that is the whole impression.
+  const url = await demoLink(page);
+  const created = page.waitForResponse((r) => r.url().includes("/session") && r.request().method() === "POST");
+  await page.goto(url);
+  await page.getByRole("button", { name: "Tap to meet Belle" }).click();
+  const session = (await (await created).json()) as { session: { sessionId: string; clientToken: string } };
+  await expect(page.locator(".bv-status")).toHaveText(/Belle is speaking/, { timeout: 15_000 });
+
+  // Something worth not having to say twice.
+  await page.getByLabel(/Say something/).fill("I run a dental clinic and we miss calls at lunch");
+  await page.getByLabel(/Say something/).press("Enter");
+  await page.waitForTimeout(1500);
+
+  // `demoLink` hands back a path, not an absolute address.
+  const token = url.split("/").filter(Boolean).pop()!;
+  const shut = await page.request.post(`${baseURL}/api/video-demo/${token}/mock`, {
+    data: { sessionId: session.session.sessionId, clientToken: session.session.clientToken, shutdown: "max_call_duration reached" },
+  });
+  expect(shut.ok()).toBe(true);
+  await page.getByLabel(/Say something/).fill("Are you still there?");
+  await page.getByLabel(/Say something/).press("Enter");
+
+  await expect(page.getByRole("heading", { name: "The call ended early" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "Start again" })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(/max_call_duration|tavus/i);
+  await shot(page, info, "demo-page-ended-cut-short");
+
+  // And the chat opens on the conversation they were already having.
+  await page.getByRole("button", { name: "Continue in chat" }).click();
+  await expect(page.getByLabel("Message Belle")).toBeVisible();
+  await expect(page.locator(".dx-bubble.is-you")).toContainText("dental clinic");
+  await shot(page, info, "demo-page-ended-into-chat");
+});
+
 test("a refused microphone: Belle still starts talking, and the page offers typing instead", async ({ page, context }, info) => {
   const url = await demoLink(page);
   await context.addInitScript(() => {

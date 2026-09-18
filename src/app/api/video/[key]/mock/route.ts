@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleChatCompletions } from "@/lib/video/engine";
+import { endVideoSession } from "@/lib/video/sessions";
 import { NO_STORE, readBody, sessionForClient, venueByEmbedKey } from "@/lib/video/http";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
   if (!found.ok) return found.response;
   const { session } = found;
   if (session.provider !== "mock") return NextResponse.json({ error: "not_found" }, { status: 404, headers: NO_STORE });
+
+  // The one thing a browser cannot otherwise make happen: the provider ending
+  // our call. It is what a Tavus account tier does, and without a way to stage
+  // it there is no way to see the panel a visitor actually met. Mock only, and
+  // the mock refuses to exist in production or beside a real database.
+  if (typeof body?.shutdown === "string") {
+    const ended = await endVideoSession(session.id, body.shutdown.slice(0, 120), { by: "provider" });
+    return NextResponse.json({ ok: true, ended }, { headers: NO_STORE });
+  }
 
   const text = typeof body?.text === "string" ? body.text.trim().slice(0, 1000) : "";
   if (!text) return NextResponse.json({ error: "empty" }, { status: 400, headers: NO_STORE });

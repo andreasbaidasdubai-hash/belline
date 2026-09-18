@@ -191,7 +191,7 @@ test("microphone accepted: the round call view, mute, captions, a lead through t
   await expect(page.locator(".bv-caption")).toHaveCount(0);
 
   await page.getByRole("button", { name: "End call" }).click();
-  await expect(page.getByText(/The call has ended/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Call ended" })).toBeVisible();
   await shot(page, info, "05-ended");
   await expectEnded(page, baseURL!, session);
 });
@@ -272,14 +272,83 @@ test("the connection drops mid-call: reconnecting is said in words, and the call
   await page.getByRole("button", { name: "End call" }).click();
 });
 
-test("the warning comes before the limit, then the call ends cleanly", async ({ page }, info) => {
-  test.skip(info.project.name !== "desktop-1280", "the timing is the same at every width");
+/** Both ways on from an ended call, on every surface that shows one. */
+async function expectWaysOn(scope: Page | FrameLocator) {
+  await expect(scope.getByRole("button", { name: "Start again" })).toBeVisible();
+  await expect(scope.getByRole("button", { name: "Continue in chat" })).toBeVisible();
+}
+
+/**
+ * The provider ending our call, staged.
+ *
+ * A Tavus account tier was cutting calls at 88 seconds of the 300 we ask for,
+ * and no browser can make that happen on demand — so the mock plays that part
+ * of Tavus's contract as it plays the others. The panel then learns the room
+ * has gone exactly as it does live: its next word comes back to a dead session.
+ */
+async function providerEnds(page: Page, baseURL: string, session: { sessionId: string; clientToken: string }, reason: string) {
+  const res = await page.request.post(`${baseURL}/api/video/${KEY}/mock`, {
+    data: { sessionId: session.sessionId, clientToken: session.clientToken, shutdown: reason },
+  });
+  expect(res.ok()).toBe(true);
+  await page.getByLabel(/Say something/).fill("Still there?");
+  await page.getByLabel(/Say something/).press("Enter");
+}
+
+test("the warning comes before the limit, then the call ends on the length we promised", async ({ page }, info) => {
   await openPanel(page);
   await startCall(page);
   // VIDEO_MAX_CALL_SECONDS=45, VIDEO_WARN_BEFORE_SECONDS=20.
   await expect(page.locator(".bv-warning")).toContainText(/seconds left/, { timeout: 40_000 });
-  await shot(page, info, "09-warning");
-  await expect(page.getByText(/The call has ended/)).toBeVisible({ timeout: 40_000 });
+  if (info.project.name === "desktop-1280") await shot(page, info, "09-warning");
+  // Our own limit, the one the intro announced — so the page may quote it back.
+  await expect(page.getByRole("heading", { name: "That's our time" })).toBeVisible({ timeout: 40_000 });
+  await expect(page.getByText(/run up to 45 seconds, and we've reached it/)).toBeVisible();
+  await expectWaysOn(page);
+  expect(await noHorizontalScroll(page)).toBe(true);
+  await shot(page, info, "09b-ended-time-limit");
+});
+
+test("a call the provider cuts short says so, calmly, and offers both ways on", async ({ page, baseURL }, info) => {
+  await openPanel(page);
+  const session = await startCall(page);
+  // A few seconds into a call the page promised 45 of. Not our limit.
+  await page.waitForTimeout(1500);
+  await providerEnds(page, baseURL!, session, "max_call_duration reached");
+
+  await expect(page.getByRole("heading", { name: "The call ended early" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/wasn't anything you did/)).toBeVisible();
+  await expectWaysOn(page);
+  // The provider's words are ours to read, never theirs.
+  await expect(page.locator("body")).not.toContainText(/max_call_duration|tavus|shutdown/i);
+  // And it does not quote back a promise it just broke.
+  await expect(page.locator(".bv-ended")).not.toContainText("45 seconds");
+  expect(await noHorizontalScroll(page)).toBe(true);
+  await shot(page, info, "09c-ended-cut-short");
+});
+
+test("a call the connection takes says that instead, and points at chat", async ({ page, baseURL }, info) => {
+  await openPanel(page);
+  const session = await startCall(page);
+  await page.waitForTimeout(1500);
+  await providerEnds(page, baseURL!, session, "daily_room_has_been_deleted");
+
+  await expect(page.getByRole("heading", { name: "The connection dropped" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/chat copes better with a patchy connection/)).toBeVisible();
+  await expectWaysOn(page);
+  await expect(page.locator("body")).not.toContainText(/daily_room|deleted/i);
+  expect(await noHorizontalScroll(page)).toBe(true);
+  await shot(page, info, "09d-ended-connection");
+});
+
+test("the visitor's own end is not dressed up as a problem", async ({ page }) => {
+  await openPanel(page);
+  await startCall(page);
+  await page.getByRole("button", { name: "End call" }).click();
+  // The same two ways on, without an apology they are owed nothing of.
+  await expect(page.getByRole("heading", { name: "Call ended" })).toBeVisible();
+  await expect(page.getByText(/ended early|connection dropped|we've reached it/)).toHaveCount(0);
+  await expectWaysOn(page);
 });
 
 test("switching to chat ends the call and opens the chat", async ({ page, baseURL }) => {

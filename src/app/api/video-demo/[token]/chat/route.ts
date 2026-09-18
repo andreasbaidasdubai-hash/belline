@@ -18,7 +18,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   if (!found.ok) return found.response;
   const { link, venue } = found;
 
-  const body = await readBody(req, 4_000);
+  // Room for the turns of a video call this chat is carrying on from, beside
+  // the message itself. Still small, and still read before anything is trusted.
+  const body = await readBody(req, 16_000);
   const claim = verifyVisitorToken(typeof body?.token === "string" ? body.token : undefined);
   if (!claim || claim.locationId !== venue.id) {
     return NextResponse.json({ error: "expired" }, { status: 401, headers: NO_STORE });
@@ -32,6 +34,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     visitorId: claim.visitorId,
     chatId,
     text: typeof body?.text === "string" ? body.text : "",
+    // The video call this chat is carrying on from, handed back to the page by
+    // the end route. Only read when the chat is being created.
+    priorTurns: Array.isArray(body?.priorTurns)
+      ? (body.priorTurns as unknown[])
+          .filter((t): t is { role: string; text: string } => Boolean(t) && typeof (t as { text?: unknown }).text === "string")
+          .map((t) => ({ role: t.role === "caller" ? ("caller" as const) : ("agent" as const), text: String(t.text) }))
+      : undefined,
     reserve: () => reserveChat(link.id),
   });
   if (!turn.ok) return NextResponse.json({ error: turn.error }, { status: turn.status, headers: NO_STORE });

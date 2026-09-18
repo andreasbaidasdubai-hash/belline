@@ -4,8 +4,11 @@ import { isBellineStaff } from "@/lib/auth";
 import { getLocation, getTenant, listUsersFor } from "@/lib/store";
 import { EXCEPTION_KINDS, KIND_META, isExceptionKind, listExceptions, type ExceptionFilter } from "@/lib/exceptions";
 import { seedIfEmpty } from "@/lib/seed";
+import { deliveredCeiling, recentVideoEndings } from "@/lib/video/delivery";
+import { videoConfig } from "@/lib/video/config";
 import { ConsoleHeader, EmptyState, FilterChips, KeyValues, Pill, SearchBox, ago } from "../ui";
 import ExceptionActions from "./ExceptionActions";
+import VideoEndings from "./VideoEndings";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +79,10 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
   const resolved = listExceptions({ status: "resolved" });
   const minutes = resolved.reduce((n, r) => n + (r.humanMinutes ?? 0), 0);
   const kindsSeen = EXCEPTION_KINDS.filter((k) => listExceptions({ status: "all", kind: k }).length > 0);
+  // Not an exception row of its own until there is a pattern, but always worth
+  // being able to look at: a provider ending calls early is invisible otherwise.
+  const configuredCallSeconds = videoConfig().maxCallSeconds;
+  const endings = recentVideoEndings();
   const href = (next: { status?: string; kind?: string }) => {
     const merged = { status: filter.status, kind: filter.kind, q: p.q, ...next };
     const qs = new URLSearchParams(Object.entries(merged).filter(([, v]) => v) as [string, string][]).toString();
@@ -169,6 +176,8 @@ export default async function IssuesPage({ searchParams }: { searchParams: Promi
           </div>
         )}
       </div>
+
+      <VideoEndings endings={endings} delivered={deliveredCeiling(configuredCallSeconds, endings)} configured={configuredCallSeconds} />
     </>
   );
 }
