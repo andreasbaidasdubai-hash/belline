@@ -636,10 +636,10 @@ await test("exit gives the staff member their own session back, removes the view
 // ═════════════════════════════════════════════════════════════════════════════
 console.log("\n\x1b[1mMenu, addresses, words\x1b[0m\n");
 
-await test("the menu is Today, Leads, Customers, Issues, Revenue, Settings, then back to the customer dashboard", () => {
+await test("the menu is Today, Leads, Outreach, Customers, Issues, Revenue, Settings, then back to the customer dashboard", () => {
   const nav = source("src/app/(internal)/StaffNav.tsx");
   const labels = [...nav.matchAll(/\{ href: "([^"]+)", label: "([^"]+)" \}/g)].map((m) => `${m[2]} ${m[1]}`);
-  assert.deepEqual(labels, ["Today /sales", "Leads /sales/leads", "Customers /sales/customers", "Issues /sales/issues", "Revenue /sales/revenue", "Settings /sales/settings"]);
+  assert.deepEqual(labels, ["Today /sales", "Leads /sales/leads", "Outreach /sales/outreach", "Customers /sales/customers", "Issues /sales/issues", "Revenue /sales/revenue", "Settings /sales/settings"]);
   assert.match(nav, /← Customer dashboard/);
   const staffGroup = source("src/lib/nav.ts").match(/function staffNav[\s\S]*?\n\}/)![0];
   assert.deepEqual([...staffGroup.matchAll(/label: "([^"]+)"/g)].map((m) => m[1]), ["Staff console"]);
