@@ -29,6 +29,7 @@ import {
 import { GERMAN_PAGES } from "./site-pricing-de";
 import { TRIAL } from "../src/lib/billing/plans";
 import { flag } from "../src/lib/flags";
+import { legalIdentity } from "../src/lib/legal/identity";
 
 /**
  * Are the German pages part of this build? `SITE_GERMAN=off` leaves them out.
@@ -107,28 +108,20 @@ const GERMAN_SOURCES: Record<string, "landing" | LegalPage> = {
 /**
  * Who the legal pages name.
  *
- * Fill these in before the pages mean anything in law. Empty, the pages say
- * "Belline" and give the email address, and the build says so every time —
- * loudly, because a privacy policy that does not name its controller is a
- * page that looks finished and is not.
+ * The block itself moved to `src/lib/legal/identity.ts`, because the outreach
+ * engine needs the same names: German commercial email has to state the
+ * sending entity, its address and who represents it, and a second copy of
+ * those strings would be a second copy to forget to fill in. Edit it there;
+ * this build and every cold email read the one block.
+ *
+ * Empty, the pages say "Belline" and give the email address, and the build
+ * says so every time — loudly, because a privacy policy that does not name its
+ * controller is a page that looks finished and is not.
  */
-const LEGAL = {
-  /** The registered company, exactly as on the trade licence. */
-  entity: "",
-  /** Its registered address. */
-  address: "",
-  /** Governing law and courts, e.g. "the laws of the Emirate of Dubai and the federal laws of the UAE, with the courts of Dubai". */
-  law: "",
-  /**
-   * The same governing law in German, for the German translation of the terms
-   * ("dem Recht des Emirats Dubai …"): it completes a German sentence, so the
-   * English wording cannot be dropped in. Empty keeps the German default.
-   */
-  lawDe: "",
-};
+const LEGAL = legalIdentity();
 if (!LEGAL.entity || !LEGAL.address || !LEGAL.law) {
   console.warn(
-    "\n  ⚠  privacy.html and terms.html: company name, address or governing law not filled in (LEGAL in scripts/build-site.ts).\n",
+    "\n  ⚠  privacy.html and terms.html: company name, address or governing law not filled in (LEGAL in src/lib/legal/identity.ts).\n",
   );
 }
 
