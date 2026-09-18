@@ -108,11 +108,37 @@
     ".belline-shut{position:fixed;z-index:2147483002;width:32px;height:32px;border:0;" +
     "border-radius:999px;background:rgba(255,255,255,.14);color:#FFFFFF;cursor:pointer;" +
     "font:16px/1 sans-serif;display:grid;place-items:center}" +
+    // The chat's sheet, its veil and its handle exist only on a phone; the
+    // nodes are always built, and a wide screen simply has nothing to show.
+    ".belline-veil,.belline-grab{display:none}" +
     "@media (max-width:520px){.belline-panel,.belline-panel.belline-left,.belline-panel.belline-video{inset:0;width:100%;height:100%;" +
     "max-width:none;max-height:none;border-radius:0}" +
     ".belline-dock{bottom:18px;right:18px}.belline-dock.belline-left{left:18px}" +
     ".belline-fab{padding:0;width:58px;height:58px;justify-content:center}" +
-    ".belline-fab span:not(.belline-logo){display:none}}" +
+    ".belline-fab span:not(.belline-logo){display:none}" +
+    // The chat opens inside the page, not as a second window (founder,
+    // 2026-09-18). It used to take the whole screen: the visitor's own page
+    // vanished, and closing it left them wondering where they had been. Now a
+    // sheet slides up over the page, the page stays behind it and where it
+    // was, and the veil, the handle or × puts it away.
+    ":root{--belline-sheet-h:min(86dvh,calc(100dvh - 56px))}" +
+    // The frame stops 22px short of the sheet's top: that strip is the handle,
+    // which is also the sheet's rounded edge. An iframe cannot be padded.
+    ".belline-panel.belline-sheet,.belline-panel.belline-sheet.belline-left{inset:auto 0 0 0;width:100%;max-width:none;" +
+    "height:calc(var(--belline-sheet-h) - 22px);max-height:none;border-radius:0;transform:translateY(100%);" +
+    "animation:belline-sheet-up .26s cubic-bezier(.22,.8,.28,1) forwards}" +
+    // On a sheet the × lies on the chat's own white paper, where a translucent
+    // white circle is invisible. It carries its own paper there.
+    ".belline-shut.belline-on-sheet{background:#FFFFFF;color:#1D1D1F;" +
+    "border:1px solid #D2D2D7;box-shadow:0 6px 18px -10px rgba(0,0,0,.4)}" +
+    ".belline-veil{display:block;position:fixed;inset:0;z-index:2147483000;background:rgba(17,17,17,.38);" +
+    "opacity:0;animation:belline-veil-in .22s ease forwards;-webkit-tap-highlight-color:transparent}" +
+    ".belline-grab{display:grid;place-items:center;position:fixed;z-index:2147483002;left:0;right:0;" +
+    "bottom:calc(var(--belline-sheet-h) - 22px);height:22px;padding:0;margin:0;border:0;" +
+    "border-radius:18px 18px 0 0;background:#FFFFFF;cursor:pointer;touch-action:none}" +
+    ".belline-grab::before{content:'';width:40px;height:4px;border-radius:999px;background:#D2D2D7}}" +
+    "@keyframes belline-sheet-up{to{transform:translateY(0)}}@keyframes belline-veil-in{to{opacity:1}}" +
+    "@media (prefers-reduced-motion:reduce){.belline-panel.belline-sheet,.belline-veil{animation-duration:.01ms}}" +
     // The venue's logo in place of the mark: always in a white circle, with
     // room around it, so a dark logo on a dark accent (or a white one on
     // white) still reads. Contained, never cropped — a wordmark stays whole.
@@ -207,6 +233,9 @@
 
   var panel = null;
   var shut = null;
+  /** The chat's sheet on a phone: what is under it, and the handle on its edge. */
+  var veil = null;
+  var grab = null;
   var reopen = null;
   var panelKind = null;
   var fabs = {};
@@ -572,7 +601,13 @@
       (kind === "video" ? "/video" : (kind === "chat" ? "/chat" : "")) +
       "?o=" +
       encodeURIComponent(location.origin);
-    panel.className = "belline-panel" + (side === "left" ? " belline-left" : "") + (kind === "video" ? " belline-video" : "");
+    panel.className =
+      "belline-panel" +
+      (side === "left" ? " belline-left" : "") +
+      (kind === "video" ? " belline-video" : "") +
+      // Only the chat is a sheet. A call is a bar and a video call is a face:
+      // neither is a page the visitor reads beside their own.
+      (kind === "chat" ? " belline-sheet" : "");
     panelKind = kind;
     // The call is ink and the chat is paper, and the frame behind each has to
     // match — otherwise the wrong colour flashes for as long as the iframe
@@ -587,7 +622,41 @@
     // Video, like the call, needs the microphone and the speakers from Start —
     // and never the camera: nothing on the other end looks at the visitor.
     if (kind === "video") panel.allow = "microphone; autoplay";
+    // Under the sheet, so the page shows through and a tap beside it closes.
+    if (kind === "chat") {
+      veil = document.createElement("div");
+      veil.className = "belline-veil";
+      veil.addEventListener("click", close);
+      document.body.appendChild(veil);
+    }
     document.body.appendChild(panel);
+    if (kind === "chat") {
+      // A handle, not a second close button: × beside it is the one in the
+      // accessibility tree, and two controls called "Close chat" is one too many.
+      grab = document.createElement("div");
+      grab.className = "belline-grab";
+      grab.setAttribute("aria-hidden", "true");
+      grab.addEventListener("click", close);
+      var from = null;
+      grab.addEventListener("pointerdown", function (e) {
+        from = e.clientY;
+        try {
+          grab.setPointerCapture(e.pointerId);
+        } catch (err) {
+          /* capture is a nicety */
+        }
+      });
+      grab.addEventListener("pointermove", function (e) {
+        if (from !== null && e.clientY - from > 44) {
+          from = null;
+          close();
+        }
+      });
+      grab.addEventListener("pointerup", function () {
+        from = null;
+      });
+      document.body.appendChild(grab);
+    }
 
     shut = document.createElement("button");
     shut.type = "button";
@@ -614,6 +683,16 @@
 
   function position(el) {
     var narrow = window.innerWidth <= 520;
+    // On a phone the chat is a sheet: its × belongs on the sheet's own top
+    // edge, not at the top of the visitor's page, which the sheet does not cover.
+    if (narrow && panelKind === "chat") {
+      el.style.top = "auto";
+      el.style.bottom = "calc(var(--belline-sheet-h) - 64px)";
+      el.style[side] = "14px";
+      el.className = "belline-shut belline-on-sheet";
+      return;
+    }
+    el.className = "belline-shut";
     el.style.top = narrow ? "14px" : "auto";
     el.style.bottom = narrow ? "auto" : panelKind === "video" ? "676px" : "556px";
     el.style[side] = narrow ? "14px" : "32px";
@@ -626,8 +705,12 @@
   function close() {
     if (panel) panel.remove();
     if (shut) shut.remove();
+    if (veil) veil.remove();
+    if (grab) grab.remove();
     panel = null;
     shut = null;
+    veil = null;
+    grab = null;
     panelKind = null;
     dock.style.display = "";
     document.removeEventListener("keydown", onKey);

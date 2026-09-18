@@ -2090,8 +2090,8 @@ function loadBubble() {
     mount: (o: Record<string, unknown>) => {
       reopen(): void;
       openCall(): void;
-      pip(on: boolean): void;
-      state(): { bubble: boolean; mini: boolean; call: boolean; pip: boolean; ringing: boolean; hidden: boolean; dismissed: boolean };
+      pip(on: boolean, big?: boolean): void;
+      state(): { bubble: boolean; mini: boolean; call: boolean; pip: boolean; pipBig: boolean; ringing: boolean; hidden: boolean; dismissed: boolean };
     };
     DISMISSED: string;
   };
@@ -2320,10 +2320,10 @@ await test("a fresh load is always the big bubble: ending a call is not a dismis
   assert.equal(/remember\(true\)/.test(closeCall), false, "closing a call remembers a dismissal again");
 });
 
-await test("picture in picture on a phone: scrolling or a tap outside tucks the same frame into a corner; a tap grows it back", () => {
+await test("a call on a phone is carried, never shrunk: scrolling or a tap outside moves the same frame, still at the call's size", () => {
   const page = fakePage({ narrow: true });
   const { ctl } = mountBubble(page);
-  // No call, no picture in picture: scrolling the page past a resting bubble changes nothing.
+  // No call, no carrying: scrolling the page past a resting bubble changes nothing.
   page.scroll(400);
   assert.equal(ctl.state().pip, false);
   page.byClass("bvb-talk")!.click();
@@ -2332,24 +2332,43 @@ await test("picture in picture on a phone: scrolling or a tap outside tucks the 
   page.scroll(420);
   assert.equal(ctl.state().pip, false, "a small scroll is not leaving");
   page.scroll(520);
-  assert.equal(ctl.state().pip, true, "scrolling on did not tuck the call away");
+  assert.equal(ctl.state().pip, true, "scrolling on did not carry the call with the visitor");
+  // Large, not a button: shrinking her while somebody is talking to her is the
+  // wrong default (founder, 2026-09-18). She stays this size until × is pressed.
+  assert.equal(ctl.state().pipBig, true, "the call shrank to a button mid-call again");
   assert.match(root.className, /\bis-pip\b/);
-  assert.equal(root.attrs["data-pip"], "on");
+  assert.match(root.className, /\bis-pipbig\b/);
+  assert.equal(root.attrs["data-pip"], "big");
   assert.equal(page.find((n) => n.tagName === "IFRAME"), frame, "the frame was replaced");
   assert.equal(frame.parent, root, "the frame was moved in the page (that reloads it)");
   assert.equal(page.all().filter((n) => n.tagName === "IFRAME").length, 1);
   assert.equal(ctl.state().call, true, "the call dropped");
-  // A tap on the small face grows it back, same frame.
+  // Her face is a handle now, not a "make it bigger": she is already big, and
+  // a tap that took her back off screen would be a trap.
   const face = page.byClass("bvb-pipface")!;
-  assert.match(face.attrs["aria-label"], /Tap to make it bigger/);
+  assert.match(face.attrs["aria-label"], /Drag to move it/);
+  assert.doesNotMatch(face.attrs["aria-label"], /make it bigger/);
   face.click();
+  assert.equal(ctl.state().pip, true, "a tap on the carried call took it away from the visitor");
+  // × ends the call, from the carried state as from any other.
+  assert.equal(page.find((n) => n.attrs["aria-label"] === "Close video call")!.className, "bvb-shut");
+  // A host may still ask for the small button; a tap on that one grows it back.
+  ctl.pip(false);
+  assert.equal(ctl.state().pip, false);
+  ctl.pip(true);
+  assert.equal(ctl.state().pip, true);
+  assert.equal(ctl.state().pipBig, false);
+  assert.equal(root.attrs["data-pip"], "on");
+  assert.match(page.byClass("bvb-pipface")!.attrs["aria-label"], /Tap to make it bigger/);
+  page.byClass("bvb-pipface")!.click();
   assert.equal(ctl.state().pip, false);
   assert.equal(frame.parent, root);
-  // A tap outside the call does it too; a tap inside does not.
+  // A tap outside the call carries it too; a tap inside does not.
   page.docEvent("pointerdown", { target: frame });
   assert.equal(ctl.state().pip, false);
   page.docEvent("pointerdown", { target: page.body });
   assert.equal(ctl.state().pip, true);
+  assert.equal(ctl.state().pipBig, true);
   // The tiny controls: mute asks the frame, the frame answers; end ends the call.
   const mute = page.find((n) => n.className === "bvb-pipbtn" && /mute/i.test(n.attrs["aria-label"] ?? ""))!;
   assert.equal(mute.attrs["aria-label"], "Mute microphone");
@@ -2374,6 +2393,10 @@ await test("picture in picture on a phone: scrolling or a tap outside tucks the 
   // CSS only: fixed, clipped to the face, the frame never takes the taps meant for the page.
   const source = read("public/embed-video.js");
   assert.match(source, /\.bvb\.is-pip\{--bvb-cur:96px;position:fixed;/);
+  // Carried: the call's own size, its controls always under it, and × still on its shoulder.
+  assert.match(source, /\.bvb\.is-pip\.is-pipbig\{--bvb-cur:var\(--bvb-call\)/);
+  assert.match(source, /\.bvb\.is-pip\.is-pipbig \.bvb-pipbar\{opacity:1;pointer-events:auto\}/);
+  assert.match(source, /\.bvb\.is-pip\.is-pipbig \.bvb-shut\{display:grid/);
   assert.match(source, /env\(safe-area-inset-bottom,0px\)/);
   assert.match(source, /\.bvb\.is-pip \.bvb-frame\{clip-path:circle\(calc\(var\(--bvb-cur\) \/ 2\) at 50% calc\(var\(--bvb-cur\) \/ 2\)\);pointer-events:none/);
   assert.match(source, /\.bvb\.is-pip:focus-within \.bvb-pipbar\{opacity:1;pointer-events:auto\}/, "the controls are not reachable by keyboard");
@@ -2792,6 +2815,13 @@ await test("12. the mobile panel: full screen in the widget and on our site, saf
     assert.equal(/camera/.test(allow), false, "the frame is never allowed the camera");
   }
   const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
+  // The clock a visitor in a call reads: inside the circle, never on its edge
+  // (every small state clips the frame to the circle, so an edge pill is gone),
+  // near the top and so clear of a thumb, and big enough to read — it was an
+  // 11.5px hairline pill on the bottom edge (founder, 2026-09-18).
+  assert.match(panel, /\.bv-time \{ top: 7%; bottom: auto;/, "the call timer is back on the circle's edge");
+  assert.match(panel, /font-size: 14px; line-height: 1\.3; font-weight: 700;[\s\S]{0,200}?color: #FFFFFF; background: rgba\(17, 17, 19, \.78\)/);
+  assert.match(panel, /font-variant-numeric: tabular-nums/);
   assert.match(panel, /env\(safe-area-inset-bottom\)/);
   assert.match(panel, /@media \(orientation: landscape\) and \(max-height: 500px\)/);
   assert.match(panel, /min-height: 48px/);

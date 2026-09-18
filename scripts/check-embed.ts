@@ -662,6 +662,27 @@ console.log("\n\x1b[1mKnowing it is installed\x1b[0m\n");
     assert.ok(!/location\.reload\(/.test(editor), "saving still reloads the page");
   });
 
+  await test("on a phone the widget's chat is a sheet over the visitor's page, not a second window", () => {
+    const embed = source("public/embed.js");
+    // A sheet: along the bottom, over the page, with the page left visible
+    // above it — the visitor stays where they were (founder, 2026-09-18).
+    assert.match(embed, /\.belline-panel\.belline-sheet[^{]*\{inset:auto 0 0 0;/, "the chat is not a sheet on a phone");
+    assert.match(embed, /--belline-sheet-h:min\(86dvh,calc\(100dvh - 56px\)\)/, "the sheet takes the whole screen");
+    assert.match(embed, /animation:belline-sheet-up/, "the sheet does not slide up");
+    // Dismissible without hunting: the veil beside it, the handle on it, ×, Escape.
+    assert.match(embed, /\.belline-veil\{display:block;position:fixed;inset:0/);
+    assert.match(embed, /\.belline-grab\{display:grid/);
+    assert.match(embed, /veil\.addEventListener\("click", close\)/);
+    assert.match(embed, /grab\.addEventListener\("click", close\)/);
+    assert.match(embed, /e\.clientY - from > 44/, "a drag down does not put the sheet away");
+    assert.match(embed, /if \(veil\) veil\.remove\(\);/);
+    assert.match(embed, /if \(grab\) grab\.remove\(\);/);
+    // Only the chat. A call is a bar and a video call is a face.
+    assert.match(embed, /\(kind === "chat" \? " belline-sheet" : ""\)/);
+    // And on a wide screen neither the veil nor the handle exists to be seen.
+    assert.match(embed, /\.belline-veil,\.belline-grab\{display:none\}/);
+  });
+
   await test("builder tabs cover WordPress, Wix, Shopify, Squarespace and Tag Manager, plus an email for a web person", async () => {
     const { BUILDER_TABS } = await import("../src/lib/onboarding/platform");
     const ids = BUILDER_TABS.map((t) => t.id);

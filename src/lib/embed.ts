@@ -6,6 +6,7 @@ import { listCalls, upsertLocation } from "./store";
 import { dateIn, todayIn } from "./time";
 import { serviceState } from "./billing/entitlement";
 import { lineFor } from "./language";
+import { isSandboxWhatsApp } from "./whatsapp";
 
 /**
  * What a venue's widget offers a visitor: the bell, the chat, or both.
@@ -363,15 +364,35 @@ export function starterPromptsFor(agent: { starterPrompts?: unknown }): string[]
  * Belline's own venue used to fall back to `WHATSAPP_NUMBER`, so a server with
  * the variable set and no connection (staging) put a WhatsApp icon on the
  * site that led to "Not on WhatsApp yet". No connected number, no icon.
+ *
+ * And never a sandbox or test connection, whatever its status says. That rule
+ * was written in a comment in lib/whatsapp.ts and nowhere in the code, so when
+ * belline.ai's venue picked up a Twilio sandbox row the public button pointed
+ * at a number that answers nobody. It is a rule here now, with
+ * `venueWhatsApp` preferring a real Meta-connected number before it gets here.
  */
 export function connectedWhatsAppLink(
-  account: { phoneE164?: string | null; status?: string; channel?: string } | null | undefined,
+  account: PublicWhatsAppAccount | null | undefined,
+  env: Record<string, string | undefined> = process.env,
 ): string | null {
   if (!account || account.status !== "active") return null;
   if (account.channel !== undefined && account.channel !== "whatsapp") return null;
+  // A sandbox or test connection is never the public button. Twilio's sandbox
+  // answers only phones that have sent it "join <two words>" first, so a wa.me
+  // link to it opens a chat that ignores the visitor — which is exactly what
+  // belline.ai published when a test connection happened to sort first.
+  if (isSandboxWhatsApp(account, env)) return null;
   const number = account.phoneE164 ?? "";
   return /^\+\d{8,15}$/.test(number) ? `https://wa.me/${number.slice(1)}` : null;
 }
+
+/** What a public WhatsApp button needs to know about a connection. */
+export type PublicWhatsAppAccount = {
+  phoneE164?: string | null;
+  status?: string;
+  channel?: string;
+  provider?: string;
+};
 
 /** Belline's own website venue (lib/seed-belline.ts), the only one `SITE_WHATSAPP_NUMBER` speaks for. */
 const BELLINE_SITE_VENUE = "loc_belline";
@@ -388,14 +409,17 @@ const BELLINE_SITE_VENUE = "loc_belline";
  */
 export function venueWhatsAppLink(
   location: { id: string; embed?: { key?: string } | null },
-  account: { phoneE164?: string | null; status?: string; channel?: string } | null | undefined,
+  account: PublicWhatsAppAccount | null | undefined,
   env: Record<string, string | undefined> = process.env,
 ): string | null {
-  const connected = connectedWhatsAppLink(account);
+  const connected = connectedWhatsAppLink(account, env);
   if (connected) return connected;
   if (location.id !== BELLINE_SITE_VENUE || location.embed?.key !== BELLINE_SITE_EMBED_KEY) return null;
   const number = (env.SITE_WHATSAPP_NUMBER ?? "").replace(/[\s-]/g, "");
-  return /^\+[1-9]\d{7,14}$/.test(number) ? `https://wa.me/${number.slice(1)}` : null;
+  if (!/^\+[1-9]\d{7,14}$/.test(number)) return null;
+  // Not even from the environment: a sandbox number is never the public button.
+  if (isSandboxWhatsApp({ phoneE164: number }, env)) return null;
+  return `https://wa.me/${number.slice(1)}`;
 }
 
 /**
