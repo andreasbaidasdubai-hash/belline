@@ -80,9 +80,14 @@
     ".bvb.is-mini{--bvb-cur:56px}" +
     "@media (max-width:520px){.bvb{--bvb-call:min(240px,calc(100vw - 40px),calc(100dvh - 230px))}}" +
     // The face.
+    // The ring is the brand blue, the same one the call panel draws round the
+    // orb (embed/[key]/video/VideoPanel.tsx, .bv-orb.is-speaking .bv-circle):
+    // a hairline of page colour first, then the blue. The grey hairline that
+    // was here read as a stock avatar on a white page — the blue says the
+    // circle is a control, and matches what the demo page already showed.
     ".bvb-circle{position:relative;display:block;width:var(--bvb-cur);height:var(--bvb-cur);padding:0;margin:0;" +
     "border:0;border-radius:50%;overflow:hidden;cursor:pointer;background:var(--bl-navy,#1D1D1F);transform-origin:0 0;" +
-    "box-shadow:0 0 0 3px " + WHITE + ",0 0 0 4px " + LINE + "," + FLOAT + "}" +
+    "box-shadow:0 0 0 3px " + WHITE + ",0 0 0 5px " + BLUE + "," + FLOAT + "}" +
     ".bvb.is-call .bvb-circle{position:absolute;top:0;right:0;cursor:default}" +
     ".bvb.bvb-left.is-call .bvb-circle{right:auto;left:0}" +
     ".bvb.is-growing .bvb-circle{transition:transform " + GROW_MS + "ms cubic-bezier(.2,.8,.2,1)}" +

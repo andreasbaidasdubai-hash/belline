@@ -903,8 +903,11 @@ function buildLanding(extra: Record<string, string>): string {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "belline-site-"));
   const env: NodeJS.ProcessEnv = { ...process.env };
   for (const k of Object.keys(env)) {
-    // Nothing from this machine may decide a flag in the test builds.
-    if (/^(?:FLAG_|GOOGLE_|MICROSOFT_|PARTNER_|CREDENTIALS_KEY$|DATABASE_URL$)/.test(k)) delete env[k];
+    // Nothing from this machine may decide a flag in the test builds. TWILIO_,
+    // WHATSAPP_ and the speech keys are here because `channel.phone` and the
+    // WhatsApp flags are not explicit — credentials alone switch them on, and
+    // they now decide the hero's eyebrow (src/lib/site-flags.ts).
+    if (/^(?:FLAG_|GOOGLE_|MICROSOFT_|PARTNER_|TWILIO_|WHATSAPP_|DEEPGRAM_|ELEVENLABS_|ANTHROPIC_|CREDENTIALS_KEY$|DATABASE_URL$)/.test(k)) delete env[k];
   }
   Object.assign(env, extra, { SITE_OUT: out });
   const run = spawnSync(process.execPath, ["--import", "tsx", path.join("scripts", "build-site.ts")], {
@@ -1144,8 +1147,10 @@ await test("video.avatar: the committed pages say nothing about video; the flag-
   }
   assert.deepEqual(videoClaims(off), [], "the flag-off build talks about video");
   assert.doesNotMatch(off, /allow-video|data-gen="faq-video"|data-gen="video-ratio"/);
-  // With the flag on: the video-first page.
-  assert.match(heroOf(on), /<p class="eyebrow rise">AI video receptionist for your website<\/p>/);
+  // With the flag on: the video-first page. The eyebrow is not part of it —
+  // it names the channels, not the medium (founder, f6), and with no phone or
+  // WhatsApp credentials in this build it is the website alone.
+  assert.match(heroOf(on), /<p class="eyebrow rise">AI receptionist for your website<\/p>/);
   assert.match(heroOf(on), /<span class="hv-title">Belle on video<\/span>/);
   assert.match(on, /<h3>Video receptionist on your website<\/h3>/);
   assert.equal(on.split('<li class="allow-video">').length, 4, "a card has no video row");
@@ -1162,11 +1167,36 @@ await test("video.avatar: the committed pages say nothing about video; the flag-
     const deOff = builtGerman.get(`off ${slug}`)!;
     const deOn = builtGerman.get(`video ${slug}`)!;
     assert.deepEqual(videoClaims(deOff), [], `${slug}: the flag-off build talks about video`);
-    assert.match(deOn, /KI-Video-Empfang für Ihre Website/, slug);
+    // The eyebrow no longer turns on video (founder, f6), so the German
+    // flag-on page is recognised by Belle's own caption instead.
+    assert.match(deOn, /<span class="hv-title">Belle per Video<\/span>/, slug);
     assert.equal(deOn.split('<li class="allow-video">').length, 4, `${slug}: a card has no video row`);
     assert.equal(same(pageWithFlags(`${slug}/index.html`, Buffer.from(deOff), VIDEO_ON).toString("utf8")), same(deOn), `${slug}: served with video on`);
     assert.equal(same(pageWithFlags(`${slug}/index.html`, Buffer.from(deOn), {}).toString("utf8")), same(deOff), `${slug}: served with video off`);
   }
+});
+
+await test("the hero's eyebrow names only the channels that are live in this environment", async () => {
+  const { heroEyebrowText, applyHeroEyebrow } = await import("../src/lib/site-flags");
+  const PHONE = { TWILIO_ACCOUNT_SID: "x", TWILIO_AUTH_TOKEN: "x", TWILIO_PHONE_NUMBER: "+15717785920", ANTHROPIC_API_KEY: "x", DEEPGRAM_API_KEY: "x", ELEVENLABS_API_KEY: "x" };
+  const WA = { FLAG_CHANNEL_WHATSAPP_SELFSERVE: "on", WHATSAPP_ACCESS_TOKEN: "x", WHATSAPP_BUSINESS_ACCOUNT_ID: "x", CREDENTIALS_KEY: "x".repeat(64) };
+
+  // The website is the product; the other two are claims about a connection.
+  assert.equal(heroEyebrowText("en", {}), "AI receptionist for your website");
+  assert.equal(heroEyebrowText("en", PHONE), "AI receptionist for your website & telephone");
+  assert.equal(heroEyebrowText("en", { ...PHONE, ...WA }), "AI receptionist for your website, telephone & WhatsApp");
+  assert.equal(heroEyebrowText("en", WA), "AI receptionist for your website & WhatsApp");
+  assert.equal(heroEyebrowText("de", { ...PHONE, ...WA }), "KI-Empfang für Ihre Website, Telefon & WhatsApp");
+
+  // A harness is not a connection: stubs must never put a channel on the page.
+  assert.equal(heroEyebrowText("en", { FLAG_STUBS: "on" }), "AI receptionist for your website");
+
+  // Both ways, from either page: serving a page built with the flags on, with
+  // them off, puts the honest line back.
+  const page = '<html lang="en-AE"><p class="eyebrow rise">AI receptionist for your website</p></html>';
+  const claiming = applyHeroEyebrow(page, { ...PHONE, ...WA });
+  assert.match(claiming, /telephone & WhatsApp/);
+  assert.equal(applyHeroEyebrow(claiming, {}), page);
 });
 
 await test("staging serves the site with links into staging's app; production and belline.ai hosts keep app.belline.ai", async () => {

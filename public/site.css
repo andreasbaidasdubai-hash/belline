@@ -3495,7 +3495,12 @@ footer a { color: var(--bl-ink-900); }
   background: radial-gradient(circle at 50% 38%, var(--bl-navy-card), var(--bl-navy) 72%);
   background-size: cover;
   background-position: center;
-  box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 4px var(--card-line), 0 24px 48px -28px rgba(29, 29, 31, 0.45);
+  /* A ring of page colour, then the brand blue — the ring the demo page's call
+     panel draws round Belle (embed/[key]/video/VideoPanel.tsx, .bv-circle), and
+     the one the live bubble draws now too (public/embed-video.js). The grey
+     hairline that was here read as a stock portrait; the blue says the circle
+     is something to press. Founder, f6. */
+  box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 5px var(--bl-blue), 0 24px 48px -28px rgba(29, 29, 31, 0.45);
 }
 .hv-face svg { width: 44%; height: 44%; }
 .hv-mark { fill: var(--bl-blue-lit); }
