@@ -75,7 +75,7 @@ export interface OAuthStateRow {
   /** sha256 of the nonce, hex. */
   id: string;
   /** Whose connection. Absent on Google's, which predate Outlook. See integrations/oauth-state.ts. */
-  provider?: "google" | "outlook";
+  provider?: "google" | "outlook" | "calendly";
   locationId: string;
   userId: string;
   createdAt: string;

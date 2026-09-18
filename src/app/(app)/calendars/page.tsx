@@ -4,7 +4,13 @@ import { requireUser, resolveLocation } from "@/lib/auth-server";
 import { canEditAgent, isBellineStaff } from "@/lib/auth";
 import { integrationErrorText } from "@/lib/errors/customer";
 import { seedIfEmpty } from "@/lib/seed";
-import { destinationOf, googleUsable, onBellineDiary, outlookUsable, takesRequestsOnly } from "@/lib/booking/destination";
+import { calendlyUsable, destinationOf, googleUsable, onBellineDiary, outlookUsable, takesRequestsOnly } from "@/lib/booking/destination";
+import {
+  CALENDLY_ABANDONED_TEXT,
+  calendlyConnectionState,
+  calendlyLimits,
+  refreshCalendlyEventTypes,
+} from "@/lib/integrations/calendly";
 import { GOOGLE_ABANDONED_TEXT, GOOGLE_EXPIRED_TEXT, connectionState, listCalendarsFor } from "@/lib/integrations/google";
 import {
   OUTLOOK_ABANDONED_TEXT,
@@ -24,6 +30,7 @@ import { stripeConfigured } from "@/lib/billing/stripe";
 import { depositsReady, refreshConnectedAccount } from "@/lib/billing/deposits";
 import type { DestinationKind, Location } from "@/lib/types";
 import CalendarControls from "./CalendarControls";
+import CalendlyControls from "./CalendlyControls";
 import DestinationSwitch from "./DestinationSwitch";
 import RemindersForm from "./RemindersForm";
 
@@ -57,6 +64,13 @@ const PARTNER_GATED = [
   { name: "Treatwell", note: "Partner programme. Credentials are issued under agreement." },
 ];
 
+/** "Google Calendar", "your Outlook calendar", "your Calendly". */
+const CALENDAR_NAME: Record<"google" | "outlook" | "calendly", string> = {
+  google: "Google Calendar",
+  outlook: "your Outlook calendar",
+  calendly: "your Calendly",
+};
+
 /** One sentence: where a booking made today actually ends up. */
 function whereBookingsGo(location: Location): string {
   if (location.onboarding && !location.onboarding.destination) {
@@ -67,6 +81,11 @@ function whereBookingsGo(location: Location): string {
     return location.google || location.outlook
       ? "Bookings go into Belline's diary, and each one is copied into your connected calendar."
       : "Bookings go into Belline's diary.";
+  }
+  if (kind === "calendly") {
+    return calendlyUsable(location)
+      ? "Belline books straight into your Calendly, as one of your own event types. Calendly decides which times are open and how long the appointment is; Belline offers what it says and books it."
+      : "You chose Calendly, but Belline cannot use it right now, so it takes booking requests for your team to confirm until it is connected again.";
   }
   if (kind === "google") {
     return googleUsable(location)
@@ -122,9 +141,19 @@ export default async function CalendarsPage({
   // Outlook, the same way, from its own flag.
   const outlookOn = flag("booking.outlook");
   const outlookCalendars = outlookOn && outlookUsable(googleVenue) ? await listOutlookCalendarsFor(googleVenue).catch(() => null) : null;
-  const venue = getLocation(location.id) ?? googleVenue;
-  const outlook = outlookConnectionState(venue);
-  const outlookTwoWay = destinationOf(venue) === "outlook";
+  const outlookVenue = getLocation(location.id) ?? googleVenue;
+  const outlook = outlookConnectionState(outlookVenue);
+  const outlookTwoWay = destinationOf(outlookVenue) === "outlook";
+  // Calendly, the same way. Its event types are read again on every load,
+  // because they are the thing that decides what Belline can book: an owner who
+  // deletes an event type in Calendly must see that here, not on a call.
+  const calendlyOn = flag("booking.calendly");
+  const calendlyRefreshed =
+    calendlyOn && calendlyUsable(outlookVenue) ? await refreshCalendlyEventTypes(outlookVenue).catch(() => outlookVenue) : outlookVenue;
+  const venue = getLocation(location.id) ?? calendlyRefreshed;
+  const calendly = calendlyConnectionState(venue);
+  const calendlyLimitList = venue.calendly ? calendlyLimits(venue).limits : [];
+  const calendlyBlocked = calendlyLimitList.some((l) => l.severity === "blocking");
 
   const diary = onBellineDiary(venue);
   const live = isActivated(venue);
@@ -136,9 +165,22 @@ export default async function CalendarsPage({
 
   // The in-place switch, for a live venue that is not on the diary: between a
   // usable calendar and requests. Anything else is the setup step's.
-  const usableKind: "google" | "outlook" | null = googleUsable(venue) ? "google" : outlookUsable(venue) ? "outlook" : null;
-  const usableName = usableKind === "google" ? "Google Calendar" : "your Outlook calendar";
-  const booksIntoCalendar = (kind === "google" || kind === "outlook") && !takesRequestsOnly(venue);
+  //
+  // Calendly counts only when this account can actually take the venue's
+  // bookings. An account with a service that has no event type, or a plan that
+  // refuses the API, is connected but not offerable — the honest limits are
+  // listed in its own panel below, and the switch is not shown until they are
+  // dealt with. `recordStep` refuses on exactly the same answer, so the button
+  // and the server cannot disagree.
+  const usableKind: "google" | "outlook" | "calendly" | null = googleUsable(venue)
+    ? "google"
+    : outlookUsable(venue)
+      ? "outlook"
+      : calendlyUsable(venue) && !calendlyBlocked
+        ? "calendly"
+        : null;
+  const usableName = usableKind ? CALENDAR_NAME[usableKind] : "";
+  const booksIntoCalendar = (kind === "google" || kind === "outlook" || kind === "calendly") && !takesRequestsOnly(venue);
   const missing = live && !diary && usableKind && !booksIntoCalendar ? missingToBook(venue, usableKind) : [];
 
   // Reminder texts and deposits only mean something once there is a booking:
@@ -209,11 +251,18 @@ export default async function CalendarsPage({
                 <DestinationSwitch
                   locationId={venue.id}
                   to={usableKind}
-                  label={usableKind === "google" ? "Book straight into Google Calendar" : "Book straight into Outlook"}
+                  label={
+                    usableKind === "google"
+                      ? "Book straight into Google Calendar"
+                      : usableKind === "outlook"
+                        ? "Book straight into Outlook"
+                        : "Book straight into Calendly"
+                  }
                 />
                 <p className="muted" style={{ fontSize: 12.5, margin: "8px 0 0", maxWidth: "68ch" }}>
-                  Belline would offer times your hours and services allow, leave out anything busy in {usableName}, and add
-                  each booking to it.
+                  {usableKind === "calendly"
+                    ? "Belline would offer the times Calendly says are open for the matching event type, inside your opening hours, and book each customer in as a Calendly invitee. Calendly sends its own confirmation, and its event type decides how long the appointment is."
+                    : `Belline would offer times your hours and services allow, leave out anything busy in ${usableName}, and add each booking to it.`}
                 </p>
               </div>
             ) : (
@@ -223,7 +272,7 @@ export default async function CalendarsPage({
             )
           ) : (
             <p className="muted" style={{ fontSize: 13, margin: 0, maxWidth: "68ch" }}>
-              Connect Google Calendar or Outlook below and Belline can book straight into it.
+              Connect Google Calendar, Outlook or Calendly below and Belline can book straight into it.
             </p>
           )}
         </div>
@@ -412,6 +461,113 @@ export default async function CalendarsPage({
               Outlook isn&apos;t available on this account yet. Until it is, Belline takes booking requests and your team confirms them.
               {isBellineStaff(user) && (
                 <span className="muted"> (Ours to fix: the booking.outlook flag is off. See the ops flags.)</span>
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="panel-head">Calendly</div>
+        <div style={{ padding: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+            <span
+              className="pill"
+              style={
+                calendly.connected && calendly.healthy
+                  ? { background: "var(--ok-soft)", color: "var(--ok)", borderColor: "var(--ok)" }
+                  : calendly.connected
+                    ? { background: "var(--bad-soft)", color: "var(--bad)", borderColor: "var(--bad)" }
+                    : undefined
+              }
+            >
+              {calendly.connected ? (calendly.healthy ? "Connected" : "Needs attention") : "Not connected"}
+            </span>
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              {calendly.detail}
+            </span>
+          </div>
+
+          {calendlyOn && !calendly.connected && venue.calendlyConnectAbandonedAt && (
+            <div role="status" className="panel" style={{ padding: "12px 14px", margin: "0 0 12px", borderColor: "var(--warn)", fontSize: 13.5, lineHeight: 1.55 }}>
+              {CALENDLY_ABANDONED_TEXT}
+            </div>
+          )}
+          {calendly.expired && (
+            <div role="alert" className="panel" style={{ padding: "12px 14px", margin: "0 0 12px", borderColor: "var(--bad)", background: "var(--bad-soft)", fontSize: 13.5 }}>
+              {calendly.detail}
+            </div>
+          )}
+
+          {calendlyOn ? (
+            <>
+              <p className="muted" style={{ fontSize: 13, lineHeight: 1.6, maxWidth: "68ch" }}>
+                Calendly is not a calendar Belline writes into — it is your booking page, and it stays in charge. Belline
+                asks Calendly which times are open for the event type a customer wants, offers those, and books the
+                customer in as an invitee. Calendly&apos;s event type decides how long the appointment is, Calendly sends
+                the confirmation, and a cancellation made on either side reaches the other.
+              </p>
+
+              {/*
+                The honest limits, at connect time.
+
+                Not a footnote: a customer's own Calendly decides what the
+                product can promise, and anything blocking here also stops
+                Calendly being chosen as the destination (onboarding/journey.ts
+                refuses it on the same answer). So the owner reads this before
+                they rely on it, rather than meeting it on a call weeks later.
+              */}
+              {venue.calendly && calendlyLimitList.length > 0 && (
+                <div
+                  className="panel"
+                  style={{
+                    padding: "12px 14px",
+                    margin: "0 0 12px",
+                    borderColor: calendlyBlocked ? "var(--bad)" : "var(--warn)",
+                    ...(calendlyBlocked ? { background: "var(--bad-soft)" } : {}),
+                  }}
+                >
+                  <p style={{ fontSize: 13.5, fontWeight: 600, margin: "0 0 8px" }}>
+                    {calendlyBlocked ? "Before Belline can book into this Calendly" : "What Belline can and cannot do through your Calendly"}
+                  </p>
+                  <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+                    {calendlyLimitList.map((limit, i) => (
+                      <li key={i} style={{ fontSize: 13, lineHeight: 1.55, color: limit.severity === "blocking" ? "var(--bad)" : undefined }}>
+                        {limit.text}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                {venue.google || venue.outlook ? (
+                  <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+                    {venue.google ? "Google Calendar" : "Outlook"} is connected to this venue. Belline books into one place
+                    per venue: disconnect it first to use Calendly.
+                  </p>
+                ) : (
+                  <a className="btn btn-accent" href={`/api/integrations/calendly?locationId=${location.id}`}>
+                    {calendly.connected ? "Reconnect" : "Connect Calendly"}
+                  </a>
+                )}
+              </div>
+              {venue.calendly && (venue.calendly.eventTypes ?? []).length > 0 && (
+                <CalendlyControls
+                  locationId={location.id}
+                  eventTypes={(venue.calendly.eventTypes ?? []).filter((t) => t.active)}
+                  services={(venue.salon?.services ?? []).map((s) => ({ id: s.id, name: s.name, durationMin: s.durationMin }))}
+                  serviceEventTypes={venue.calendly.serviceEventTypes ?? {}}
+                  defaultEventType={venue.calendly.defaultEventType}
+                />
+              )}
+            </>
+          ) : (
+            <p style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 14 }}>
+              Calendly isn&apos;t available on this account yet. Until it is, Belline takes booking requests and your team
+              confirms them.
+              {isBellineStaff(user) && (
+                <span className="muted"> (Ours to fix: the booking.calendly flag is off. See the ops flags.)</span>
               )}
             </p>
           )}

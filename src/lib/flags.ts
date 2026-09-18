@@ -32,6 +32,7 @@ export const FLAG_NAMES = [
   "import.maps",
   "booking.google",
   "booking.outlook",
+  "booking.calendly",
   "belline.diary",
   "vertical.clinic.selfserve",
   "forwarding.autotest",
@@ -79,6 +80,11 @@ const DEFS: Record<Exclude<StaticFlag, "stubs">, FlagDef> = {
   // Google's OAuth verification; the site keeps "Coming soon" until this is on.
   "booking.google": { needs: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "CREDENTIALS_KEY"], explicit: true },
   "booking.outlook": { needs: ["MICROSOFT_CLIENT_ID", "MICROSOFT_CLIENT_SECRET", "CREDENTIALS_KEY"], explicit: true },
+  // Calendly's API is self-serve, so the credentials are ours to create — but a
+  // Calendly account decides what Belline may promise (see integrations/calendly.ts),
+  // and the site keeps "Coming soon" until somebody has booked a real Calendly
+  // appointment on staging and read the limits back.
+  "booking.calendly": { needs: ["CALENDLY_CLIENT_ID", "CALENDLY_CLIENT_SECRET", "CREDENTIALS_KEY"], explicit: true },
   // Belline's own diary for new signups (FLAG_BELLINE_DIARY). Accounts already
   // on it keep it whatever this says.
   "belline.diary": { needs: [], explicit: true },

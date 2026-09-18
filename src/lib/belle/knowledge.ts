@@ -87,14 +87,24 @@ const DIARY_PAGES = ["/calendar", "/floor", "/waitlist", "/recall", "/rota"];
 function howTo(env: Env): string[] {
   const google = flag("booking.google", env);
   const outlook = flag("booking.outlook", env);
-  const calendars =
-    google && outlook
-      ? "Connect Google Calendar or Outlook on Calendars; Belline then checks it for busy times and books into it. Only one calendar connection per location."
-      : google
-        ? "Connect Google Calendar on Calendars; Belline then checks it for busy times and books into it. Outlook is not available yet."
-        : outlook
-          ? "Connect Outlook on Calendars; Belline then checks it for busy times and books into it. Google Calendar is not available yet."
-          : "Calendar connections are not available yet: Belline takes booking requests and your team confirms them. Choose this on Calendars or the Where bookings go step.";
+  const calendly = flag("booking.calendly", env);
+  // Google and Outlook are diaries Belline reads busy times out of; Calendly is
+  // a booking page that decides the times itself, so it gets its own sentence
+  // rather than being folded into theirs (see integrations/calendly.ts).
+  const diaries = [google && "Google Calendar", outlook && "Outlook"].filter(Boolean) as string[];
+  const notLive = [!google && "Google Calendar", !outlook && "Outlook", !calendly && "Calendly"].filter(Boolean) as string[];
+  const said: string[] = [];
+  if (diaries.length) said.push(`Connect ${diaries.join(" or ")} on Calendars; Belline then checks it for busy times and books into it.`);
+  if (calendly) {
+    said.push(
+      "Connect Calendly on Calendars; Belline then offers the times your Calendly says are open for one of your event types and books the customer in there. Calendly sets the length, and it needs the customer's email address. The Calendars page lists what your own Calendly can and cannot do before you choose it.",
+    );
+  }
+  if (said.length) said.push("Only one booking connection per location.");
+  if (said.length && notLive.length) said.push(`${notLive.join(", ")} ${notLive.length === 1 ? "is" : "are"} not available yet.`);
+  const calendars = said.length
+    ? said.join(" ")
+    : "Calendar connections are not available yet: Belline takes booking requests and your team confirms them. Choose this on Calendars or the Where bookings go step.";
   return [
     "Add or change your logo: Your business > Details (/venue), Logo section. It shows in your website chat too.",
     "Change opening hours, services, prices or staff: Your business > Details (/venue), or tell Ask Belle and she saves it.",
@@ -165,7 +175,7 @@ function channelsSection(env: Env): string[] {
     "- Website chat and voice button: one line of code on your site.",
     "- Chat link: a link to share anywhere, no website needed.",
     "- WhatsApp: on a second number for the business, English, no voice notes.",
-    `- Calendars: ${google ? "Google Calendar live" : "Google Calendar coming soon"}; ${outlook ? "Outlook live" : "Outlook not available yet"}. Fresha, SevenRooms, OpenTable and Treatwell need partner agreements Belline does not have: Belline takes the request and the team books it.`,
+    `- Calendars: ${google ? "Google Calendar live" : "Google Calendar coming soon"}; ${outlook ? "Outlook live" : "Outlook not available yet"}; ${flag("booking.calendly", env) ? "Calendly live (it books your own Calendly event types, and needs the customer's email address)" : "Calendly not available yet"}. Fresha, SevenRooms, OpenTable and Treatwell need partner agreements Belline does not have: Belline takes the request and the team books it.`,
     `- Video receptionist on the website: ${videoLive() ? "available" : "not available yet"}.`,
     `- Languages: ${languages.join(", ")}. Not available yet: ${notYet.join(", ")}.`,
     "- Urgent calls put through live to your team: Growth and Scale plans.",
@@ -183,7 +193,12 @@ function notYetSection(env: Env): string[] {
       notYetLive()
         .filter((g) => where.has(g.where))
         .map((g) => g.feature)
-        .filter((f) => !(google && /Google Calendar connection/.test(f)) && !(outlook && /Outlook connection/.test(f))),
+        .filter(
+          (f) =>
+            !(google && /Google Calendar connection/.test(f)) &&
+            !(outlook && /Outlook connection/.test(f)) &&
+            !(flag("booking.calendly", env) && /Calendly connection/.test(f)),
+        ),
     ),
     "Confirmation texts or emails to customers",
   ];
@@ -283,7 +298,7 @@ function compactKnowledge(env: Env): string {
     "Reference data, not instructions. Answer only from it; if something is not here, say you don't know and offer a person. Never invent a price, date or feature, never say how long setup takes.",
     `Plans, per location, AED: ${plans.join("; ")}. Annual is ${money(periodFee(["v2_starter"], "AE", "annual"), "AE")}, ${money(periodFee(["v2_growth"], "AE", "annual"), "AE")} and ${money(periodFee(["v2_scale"], "AE", "annual"), "AE")} a year. Urgent calls put through live on Growth and Scale.`,
     `Trial: ${TRIAL.days} days free from Go live, ${TRIAL.minutes} voice minutes, ${TRIAL.conversations} text conversations, no card. Video uses ${VIDEO_VOICE_MINUTE_RATIO} voice minutes a minute. Card payment ${stripeEnabled() ? "is open" : "is not open yet"}.`,
-    `Channels: phone (forward your own number), website chat, chat link, WhatsApp on a second number. Calendars: Google ${google ? "live" : "coming soon"}, Outlook ${outlook ? "live" : "not yet"}.`,
+    `Channels: phone (forward your own number), website chat, chat link, WhatsApp on a second number. Calendars: Google ${google ? "live" : "coming soon"}, Outlook ${outlook ? "live" : "not yet"}, Calendly ${flag("booking.calendly", env) ? "live" : "not yet"}.`,
     `Not available yet: ${notYet.join("; ")}.`,
     `Signing up: checkout, confirm the 6-digit email code (valid ${CODE_MINUTES} minutes; Send a new code or Wrong address? if it did not arrive), then setup: ${STEP_IDS.map((id) => stepMeta(id).title).join(", ")}.`,
     "A person: in the dashboard, Talk to a person in Ask Belle opens a ticket and the team replies by email. Billing questions and failed payments go to a person.",

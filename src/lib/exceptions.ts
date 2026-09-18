@@ -52,6 +52,13 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "outlook_misconfigured",
   "outlook_connect_abandoned",
   "outlook_admin_approval",
+  "calendly_token_expired",
+  "calendly_misconfigured",
+  "calendly_connect_abandoned",
+  "calendly_plan_blocked",
+  "calendly_rate_limited",
+  "calendly_booking_failed",
+  "calendly_cancel_failed",
   "email_unverified",
 ];
 
@@ -151,6 +158,41 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
   outlook_admin_approval: {
     label: "Organisation must approve Belline for Outlook",
     next: "Contact the owner and send their IT admin the approval link in the reason. Publisher verification of Belline's Entra app removes most of these.",
+    belle: false,
+  },
+  calendly_token_expired: {
+    label: "Calendly access expired",
+    next: "The venue is on requests and the owner has a banner. Usually they removed Belline under Integrations in their Calendly account. If they do not reconnect within a day, contact them.",
+    belle: false,
+  },
+  calendly_misconfigured: {
+    label: "Calendly refusing Belline's app",
+    next: "Read the reason: a wrong CALENDLY_CLIENT_ID or CALENDLY_CLIENT_SECRET, a redirect address missing from the OAuth application, or a scope it was not registered with. Fix it in Calendly's developer portal; the sweep clears the venue on its own.",
+    belle: false,
+  },
+  calendly_connect_abandoned: {
+    label: "Calendly connection never came back",
+    next: "Usually the owner closed the window. Check the OAuth application's redirect address matches Belline's before contacting them.",
+    belle: false,
+  },
+  calendly_plan_blocked: {
+    label: "Calendly plan will not take bookings",
+    next: "Making a booking through Calendly's API needs a paid Calendly plan. The venue is on requests and the owner has been told. Contact them about their Calendly subscription, or move them to Google Calendar or Outlook.",
+    belle: false,
+  },
+  calendly_rate_limited: {
+    label: "Calendly booking limit reached",
+    next: "Calendly caps how many bookings an app may make for one account: about a hundred a day on a paid plan, five on a trial. Callers were taken as requests, so nothing is lost. A venue that books more than that every day needs a different destination, and should be told.",
+    belle: false,
+  },
+  calendly_booking_failed: {
+    label: "Calendly refused a booking",
+    next: "The caller was told Belline could not confirm and was taken as a message, so nothing was promised. Check the server log for the venue's [calendly] lines, and whether the owner's event types have changed.",
+    belle: false,
+  },
+  calendly_cancel_failed: {
+    label: "Cancellation not reaching Calendly",
+    next: "The customer has been told their booking is cancelled, but the slot is still held in the owner's Calendly. Belline retries on its own; if it does not clear, cancel it in Calendly by hand and tell the owner.",
     belle: false,
   },
   email_unverified: {

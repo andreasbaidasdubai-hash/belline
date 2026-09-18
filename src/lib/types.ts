@@ -1,6 +1,7 @@
 import type { BrainVersion } from "./brain";
 import type { GoogleLink } from "./integrations/google";
 import type { OutlookLink } from "./integrations/outlook";
+import type { CalendlyLink } from "./integrations/calendly";
 import type { BillingCycle, LegacyPlanId, ProductId } from "./billing/plans";
 import type { Market } from "./markets";
 import type { LanguageChannel, LanguageCode } from "../config/languages";
@@ -277,6 +278,17 @@ export interface Location {
   /** When Microsoft last said the owner's organisation must approve Belline first. Cleared by a connection. */
   outlookAdminApprovalAt?: string;
   /**
+   * A connected Calendly account. See integrations/calendly.ts.
+   *
+   * Not a calendar: Calendly books its owner's *event types*, each with a fixed
+   * length and its own availability, and there is no way to write an arbitrary
+   * event into it. So there is no mirror mode — a venue on Belline's own diary
+   * gains nothing by connecting it — and Calendly is a destination or nothing.
+   */
+  calendly?: CalendlyLink;
+  /** As `googleConnectAbandonedAt`, for Calendly: a connection that never came back. */
+  calendlyConnectAbandonedAt?: string;
+  /**
    * What one booking is typically worth here.
    *
    * Entered by the venue or left alone. Belline never guesses it: an invented
@@ -407,7 +419,7 @@ export interface BellineNumber {
   by?: string;
 }
 
-export type DestinationKind ="requests" | "belline" | "google" | "outlook" | "partner";
+export type DestinationKind = "requests" | "belline" | "google" | "outlook" | "calendly" | "partner";
 
 export interface RequestRules {
   /** Details a request needs besides a name and a number. */
@@ -1372,10 +1384,18 @@ export interface Booking {
   /**
    * The calendar event this booking is, and the calendar it is in. For Google
    * the id is derived from the idempotency key, so a second create finds the
-   * first. For Outlook it is the id Microsoft assigned.
+   * first. For Outlook it is the id Microsoft assigned. For Calendly it is the
+   * scheduled event's URI, and `calendarId` is the event type's, because a
+   * Calendly booking is always a booking *of* an event type.
    */
   calendarEventId?: string;
   calendarId?: string;
+  /**
+   * Calendly only: the invitee URI. A cancellation names the event, but a
+   * reschedule made on Calendly's own side names the *invitee* it replaced
+   * (`old_invitee`), and that is the only way to match the two.
+   */
+  calendlyInvitee?: string;
   /**
    * Outlook only: the key written on the event (integrations/calendar-connector.ts),
    * by which it is found again whatever id Microsoft gave it. Google's key is its id.
@@ -1705,8 +1725,16 @@ export interface CalendarSync {
   stale?: CalendarEventRef[];
   /** A write that was started and not confirmed: it may exist in the calendar. */
   inflight?: CalendarEventRef;
-  /** Which calendar service the event fields belong to. Absent: Google. */
-  provider?: "outlook";
+  /**
+   * Which calendar service the event fields belong to. Absent: Google.
+   *
+   * `calendly` is not a calendar sync at all — calendar-sync.ts leaves it
+   * alone. It marks a *cancellation* Calendly has not taken yet, which
+   * integrations/calendly.ts retries on the same back-off. A Calendly booking
+   * that fails is refused to the caller at the time, so there is never a
+   * pending Calendly *create* to retry.
+   */
+  provider?: "outlook" | "calendly";
 }
 
 /** Why a person at Belline has to step in. See exceptions.ts. */
@@ -1740,6 +1768,13 @@ export type ExceptionKind =
   | "outlook_misconfigured"
   | "outlook_connect_abandoned"
   | "outlook_admin_approval"
+  | "calendly_token_expired"
+  | "calendly_misconfigured"
+  | "calendly_connect_abandoned"
+  | "calendly_plan_blocked"
+  | "calendly_rate_limited"
+  | "calendly_booking_failed"
+  | "calendly_cancel_failed"
   | "email_unverified";
 
 export interface SupportException {

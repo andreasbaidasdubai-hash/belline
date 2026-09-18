@@ -24,6 +24,17 @@ import {
   type OutlookEvent,
   type TokenErrorBody,
 } from "../integrations/microsoft-api";
+import {
+  AVAILABILITY_WINDOW_DAYS,
+  CALENDLY_SCOPES,
+  apiFailure,
+  tokenFailure as tokenFailureCalendly,
+  type CalendlyApi,
+  type CalendlyEventType,
+  type CalendlyInvitee,
+  type CalendlySlot,
+  type CalendlyWebhook,
+} from "../integrations/calendly-api";
 
 /**
  * Fake providers for local end-to-end runs.
@@ -659,6 +670,284 @@ export function fakeMicrosoftApi(opts: { calendars?: OutlookCalendarEntry[] } = 
     /** Every token request fails with this body until cleared with null. */
     failTokens(reply: { status: number; body: TokenErrorBody } | null): void {
       tokenError = reply;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Calendly
+// ---------------------------------------------------------------------------
+
+/**
+ * A fake Calendly, in the shape of `CalendlyApi`.
+ *
+ * Deliberately a *booking page*, not a calendar, because that is the whole
+ * difference the adapter is built around. It holds event types with fixed
+ * durations, generates open times on a grid inside working hours, refuses a
+ * time it has already given away, and rotates its refresh token on every
+ * refresh as Calendly does.
+ *
+ * It can also be told to behave like the accounts the product must survive: a
+ * Free plan that will not take bookings (`refusePlan`), an account at its
+ * daily booking ceiling (`rateLimit`), a create whose answer is lost after the
+ * booking landed (`failNext("createInvitee", 1, { afterWrite: true })`), and a
+ * Calendly that has stopped accepting the connection (`expire`).
+ *
+ * The errors it throws are made by the real classifiers in calendly-api.ts, so
+ * a change to how Calendly's replies are read is caught here rather than in
+ * production.
+ */
+export function fakeCalendlyApi(
+  opts: { eventTypes?: { uri: string; name: string; duration: number; poolingType?: string }[]; open?: { fromMin?: number; toMin?: number; stepMin?: number } } = {},
+) {
+  const calls: { method: keyof CalendlyApi; detail?: string }[] = [];
+  const live = new Set<string>();
+  const issued: string[] = [];
+  let seq = 0;
+  let expired = false;
+  let grantedScope = [...CALENDLY_SCOPES].join(" ");
+  let plan: "paid" | "free" = "paid";
+  let rate: { daily: boolean } | null = null;
+
+  const OWNER = "https://api.calendly.com/users/STUBUSER00000001";
+  const ORG = "https://api.calendly.com/organizations/STUBORG000000001";
+
+  const eventTypes: CalendlyEventType[] = (
+    opts.eventTypes ?? [{ uri: "https://api.calendly.com/event_types/STUBTYPE00000001", name: "Appointment", duration: 60 }]
+  ).map((e) => ({
+    uri: e.uri,
+    name: e.name,
+    duration: e.duration,
+    active: true,
+    secret: false,
+    poolingType: e.poolingType ?? "solo",
+    owner: OWNER,
+    schedulingUrl: `https://calendly.com/stub/${e.name.toLowerCase().replace(/\W+/g, "-")}`,
+  }));
+
+  /** Every invitee this Calendly holds, by its own URI. */
+  const invitees = new Map<string, CalendlyInvitee & { eventType: string }>();
+  const webhooks = new Map<string, CalendlyWebhook>();
+  let inviteeSeq = 0;
+  let webhookSeq = 0;
+
+  const grid = { fromMin: opts.open?.fromMin ?? 9 * 60, toMin: opts.open?.toMin ?? 18 * 60, stepMin: opts.open?.stepMin ?? 30 };
+
+  const issue = () => {
+    const token = `stub-cal-refresh-${++seq}-${randomUUID()}`;
+    live.add(token);
+    issued.push(token);
+    return token;
+  };
+  const tokens = (refreshToken: string) => ({
+    accessToken: `stub-cal-access-${refreshToken}`,
+    refreshToken,
+    scope: grantedScope,
+    expiresIn: 7200,
+    owner: OWNER,
+    organization: ORG,
+  });
+  const access = (token: string) => {
+    if (expired || !token.startsWith("stub-cal-access-") || !issued.includes(token.slice("stub-cal-access-".length))) {
+      throw apiFailure(401, JSON.stringify({ title: "Unauthenticated", message: "The access token is invalid" }), "stub");
+    }
+  };
+
+  const failures = new Map<keyof CalendlyApi, { times: number; afterWrite: boolean }>();
+  const trip = (method: keyof CalendlyApi, wrote: boolean) => {
+    const f = failures.get(method);
+    if (!f || f.times <= 0 || f.afterWrite !== wrote) return;
+    f.times--;
+    throw apiFailure(503, JSON.stringify({ title: "Service unavailable", message: `stub: ${method} failed${wrote ? " after the booking landed" : ""}` }), method);
+  };
+
+  /** Is anything already booked on this event type at this instant? */
+  const takenAt = (eventType: string, startTime: string) =>
+    [...invitees.values()].some((i) => i.eventType === eventType && i.startTime === startTime && !i.canceled);
+
+  const api: CalendlyApi = {
+    async exchangeCode(code) {
+      calls.push({ method: "exchangeCode" });
+      if (code !== "stub-code") {
+        throw tokenFailureCalendly(400, { error: "invalid_grant", error_description: "The authorization code is invalid" }, "code");
+      }
+      return tokens(issue());
+    },
+    async refresh(refreshToken) {
+      calls.push({ method: "refresh" });
+      if (expired || !live.has(refreshToken)) {
+        throw tokenFailureCalendly(400, { error: "invalid_grant", error_description: "The refresh token is invalid" }, "refresh");
+      }
+      // Calendly rotates on every refresh, and the old one stops working.
+      live.delete(refreshToken);
+      return tokens(issue());
+    },
+    async revoke(token) {
+      calls.push({ method: "revoke" });
+      live.delete(token);
+    },
+    async me(token) {
+      access(token);
+      calls.push({ method: "me" });
+      trip("me", false);
+      return { uri: OWNER, name: "Stub Owner", email: "owner@example.test", schedulingUrl: "https://calendly.com/stub", timezone: "UTC", organization: ORG };
+    },
+    async listEventTypes(token) {
+      access(token);
+      calls.push({ method: "listEventTypes" });
+      trip("listEventTypes", false);
+      return eventTypes.filter((e) => e.active);
+    },
+    async availableTimes(token, eventTypeUri, start, end) {
+      access(token);
+      calls.push({ method: "availableTimes", detail: eventTypeUri });
+      trip("availableTimes", false);
+      const from = Date.parse(start);
+      const to = Date.parse(end);
+      // Calendly refuses a window of more than seven days, or one in the past.
+      if (to - from > AVAILABILITY_WINDOW_DAYS * 24 * 3600_000) {
+        throw apiFailure(400, JSON.stringify({ title: "Invalid Argument", message: "start_time and end_time must be within 7 days" }), "availableTimes");
+      }
+      const type = eventTypes.find((e) => e.uri === eventTypeUri);
+      if (!type) throw apiFailure(404, JSON.stringify({ title: "Not Found", message: "event type" }), "availableTimes");
+      const out: CalendlySlot[] = [];
+      // Walk UTC days across the window and offer the grid inside each.
+      for (let day = Math.floor(from / 86400_000) * 86400_000; day <= to; day += 86400_000) {
+        for (let m = grid.fromMin; m + type.duration <= grid.toMin; m += grid.stepMin) {
+          const at = day + m * 60_000;
+          if (at < from || at >= to) continue;
+          const startTime = new Date(at).toISOString();
+          if (takenAt(eventTypeUri, startTime)) continue;
+          out.push({ startTime, inviteesRemaining: 1, schedulingUrl: `${type.schedulingUrl}/${startTime}` });
+        }
+      }
+      return out;
+    },
+    async createInvitee(token, input) {
+      access(token);
+      calls.push({ method: "createInvitee", detail: input.startTime });
+      trip("createInvitee", false);
+      if (plan === "free") {
+        throw apiFailure(403, JSON.stringify({ title: "Permission Denied", message: "This feature is not available on your current plan" }), "createInvitee");
+      }
+      if (rate) {
+        throw apiFailure(
+          429,
+          JSON.stringify({ title: "Too Many Requests", message: rate.daily ? "You have exceeded the limit of bookings per day" : "Too many requests" }),
+          "createInvitee",
+          new Headers({ "x-ratelimit-reset": "60" }),
+        );
+      }
+      if (takenAt(input.eventType, input.startTime)) {
+        throw apiFailure(400, JSON.stringify({ title: "Invalid Argument", message: "That time is no longer available" }), "createInvitee");
+      }
+      const n = ++inviteeSeq;
+      const invitee = {
+        uri: `https://api.calendly.com/scheduled_events/STUBEVT${String(n).padStart(9, "0")}/invitees/STUBINV${String(n).padStart(9, "0")}`,
+        eventUri: `https://api.calendly.com/scheduled_events/STUBEVT${String(n).padStart(9, "0")}`,
+        email: input.email,
+        name: input.name,
+        startTime: input.startTime,
+        eventType: input.eventType,
+      };
+      invitees.set(invitee.uri, invitee);
+      // The booking has landed; only the answer is lost after this.
+      trip("createInvitee", true);
+      return invitee;
+    },
+    async findInvitee(token, { email, startTime }) {
+      access(token);
+      calls.push({ method: "findInvitee", detail: startTime });
+      trip("findInvitee", false);
+      return (
+        [...invitees.values()].find((i) => i.email.toLowerCase() === email.toLowerCase() && i.startTime === startTime && !i.canceled) ?? null
+      );
+    },
+    async cancelEvent(token, eventUri) {
+      access(token);
+      calls.push({ method: "cancelEvent", detail: eventUri });
+      trip("cancelEvent", false);
+      for (const invitee of invitees.values()) {
+        if (invitee.eventUri === eventUri) invitee.canceled = true;
+      }
+      trip("cancelEvent", true);
+    },
+    async listWebhooks(token) {
+      access(token);
+      calls.push({ method: "listWebhooks" });
+      trip("listWebhooks", false);
+      return [...webhooks.values()];
+    },
+    async createWebhook(token, input) {
+      access(token);
+      calls.push({ method: "createWebhook", detail: input.scope });
+      trip("createWebhook", false);
+      const hook: CalendlyWebhook = {
+        uri: `https://api.calendly.com/webhook_subscriptions/STUBHOOK${++webhookSeq}`,
+        callbackUrl: input.url,
+        events: input.events,
+        // Calendly shows the signing key once, on creation.
+        signingKey: `stub-signing-key-${webhookSeq}`,
+      };
+      webhooks.set(hook.uri, hook);
+      return hook;
+    },
+    async deleteWebhook(token, webhookUri) {
+      access(token);
+      calls.push({ method: "deleteWebhook" });
+      webhooks.delete(webhookUri);
+    },
+  };
+
+  return {
+    api,
+    calls,
+    issued,
+    eventTypes,
+    owner: OWNER,
+    organization: ORG,
+    /** Every invitee this Calendly holds, cancelled ones included. */
+    bookings(): (CalendlyInvitee & { eventType: string })[] {
+      return [...invitees.values()];
+    },
+    webhooks(): CalendlyWebhook[] {
+      return [...webhooks.values()];
+    },
+    /** Somebody else booked this event type at this time, outside Belline. */
+    takeSlot(eventType: string, startTime: string, email = "someone@example.test"): void {
+      const n = ++inviteeSeq;
+      const uri = `https://api.calendly.com/scheduled_events/OTHER${n}/invitees/OTHER${n}`;
+      invitees.set(uri, { uri, eventUri: `https://api.calendly.com/scheduled_events/OTHER${n}`, email, name: "Someone else", startTime, eventType });
+    },
+    /** The next `times` calls to `method` fail. With `afterWrite` the booking lands and only the answer is lost. */
+    failNext(method: keyof CalendlyApi, times = 1, options: { afterWrite?: boolean } = {}): void {
+      failures.set(method, { times, afterWrite: Boolean(options.afterWrite) });
+    },
+    /** Calendly stops accepting every token: the owner removed Belline. */
+    expire(): void {
+      expired = true;
+    },
+    restore(): void {
+      expired = false;
+    },
+    accepts(refreshToken: string): boolean {
+      return live.has(refreshToken) && !expired;
+    },
+    /** A Free Calendly plan: readable, not bookable. */
+    refusePlan(on = true): void {
+      plan = on ? "free" : "paid";
+    },
+    /** The account has hit Calendly's booking ceiling. */
+    rateLimit(on: boolean | { daily: boolean } = true): void {
+      rate = on === false ? null : typeof on === "object" ? on : { daily: true };
+    },
+    /** What Calendly reports as granted. */
+    grant(scope: string): void {
+      grantedScope = scope;
+    },
+    deactivate(uri: string): void {
+      const type = eventTypes.find((e) => e.uri === uri);
+      if (type) type.active = false;
     },
   };
 }

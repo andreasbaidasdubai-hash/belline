@@ -16,9 +16,10 @@ import {
 } from "./index";
 import { findBookingByRef, findBookingsByPhone, getBooking } from "../store";
 import { holdForSlot, MAX_QUOTED_HOLDS } from "./holds";
-import { destinationOf, googleUsable, outlookUsable, takesRequestsOnly } from "./destination";
+import { calendlyUsable, destinationOf, googleUsable, outlookUsable, takesRequestsOnly } from "./destination";
 import { googleCalendarProvider } from "./google-provider";
 import { outlookCalendarProvider } from "./outlook-provider";
+import { calendlyProvider } from "./calendly-provider";
 
 export { takesRequestsOnly } from "./destination";
 
@@ -283,12 +284,19 @@ export const requestOnlyProvider: BookingProvider = {
  * have to be undone.
  *
  * Belline's diary where the venue uses it; Google Calendar or Outlook where the
- * venue chose it and the connection works (see calendar-provider.ts); requests
- * for everything else. Partner systems have no adapter yet, and a calendar
- * connection that expired falls back to requests on the next call.
+ * venue chose it and the connection works (see calendar-provider.ts); Calendly
+ * where it chose that (calendly-provider.ts, which is a different shape because
+ * Calendly is a booking page rather than a diary); requests for everything
+ * else. Partner systems have no adapter yet, and a connection that expired
+ * falls back to requests on the next call.
+ *
+ * Belle reads `capabilities` and nothing else, so a Calendly venue that cannot
+ * promise a named person, or cannot reschedule, needs no special case anywhere
+ * in the agent: the tool is simply not offered.
  */
 export function providerFor(location: Location): BookingProvider {
   if (destinationOf(location) === "google" && googleUsable(location)) return googleCalendarProvider;
   if (destinationOf(location) === "outlook" && outlookUsable(location)) return outlookCalendarProvider;
+  if (destinationOf(location) === "calendly" && calendlyUsable(location)) return calendlyProvider(location);
   return takesRequestsOnly(location) ? requestOnlyProvider : localProvider;
 }

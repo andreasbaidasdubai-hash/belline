@@ -15,9 +15,13 @@ import { randomUUID } from "node:crypto";
  * are. Anything else is treated as internal, whatever it says.
  */
 
-export type Provider = "import" | "model" | "google" | "outlook" | "stripe" | "messaging" | "setup";
+export type Provider = "import" | "model" | "google" | "outlook" | "calendly" | "stripe" | "messaging" | "setup";
 
-/** `in_use`: the venue already has the other calendar connected. Belline keeps one per venue. */
+/**
+ * `in_use`: the venue already has another calendar connected. Belline keeps one
+ * per venue. `no_calendar`: the account connected has nothing Belline can book
+ * — no Outlook mailbox, or no Calendly event type.
+ */
 export type Kind = "unavailable" | "not_configured" | "refused" | "declined" | "failed" | "in_use" | "needs_admin" | "no_calendar";
 
 export interface CustomerMessage {
@@ -79,6 +83,27 @@ const COPY: Record<Provider, Partial<Record<Kind, [string, string]>> & { failed:
     no_calendar: [
       "That Microsoft account has no Outlook calendar Belline can use.",
       "This happens with a work account that has no Microsoft 365 mailbox licence, or a mailbox kept on your company's own servers. Connect an account whose calendar opens in Outlook on the web, or ask your IT team.",
+    ],
+  },
+  calendly: {
+    not_configured: ["Calendly is not available on this account yet.", "Belline takes booking requests in the meantime."],
+    refused: [
+      "Calendly did not allow the connection.",
+      "Connect again, and choose Connect on Calendly's screen with every permission it asks for left ticked.",
+    ],
+    declined: [
+      "No problem — requests for now.",
+      "Belline takes the details and your team confirms. You can connect Calendly whenever you like.",
+    ],
+    failed: ["Calendly could not be connected just now.", "Please connect again. If it happens twice, wait a few minutes first."],
+    unavailable: ["Calendly could not be reached just now.", "Try again in a few minutes."],
+    in_use: [
+      "Another calendar is already connected to this venue.",
+      "Belline books into one place per venue. Disconnect the other one first, then connect Calendly.",
+    ],
+    no_calendar: [
+      "That Calendly account has no bookable event types, so there is nothing for Belline to book.",
+      "Create at least one event type in Calendly — the length of a typical appointment — and connect again.",
     ],
   },
   stripe: {
@@ -178,6 +203,12 @@ export const INTEGRATION_ERRORS: Record<string, [Provider, Kind]> = {
   outlook_in_use: ["outlook", "in_use"],
   outlook_admin_approval: ["outlook", "needs_admin"],
   outlook_no_calendar: ["outlook", "no_calendar"],
+  calendly_unavailable: ["calendly", "not_configured"],
+  calendly_refused: ["calendly", "refused"],
+  calendly_declined: ["calendly", "declined"],
+  calendly_failed: ["calendly", "failed"],
+  calendly_in_use: ["calendly", "in_use"],
+  calendly_no_event_types: ["calendly", "no_calendar"],
   payments_off: ["stripe", "not_configured"],
   payments_failed: ["stripe", "failed"],
 };

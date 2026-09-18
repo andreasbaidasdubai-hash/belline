@@ -2,7 +2,8 @@ import type { Call, DestinationKind, Location, OnboardingState } from "../types"
 import { readiness } from "./index";
 import { listCalls } from "../store";
 import { flag } from "../flags";
-import { googleUsable, outlookUsable } from "../booking/destination";
+import { calendlyUsable, googleUsable, outlookUsable } from "../booking/destination";
+import { calendlyLimits } from "../integrations/calendly";
 import { applyRules, type RulesInput } from "./rules";
 import { testsCurrent, testsPassed } from "./selftest-state";
 import { bellineNumberOf } from "../telephony/number";
@@ -487,6 +488,7 @@ export const INTEGRATIONS: Record<string, string> = {
   treatwell: "Treatwell",
   google: "Google Calendar",
   outlook: "Outlook",
+  calendly: "Calendly",
   whatsapp: "WhatsApp",
   other: "another booking system",
 };
@@ -563,6 +565,29 @@ export function recordStep(location: Location, action: StepAction, facts: Journe
         status: 409,
         error: "Connect Outlook first, then choose it here.",
         fix: `/api/integrations/microsoft?locationId=${encodeURIComponent(location.id)}&from=setup`,
+      };
+    }
+    // Calendly, once its own flag is on — and with one condition the other two
+    // do not have. A Calendly account can be perfectly connected and still
+    // unable to take this venue's bookings: a service with no event type, a
+    // Free plan that refuses the API, an account whose event types were all
+    // deleted. `calendlyLimits` is what the Calendars page shows the owner at
+    // connect time, and choosing Calendly is refused on exactly the same
+    // answer, so the product cannot promise what the setup cannot do.
+    if (kind === "calendly" && flag("booking.calendly")) {
+      if (calendlyUsable(location)) {
+        const limits = calendlyLimits(location);
+        const blocking = limits.limits.find((l) => l.severity === "blocking");
+        if (blocking) {
+          return { ok: false, status: 409, error: blocking.text, fix: `/calendars?loc=${encodeURIComponent(location.id)}` };
+        }
+        return { ok: true, location: { ...location, onboarding: { ...o, destination: { kind, setAt: at } } } };
+      }
+      return {
+        ok: false,
+        status: 409,
+        error: "Connect Calendly first, then choose it here.",
+        fix: `/api/integrations/calendly?locationId=${encodeURIComponent(location.id)}&from=setup`,
       };
     }
     // Partner systems have no adapter yet, so choosing one would promise

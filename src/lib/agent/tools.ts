@@ -6,7 +6,7 @@ import {
   type BookingProvider,
   type ProviderContext,
 } from "../booking/provider";
-import { bookingLinkOf, takesRequestsOnly } from "../booking/destination";
+import { bookingLinkOf, needsGuestEmail, takesRequestsOnly } from "../booking/destination";
 import { requestRulesOf, takeBookingRequest } from "../booking/requests";
 import { transferAllowed } from "../onboarding/rules";
 import { sendSms, smsEnabled } from "../providers/sms";
@@ -168,7 +168,7 @@ export function toolsFor(
       name: "book",
       description:
         "Create the booking. Only call this once you have a name, a contact number, and a time you have confirmed with check_availability." +
-        (location.requiresEmail
+        (needsGuestEmail(location)
           ? " This venue also needs an email address. Spell it back to them letter by letter and have them confirm it before you call this — an address misheard on a phone line never bounces, it just means they never hear from us."
           : ""),
       input_schema: {
@@ -178,11 +178,11 @@ export function toolsFor(
           time: { type: "string", description: TIME_DESC },
           guest_name: { type: "string" },
           guest_phone: { type: "string", description: "Contact number, digits as spoken." },
-          ...(location.requiresEmail || usesStaffDiary(location)
+          ...(needsGuestEmail(location) || usesStaffDiary(location)
             ? {
                 guest_email: {
                   type: "string",
-                  description: location.requiresEmail
+                  description: needsGuestEmail(location)
                     ? "Email address, confirmed with them. Write it as an address — 'andreas at gmail dot com' becomes andreas@gmail.com."
                     : "Optional. Offer to email the confirmation with a link to change or cancel. If they give an address, spell it back and write it as an address — 'andreas at gmail dot com' becomes andreas@gmail.com. Leave it out if they would rather not.",
                 },
@@ -205,7 +205,7 @@ export function toolsFor(
           "time",
           "guest_name",
           "guest_phone",
-          ...(location.requiresEmail ? ["guest_email"] : []),
+          ...(needsGuestEmail(location) ? ["guest_email"] : []),
           ...(isRestaurant ? ["party_size"] : ["service_ids"]),
         ],
       },
@@ -590,7 +590,7 @@ export async function executeTool(
       let guestEmail: string | undefined;
       // Required where the venue needs one; checked the same way wherever a
       // guest at an appointment venue offered one for their confirmation.
-      if (location.requiresEmail || (usesStaffDiary(location) && String(input.guest_email ?? "").trim())) {
+      if (needsGuestEmail(location) || (usesStaffDiary(location) && String(input.guest_email ?? "").trim())) {
         const check = checkShape(String(input.guest_email ?? ""));
         if (!check.valid) {
           return {

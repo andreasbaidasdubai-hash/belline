@@ -30,7 +30,11 @@ export function onBellineDiary(location: Pick<Location, "onboarding">): boolean 
   return destinationOf(location) === "belline";
 }
 
-type Venue = Pick<Location, "onboarding"> & { google?: Location["google"]; outlook?: Location["outlook"] };
+type Venue = Pick<Location, "onboarding"> & {
+  google?: Location["google"];
+  outlook?: Location["outlook"];
+  calendly?: Location["calendly"];
+};
 
 /**
  * Can Belline book into this venue's Google Calendar right now?
@@ -54,10 +58,33 @@ export function outlookUsable(location: Venue, env: Record<string, string | unde
 }
 
 /**
+ * Can Belline book into this venue's Calendly right now?
+ *
+ * The same four conditions as Google's and Outlook's — flag on, sealed token,
+ * not expired, not refused because of Belline's own application — plus two that
+ * are Calendly's alone, because Calendly can be perfectly connected and still
+ * unable to take a booking:
+ *
+ * - **the plan.** Creating an invitee through Calendly's API needs a paid
+ *   Calendly plan. A Free account connects and reads; it cannot be booked into,
+ *   and `planBlockedAt` is set the first time Calendly says so.
+ * - **something to book.** Calendly books event types, so an account with none
+ *   left (they were all deleted or deactivated) has nothing Belline can offer.
+ *
+ * Any of them missing and the venue takes requests.
+ */
+export function calendlyUsable(location: Venue, env: Record<string, string | undefined> = process.env): boolean {
+  const link = location.calendly;
+  if (!link?.sealedToken || link.expiredAt || link.misconfiguredAt || link.planBlockedAt) return false;
+  if (!(link.eventTypes ?? []).some((e) => e.active)) return false;
+  return flag("booking.calendly", env);
+}
+
+/**
  * Does this venue take requests rather than confirmed bookings?
  *
- * Partner systems count as requests until their adapters exist. Google and
- * Outlook count as requests whenever their connection is not usable — flag
+ * Partner systems count as requests until their adapters exist. Google, Outlook
+ * and Calendly count as requests whenever their connection is not usable — flag
  * off, never connected, or the token expired — so a calendar Belline cannot
  * see is never booked into. An owner who chose one is not told it works; the
  * agent takes the details and the team confirms.
@@ -67,7 +94,23 @@ export function takesRequestsOnly(location: Venue): boolean {
   if (kind === "belline") return false;
   if (kind === "google") return !googleUsable(location);
   if (kind === "outlook") return !outlookUsable(location);
+  if (kind === "calendly") return !calendlyUsable(location);
   return true;
+}
+
+/**
+ * Must the agent take an email address before it can book?
+ *
+ * `Location.requiresEmail` is the owner's own answer, for a venue whose booking
+ * *is* something sent. Calendly adds a second reason that is not the owner's to
+ * decide: `POST /invitees` will not take a booking without an address, and the
+ * confirmation, the reschedule link and the cancellation link all go to it. So
+ * a venue booking into Calendly always asks, whatever the owner set — and a
+ * caller who will not give one is taken as a request rather than promised a
+ * time Belline cannot actually make.
+ */
+export function needsGuestEmail(location: Pick<Location, "requiresEmail"> & Venue): boolean {
+  return Boolean(location.requiresEmail) || (destinationOf(location) === "calendly" && calendlyUsable(location));
 }
 
 /**

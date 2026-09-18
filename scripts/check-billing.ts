@@ -685,7 +685,11 @@ const lf = (s: string) => s.replace(/\r\n/g, "\n");
 
 test("every v2 summary and feature has a German translation, and the calendar line matches the flags' German", () => {
   for (const { english } of de.germanCatalogueTexts()) assert.doesNotThrow(() => de.catalogueDe(english), english);
-  for (const on of [{ google: true, outlook: false }, { google: false, outlook: true }, { google: true, outlook: true }]) {
+  // Every combination of live destinations, so a German line can never be missed.
+  const combinations = [true, false].flatMap((google) =>
+    [true, false].flatMap((outlook) => [true, false].map((calendly) => ({ google, outlook, calendly }))),
+  ).filter((on) => on.google || on.outlook || on.calendly);
+  for (const on of combinations) {
     assert.equal(de.catalogueDe(calendarConnectionText(on)), calendarConnectionTextDe(on));
   }
   assert.throws(() => de.catalogueDe("A feature nobody translated"), /CATALOGUE_DE/);

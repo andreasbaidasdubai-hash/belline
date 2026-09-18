@@ -21,8 +21,9 @@ import {
 import { venueMarket } from "@/lib/onboarding/rules";
 import { setupGreeting } from "@/lib/onboarding/assistant";
 import { requestRulesOf } from "@/lib/booking/requests";
-import { destinationOf, googleUsable, onBellineDiary, outlookUsable, serviceLengthsRequired, takesRequestsOnly } from "@/lib/booking/destination";
+import { calendlyUsable, destinationOf, googleUsable, onBellineDiary, outlookUsable, serviceLengthsRequired, takesRequestsOnly } from "@/lib/booking/destination";
 import { OUTLOOK_NO_CALENDAR_TEXT } from "@/lib/integrations/outlook";
+import { CALENDLY_PLAN_TEXT, calendlyLimits } from "@/lib/integrations/calendly";
 import { integrationErrorText } from "@/lib/errors/customer";
 import { CLINIC_MEDICAL_RULE } from "@/lib/agent/prompt";
 import { MARKETS } from "@/lib/markets";
@@ -219,7 +220,56 @@ function outlookNotice(code: string | undefined): string | undefined {
   return code?.startsWith("outlook_") ? (integrationErrorText(code) ?? undefined) : undefined;
 }
 
-/** The bookings step's cards. Google follows `googleCard`, Outlook `outlookCard`. */
+/**
+ * The Calendly card, as Google's and Outlook's — with one condition neither of
+ * them has.
+ *
+ * Calendly can be connected and still unable to take this venue's bookings: a
+ * service with no event type, a Free plan whose API refuses bookings, an
+ * account whose event types were all deleted. `calendlyLimits` is the same
+ * answer the Calendars page shows, and `recordStep` refuses the choice on it,
+ * so the card says what is in the way rather than offering a destination the
+ * next press would reject.
+ */
+function calendlyCard(venue: Location): DestinationOption {
+  const title = "Calendly";
+  if (!flag("booking.calendly")) {
+    return { id: "calendly", title, state: "soon", body: "Coming soon. Belline starts with requests, and you can ask to be told when it is ready." };
+  }
+  const connectUrl = `/api/integrations/calendly?locationId=${encodeURIComponent(venue.id)}&from=setup`;
+  if (calendlyUsable(venue)) {
+    const blocking = calendlyLimits(venue).limits.find((l) => l.severity === "blocking");
+    if (blocking) return { id: "calendly", title, state: "connect", connectUrl: `/calendars?loc=${encodeURIComponent(venue.id)}`, body: blocking.text };
+    return {
+      id: "calendly",
+      title,
+      state: "available",
+      body: "Belline offers the times your Calendly says are open and books the customer in as an invitee. Calendly's event type sets the length, and every booking needs an email address.",
+    };
+  }
+  if (venue.calendly?.expiredAt) {
+    return { id: "calendly", title, state: "connect", connectUrl, body: "Calendly stopped letting Belline in. Connect it again to use it; until then Belline takes requests." };
+  }
+  if (venue.calendly?.planBlockedAt) {
+    return { id: "calendly", title, state: "connect", connectUrl, body: CALENDLY_PLAN_TEXT };
+  }
+  return {
+    id: "calendly",
+    title,
+    state: "connect",
+    connectUrl,
+    body: "Connect your Calendly account first. Belline reads your event types and the times they have open, and books customers in — it never changes your event types.",
+  };
+}
+
+/** What the page says after Calendly sends the owner back here. */
+function calendlyNotice(code: string | undefined): string | undefined {
+  if (code === "declined") return integrationErrorText("calendly_declined") ?? undefined;
+  if (code === "connected") return "Calendly is connected. Choose it below and press Use this.";
+  return code?.startsWith("calendly_") ? (integrationErrorText(code) ?? undefined) : undefined;
+}
+
+/** The bookings step's cards. Google follows `googleCard`, Outlook `outlookCard`, Calendly `calendlyCard`. */
 function destinationOptions(venue: Location): DestinationOption[] {
   const clinicPreview = venue.vertical === "clinic" && !flag("vertical.clinic.selfserve");
   return [
@@ -245,7 +295,7 @@ function destinationOptions(venue: Location): DestinationOption[] {
           } satisfies DestinationOption,
         ]
       : []),
-    ...(clinicPreview ? [] : [googleCard(venue), outlookCard(venue)]),
+    ...(clinicPreview ? [] : [googleCard(venue), outlookCard(venue), calendlyCard(venue)]),
   ];
 }
 
@@ -268,6 +318,7 @@ function Body({
   facts,
   google,
   outlook,
+  calendly,
   whatsappLive,
 }: {
   whatsappLive: boolean;
@@ -277,6 +328,7 @@ function Body({
   facts: ReturnType<typeof factsFrom>;
   google?: string;
   outlook?: string;
+  calendly?: string;
 }) {
   // Onward from this step, to the next one not done, or the dashboard. No
   // step refuses to open because an earlier one is unfinished: a step that
@@ -327,7 +379,7 @@ function Body({
           </p>
           <DestinationPicker
             options={destinationOptions(venue)}
-            notice={googleNotice(google) ?? outlookNotice(outlook)}
+            notice={googleNotice(google) ?? outlookNotice(outlook) ?? calendlyNotice(calendly)}
             current={venue.onboarding?.destination?.kind}
             currentLink={venue.onboarding?.destination?.bookingLink}
             requested={venue.onboarding?.integrationRequests ?? []}
@@ -570,12 +622,12 @@ export default async function SetupStepPage({
   searchParams,
 }: {
   params: Promise<{ step: string }>;
-  searchParams: Promise<{ google?: string; outlook?: string }>;
+  searchParams: Promise<{ google?: string; outlook?: string; calendly?: string }>;
 }) {
   seedIfEmpty();
   const user = await requireUser();
   const { step: requested } = await params;
-  const { google, outlook } = await searchParams;
+  const { google, outlook, calendly } = await searchParams;
 
   const venue = listLocationsFor(user.tenantId)[0];
   if (!venue) redirect("/");
@@ -621,7 +673,7 @@ export default async function SetupStepPage({
         <div className="setup-grid" style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 112px" }}>
           <Rail j={j} active={step} />
           <main style={{ minWidth: 0, maxWidth: 720 }}>
-            <Body step={step} j={j} venue={venue} facts={facts} google={google} outlook={outlook} whatsappLive={whatsappLive} />
+            <Body step={step} j={j} venue={venue} facts={facts} google={google} outlook={outlook} calendly={calendly} whatsappLive={whatsappLive} />
             {/* Every unfinished step can be left for later. */}
             {!ownFooter && (
               <Footer step={step} skip={stepAfter(j, step.id)?.url ?? "/"}>

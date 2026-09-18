@@ -4,6 +4,7 @@ import { attentionFor, type AttentionItem } from "./attention";
 import { currentVersion } from "./brain";
 import { connectionState } from "./integrations/google";
 import { outlookConnectionState } from "./integrations/outlook";
+import { calendlyConnectionState } from "./integrations/calendly";
 import { todayIn, nowMinutesIn } from "./time";
 import { isRestaurant, terms } from "./verticals";
 
@@ -168,8 +169,13 @@ export function overviewFor(location: Location): Overview {
     days: DAYS,
   };
 
-  // The venue's one calendar connection: Outlook where it has one, Google otherwise.
-  const google = location.outlook ? outlookConnectionState(location) : connectionState(location);
+  // The venue's one booking connection, whichever it is: Belline allows one per
+  // venue, and the routes refuse a second, so this is never ambiguous.
+  const google = location.calendly
+    ? calendlyConnectionState(location)
+    : location.outlook
+      ? outlookConnectionState(location)
+      : connectionState(location);
   const version = currentVersion(location);
   const lastCall = calls[0];
   const hoursSinceCall = lastCall
