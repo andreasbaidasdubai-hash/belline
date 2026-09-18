@@ -611,14 +611,23 @@ export default function WidgetEditor({
             </div>
           </div>
 
-          {/* The preview: the buttons exactly as the widget will draw them. */}
+          {/*
+            The preview: the buttons exactly as the widget will draw them.
+
+            A card of its own height, not a column stretched to whatever the
+            controls beside it happen to need. Stretched, its bottom-right
+            corner ran the length of the page — and Belle's own bell is fixed
+            in that corner, so the two sat on each other at almost any scroll
+            position (founder, f6/4: she must not overlap the page).
+          */}
           <div
             aria-label="Preview"
             style={{
               borderRadius: 12,
               border: "1px solid var(--border)",
               background: "repeating-linear-gradient(45deg, var(--panel-2) 0 10px, var(--panel) 10px 20px)",
-              minHeight: 260,
+              height: 300,
+              alignSelf: "start",
               position: "relative",
             }}
           >
