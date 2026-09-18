@@ -35,7 +35,19 @@ import { flag } from "../../flags";
  * *that* venue however good our key is.
  */
 
-export type PartnerId = "fresha" | "zenoti" | "mindbody" | "treatwell" | "opentable" | "sevenrooms";
+export type PartnerId =
+  | "fresha"
+  | "zenoti"
+  | "mindbody"
+  | "treatwell"
+  | "opentable"
+  | "sevenrooms"
+  | "msbookings"
+  | "calcom"
+  | "eatapp"
+  | "booksy"
+  | "vagaro"
+  | "doctolib";
 
 /** How the partner's own product thinks about a booking. */
 export type PartnerModel =
@@ -147,6 +159,26 @@ export function partnerLiveMissing(facts: PartnerFacts, env: Env = process.env):
 export interface PartnerVenueLink {
   /** The partner's own id for this venue: a site id, a centre id, a venue id. */
   venueId?: string;
+  /**
+   * The IANA zone this venue's partner calendar answers in, where the partner
+   * needs an exact instant rather than a wall time.
+   *
+   * Most of these take naive local times and resolve them against the venue's
+   * own record (Zenoti's centre, Bookings' calendar), so they need nothing
+   * here. Cal.com is the exception: `POST /v2/bookings` takes `start` in UTC,
+   * so "Tuesday at ten" has to become an instant, and Belline will not decide
+   * which instant a venue meant. Missing, and the venue is not connected.
+   */
+  timeZone?: string;
+  /**
+   * Where this venue's partner lives, when the venue hosts it itself.
+   *
+   * Only Cal.com is open source, so only Cal.com has this: a self-hosted
+   * instance is on the venue's own domain and may be on an older release than
+   * the API versions the adapter pins. Everyone else's host is a constant and
+   * this stays empty.
+   */
+  baseUrl?: string;
   /**
    * Mindbody's per-studio activation, Zenoti's per-centre grant: the partner
    * key gets us to the door, this is the studio letting us in. Sealed like any

@@ -1,28 +1,41 @@
 import type { Location } from "../../types";
 import { partnerMode, type PartnerConnector, type PartnerId, type PartnerVenue } from "./contract";
+import { booksyConnector } from "./booksy";
+import { calcomConnector } from "./calcom";
+import { doctolibConnector } from "./doctolib";
+import { eatappConnector } from "./eatapp";
 import { freshaConnector } from "./fresha";
 import { mindbodyConnector } from "./mindbody";
+import { msbookingsConnector } from "./msbookings";
 import { opentableConnector } from "./opentable";
 import { PARTNERS } from "./registry";
 import { sevenroomsConnector } from "./sevenrooms";
 import { treatwellConnector } from "./treatwell";
+import { vagaroConnector } from "./vagaro";
 import { zenotiConnector } from "./zenoti";
 
 /**
  * Every partner booking system Belline has an adapter for, connected or not.
  *
- * Two of them could work with a key (Zenoti, Mindbody). Four of them cannot
- * work at all until somebody signs something (Fresha, Treatwell, OpenTable,
- * SevenRooms), and their adapters say so by refusing rather than by pretending.
- * Which is which is in registry.ts, and the website reads it from there.
+ * Some could work with credentials (Zenoti, Mindbody, Microsoft Bookings).
+ * Others cannot work at all until somebody signs something (Fresha, Treatwell,
+ * OpenTable, SevenRooms), and their adapters say so by refusing rather than by
+ * pretending. Which is which is in registry.ts — `facts.api.create` is the
+ * question, not the file name — and the website reads it from there.
  */
 export const PARTNER_CONNECTORS: Record<PartnerId, PartnerConnector> = {
   fresha: freshaConnector,
   zenoti: zenotiConnector,
   mindbody: mindbodyConnector,
+  msbookings: msbookingsConnector,
+  calcom: calcomConnector,
   treatwell: treatwellConnector,
   opentable: opentableConnector,
   sevenrooms: sevenroomsConnector,
+  eatapp: eatappConnector,
+  booksy: booksyConnector,
+  vagaro: vagaroConnector,
+  doctolib: doctolibConnector,
 };
 
 export function partnerConnector(id: PartnerId): PartnerConnector {

@@ -228,6 +228,400 @@ export const PARTNERS: Record<PartnerId, PartnerFacts> = {
     ],
   },
 
+  /**
+   * Microsoft Bookings, through Microsoft Graph: the most complete partner on
+   * the list, and the one whose *permission model* is the whole story.
+   *
+   * Bookings is a first-class Graph resource under `/solutions/bookingBusinesses`
+   * and every operation Belline needs is documented in v1.0:
+   *
+   *   GET   /solutions/bookingBusinesses                      the tenant's calendars
+   *   GET   /solutions/bookingBusinesses/{id}                 businessHours, schedulingPolicy
+   *   GET   /solutions/bookingBusinesses/{id}/services        duration, buffers, policy
+   *   GET   /solutions/bookingBusinesses/{id}/staffMembers    who can be asked for
+   *   POST  /solutions/bookingBusinesses/{id}/getStaffAvailability
+   *   POST  /solutions/bookingBusinesses/{id}/appointments
+   *   PATCH /solutions/bookingBusinesses/{id}/appointments/{id}
+   *   POST  /solutions/bookingBusinesses/{id}/appointments/{id}/cancel
+   *
+   * Availability, create, move and cancel: all four, which no other partner on
+   * this list offers. So why is it not simply an extension of the Outlook
+   * connection Belline already has?
+   *
+   * **Because `getStaffAvailability` has no delegated permission at all.**
+   * Microsoft's reference is explicit: for delegated work-or-school accounts
+   * and for delegated personal accounts it says "Not supported." The only way
+   * to read availability is an *application* permission — client credentials,
+   * no user in the loop, and therefore tenant-wide admin consent. Belline's
+   * Outlook app registration is the opposite of that: delegated scopes on the
+   * `common` endpoint, consented by the owner who signs in, deliberately small
+   * (integrations/microsoft-api.ts).
+   *
+   * Three consequences, and they are why this is its own destination rather
+   * than a tick-box on the Outlook connection:
+   *
+   * 1. **Personal Microsoft accounts cannot do this at all.** Every Bookings
+   *    permission row for personal accounts reads "Not supported", and the API
+   *    overview says the Bookings API applies only to *shared* bookings, never
+   *    personal ones. Outlook's `common` endpoint happily takes an Outlook.com
+   *    account; Bookings will never work for one.
+   * 2. **Admin consent is tenant-wide and cannot be narrowed.** There is no
+   *    `Bookings.Read` scoped to one calendar — `Bookings.Read.All` and
+   *    `BookingsAppointment.ReadWrite.All` reach every booking business in the
+   *    tenant. Bolting that onto the Outlook app would turn a modest calendar
+   *    consent screen into a tenant-wide grant for every Outlook customer,
+   *    including the ones who only wanted their own diary read.
+   * 3. **Microsoft makes the app responsible for the business rules.** Its
+   *    "Business rules validation" page says apps creating appointments with
+   *    application permissions must themselves honour business hours, the time
+   *    slot interval, minimum and maximum lead time, pre- and post-buffers and
+   *    the `allowStaffSelection` setting — service-level policy overriding
+   *    business-level. Nothing validates this for us.
+   *
+   * That third point is the risk worth naming. `getStaffAvailability` returns
+   * coarse Available/Busy *intervals* ("available 08:00–15:00"), not bookable
+   * starts, so Belline has to cut them on the venue's own increment and fit the
+   * service plus its buffers inside. That is computing a grid, which is exactly
+   * what Mindbody's `availabledates` trap warns against — with one difference
+   * that makes it acceptable here: for Mindbody a truer endpoint existed and we
+   * were declining to use it, whereas Microsoft publishes no bookable-slots
+   * endpoint at all and documents the arithmetic as the caller's job. The
+   * inputs are all the venue's own (msbookings.ts), none is Belline's guess,
+   * and `check:msbookings` pins every rule.
+   */
+  msbookings: {
+    id: "msbookings",
+    name: "Microsoft Bookings",
+    model: "appointments",
+    api: {
+      documented: true,
+      availability: true,
+      create: true,
+      // PATCH /appointments/{id} moves start, end and staffMemberIds.
+      reschedule: true,
+      // POST /appointments/{id}/cancel, and Microsoft mails the customer.
+      cancel: true,
+      staffSelection: true,
+      catalogue: true,
+    },
+    auth:
+      "Microsoft Graph application permissions only: OAuth 2.0 client credentials against the venue's own tenant, scope https://graph.microsoft.com/.default. getStaffAvailability has no delegated permission, for work or personal accounts.",
+    sandbox: "on-request",
+    gate: {
+      what:
+        "A separate multi-tenant Entra app registration holding BookingsAppointment.ReadWrite.All and Bookings.Read.All as APPLICATION permissions, plus a tenant administrator at each venue granting admin consent (the /adminconsent URL) — a staff member cannot approve this for themselves. The venue also needs a Microsoft 365 licence that includes Bookings and a shared Bookings calendar already set up. Microsoft's own free E5 sandbox tenant now requires a Visual Studio Professional or Enterprise subscription or membership of another qualifying programme, so it is not simply self-serve.",
+      apply: "https://learn.microsoft.com/en-us/graph/auth-v2-service",
+      docs: "https://learn.microsoft.com/en-us/graph/api/resources/booking-api-overview",
+    },
+    liveNeeds: ["PARTNER_MSBOOKINGS_CLIENT_ID", "PARTNER_MSBOOKINGS_CLIENT_SECRET"],
+    venueNeeds: [
+      "the venue's Microsoft 365 tenant id",
+      "the bookingBusiness id (an SMTP-style address)",
+      "admin consent granted by that tenant's administrator",
+    ],
+    limits: [
+      "Availability has no delegated permission, so this can never ride on the Outlook connection the owner clicks through. It needs application permissions and a tenant administrator, which is a different and much larger conversation than 'connect my calendar'.",
+      "Application permissions are tenant-wide and cannot be narrowed to one calendar: Bookings.Read.All and BookingsAppointment.ReadWrite.All reach every booking business in the tenant. Belline holds more access than the job needs, and that must be said plainly to the administrator being asked for it.",
+      "Personal Microsoft accounts are not supported at all — the API covers shared bookings only. An owner running Bookings on a personal account has nothing to connect.",
+      "getStaffAvailability returns Available/Busy intervals, not bookable starts. Belline has to cut them on the venue's own time increment and fit the service and its buffers inside, because Microsoft documents that arithmetic as the app's responsibility and publishes no slots endpoint.",
+      "There is no idempotency key on POST /appointments. A retried create is a second appointment, so Belline's own key check is the only guard — the same exposure as Zenoti's confirm.",
+      "Staff selection is only honest where the venue set allowStaffSelection on its scheduling policy. Where it is off, Bookings picks the person and Belline must not promise one.",
+      "UNVERIFIED: whether a customer email address is mandatory on POST /appointments. The bookingCustomerInformation shape carries name, emailAddress and phone, and Bookings mails a confirmation, but the reference does not mark the address required. To be checked against a real calendar before any venue is connected.",
+    ],
+  },
+
+  /**
+   * Cal.com: the only one on this list with no gatekeeper at all.
+   *
+   * Open source (AGPLv3), a published REST API at `https://api.cal.com/v2`,
+   * and a key the account holder mints for themselves in their own settings.
+   * No programme, no application, no partnership, no review. A salon owner
+   * could connect Belline this afternoon.
+   *
+   *   GET  /v2/slots?eventTypeId=&start=&end=&timeZone=&format=range
+   *   POST /v2/bookings
+   *   POST /v2/bookings/{uid}/reschedule
+   *   POST /v2/bookings/{uid}/cancel
+   *   GET  /v2/event-types
+   *
+   * Every endpoint is pinned to a dated contract through a mandatory
+   * `cal-api-version` header, and the versions differ per endpoint — slots is
+   * `2024-09-04`, bookings `2026-02-25`, event types `2024-06-14`. Cal.com's
+   * own note says that sending the wrong value silently falls back to an older
+   * version of the endpoint, which is the most dangerous kind of failure: the
+   * call succeeds and means something else. The adapter pins all three and
+   * `check:calcom` fails if any is dropped.
+   *
+   * ## The booking-page shape, and where Cal.com differs from Calendly
+   *
+   * This is the second worked example of the shape Calendly established, and
+   * the two are not interchangeable. What they share: the *event type* decides
+   * the length, not Belline; availability is the owner's real calendar, their
+   * buffers, their notice and their caps, computed by the partner and never
+   * reconstructed here; a booking needs an attendee email address; a pooled
+   * event type lets the partner choose the host, so no name may be promised;
+   * and neither holds a slot while a caller decides.
+   *
+   * Where they part:
+   *
+   * - **Cal.com can move a booking.** `POST /v2/bookings/{uid}/reschedule` is a
+   *   real endpoint. Calendly has none, so a move there is a create followed by
+   *   a cancel, two emails and two of the day's booking allowance. Cal.com
+   *   keeps the guest's booking as one thing.
+   * - **Cal.com can be self-hosted**, so the base URL is a property of the
+   *   venue rather than a constant. A self-hosted instance may be on an older
+   *   release than the pinned `cal-api-version`, which is a failure mode
+   *   Calendly simply cannot have.
+   * - **The version header.** Calendly has nothing like it.
+   * - **Rate limits are flat**: 120 requests a minute on an API key, against
+   *   Calendly's per-plan booking allowances (10 a minute, 50 an hour, 100 a
+   *   day, five a day on a trial).
+   * - **Managed event types are a trap Calendly has no equivalent of.** A
+   *   managed event type is a template; Cal.com's docs say slots cannot be
+   *   fetched for the parent at all, and the child event type ids must be used
+   *   instead. A venue mapped to a parent would look connected and quote
+   *   nothing.
+   *
+   * The credential model is Zenoti's rather than Calendly's: the key belongs to
+   * the venue and is sealed on it, because Cal.com's OAuth — the `x-cal-client-id`
+   * and `x-cal-secret-key` platform clients that would let an owner self-connect
+   * from Belline's setup — is a paid Platform product and an official-partner
+   * listing, which is a decision to make later rather than a prerequisite now.
+   */
+  calcom: {
+    id: "calcom",
+    name: "Cal.com",
+    model: "appointments",
+    api: {
+      documented: true,
+      availability: true,
+      create: true,
+      reschedule: true,
+      cancel: true,
+      // True only where the event type is a solo one; a round-robin or
+      // collective type lets Cal.com choose, and the adapter refuses to name a
+      // person for those. See `limits`.
+      staffSelection: true,
+      catalogue: true,
+    },
+    auth:
+      "Authorization: Bearer <cal_live_… key>, minted by the account holder in their own Cal.com settings, plus a mandatory per-endpoint cal-api-version header. Platform OAuth clients exist but are a paid product.",
+    sandbox: "self-serve",
+    gate: {
+      what:
+        "Nothing to apply for, and nobody to ask. The venue's own Cal.com account holder creates an API key in their settings and gives it to Belline, exactly as a Zenoti admin does — except that here it is free, self-serve and takes a minute. The only thing that would need Cal.com's agreement is the paid Platform plan and a verified OAuth client, which would let owners self-connect from Belline's setup instead of pasting a key, and would be needed to be listed in Cal.com's own app store.",
+      apply: "https://cal.com/docs/api-reference/v2/introduction",
+      docs: "https://cal.com/docs/api-reference/v2/introduction",
+    },
+    liveNeeds: [],
+    venueNeeds: [
+      "the venue's own Cal.com API key, sealed",
+      "the event type id for each service Belline may book",
+      "the IANA time zone the account answers in",
+      "the base URL, where the venue self-hosts",
+    ],
+    limits: [
+      "A booking needs an attendee email address. Cal.com's POST /v2/bookings will not take one without it, and it is where the confirmation and the reschedule and cancel links go. A caller who will not give an address cannot be booked, and is taken as a request instead.",
+      "The event type fixes the length. Belline's own service duration chooses which event type to use and what to say on the phone; it never overrides Cal.com's.",
+      "A round-robin or collective event type lets Cal.com choose the host, so Belline must not promise the caller a particular person on those.",
+      "Managed event types are templates: Cal.com documents that slots cannot be fetched for the parent, only for the per-member child event types. A venue mapped to a parent id would look connected and quote nothing.",
+      "Nothing holds a slot. Between quoting a time and writing the booking, Cal.com may have given it to somebody else, and the caller is told at the time rather than afterwards.",
+      "Every endpoint needs its own dated cal-api-version header, and Cal.com says an absent or wrong value silently falls back to an older version of that endpoint rather than failing.",
+      "120 requests a minute on an API key. A busy evening asking for slots has to be cached rather than polled.",
+      "A self-hosted instance may run an older release than the pinned API versions, so the base URL and the version are a pair the venue has to be asked about together.",
+      "The key is the account holder's and is not scoped to one event type: it can read and write everything that account can. Sealed and audited like Zenoti's.",
+      "UNVERIFIED: whether Cal.com's free plan can take API bookings. Calendly's cannot, which is the kind of difference that only shows up on a customer's first call, and it must be checked on a real free account before a venue is connected.",
+      "The website's gate is weaker here than for a partner Belline holds credentials with. Mindbody cannot say 'Available' until Mindbody has approved us, because its liveNeeds hold credentials the approval issues; Cal.com has no such credential to wait for, so the only thing between the flag and the word 'Available' is somebody setting PARTNER_CALCOM_ENV=live on a deployment. Zenoti is the same shape. That is a human act rather than a partner's, and it is the one to be careful with.",
+    ],
+  },
+
+  /**
+   * Booksy: a documentation site that exists and answers 401.
+   *
+   * Salons and barbers, and the closest thing on this list to Fresha — with one
+   * difference worth recording precisely, because it changes what the founder
+   * should say in the first email.
+   *
+   * Fresha has no API. Booksy has one and will not show it to you. `docs.booksy.com`
+   * and its sibling `alpha.docs.booksy.net` resolve and answer **401
+   * Unauthorized**: a Booksy-owned documentation host, HTTP-Basic gated. That
+   * is the strongest evidence available that a partner API exists. Everything
+   * else is absent: `developers.booksy.com` and `api.booksy.com` both resolve
+   * only to redirect to the consumer marketplace, `booksy.com/en-us/partners`
+   * is a 404, and neither booksy.com, biz.booksy.com nor their help centre
+   * mentions an API, a developer programme, an application form or a developer
+   * contact address anywhere.
+   *
+   * So there is no queue to join and no form to fill in — but unlike Fresha,
+   * the ask is concrete: not "would you build an API", but "please provision a
+   * documentation account". The integrations Booksy does have (Reserve with
+   * Google, Google AI Mode, Instagram, Facebook, Yelp) are all ones Booksy
+   * built itself and announces as its own work; there is no third-party app
+   * marketplace to publish into.
+   *
+   * **A trap recorded so nobody re-finds it and trusts it.** Because the real
+   * documentation is behind a 401, several aggregators publish confident,
+   * detailed reconstructions of it — a `https://<country>.booksy.com/public-api/`
+   * base URL, ninety-odd endpoints, an RS256 partner-keypair JWT exchanged for
+   * a five-minute token, and exact rate limits. These come from independent
+   * third-party API directories, not from Booksy, and they are reconstructions
+   * of a page their authors could not open either. They are the most likely
+   * thing for a future implementer to build against by mistake, and
+   * `check:booksy` fails if any of it lands in this repository.
+   */
+  booksy: {
+    id: "booksy",
+    name: "Booksy",
+    model: "appointments",
+    api: { documented: false, availability: false, create: false, reschedule: false, cancel: false, staffSelection: false, catalogue: false },
+    auth: "Not published. The documentation host exists and answers 401 to the public.",
+    sandbox: "none",
+    gate: {
+      what:
+        "No public developer portal, no API reference, no application form and no developer contact address published anywhere on Booksy's own sites. Booksy's documentation host (docs.booksy.com) exists and is HTTP-Basic gated, so the concrete ask is to be provisioned a documentation account — a partnerships or business development approach through their published contact or support channels. Every named Booksy integration so far is one Booksy built itself.",
+      docs: "https://biz.booksy.com/",
+    },
+    liveNeeds: [],
+    venueNeeds: [],
+    limits: [
+      "Nothing technical is public: no endpoints, no base URL, no auth model, no sandbox, no rate limits. The first honest estimate can only be made after a documentation account is granted.",
+      "There is no application route at all — not a form, not an email, not a programme page. It is a cold commercial approach, and it may simply not be answered.",
+      "No third-party app marketplace exists to publish into. Booksy's integrations are ones Booksy built and announced itself, which suggests access is granted to partners it chose rather than to applicants.",
+      "Widely circulated third-party reconstructions of the gated documentation quote a public-api base URL, an RS256 partner-keypair auth flow and exact rate limits. None of it is from Booksy, all of it is a reconstruction of a page nobody outside could read, and nothing in this repository is built against it.",
+    ],
+  },
+
+  /**
+   * Vagaro: real documentation, and no way to book through it.
+   *
+   * Salons, spas and fitness. Unlike Booksy, Vagaro genuinely publishes
+   * developer documentation at `docs.vagaro.com`, and it is readable. The
+   * problem is what is in it.
+   *
+   * Vagaro's own API introduction names five capability areas — Employee
+   * Management, Locations, Appointments, Customers, Employees — and describes
+   * them in read terms: an appointment can be *retrieved*, with its status,
+   * start time and who is providing the service. There is no availability
+   * search, and there is no documented write path to create, move or cancel an
+   * appointment. The pages that would carry the endpoint reference
+   * (`/public/reference/getting-started`, `/public/reference/authentication`)
+   * are unfilled template stubs, and concrete reference slugs answer 404. No
+   * base URL is published. `developers.vagaro.com` and `sandbox.vagaro.com` do
+   * not resolve at all.
+   *
+   * What *is* properly documented is the webhook side: Appointment, Customer,
+   * FormResponse, Transaction, business location and Employee events, an
+   * envelope of `id`, `createdDate`, `type`, `action` and `payload`, and a
+   * delivery contract of HTTPS POST, 2xx within twenty seconds, five retries
+   * over fifteen minutes with exponential backoff. That is a real integration
+   * surface — but it tells Belline what already happened, which is the opposite
+   * of what a receptionist needs.
+   *
+   * So on what Vagaro publishes, this is an analytics and sync integration, not
+   * a booking one. Belline is not written against it.
+   *
+   * The commercial gate is the sharp part and the founder should know it before
+   * spending a call: access goes through Vagaro's Enterprise Sales team, and
+   * their support material conditions it on the merchant being a paid,
+   * non-trial account **actively using Vagaro's own credit card processing**.
+   * That is not a technical hurdle Belline can clear; it is a requirement on
+   * every salon Belline would want to connect.
+   *
+   * One thing not to confuse: the "Vagaro Marketplace" is the consumer-facing
+   * directory where clients find businesses, not a developer app store. Several
+   * third-party write-ups treat it as the latter. There is no app store.
+   */
+  vagaro: {
+    id: "vagaro",
+    name: "Vagaro",
+    model: "appointments",
+    api: { documented: false, availability: false, create: false, reschedule: false, cancel: false, staffSelection: false, catalogue: false },
+    auth: "Not published in usable form: Vagaro's own authentication page is an unfilled template. Credentials are issued inside a merchant's account after approval.",
+    sandbox: "none",
+    gate: {
+      what:
+        "Contact Vagaro's Enterprise Sales team through the form linked from their APIs and Webhooks page, or from inside a merchant account under Settings → Developers → APIs and Webhooks. Their support material conditions access on the salon being a paid, non-trial Vagaro account that is actively using Vagaro's own credit card processing, with roughly five to seven business days to approval — so the gate is on every salon Belline would connect, not only on Belline.",
+      apply: "https://www.vagaro.com/pro/updates/webhooks",
+      docs: "https://docs.vagaro.com/public/reference/api-introduction",
+    },
+    liveNeeds: [],
+    venueNeeds: [],
+    limits: [
+      "On what Vagaro publishes there is no booking API: no availability search, and no documented endpoint to create, move or cancel an appointment. The five documented capability areas are read-oriented, and the appointment one describes retrieving an appointment rather than making one.",
+      "No base URL and no endpoint paths are published. The reference pages that would carry them are unfilled template stubs, and concrete reference slugs answer 404.",
+      "No sandbox: sandbox.vagaro.com does not resolve, and none is mentioned on any Vagaro page.",
+      "Access is conditioned on the salon using Vagaro's own credit card processing, which is a commercial requirement on every venue rather than a one-off approval for Belline.",
+      "The webhooks are genuinely well documented and are the real integration surface today — but they report what already happened, which cannot answer a caller asking what is free on Tuesday.",
+      "The 'Vagaro Marketplace' is the consumer booking directory, not a developer app store. There is nothing to publish an app into.",
+    ],
+  },
+
+  /**
+   * Doctolib: the hardest door on the list, and the one the German launch needs.
+   *
+   * Clinics in France and Germany, and dominant in both. Nothing technical is
+   * public. `developers.doctolib.com` resolves and answers **401**;
+   * `developers.doctolib.fr` does not exist; `doctolib.de/api` and
+   * `doctolib.fr/api` are 404; `partners.doctolib.fr` redirects to the consumer
+   * site; and `partnerportal.doctolib.com` is a Salesforce login wall that asks
+   * for a company custom domain, so it is reachable only once a commercial
+   * relationship already exists. There is no API reference, no base URL, no
+   * auth model and no sandbox.
+   *
+   * The partner routes that do exist all lead to lead-capture forms rather than
+   * to an API. The German one is framed around partner discounts — a
+   * reseller and consultancy channel. The French taxonomy lists télésecrétariat,
+   * IT consultants, equipment makers and distributors, training bodies and
+   * "other", with **no category for a software vendor and none a voice agent
+   * would fit**. Doctolib Connect does expose a SCIM API, but SCIM provisions
+   * users; it has nothing to do with appointments.
+   *
+   * Every integration Doctolib names publicly is with a practice-management
+   * software vendor — PRO MEDISOFT, zollsoft's tomedo — and runs the *other*
+   * direction: Doctolib's calendar syncs into the practice's own software to
+   * avoid double entry. Doctolib publishes no third-party booking API, no
+   * book-on-behalf-of-a-patient flow and no patient OAuth model.
+   *
+   * **And this one is not only a commercial problem.** Appointment data here is
+   * health data: Doctolib holds HDS certification in France (health-data
+   * hosting) and its public position is that only authorised healthcare
+   * providers reach patient data; Germany adds medical confidentiality under
+   * §203 StGB on top of GDPR Article 9. A voice agent booking on a patient's
+   * behalf is a non-clinical third party touching regulated health data, which
+   * is an argument to be had with lawyers before it is one to have with an API
+   * team. Doctolib does not publish a prohibition — it simply does not address
+   * it, and inferring permission from that silence would be the wrong reading.
+   *
+   * The honest planning assumption for the German-speaking launch: **do not
+   * plan on Doctolib.** A clinic on Doctolib is one where Belline takes the
+   * request and the practice confirms, and that should be designed for rather
+   * than treated as a gap to be closed.
+   */
+  doctolib: {
+    id: "doctolib",
+    name: "Doctolib",
+    model: "appointments",
+    api: { documented: false, availability: false, create: false, reschedule: false, cancel: false, staffSelection: false, catalogue: false },
+    auth: "Not published. developers.doctolib.com exists and answers 401; the partner portal is a login wall.",
+    sandbox: "none",
+    gate: {
+      what:
+        "No public developer programme and no technical application route. The realistic first step is the German partnership form at info.doctolib.de/commercial-partnerships/ or the French one at info.doctolib.fr/partenariats-doctolib/ — both lead-capture forms whose partner categories have no slot for a software vendor or a voice agent, and the German one is framed around reseller discounts. Expect a commercial conversation, and expect the regulatory question about a non-clinical third party touching health data to be the real obstacle rather than the API.",
+      apply: "https://info.doctolib.de/commercial-partnerships/",
+      docs: "https://info.doctolib.fr/partenariats-doctolib/logiciels-solutions/",
+    },
+    liveNeeds: [],
+    venueNeeds: [],
+    limits: [
+      "Nothing technical is public: no endpoints, no base URL, no auth model, no sandbox. developers.doctolib.com answers 401 and the partner portal needs a company domain issued after a commercial relationship exists.",
+      "Doctolib publishes no third-party booking API and no book-on-behalf-of-a-patient flow. Every integration it names publicly runs the other way — its calendar syncing into a practice's own software.",
+      "Every named partner is a practice-management software vendor or a telephone secretarial service. The published partner taxonomies have no category a voice agent fits into, and no self-service route.",
+      "Appointment data here is health data. Doctolib holds HDS certification in France and positions patient data as reachable only by authorised healthcare providers; Germany adds medical confidentiality under §203 StGB to GDPR Article 9. The obstacle is a legal argument about a non-clinical third party, not an integration task.",
+      "Doctolib does not publish a prohibition on third-party booking — it does not address it at all. Absence of a refusal is not permission, and nothing here should be planned as though it were.",
+      "For the German-speaking launch the honest assumption is that Doctolib will not be connected. A clinic on Doctolib takes requests, and the product should be designed for that rather than waiting.",
+    ],
+  },
+
   // -------------------------------------------------------------------------
   // The restaurant two. A different model, not a variant of the one above.
   // -------------------------------------------------------------------------
@@ -273,6 +667,106 @@ export const PARTNERS: Record<PartnerId, PartnerFacts> = {
       "The sandbox excludes the Booking API: a reservation cannot be tested until production review is passed.",
       "Rate limits exist and are not published; OpenTable's platform policy reserves the right to set and charge for them.",
       "A restaurant is not an appointment book (see the note at the foot of this file): party size decides availability, the house decides the turn time, and there is no person to ask for.",
+    ],
+  },
+
+  /**
+   * Eat App: Dubai-founded, strong in the Gulf, and — unlike the other two
+   * restaurant systems — it actually publishes the API.
+   *
+   * Not on a developer portal: `eatapp.co/developers`, `developers.eatapp.co`
+   * and `docs.eatapp.co` do not resolve at all. The documentation lives as
+   * articles inside their customer help centre at `restaurant.eatapp.co/knowledge/`,
+   * which is why it is easy to conclude there is nothing there. There is.
+   *
+   * Two separate APIs, and which one Belline is on decides what it can do.
+   *
+   * **The Partner API** is the one for booking channels, which is what Belline
+   * is. It is two endpoints:
+   *
+   *   GET  /partners/v2/availability      time_slots for a date and a party size
+   *   POST /partners/v2/reservations
+   *
+   * with `Authorization: Bearer <token>` and a documented sandbox at
+   * `https://api.eat-sandbox.co`, production at `https://api.eatapp.co`, and a
+   * sandbox partner portal to inspect what was booked. That is more than
+   * OpenTable gives an approved partner, whose sandbox excludes booking
+   * entirely.
+   *
+   * **The Concierge API** is the richer one — `POST /concierge/v2/availability/range`,
+   * `POST /concierge/v2/reservations`, `PATCH /concierge/v2/reservations/:id`
+   * for both modifying and cancelling, `GET /resources`, `GET /guests`, and an
+   * `idempotency_token` on create — scoped by an `X-Restaurant-ID` or
+   * `X-Group-ID` header. It is a different grant, issued to restaurants,
+   * groups and vendors syncing data rather than to a booking channel.
+   *
+   * So the honest position: Belline builds on the Partner API, which can quote
+   * and book and nothing else. Moving and cancelling are recorded as `false`,
+   * the agent is given no tool for them, and a guest who rings to cancel is
+   * taken as a message — exactly as for Mindbody. The Concierge `PATCH` is
+   * written down above so that the day Eat App issues a Concierge grant the
+   * work is an afternoon rather than a project, but nothing is built against a
+   * credential nobody has offered.
+   *
+   * ## The restaurant note, tested against a real restaurant API
+   *
+   * Eat App confirms most of what the note at the foot of this file predicts,
+   * from its own help centre: party size is the question (`guests` is required,
+   * `covers` in the Concierge dialect — the two APIs disagree on the word);
+   * the venue sets a slot interval, and 30 minutes is its own example; a shift
+   * is "the range where customers can either make reservations or walk in"
+   * rather than the kitchen's hours; turn time is "adjusted based on the number
+   * of covers"; pacing caps either arrivals per slot or covers per shift; and
+   * there is a notice period.
+   *
+   * But it contradicts the note on one point, and that is the useful finding:
+   * **there is no slot lock.** The note says a partner reservation adapter
+   * "must expect a two-phase hold", because OpenTable and SevenRooms both have
+   * one. Eat App publishes no hold and no lock primitive at all — the only
+   * concurrency protection documented anywhere is the Concierge
+   * `idempotency_token`, and that is on the API Belline is not on. For a voice
+   * agent that is a real limitation: the table cannot be held while the caller
+   * makes up their mind, so a time quoted at the start of a sentence may be
+   * gone by the end of it.
+   */
+  eatapp: {
+    id: "eatapp",
+    name: "Eat App",
+    model: "reservations",
+    api: {
+      documented: true,
+      availability: true,
+      create: true,
+      // Both live on the Concierge API's PATCH /reservations/:id, which is a
+      // different grant from the Partner API Belline would be issued. See the
+      // comment above and `limits`.
+      reschedule: false,
+      cancel: false,
+      // Nobody asks for a waiter.
+      staffSelection: false,
+      // GET /resources is Concierge-only; the Partner API publishes no
+      // catalogue, so Belline is told the restaurant's shape rather than reading it.
+      catalogue: false,
+    },
+    auth: "Authorization: Bearer <api token>, issued by Eat App per partner. The Concierge API adds an X-Restaurant-ID or X-Group-ID scope header.",
+    sandbox: "on-request",
+    gate: {
+      what:
+        "A partner onboarding conversation with Eat App: their become-a-partner page books a 30-minute call, and their integrations page says plainly to reach out for API access. The sandbox at api.eat-sandbox.co and the token are both things Eat App issues — there is no self-serve key generation — and each restaurant must be on a subscription that includes the integration. Write to info@eatapp.co for partnerships or support@eatapp.co for the technical side.",
+      apply: "https://restaurant.eatapp.co/become-a-partner-eat-app",
+      docs: "https://restaurant.eatapp.co/knowledge/using-the-eat-app-partner-api-to-get-and-post-availability",
+    },
+    liveNeeds: [],
+    venueNeeds: ["the restaurant's own Eat App id", "that restaurant enabled on Belline's partner token"],
+    limits: [
+      "Nothing holds a table. Eat App publishes no slot lock or hold on the Partner API, so a time quoted while a caller is still deciding may be gone before they finish. This is the one place the restaurant note's 'expect a two-phase hold' does not hold.",
+      "Moving and cancelling are on the Concierge API (PATCH /concierge/v2/reservations/:id), which is a different grant from the Partner API a booking channel is issued. Until Eat App grants both, a guest who rings to cancel is taken as a message and Belline never says it is done.",
+      "No idempotency key on the Partner API's create. The Concierge API has an idempotency_token and the Partner API does not, so Belline's own key check is the only guard against a retry becoming two tables.",
+      "No catalogue on the Partner API. GET /resources is Concierge-only, so the restaurant's rooms and tables are whatever setup recorded rather than something Belline can read back.",
+      "Party size is required, and the two APIs disagree on the word for it — 'guests' on the Partner API, 'covers' on the Concierge one. A port from one to the other that keeps the field name would silently book parties of nobody.",
+      "The waitlist is a product Eat App sells and does not expose: no waitlist endpoint is published, so Belline cannot put a caller in a real queue or quote them a wait.",
+      "No rate limits are published, so the safe assumption is that a busy evening's availability must be cached rather than polled.",
+      "UNVERIFIED: the exact JSON:API envelope of GET /partners/v2/availability, and how the restaurant is identified on it. The field name time_slots and the 30-minute example values come from Eat App's own help centre, but the surrounding shape was not confirmed against a live sandbox. The adapter refuses anything it does not recognise rather than guessing, and this must be checked before any restaurant is connected.",
     ],
   },
 
@@ -356,9 +850,20 @@ export const PARTNER_IDS = Object.keys(PARTNERS) as PartnerId[];
  * Belline's own restaurant engine already models tables, sittings and turn
  * times (booking/restaurant.ts), so the concepts are not foreign. But a partner
  * reservation adapter must take `partySize` as required, must not invent a
- * duration, must not offer a person, and must expect a two-phase hold. The
- * shared provider (booking/partner-provider.ts) is written so that a
- * reservations partner cannot quietly behave like an appointments one.
+ * duration and must not offer a person. The shared provider
+ * (booking/partner-provider.ts) is written so that a reservations partner
+ * cannot quietly behave like an appointments one.
+ *
+ * **One correction, from the first restaurant API we could actually read.**
+ * This note used to end "and must expect a two-phase hold". Eat App is the
+ * first of the three whose API is published, and it has no slot lock at all —
+ * the only concurrency protection documented anywhere is an idempotency token
+ * on the Concierge API, which is the grant a booking channel does not get. So
+ * a hold is something to check for per partner, not to assume. Where there is
+ * none, the table may be gone between quoting a time and writing the
+ * reservation; the caller is told at the time, and nothing is pre-announced.
+ * For a voice agent, where the caller is still talking while the slot ages,
+ * that belongs in the conversation design and not only in a footnote.
  */
 export const RESTAURANT_MODEL_NOTE =
   "Restaurant reservations are party size, table inventory, house-set turn times, shifts and pacing, with no staff selection and a two-phase slot lock. They are not appointments with a party size attached.";
