@@ -435,6 +435,62 @@ export const PARTNERS: Record<PartnerId, PartnerFacts> = {
     ],
   },
 
+  /**
+   * Booksy: a documentation site that exists and answers 401.
+   *
+   * Salons and barbers, and the closest thing on this list to Fresha — with one
+   * difference worth recording precisely, because it changes what the founder
+   * should say in the first email.
+   *
+   * Fresha has no API. Booksy has one and will not show it to you. `docs.booksy.com`
+   * and its sibling `alpha.docs.booksy.net` resolve and answer **401
+   * Unauthorized**: a Booksy-owned documentation host, HTTP-Basic gated. That
+   * is the strongest evidence available that a partner API exists. Everything
+   * else is absent: `developers.booksy.com` and `api.booksy.com` both resolve
+   * only to redirect to the consumer marketplace, `booksy.com/en-us/partners`
+   * is a 404, and neither booksy.com, biz.booksy.com nor their help centre
+   * mentions an API, a developer programme, an application form or a developer
+   * contact address anywhere.
+   *
+   * So there is no queue to join and no form to fill in — but unlike Fresha,
+   * the ask is concrete: not "would you build an API", but "please provision a
+   * documentation account". The integrations Booksy does have (Reserve with
+   * Google, Google AI Mode, Instagram, Facebook, Yelp) are all ones Booksy
+   * built itself and announces as its own work; there is no third-party app
+   * marketplace to publish into.
+   *
+   * **A trap recorded so nobody re-finds it and trusts it.** Because the real
+   * documentation is behind a 401, several aggregators publish confident,
+   * detailed reconstructions of it — a `https://<country>.booksy.com/public-api/`
+   * base URL, ninety-odd endpoints, an RS256 partner-keypair JWT exchanged for
+   * a five-minute token, and exact rate limits. These come from independent
+   * third-party API directories, not from Booksy, and they are reconstructions
+   * of a page their authors could not open either. They are the most likely
+   * thing for a future implementer to build against by mistake, and
+   * `check:booksy` fails if any of it lands in this repository.
+   */
+  booksy: {
+    id: "booksy",
+    name: "Booksy",
+    model: "appointments",
+    api: { documented: false, availability: false, create: false, reschedule: false, cancel: false, staffSelection: false, catalogue: false },
+    auth: "Not published. The documentation host exists and answers 401 to the public.",
+    sandbox: "none",
+    gate: {
+      what:
+        "No public developer portal, no API reference, no application form and no developer contact address published anywhere on Booksy's own sites. Booksy's documentation host (docs.booksy.com) exists and is HTTP-Basic gated, so the concrete ask is to be provisioned a documentation account — a partnerships or business development approach through their published contact or support channels. Every named Booksy integration so far is one Booksy built itself.",
+      docs: "https://biz.booksy.com/",
+    },
+    liveNeeds: [],
+    venueNeeds: [],
+    limits: [
+      "Nothing technical is public: no endpoints, no base URL, no auth model, no sandbox, no rate limits. The first honest estimate can only be made after a documentation account is granted.",
+      "There is no application route at all — not a form, not an email, not a programme page. It is a cold commercial approach, and it may simply not be answered.",
+      "No third-party app marketplace exists to publish into. Booksy's integrations are ones Booksy built and announced itself, which suggests access is granted to partners it chose rather than to applicants.",
+      "Widely circulated third-party reconstructions of the gated documentation quote a public-api base URL, an RS256 partner-keypair auth flow and exact rate limits. None of it is from Booksy, all of it is a reconstruction of a page nobody outside could read, and nothing in this repository is built against it.",
+    ],
+  },
+
   // -------------------------------------------------------------------------
   // The restaurant two. A different model, not a variant of the one above.
   // -------------------------------------------------------------------------

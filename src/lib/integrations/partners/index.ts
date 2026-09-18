@@ -1,5 +1,6 @@
 import type { Location } from "../../types";
 import { partnerMode, type PartnerConnector, type PartnerId, type PartnerVenue } from "./contract";
+import { booksyConnector } from "./booksy";
 import { calcomConnector } from "./calcom";
 import { eatappConnector } from "./eatapp";
 import { freshaConnector } from "./fresha";
@@ -30,6 +31,7 @@ export const PARTNER_CONNECTORS: Record<PartnerId, PartnerConnector> = {
   opentable: opentableConnector,
   sevenrooms: sevenroomsConnector,
   eatapp: eatappConnector,
+  booksy: booksyConnector,
 };
 
 export function partnerConnector(id: PartnerId): PartnerConnector {
