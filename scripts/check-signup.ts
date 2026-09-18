@@ -310,7 +310,11 @@ await test("the terms checkbox is announced by what it agrees to, not by the wor
   assert.match(form, /id="acceptTerms"[^>]*type="checkbox"/, "the terms checkbox is gone or renamed");
 });
 
-await test("one open market is stated, not offered as a choice; two or more get the select", async () => {
+// While only one market is open the question is not on the page at all
+// (founder, f6): a read-only line saying the one possible answer is a line
+// nobody needs. The market still travels, and the control comes back on its
+// own the day a second market's status turns "live" — nothing to remember.
+await test("one open market is sent but never shown; two or more bring the select back", async () => {
   const React = await import("react");
   const { renderToStaticMarkup } = await import("react-dom/server");
   (globalThis as { React?: unknown }).React = React;
@@ -318,24 +322,31 @@ await test("one open market is stated, not offered as a choice; two or more get 
   const { liveMarkets, MARKETS } = await import("../src/lib/markets");
   const render = (markets: string[]) =>
     renderToStaticMarkup(
-      React.createElement(CheckoutForm, { products: ["v2_starter"], market: "AE", markets, trade: "", siteOrigin: "https://belline.ai" } as never),
+      React.createElement(CheckoutForm, { products: ["v2_starter"], market: "AE", markets, siteOrigin: "https://belline.ai" } as never),
     );
 
   const live = liveMarkets();
   const today = render(live);
   if (live.length === 1) {
     assert.doesNotMatch(today, /<select[^>]*id="market"/, "a single open market is still a select");
-    assert.match(today, /data-market-fixed/);
-    assert.ok(today.includes(MARKETS[live[0]].name), "the fixed market is not named");
-    assert.match(today, new RegExp(`<input type="hidden" name="market" value="${live[0]}"`), "the fixed market is not sent");
+    assert.doesNotMatch(today, /Where the business is/, "the one open market is still read out on the page");
+    assert.ok(!today.includes(MARKETS[live[0]].name), "the one open market is still named on the page");
+    assert.match(today, new RegExp(`<input type="hidden"[^>]*name="market" value="${live[0]}"`), "the fixed market is not sent");
   }
   const one = render(["AE"]);
   assert.doesNotMatch(one, /<select[^>]*id="market"/);
-  assert.match(one, /United Arab Emirates/);
+  assert.match(one, /data-market-fixed/);
+  assert.doesNotMatch(one, /United Arab Emirates/);
   const two = render(["AE", "GB"]);
   assert.match(two, /<select[^>]*id="market"/, "two open markets get no select");
+  assert.match(two, /Where is the business\?/, "two open markets get no label");
   assert.doesNotMatch(two, /data-market-fixed/);
   assert.match(one, /href="https:\/\/belline\.ai\/terms"/, "the terms link does not follow the site origin it is given");
+
+  // And the question the checkout no longer asks is gone for good: it is not
+  // hidden, not prefilled from a campaign link, not sent.
+  assert.doesNotMatch(today, /What do you do\?|name="trade"/, "the trade question is back on the checkout");
+  assert.doesNotMatch(today, /Marina Hair Studio/, "the placeholder names a business again");
 });
 
 const matrix: { market?: string; browserZone?: string; currency: string; timezone: string }[] = [

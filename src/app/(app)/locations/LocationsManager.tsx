@@ -36,6 +36,8 @@ interface Venue {
   usage: { bookings: number; upcoming: number; calls: number };
   archiveBlock: RemovalBlock | null;
   deleteBlock: RemovalBlock | null;
+  /** Why the kind of business can no longer change here, or null while it still can. */
+  kindBlock: string | null;
 }
 
 type AddState = { allowed: true; sentence: string } | { allowed: false; reason: string; choosePlan: boolean };
@@ -436,7 +438,10 @@ function VenueDrawer({
       action: venue ? "update" : "create",
       locationId: venue?.id,
       name,
-      ...(venue ? {} : { trade }),
+      // The trade goes with an edit too, while the venue is still empty enough
+      // for its kind to change (lib/locations.ts `kindBlock`); the server
+      // refuses it once it is not, whatever this form sends.
+      ...(venue && venue.kindBlock ? {} : { trade }),
       timezone,
       address,
       phone,
@@ -462,11 +467,12 @@ function VenueDrawer({
         </div>
         <form onSubmit={save} className="drawer-body">
           <label>Name<input ref={nameInput} value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} /></label>
-          {venue ? (
-            // The engine behind a restaurant and a clinic differ, so the kind
-            // of business is fixed (lib/locations.ts). Said, not hidden.
+          {venue && venue.kindBlock ? (
+            // The engine behind a restaurant and a clinic differ, so once this
+            // venue has anything saved against it the kind is fixed
+            // (lib/locations.ts `kindBlock`). Said, not hidden.
             <p className="muted" style={{ fontSize: 12.5, margin: 0, lineHeight: 1.5 }}>
-              Kind of business: {tradeLabel(venue.tradeKey, venue.vertical)}. This cannot change — add a new location for a different kind.
+              Kind of business: {tradeLabel(venue.tradeKey, venue.vertical)}. {venue.kindBlock}
             </p>
           ) : (
             <label>
@@ -481,6 +487,15 @@ function VenueDrawer({
                   </optgroup>
                 ))}
               </select>
+              {venue && (
+                // The checkout no longer asks (founder, f6), so most venues
+                // arrive on the appointment engine by default. Say plainly that
+                // this is the moment to correct it.
+                <span className="muted" style={{ fontSize: 12, lineHeight: 1.5, display: "block", marginTop: 6 }}>
+                  A restaurant keeps tables and a menu; everything else keeps services and a team. You can still change this because nothing has been
+                  saved against this location yet — once Belline has taken a booking or a call, it is fixed.
+                </span>
+              )}
             </label>
           )}
           <label>Address<input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={240} /></label>
