@@ -850,9 +850,20 @@ export const PARTNER_IDS = Object.keys(PARTNERS) as PartnerId[];
  * Belline's own restaurant engine already models tables, sittings and turn
  * times (booking/restaurant.ts), so the concepts are not foreign. But a partner
  * reservation adapter must take `partySize` as required, must not invent a
- * duration, must not offer a person, and must expect a two-phase hold. The
- * shared provider (booking/partner-provider.ts) is written so that a
- * reservations partner cannot quietly behave like an appointments one.
+ * duration and must not offer a person. The shared provider
+ * (booking/partner-provider.ts) is written so that a reservations partner
+ * cannot quietly behave like an appointments one.
+ *
+ * **One correction, from the first restaurant API we could actually read.**
+ * This note used to end "and must expect a two-phase hold". Eat App is the
+ * first of the three whose API is published, and it has no slot lock at all —
+ * the only concurrency protection documented anywhere is an idempotency token
+ * on the Concierge API, which is the grant a booking channel does not get. So
+ * a hold is something to check for per partner, not to assume. Where there is
+ * none, the table may be gone between quoting a time and writing the
+ * reservation; the caller is told at the time, and nothing is pre-announced.
+ * For a voice agent, where the caller is still talking while the slot ages,
+ * that belongs in the conversation design and not only in a footnote.
  */
 export const RESTAURANT_MODEL_NOTE =
   "Restaurant reservations are party size, table inventory, house-set turn times, shifts and pacing, with no staff selection and a two-phase slot lock. They are not appointments with a party size attached.";
