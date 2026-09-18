@@ -35,6 +35,7 @@ export default function CheckoutForm({
   markets,
   trade,
   siteOrigin,
+  verifyBy,
 }: {
   products: ProductId[];
   market: Market;
@@ -44,6 +45,8 @@ export default function CheckoutForm({
   trade: string;
   /** Where the terms and privacy policy are, for this environment (lib/origin.ts). */
   siteOrigin: string;
+  /** How the address is confirmed here: by an emailed code, or by the team. */
+  verifyBy: "email" | "team";
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Failure | null>(null);
@@ -306,7 +309,9 @@ export default function CheckoutForm({
       </button>
 
       <p className="muted" style={{ fontSize: 10.5, margin: 0, textAlign: "center", lineHeight: 1.6 }}>
-        No card. Next, confirm your email with the code we send.
+        {verifyBy === "email"
+          ? "No card. Next, confirm your email with the code we send."
+          : "No card. Belline can’t send email from here yet, so the team confirms your address for you."}
       </p>
     </form>
   );

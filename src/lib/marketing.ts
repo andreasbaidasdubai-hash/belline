@@ -177,6 +177,11 @@ export function isMarketingHost(host: string | undefined): boolean {
   return !name.startsWith("app.") && name !== "localhost" && !name.startsWith("127.");
 }
 
+/** Does this request carry a dashboard session cookie? Name only — never the value. */
+function signedIn(cookie: string | undefined): boolean {
+  return cookie ? /(?:^|;\s*)belline_session=[^;\s]/.test(cookie) : false;
+}
+
 /**
  * Serve a marketing file, or return false and let Next have the request.
  *
@@ -194,6 +199,14 @@ export function serveMarketing(req: IncomingMessage, res: ServerResponse): boole
   if (pathname.startsWith("/api/") || pathname.startsWith("/ws/") || pathname.startsWith("/_next/")) {
     return false;
   }
+
+  // A signed-in owner asking for `/` wants their dashboard, not the landing
+  // page. In production the two live on separate hostnames and never meet;
+  // on a deployment that serves both from one host (staging, a preview) the
+  // landing page would otherwise shadow the dashboard and sign-in would look
+  // like it did nothing. The cookie is per-host, so belline.ai can't carry
+  // one: this changes nothing there.
+  if (pathname === "/" && signedIn(req.headers.cookie)) return false;
 
   const root = path.resolve(ROOT);
   // `/dental` is a directory with an index; `/` is the landing page.

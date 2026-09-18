@@ -245,6 +245,29 @@ await test("the marketing file server marks its own pages the same way", () => {
   assert.ok(first > 0 && first < server.indexOf("serveMarketing(req, res)"), "server.ts does not apply indexing before serving");
 });
 
+await test("a signed-in owner asking for / gets the dashboard, not the landing page", async () => {
+  const { serveMarketing } = await import("../src/lib/marketing");
+  const sink = () => {
+    const res = { writeHead() {}, end() {} };
+    return res as never;
+  };
+  const ask = (path: string, cookie?: string) =>
+    serveMarketing(
+      { method: "GET", url: path, headers: { host: "belline-staging.up.railway.app", ...(cookie ? { cookie } : {}) } } as never,
+      sink(),
+    );
+
+  // Signed out, the landing page is served as before.
+  assert.equal(ask("/"), true, "the landing page is no longer served to a visitor");
+  // Signed in, the request falls through to the app, whose own auth decides.
+  assert.equal(ask("/", "belline_session=abc123"), false, "a signed-in owner still gets the landing page at /");
+  // An empty or unrelated cookie is not a session.
+  assert.equal(ask("/", "belline_session=; other=1"), true, "an empty session cookie counted as signed in");
+  assert.equal(ask("/", "cart=3"), true, "an unrelated cookie counted as signed in");
+  // Only the landing page moves: the other marketing pages stay public.
+  assert.equal(ask("/pricing", "belline_session=abc123"), ask("/pricing"), "a marketing page changed for signed-in visitors");
+});
+
 fs.rmSync(process.env.DATA_DIR!, { recursive: true, force: true });
 
 console.log(`\n${failed ? "\x1b[31m" : "\x1b[32m"}✓ ${passed} passed, ${failed} failed\x1b[0m\n`);

@@ -89,6 +89,7 @@ export default function Order({
   markets,
   trade,
   siteOrigin,
+  verifyBy,
   video = false,
   included,
 }: {
@@ -110,6 +111,8 @@ export default function Order({
   trade: string;
   /** The marketing site for this environment (lib/origin.ts `siteOrigin`). */
   siteOrigin: string;
+  /** How the address is confirmed here: by an emailed code, or by the team. */
+  verifyBy: "email" | "team";
 }) {
   const plans = sellable(market);
   const [order, setOrder] = useState(() => initialOrder(initial[0] ?? plans[0].id, initialCycle));
@@ -287,7 +290,7 @@ export default function Order({
                 </li>
               ))}
             </ol>
-            <CheckoutForm products={ids} market={market} markets={markets} trade={trade} siteOrigin={siteOrigin} />
+            <CheckoutForm products={ids} market={market} markets={markets} trade={trade} siteOrigin={siteOrigin} verifyBy={verifyBy} />
           </>
         )}
 

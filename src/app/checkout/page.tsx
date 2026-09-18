@@ -9,6 +9,7 @@ import { tradeFromParam } from "@/lib/signup-rules";
 import { stripeEnabled } from "@/lib/billing/stripe";
 import { paymentsSoonSentence } from "@/lib/billing/trial-end";
 import { siteOrigin } from "@/lib/origin";
+import { verifyMode } from "@/lib/email-verify";
 import Order from "./Order";
 import BelleForVisitors from "@/components/BelleForVisitors";
 import { cycleFromParam } from "./order-state";
@@ -100,6 +101,9 @@ export default async function CheckoutPage({
           trade={trade}
           siteOrigin={site}
           video={videoLive()}
+          // Read here, like the flags below: a deployment that cannot send
+          // email must not promise a code (lib/email-verify.ts `verifyMode`).
+          verifyBy={verifyMode()}
           // Read here, on the server: a feature that follows a flag must say
           // the same in the browser as in the page the server sent.
           included={Object.fromEntries(sellable(market).map((p) => [p.id, publicLines(p)]))}
