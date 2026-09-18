@@ -228,6 +228,108 @@ export const PARTNERS: Record<PartnerId, PartnerFacts> = {
     ],
   },
 
+  /**
+   * Microsoft Bookings, through Microsoft Graph: the most complete partner on
+   * the list, and the one whose *permission model* is the whole story.
+   *
+   * Bookings is a first-class Graph resource under `/solutions/bookingBusinesses`
+   * and every operation Belline needs is documented in v1.0:
+   *
+   *   GET   /solutions/bookingBusinesses                      the tenant's calendars
+   *   GET   /solutions/bookingBusinesses/{id}                 businessHours, schedulingPolicy
+   *   GET   /solutions/bookingBusinesses/{id}/services        duration, buffers, policy
+   *   GET   /solutions/bookingBusinesses/{id}/staffMembers    who can be asked for
+   *   POST  /solutions/bookingBusinesses/{id}/getStaffAvailability
+   *   POST  /solutions/bookingBusinesses/{id}/appointments
+   *   PATCH /solutions/bookingBusinesses/{id}/appointments/{id}
+   *   POST  /solutions/bookingBusinesses/{id}/appointments/{id}/cancel
+   *
+   * Availability, create, move and cancel: all four, which no other partner on
+   * this list offers. So why is it not simply an extension of the Outlook
+   * connection Belline already has?
+   *
+   * **Because `getStaffAvailability` has no delegated permission at all.**
+   * Microsoft's reference is explicit: for delegated work-or-school accounts
+   * and for delegated personal accounts it says "Not supported." The only way
+   * to read availability is an *application* permission — client credentials,
+   * no user in the loop, and therefore tenant-wide admin consent. Belline's
+   * Outlook app registration is the opposite of that: delegated scopes on the
+   * `common` endpoint, consented by the owner who signs in, deliberately small
+   * (integrations/microsoft-api.ts).
+   *
+   * Three consequences, and they are why this is its own destination rather
+   * than a tick-box on the Outlook connection:
+   *
+   * 1. **Personal Microsoft accounts cannot do this at all.** Every Bookings
+   *    permission row for personal accounts reads "Not supported", and the API
+   *    overview says the Bookings API applies only to *shared* bookings, never
+   *    personal ones. Outlook's `common` endpoint happily takes an Outlook.com
+   *    account; Bookings will never work for one.
+   * 2. **Admin consent is tenant-wide and cannot be narrowed.** There is no
+   *    `Bookings.Read` scoped to one calendar — `Bookings.Read.All` and
+   *    `BookingsAppointment.ReadWrite.All` reach every booking business in the
+   *    tenant. Bolting that onto the Outlook app would turn a modest calendar
+   *    consent screen into a tenant-wide grant for every Outlook customer,
+   *    including the ones who only wanted their own diary read.
+   * 3. **Microsoft makes the app responsible for the business rules.** Its
+   *    "Business rules validation" page says apps creating appointments with
+   *    application permissions must themselves honour business hours, the time
+   *    slot interval, minimum and maximum lead time, pre- and post-buffers and
+   *    the `allowStaffSelection` setting — service-level policy overriding
+   *    business-level. Nothing validates this for us.
+   *
+   * That third point is the risk worth naming. `getStaffAvailability` returns
+   * coarse Available/Busy *intervals* ("available 08:00–15:00"), not bookable
+   * starts, so Belline has to cut them on the venue's own increment and fit the
+   * service plus its buffers inside. That is computing a grid, which is exactly
+   * what Mindbody's `availabledates` trap warns against — with one difference
+   * that makes it acceptable here: for Mindbody a truer endpoint existed and we
+   * were declining to use it, whereas Microsoft publishes no bookable-slots
+   * endpoint at all and documents the arithmetic as the caller's job. The
+   * inputs are all the venue's own (msbookings.ts), none is Belline's guess,
+   * and `check:msbookings` pins every rule.
+   */
+  msbookings: {
+    id: "msbookings",
+    name: "Microsoft Bookings",
+    model: "appointments",
+    api: {
+      documented: true,
+      availability: true,
+      create: true,
+      // PATCH /appointments/{id} moves start, end and staffMemberIds.
+      reschedule: true,
+      // POST /appointments/{id}/cancel, and Microsoft mails the customer.
+      cancel: true,
+      staffSelection: true,
+      catalogue: true,
+    },
+    auth:
+      "Microsoft Graph application permissions only: OAuth 2.0 client credentials against the venue's own tenant, scope https://graph.microsoft.com/.default. getStaffAvailability has no delegated permission, for work or personal accounts.",
+    sandbox: "on-request",
+    gate: {
+      what:
+        "A separate multi-tenant Entra app registration holding BookingsAppointment.ReadWrite.All and Bookings.Read.All as APPLICATION permissions, plus a tenant administrator at each venue granting admin consent (the /adminconsent URL) — a staff member cannot approve this for themselves. The venue also needs a Microsoft 365 licence that includes Bookings and a shared Bookings calendar already set up. Microsoft's own free E5 sandbox tenant now requires a Visual Studio Professional or Enterprise subscription or membership of another qualifying programme, so it is not simply self-serve.",
+      apply: "https://learn.microsoft.com/en-us/graph/auth-v2-service",
+      docs: "https://learn.microsoft.com/en-us/graph/api/resources/booking-api-overview",
+    },
+    liveNeeds: ["PARTNER_MSBOOKINGS_CLIENT_ID", "PARTNER_MSBOOKINGS_CLIENT_SECRET"],
+    venueNeeds: [
+      "the venue's Microsoft 365 tenant id",
+      "the bookingBusiness id (an SMTP-style address)",
+      "admin consent granted by that tenant's administrator",
+    ],
+    limits: [
+      "Availability has no delegated permission, so this can never ride on the Outlook connection the owner clicks through. It needs application permissions and a tenant administrator, which is a different and much larger conversation than 'connect my calendar'.",
+      "Application permissions are tenant-wide and cannot be narrowed to one calendar: Bookings.Read.All and BookingsAppointment.ReadWrite.All reach every booking business in the tenant. Belline holds more access than the job needs, and that must be said plainly to the administrator being asked for it.",
+      "Personal Microsoft accounts are not supported at all — the API covers shared bookings only. An owner running Bookings on a personal account has nothing to connect.",
+      "getStaffAvailability returns Available/Busy intervals, not bookable starts. Belline has to cut them on the venue's own time increment and fit the service and its buffers inside, because Microsoft documents that arithmetic as the app's responsibility and publishes no slots endpoint.",
+      "There is no idempotency key on POST /appointments. A retried create is a second appointment, so Belline's own key check is the only guard — the same exposure as Zenoti's confirm.",
+      "Staff selection is only honest where the venue set allowStaffSelection on its scheduling policy. Where it is off, Bookings picks the person and Belline must not promise one.",
+      "UNVERIFIED: whether a customer email address is mandatory on POST /appointments. The bookingCustomerInformation shape carries name, emailAddress and phone, and Bookings mails a confirmation, but the reference does not mark the address required. To be checked against a real calendar before any venue is connected.",
+    ],
+  },
+
   // -------------------------------------------------------------------------
   // The restaurant two. A different model, not a variant of the one above.
   // -------------------------------------------------------------------------

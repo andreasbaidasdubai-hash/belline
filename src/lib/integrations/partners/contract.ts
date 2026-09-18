@@ -35,7 +35,14 @@ import { flag } from "../../flags";
  * *that* venue however good our key is.
  */
 
-export type PartnerId = "fresha" | "zenoti" | "mindbody" | "treatwell" | "opentable" | "sevenrooms";
+export type PartnerId =
+  | "fresha"
+  | "zenoti"
+  | "mindbody"
+  | "treatwell"
+  | "opentable"
+  | "sevenrooms"
+  | "msbookings";
 
 /** How the partner's own product thinks about a booking. */
 export type PartnerModel =
