@@ -55,6 +55,9 @@ export default async function BelleVideoPage() {
       promisedSeconds={deliveredCeiling(availability.config.maxCallSeconds).seconds}
       previewClipUrl={face.clipUrl}
       previewPosterUrl={face.posterUrl}
+      // Start is pressed inside this frame, so the greeting clip is ours to
+      // speak: Belle answers on the press instead of after the connection.
+      speakGreeting={face.greets}
       introTitle="Talk to Belle on video"
       introBody="Belle is Belline's AI assistant. She can see your account and help with setup, your plan or anything about Belline. When you press Start, your browser will ask to use your microphone so she can hear you. Your camera stays off and the call isn't recorded."
       startLabel="Start"

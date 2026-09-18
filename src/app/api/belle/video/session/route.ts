@@ -34,6 +34,9 @@ export async function POST(req: Request) {
   if (!venue) return NextResponse.json({ error: "not_found" }, { status: 404, headers: NO_STORE });
 
   const result = await startVideoSession(venue, `owner_${user.id}`, {
+    // The launcher says whether the owner has already heard the greeting clip,
+    // so Belle does not introduce herself twice. A boolean and nothing else.
+    greeted: body?.greeted === true,
     support: {
       userId: user.id,
       tenantId: user.tenantId,

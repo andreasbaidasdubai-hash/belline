@@ -162,7 +162,12 @@ export function errorCopy(code: VideoErrorCode, agent: string): string {
 }
 
 /** What the state means, in words — the panel never says it with colour alone. */
-export function statusText(state: PanelState, agentName: string): string {
+export function statusText(state: PanelState, agentName: string, greetingSpeaking = false): string {
+  // The greeting clip is her, saying the call's first words, and the visitor
+  // can both see and hear her doing it. "Connecting…" under a face that is
+  // plainly already talking is the page arguing with its own picture — what is
+  // connecting underneath is our business, not theirs.
+  if (greetingSpeaking && (state.phase === "mic" || state.phase === "connecting")) return `${agentName} is speaking`;
   switch (state.phase) {
     case "intro":
       return "Ready when you are";

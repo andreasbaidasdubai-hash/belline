@@ -16,15 +16,31 @@
  *   3. Prints `download_url`, `stream_url` and `still_image_thumbnail_url`, and with
  *      `--download <dir>` saves `greeting-<face>.mp4` and `greeting-<face>.jpg` there.
  *
- * Then set VIDEO_GREETING_CLIP_URL and VIDEO_GREETING_POSTER_URL to wherever the
- * files are served from: a path on this app such as /video/greeting-rf90eb925bd8.mp4
- * after committing them to public/video, or an https URL on your own storage.
- * Keep the clip short and small (a few seconds, under ~1 MB). The bubble plays
- * it muted and looping, so the words are for the lips, not the ears.
+ * **The clip for `rf90eb925bd8` is already made and committed**, and is the
+ * default (`src/lib/video/config.ts`). This is only for a deployment on another
+ * face. The words are `GREETING_CLIP_SCRIPT` and are not a choice: the live
+ * greeting is shortened against them (`src/lib/video/greeting-clip.ts`).
+ *
+ * Afterwards, and this matters — the visitor hears this file on a tap, so it
+ * has to be ready before one:
+ *
+ *   1. Re-encode small. 640×360 is ample for a circle:
+ *      `ffmpeg -i in.mp4 -vf scale=640:360 -c:v libx264 -crf 26 -preset slow \
+ *         -c:a aac -b:a 64k -ac 1 -movflags +faststart out.mp4`
+ *      (1.2 MB → ~110 KB, and `+faststart` is what lets it play before it has
+ *      finished downloading).
+ *   2. Take the poster from the clip's **own last frame**, not from Tavus's
+ *      thumbnail: `ffmpeg -sseof -0.12 -i out.mp4 -update 1 -frames:v 1 out.jpg`.
+ *      That frame is the one held during the handover and the one the resting
+ *      bubble shows, so there is nothing to flash, and it is the only frame
+ *      where she is neither mid-word nor mid-blink.
+ *   3. Commit both under `public/video/` and point VIDEO_GREETING_CLIP_URL and
+ *      VIDEO_GREETING_POSTER_URL at them (or leave them for the defaults).
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import { GREETING_CLIP_SCRIPT } from "../src/lib/video/greeting-clip";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(`--${name}`);
@@ -37,7 +53,11 @@ const apiKey = (process.env.TAVUS_API_KEY ?? "").trim();
 const faceId = (value("face") || process.env.TAVUS_FACE_ID || "").trim();
 const agent = value("agent", "Belle");
 const business = value("business", "Belline");
-const script = value("script") || `Hi, I'm ${agent}, the AI concierge for ${business}. How may I help you today?`;
+// The words belong to the product, not to this script: `GREETING_CLIP_SCRIPT`
+// is what the app assumes has been said, what the live greeting is shortened
+// against, and what `check:video` pins. Regenerating for another face has to
+// reproduce it exactly, so it is the default rather than something to remember.
+const script = value("script") || GREETING_CLIP_SCRIPT;
 const base = (process.env.TAVUS_API_BASE ?? "https://tavusapi.com").replace(/\/+$/, "");
 const downloadDir = value("download");
 

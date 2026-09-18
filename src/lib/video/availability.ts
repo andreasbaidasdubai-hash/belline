@@ -124,6 +124,14 @@ export function videoAvailability(
  * What the bubble needs to greet: the clip and poster (the venue's own, else the
  * deployment's), the agent's name, and whether it is the mock. Public, so built
  * from a whitelist; only for a venue that is offering video.
+ *
+ * `greets` is the one field with teeth. A configured clip is a greeting we made
+ * on purpose: the same face, saying words we wrote, on our own origin. Callers
+ * play that one aloud on the tap and let the live session drop its hello. What
+ * they must never do that to is the *fallback* the pages reach for when nothing
+ * is configured — the provider's own stock preview of the face, hot-linked, with
+ * no words in it at all. Unmuting that would greet the visitor with silence and
+ * then take the live greeting away as well, which is worse than either.
  */
 export function videoBubbleConfig(location: Location, env: Env = process.env) {
   const config = videoConfig(env);
@@ -132,10 +140,12 @@ export function videoBubbleConfig(location: Location, env: Env = process.env) {
     const v = (venue ?? "").trim();
     return /^https:\/\/[^\s"'<>]+$/.test(v) || /^\/[^\s"'<>]*$/.test(v) ? v : fallback;
   };
+  const clipUrl = pick(own?.greetingClipUrl, config.greetingClipUrl);
   return {
     agentName: location.agent.displayName,
-    clipUrl: pick(own?.greetingClipUrl, config.greetingClipUrl),
+    clipUrl,
     posterUrl: pick(own?.greetingPosterUrl, config.greetingPosterUrl),
+    greets: Boolean(clipUrl),
     mock: config.provider === "mock",
   };
 }

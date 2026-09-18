@@ -292,7 +292,27 @@ Mobile web works in iOS Safari and Android Chrome without a native SDK.
   hard-coded in Belline.
 - Rate limits: **not documented**. Concurrency: only the 400 error text.
 
-### What actually limits a conversation (read 18 September 2026)
+### Settled: the account was out of minutes (18 September 2026)
+
+The account was topped up, and one call was run on staging and left alone:
+
+```
+[video] vs_1NXG0aNxQhrZ ended after 306s of 300s — time_limit (tavus: client_duration, by timer)
+```
+
+**306 seconds, ended by our own ceiling**, not Tavus's. So the 85–88 second
+endings below were the month's CVI minutes running out — the one explanation
+the section had left open and could not test. Nothing in the code was wrong and
+nothing needs changing: `VIDEO_MAX_CALL_SECONDS` is delivered in full, and
+`deliveredCeiling` goes back to promising 300 s as soon as the short endings
+fall out of its window.
+
+Worth keeping: **a Tavus account out of minutes looks exactly like a plan cap.**
+Same `system.shutdown`, same `max_call_duration`, no error, and no endpoint to
+ask. `delivery.ts` was the only thing that noticed, and it is still the only
+thing that would notice next time.
+
+### What limited a conversation before that top-up (read 18 September 2026)
 
 A founder's call on staging ended at 88 seconds of the 300 we ask for, with
 `system.shutdown` and a `shutdown_reason` we map to `max_call_duration`. Other

@@ -54,7 +54,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
     }
   }
 
-  const result = await startVideoSession(location, claim.visitorId, { preview });
+  // The panel says whether the visitor has already heard the greeting clip, so
+  // the live session can drop its own hello. A boolean and nothing else: the
+  // browser can shorten the opening, never write it.
+  const result = await startVideoSession(location, claim.visitorId, { preview, greeted: body?.greeted === true });
   if (!result.ok) {
     return NextResponse.json(
       {

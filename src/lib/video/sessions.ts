@@ -15,6 +15,7 @@ import type { VideoConfig } from "./config";
 import { recordVideoEnding } from "./delivery";
 import { classifyVideoEnd, type VideoEndCause } from "./end-reason";
 import { venueVideoSettings } from "./control";
+import { greetingAfterClip } from "./greeting-clip";
 import { videoBackground } from "./backgrounds";
 import { venueLook } from "./faces";
 import { recordVideoMetric } from "./metrics";
@@ -191,10 +192,43 @@ export function videoGreeting(location: Location): string {
   return `Hi, I'm ${location.agent.displayName}, the AI concierge for ${location.name}. How may I help you today?`;
 }
 
+/**
+ * What this particular session opens with.
+ *
+ * A demo link's personalised opening wins, then a support session's
+ * account-aware line, then the venue's own. When the visitor has already heard
+ * the greeting clip, whichever of those it is loses its hello and keeps the
+ * rest, so the clip and the live face read as one conversation rather than two
+ * introductions (`greeting-clip.ts`).
+ */
+export function openingFor(
+  location: Location,
+  demo: VideoDemoStart | undefined,
+  support: VideoSupportStart | undefined,
+  greeted: boolean,
+): string {
+  const full = demo?.greeting.trim() || support?.greeting.trim() || videoGreeting(location);
+  return greeted ? greetingAfterClip(full) : full;
+}
+
 export async function startVideoSession(
   location: Location,
   visitorId: string,
-  opts: { env?: Env; preview?: boolean; provider?: VideoAvatarProvider; demo?: VideoDemoStart; support?: VideoSupportStart } = {},
+  opts: {
+    env?: Env;
+    preview?: boolean;
+    provider?: VideoAvatarProvider;
+    demo?: VideoDemoStart;
+    support?: VideoSupportStart;
+    /**
+     * The visitor has already heard the pre-rendered greeting clip, so this
+     * session must not say hello a second time. Only ever true when the
+     * browser reports the clip really played: a missing file, a refused
+     * `play()`, reduced motion or Data Saver all leave it false, and the
+     * greeting whole.
+     */
+    greeted?: boolean;
+  } = {},
 ): Promise<StartResult> {
   const env = opts.env ?? process.env;
   // Each kind is counted against its own ceiling: a demo link's session against
@@ -239,7 +273,7 @@ export async function startVideoSession(
   if (limit === null) return { ok: false, reason: "not_entitled", retryable: false, status: 403 };
   const config = limit === available.config.maxCallSeconds ? available.config : { ...available.config, maxCallSeconds: limit, warnBeforeSeconds: Math.min(available.config.warnBeforeSeconds, Math.floor(limit / 2)) };
 
-  const creation = create(location, visitorKey, config, provider, env, opts.demo, opts.support);
+  const creation = create(location, visitorKey, config, provider, env, opts.demo, opts.support, opts.greeted === true);
   reg.pending.set(visitorKey, creation);
   try {
     return await creation;
@@ -278,6 +312,8 @@ async function create(
   env: Env,
   demo?: VideoDemoStart,
   support?: VideoSupportStart,
+  /** The visitor has already heard the greeting clip, so this session drops its hello. */
+  greeted = false,
 ): Promise<StartResult> {
   const reg = registry();
   const sessionId = `vs_${crypto.randomBytes(9).toString("base64url")}`;
@@ -308,7 +344,7 @@ async function create(
     createdAt: startedAt,
     llmToken: signVideoToken("llm", sessionId, location.id, tokenTtl, env),
     clientToken: signVideoToken("client", sessionId, location.id, tokenTtl, env),
-    greeting: demo?.greeting.trim() || support?.greeting.trim() || videoGreeting(location),
+    greeting: openingFor(location, demo, support, greeted),
     maxCallSeconds: config.maxCallSeconds,
     warnBeforeSeconds: config.warnBeforeSeconds,
     timers: [],

@@ -52,10 +52,12 @@ export default async function VideoDemoPage({ params }: { params: Promise<{ toke
   const availability = videoAvailability(venue, { skipLive: !isActivated(venue) });
   const config = availability.on ? availability.config : videoConfig();
   const own = videoBubbleConfig(venue);
-  let preview = { clipUrl: own.clipUrl, posterUrl: own.posterUrl };
+  let preview = { clipUrl: own.clipUrl, posterUrl: own.posterUrl, greets: own.greets };
   if (availability.on && !own.mock && (!own.clipUrl || !own.posterUrl)) {
     const face = await facePreview(availability.config, undefined, undefined, venueFaceId(venue, availability.config));
-    if (face) preview = { clipUrl: own.clipUrl || face.clipUrl, posterUrl: own.posterUrl || face.posterUrl };
+    // `greets` stays as it was: the provider's stock preview is a face with no
+    // words in it, and must never be played as Belle's opening.
+    if (face) preview = { ...preview, clipUrl: own.clipUrl || face.clipUrl, posterUrl: own.posterUrl || face.posterUrl };
   }
 
   // Belle's own prepared answers, word for word, so the page and Belle agree.
@@ -75,6 +77,7 @@ export default async function VideoDemoPage({ params }: { params: Promise<{ toke
       promisedSeconds={deliveredCeiling(config.maxCallSeconds).seconds}
       previewClipUrl={preview.clipUrl}
       previewPosterUrl={preview.posterUrl}
+      previewGreets={preview.greets}
       siteOrigin={siteOrigin()}
       packages={demoPackages("AE")}
       setupClaim={SETUP_CLAIM}

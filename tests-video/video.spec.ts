@@ -79,7 +79,13 @@ async function startCall(page: Page) {
   const body = (await res.json()) as { session: { sessionId: string; clientToken: string; greeting: string } };
   await expect(page.getByText("MOCK — not a live avatar")).toBeVisible();
   await expect(page.getByRole("button", { name: "End call" })).toBeVisible();
-  expect(body.session.greeting).toMatch(/^Hi, I'm Belle, Belline's AI concierge\./);
+  // One greeting, not two. Where the tap played the clip, the panel says so and
+  // this session drops its own hello but keeps everything after it; where it
+  // did not, the whole greeting comes as it always has (greeting-clip.ts).
+  // Either way Belline's substance is said exactly once.
+  const greeted = ((res.request().postDataJSON() ?? {}) as { greeted?: boolean }).greeted === true;
+  expect(body.session.greeting).toMatch(/Belline answers your business's calls/);
+  expect(body.session.greeting).toMatch(greeted ? /^Belline answers your business's calls/ : /^Hi, I'm Belle, Belline's AI concierge\./);
   return body.session;
 }
 

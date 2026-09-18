@@ -19,6 +19,19 @@ export const CLIENT_METRICS = [
   "video_selected",
   "mic_prompted",
   "mic_denied",
+  /**
+   * The greeting clip, on the tap: `ms` is how long the browser took to give
+   * it a voice, and `detail` says what happened — `spoken`, `host` (the page
+   * around the bubble said it), or why it did not: `no_clip`, `hidden`,
+   * `refused`, `host_failed`.
+   *
+   * The failures are the point. A clip that quietly stops playing is invisible
+   * from outside: the call still works, the visitor simply goes back to
+   * waiting in silence, which is the thing this was built to remove. This is
+   * how that becomes a number instead of something somebody eventually
+   * notices.
+   */
+  "greeting_clip",
   "ready",
   "first_frame",
   "first_response",

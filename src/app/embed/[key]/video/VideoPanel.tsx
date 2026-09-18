@@ -18,6 +18,8 @@ import {
   type VideoErrorCode,
 } from "@/lib/video/client/machine";
 import { END_ACTIONS, endCopy, endedUnexpectedly, type VideoEndCause } from "@/lib/video/end-reason";
+import { hostGreeting, noGreeting, playGreeting, type PlayingGreeting } from "@/lib/video/client/greeting";
+import { HANDOVER_LEAD_MS } from "@/lib/video/greeting-clip";
 import type { CallAdapter, CallSession } from "@/lib/video/client/calls";
 import Greenscreen from "./Greenscreen";
 
@@ -83,6 +85,32 @@ type Props = {
   previewClipUrl?: string;
   previewPosterUrl?: string;
   /**
+   * Play the preview clip aloud on the tap, as the call's opening words.
+   *
+   * The clip is the same face saying the one part of the greeting that is true
+   * on every surface, so the visitor hears Belle immediately instead of
+   * watching a silent face connect. It only works from inside the press, which
+   * is why it is a property of the surfaces that have one — the bubble's tap
+   * happens in the page around us, so that page plays it instead
+   * (`hostGreetingMs`).
+   */
+  speakGreeting?: boolean;
+  /**
+   * The page around the bubble is playing the greeting clip, with its own tap.
+   *
+   * Cross-origin, a frame cannot borrow a gesture from the page that holds it,
+   * and mobile Safari will not let us make a sound without one. So the bubble
+   * plays the clip itself and tells us here that it did: we skip our own,
+   * shorten the live greeting the same way, and wait for the page to say the
+   * last word has been said before letting the live face in.
+   *
+   * The clip's length in milliseconds, or 0 when the page is not playing one.
+   * It arrives with the frame's URL rather than as a message because the tap
+   * and the frame happen in the same instant, and a message would race this
+   * frame's own listener into existence.
+   */
+  hostGreetingMs?: number;
+  /**
    * Where the session, end, event and mock requests go. The widget's own by
    * default; a personalised demo page (`/demo/v/<token>`) uses its link's.
    */
@@ -129,6 +157,15 @@ const TOKEN_KEY = "belline.video.visitor";
 const ENDED_LINGER_MS = 1200;
 /** How long the bubble waits for the end route to say why, before giving up on a reason. */
 const CAUSE_WAIT_MS = 2000;
+/**
+ * The crossfade from the greeting clip to the live face, and how long the clip
+ * stays in the tree to perform it. Matches `.bv-face`'s own opacity
+ * transition, so the two halves of the dissolve are the same length: the same
+ * face in the same chair, one becoming the other rather than replacing it.
+ */
+const HANDOVER_FADE_MS = 400;
+/** How long to let the page around the bubble say its clip was refused, before trusting it. */
+const HOST_CONFIRM_MS = 250;
 
 export default function VideoPanel({
   embedKey,
@@ -153,6 +190,8 @@ export default function VideoPanel({
   listenFirst,
   tapLabel,
   preloadClient,
+  speakGreeting,
+  hostGreetingMs,
 }: Props) {
   const [state, dispatch] = useReducer(reduce, INITIAL);
   const [now, setNow] = useState(() => Date.now());
@@ -161,12 +200,24 @@ export default function VideoPanel({
   const [note, setNote] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [faceVisible, setFaceVisible] = useState(false);
+  // The greeting clip is speaking: its words are the call's opening, so the
+  // circle keeps showing it (and holds its last frame) until the live face is
+  // ready to take over.
+  const [greetingSpeaking, setGreetingSpeaking] = useState(false);
   // The venue's background, when the session has one: the face is keyed onto it (Greenscreen.tsx).
   const [background, setBackground] = useState("");
   const [keyed, setKeyed] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  /** The pre-rendered greeting, when this surface plays it itself. */
+  const greetingRef = useRef<HTMLVideoElement>(null);
+  /** What the current start is doing about the greeting. Reset on every start. */
+  const greetingPlayRef = useRef<PlayingGreeting>(noGreeting());
+  /** Told by the page around the bubble that its clip has said the last word. */
+  const hostFinishRef = useRef<(() => void) | null>(null);
+  /** …or that it never said one. */
+  const hostFailedRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const sessionRef = useRef<Session | null>(null);
   const callRef = useRef<CallAdapter | null>(null);
@@ -320,11 +371,20 @@ export default function VideoPanel({
     recapRef.current = [];
     sessionRef.current = null;
     setNote(null);
+    // "Start again" gets the whole opening again, clip included.
+    setFaceVisible(false);
+    setGreetingSpeaking(false);
+    hostFinishRef.current = null;
     dispatch({ type: "start" });
     startedAtRef.current = Date.now();
 
     // Inside the press: the one moment iOS Safari lets a page start audio.
     void audioRef.current?.play().catch(() => undefined);
+
+    // Still inside the press, and before anything is awaited: Belle's first
+    // words. From here on `greetingPlayRef` is the whole handover — whether
+    // the live session may drop its hello, and when the live face may come in.
+    await beginGreeting();
 
     if (listenFirst) return startListening();
 
@@ -411,7 +471,7 @@ export default function VideoPanel({
         mockUrl: `${base}/mock`,
       });
       callRef.current = call;
-      await call.join();
+      await handOverToLiveFace(call);
       report("ready", Date.now() - startedAtRef.current);
     } catch {
       report("client_error", undefined, "join_failed");
@@ -476,7 +536,7 @@ export default function VideoPanel({
         mockUrl: `${base}/mock`,
       });
       callRef.current = call;
-      await call.join();
+      await handOverToLiveFace(call);
       report("ready", Date.now() - startedAtRef.current);
     } catch {
       dropMic();
@@ -509,6 +569,75 @@ export default function VideoPanel({
     }
   }
 
+  /**
+   * Belle's first words, from the visitor's own tap.
+   *
+   * Called before anything is awaited in the start sequence, because a browser
+   * only counts a gesture for as long as the handler is still its own. What it
+   * settles is `greetingPlayRef`, and everything downstream reads that rather
+   * than the properties: whether the live session may drop its hello
+   * (`requestSession`), and when the live face may take the circle
+   * (`handOverToLiveFace`).
+   *
+   * Nothing here can fail loudly. A surface with no clip, a page that is not
+   * playing one, a file that never loaded, a browser that refuses the sound —
+   * all of them leave the silent default in place, and the call goes on
+   * exactly as it did before any of this existed.
+   */
+  async function beginGreeting(): Promise<void> {
+    const at = Date.now();
+    const tell = (detail: string) => report("greeting_clip", Date.now() - at, detail);
+    greetingPlayRef.current = noGreeting();
+    hostFailedRef.current = false;
+    if (hostGreetingMs && hostGreetingMs > 0) {
+      const fromHost = hostGreeting(hostGreetingMs);
+      hostFinishRef.current = fromHost.finish;
+      // A page whose clip was refused says so within a few milliseconds of the
+      // tap. Give it that long before believing the URL, because the belief is
+      // what shortens the live greeting, and a wrong one is a visitor nobody
+      // says hello to. It costs nothing anybody can feel: the call client is
+      // downloading through the same moment.
+      await new Promise((r) => setTimeout(r, HOST_CONFIRM_MS));
+      if (hostFailedRef.current) return tell("host_failed");
+      greetingPlayRef.current = fromHost;
+      setGreetingSpeaking(true);
+      void fromHost.done.then(() => setGreetingSpeaking(false));
+      return tell("host");
+    }
+    if (!speakGreeting) return tell("no_clip");
+    const clip = greetingRef.current;
+    const playing = await playGreeting(clip);
+    greetingPlayRef.current = playing;
+    if (!playing.played) {
+      // Hidden and refused are the same shape and different things: the first
+      // is a choice the visitor made (reduced motion), the second is a browser
+      // saying no. Only one of them is worth chasing.
+      const visible = Boolean(clip && clip.offsetWidth && clip.offsetHeight);
+      if (visible) tell("refused");
+      else tell("hidden");
+      return;
+    }
+    setGreetingSpeaking(true);
+    void playing.done.then(() => setGreetingSpeaking(false));
+    tell("spoken");
+  }
+
+  /**
+   * Join the room so the live face arrives as the clip finishes, not after it.
+   *
+   * The provider speaks its greeting once somebody is in the room, so the join
+   * is the moment the live Belle starts — which makes it the one thing worth
+   * holding. Held until the clip is nearly done, the two run together: the
+   * room connects under the clip's last words and the face fades in as they
+   * end. Without a clip this waits on nothing and the call joins exactly when
+   * it always did.
+   */
+  async function handOverToLiveFace(call: CallAdapter): Promise<void> {
+    await greetingPlayRef.current.beforeEnd(HANDOVER_LEAD_MS);
+    if (endingRef.current) return;
+    await call.join();
+  }
+
   type SessionReply = { res: Response | null; data: { session?: Session; error?: string; retryable?: boolean } };
 
   /** Create the session. Never throws: a network failure is `res: null`. */
@@ -516,7 +645,11 @@ export default function VideoPanel({
     return fetch(`${base}/session`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ token: tokenRef.current }),
+      // `greeted` is the handover's only word to the server: the visitor has
+      // heard the clip, so this session must not say hello again. False
+      // whenever the clip is not really playing, which keeps the greeting
+      // whole on every fallback.
+      body: JSON.stringify({ token: tokenRef.current, greeted: greetingPlayRef.current.played }),
     }).then(
       async (res) => ({ res, data: (await res.json().catch(() => ({}))) as SessionReply["data"] }),
       () => ({ res: null, data: {} }),
@@ -560,6 +693,31 @@ export default function VideoPanel({
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [end]);
+
+  /**
+   * The page around the bubble has finished saying the greeting.
+   *
+   * Its own clip, its own tap, its own last word — this frame only learns of
+   * it here. The message is the authority; the length that came with the URL
+   * is just a backstop for a page that never sends one, so a clip that stalls
+   * cannot keep the live face waiting for ever.
+   */
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { source?: string; type?: string } | null;
+      if (e.source !== window.parent || data?.source !== "belline-host") return;
+      if (data.type === "greeting_ended") hostFinishRef.current?.();
+      // The page's clip never made a sound after all. Nothing is waiting on it,
+      // and — if the session has not gone out yet — nothing was heard, so the
+      // live Belle keeps her whole greeting.
+      if (data.type === "greeting_failed") {
+        hostFailedRef.current = true;
+        hostFinishRef.current?.();
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   // The page's small picture-in-picture face has its own mute: it asks here, and hears back below.
   useEffect(() => {
@@ -620,9 +778,21 @@ export default function VideoPanel({
     };
   }, [bubble, tellHost]);
 
+  /**
+   * The live face has the circle.
+   *
+   * Both halves matter. `faceVisible` is the stream having painted a frame —
+   * without it there is nothing to show. `greetingSpeaking` is Belle still
+   * talking in the clip — cutting to the live face then would interrupt her
+   * mid-sentence, which is the jump cut this whole feature exists to avoid.
+   * The live stream only takes over when it can do so without either.
+   */
+  const liveFaceOn = faceVisible && !greetingSpeaking;
+
   useEffect(() => {
-    if (faceVisible) tellHost({ type: "face" });
-  }, [faceVisible, tellHost]);
+    if (liveFaceOn) tellHost({ type: "face" });
+  }, [liveFaceOn, tellHost]);
+
 
   /**
    * Inside the bubble, an ended call gives the page back its resting bubble —
@@ -736,7 +906,7 @@ export default function VideoPanel({
 
   const inCall = state.phase === "mic" || state.phase === "connecting" || state.phase === "live";
   const resting = state.phase === "intro" || state.phase === "ended" || state.phase === "error";
-  const status = statusText(state, agentName);
+  const status = statusText(state, agentName, greetingSpeaking);
   // About as many characters as fit on one line of the circle's width.
   const captionChars = bubble && typeof window !== "undefined" ? Math.max(28, Math.floor((window.innerWidth - 48) / 7.4)) : 90;
   const caption = showCaptions && state.phase === "live" ? captionLine(state, agentName, captionChars) : "";
@@ -762,7 +932,7 @@ export default function VideoPanel({
           <div className="bv-circle">
             <video
               ref={videoRef}
-              className={`bv-face${faceVisible && !keyed ? " is-on" : ""}`}
+              className={`bv-face${liveFaceOn && !keyed ? " is-on" : ""}`}
               playsInline
               autoPlay
               muted
@@ -783,10 +953,27 @@ export default function VideoPanel({
               // eslint-disable-next-line @next/next/no-img-element
               <img className="bv-preview" src={previewPosterUrl} alt="" aria-hidden="true" />
             )}
-            {previewClipUrl && !faceVisible && (
-              <video className="bv-preview bv-preview-clip" src={previewClipUrl} poster={previewPosterUrl || undefined} muted loop autoPlay playsInline aria-hidden="true" />
+            {/* The same element twice over: the silent loop that fills the wait, and — once
+                the tap has unmuted it — Belle's opening words. It stays on the circle until
+                the live face is both here and no longer interrupting her, then fades out
+                under it rather than being cut away (`greeting.ts`, `greeting-clip.ts`).
+                It is never unmounted, only faded: the face is drawn over it anyway, and a
+                clip that left the tree would take its element with it, so "Start again"
+                would have nothing to speak with and would meet a silent wait again. */}
+            {previewClipUrl && (
+              <video
+                ref={greetingRef}
+                className={`bv-preview bv-preview-clip${liveFaceOn ? " is-gone" : ""}`}
+                src={previewClipUrl}
+                poster={previewPosterUrl || undefined}
+                muted={!greetingSpeaking}
+                loop={!greetingSpeaking}
+                autoPlay
+                playsInline
+                aria-hidden={greetingSpeaking ? undefined : "true"}
+              />
             )}
-            {!faceVisible && !previewClipUrl && !previewPosterUrl && (
+            {!liveFaceOn && !previewClipUrl && !previewPosterUrl && (
               <div className={`bv-placeholder${state.phase === "connecting" || state.phase === "mic" ? " is-loading" : ""}`} aria-hidden="true">
                 <span className={`bv-avatar${state.agentSpeaking ? " is-speaking" : ""}`}>{agentName.slice(0, 1)}</span>
               </div>
@@ -1053,6 +1240,7 @@ html, body { margin: 0; height: 100%; background: var(--bl-ground) }
   box-shadow: 0 0 0 3px var(--bl-ground), 0 0 0 4px var(--bl-blue-line), var(--bl-elev-float); transition: box-shadow .2s ease }
 .bv-orb.is-speaking .bv-circle { box-shadow: 0 0 0 3px var(--bl-ground), 0 0 0 5px var(--bl-blue), var(--bl-elev-float) }
 .bv-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block }
+.bv-preview-clip.is-gone { opacity: 0; pointer-events: none; transition: opacity .4s ease }
 .bv-face { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .4s ease }
 .bv-face.is-on { opacity: 1 }
 .bv-placeholder { position: absolute; inset: 0; display: grid; place-items: center;

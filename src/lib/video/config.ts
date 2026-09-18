@@ -87,11 +87,33 @@ function num(raw: string | undefined, fallback: number, min: number, max: number
   return Math.min(max, Math.max(min, Math.round(n)));
 }
 
-/** A clip or poster address a visitor's browser may load: https, or a path on this app. */
-function httpsOrPath(raw: string | undefined): string {
+/**
+ * A clip or poster address a visitor's browser may load: https, or a path on
+ * this app.
+ *
+ * An address that is neither is `""` and not the default, deliberately. A
+ * deployment that set this to something dangerous, or merely wrong, has said
+ * something about what it wants shown, and quietly showing our own file
+ * instead would hide the mistake. Nothing set at all is a different thing to
+ * say, and `fallback` answers that one.
+ */
+function httpsOrPath(raw: string | undefined, fallback = ""): string {
   const value = (raw ?? "").trim();
+  if (!value) return fallback;
   return /^https:\/\/[^\s"'<>]+$/.test(value) || /^\/[^\s"'<>]*$/.test(value) ? value : "";
 }
+
+/**
+ * Belle's greeting clip and its poster, as they ship.
+ *
+ * Both files are in `public/video`, made once against `TAVUS_FACE_ID` by
+ * `scripts/video-greeting-clip.ts` and committed, so the greeting works out of
+ * the box rather than waiting for somebody to be told to set two environment
+ * variables. A deployment with its own face sets them (or the venue's own
+ * settings in `video.json`) and those win.
+ */
+export const GREETING_CLIP_PATH = "/video/greeting-rf90eb925bd8.mp4";
+export const GREETING_POSTER_PATH = "/video/greeting-rf90eb925bd8.jpg";
 
 function on(raw: string | undefined): boolean {
   return ["on", "1", "true", "yes"].includes((raw ?? "").trim().toLowerCase());
@@ -130,8 +152,8 @@ export function videoConfig(env: Env = process.env): VideoConfig {
     maxDemoSessionsPerDay: num(env.VIDEO_DEMO_MAX_SESSIONS_PER_DAY, 200, 1, 5000),
     maxSupportSessionsPerDay: num(env.VIDEO_SUPPORT_MAX_SESSIONS_PER_DAY, 100, 1, 5000),
     maxConcurrentPerVenue: num(env.VIDEO_MAX_CONCURRENT_PER_VENUE, 2, 1, 50),
-    greetingClipUrl: httpsOrPath(env.VIDEO_GREETING_CLIP_URL),
-    greetingPosterUrl: httpsOrPath(env.VIDEO_GREETING_POSTER_URL),
+    greetingClipUrl: httpsOrPath(env.VIDEO_GREETING_CLIP_URL, GREETING_CLIP_PATH),
+    greetingPosterUrl: httpsOrPath(env.VIDEO_GREETING_POSTER_URL, GREETING_POSTER_PATH),
     venues: (env.VIDEO_AVATAR_VENUES ?? "")
       .split(",")
       .map((v) => v.trim())

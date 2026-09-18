@@ -656,7 +656,9 @@ await test("one tap: nothing before it, and the face's opening never waits on th
   const listen = panel.slice(panel.indexOf("async function startListening()"), panel.indexOf("type SessionReply"));
   assert.ok(listen.indexOf("requestSession()") < listen.indexOf("getUserMedia("), "the session starts with the prompt");
   assert.match(listen, /micTrack: null/);
-  assert.ok(listen.indexOf("await call.join()") < listen.indexOf("await mic"), "the call waits for the microphone");
+  // The join is held for the greeting clip's last words now (handOverToLiveFace),
+  // and never for the microphone: the prompt must not sit between the tap and Belle.
+  assert.ok(listen.indexOf("await handOverToLiveFace(call)") < listen.indexOf("await mic"), "the call waits for the microphone");
   assert.match(listen, /call\.setMicTrack\(got\)/);
   assert.match(listen, /She'll keep talking/, "a refused microphone ends the call instead of offering the chat");
   assert.match(read("src/lib/video/client/calls.ts"), /audioSource: micTrack \?\? false/);

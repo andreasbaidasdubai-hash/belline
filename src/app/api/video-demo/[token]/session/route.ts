@@ -45,6 +45,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   const context = sessionContextFor(link);
   const result = await startVideoSession(venue, claim.visitorId, {
     preview: !isActivated(venue),
+    // The demo page says whether the prospect has already heard the greeting
+    // clip. When they have, the personalised opening drops its hello and keeps
+    // every word of the research behind it. A boolean and nothing else.
+    greeted: body?.greeted === true,
     demo: {
       linkId: link.id,
       briefing: context.briefing,

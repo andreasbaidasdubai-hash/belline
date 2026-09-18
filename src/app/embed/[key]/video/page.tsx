@@ -38,10 +38,10 @@ export default async function VideoPage({
   searchParams,
 }: {
   params: Promise<{ key: string }>;
-  searchParams: Promise<{ o?: string; autostart?: string; bubble?: string }>;
+  searchParams: Promise<{ o?: string; autostart?: string; bubble?: string; greeting?: string }>;
 }) {
   const { key } = await params;
-  const { o, autostart, bubble } = await searchParams;
+  const { o, autostart, bubble, greeting } = await searchParams;
   const location = venueByEmbedKey(key);
   if (!location?.embed) notFound();
 
@@ -78,13 +78,15 @@ export default async function VideoPage({
   // On a page of its own the face's muted preview plays in the circle while the
   // call connects, as it does in the bubble on a website (where the page's own
   // circle shows it under this frame, so none is needed here).
-  let preview = { clipUrl: "", posterUrl: "" };
+  let preview = { clipUrl: "", posterUrl: "", greets: false };
   if (bubble !== "1") {
     const own = videoBubbleConfig(location);
-    preview = { clipUrl: own.clipUrl, posterUrl: own.posterUrl };
+    preview = { clipUrl: own.clipUrl, posterUrl: own.posterUrl, greets: own.greets };
     if (!own.mock && (!own.clipUrl || !own.posterUrl)) {
       const face = await facePreview(availability.config, undefined, undefined, venueFaceId(location, availability.config));
-      if (face) preview = { clipUrl: own.clipUrl || face.clipUrl, posterUrl: own.posterUrl || face.posterUrl };
+      // `greets` stays as it was: the provider's stock preview is a face with
+      // no words in it, and must never be played as the greeting.
+      if (face) preview = { ...preview, clipUrl: own.clipUrl || face.clipUrl, posterUrl: own.posterUrl || face.posterUrl };
     }
   }
 
@@ -107,8 +109,28 @@ export default async function VideoPage({
       // Inside the page's own bubble: chromeless, and it talks only to the origin checked above.
       bubble={bubble === "1" && Boolean(framedBy)}
       hostOrigin={bubble === "1" && framedBy ? framedBy : undefined}
+      // On a page of its own the tap is ours, so we speak the greeting clip —
+      // but only a real one, never the provider's silent stock preview.
+      speakGreeting={preview.greets}
+      // Inside the bubble the tap belonged to the page around us, and so does
+      // the clip: `greeting` is how long it will be talking for.
+      hostGreetingMs={bubble === "1" ? hostGreetingMs(greeting) : 0}
     />
   );
+}
+
+/**
+ * How long the page around the bubble says its greeting clip runs.
+ *
+ * Read defensively because it arrives in a URL anyone can type: a number, in
+ * milliseconds, and never long enough to strand the live face behind a
+ * greeting that was never playing. Anything else is "no clip", which is the
+ * behaviour this page had before clips existed.
+ */
+const MAX_HOST_GREETING_MS = 20_000;
+function hostGreetingMs(value: string | undefined): number {
+  const ms = Number(value);
+  return Number.isFinite(ms) && ms > 0 ? Math.min(Math.round(ms), MAX_HOST_GREETING_MS) : 0;
 }
 
 function refererOrigin(referer: string | null): string | null {

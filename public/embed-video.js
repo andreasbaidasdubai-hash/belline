@@ -389,7 +389,11 @@
       }
       circle.addEventListener("click", function () {
         if (state.mode === "mini") reopen();
-        else if (state.mode === "rest") openCall();
+        // The greeting starts inside the press, before anything else: a browser
+        // grants sound only to the handler the tap is still in, and this page's
+        // tap is the only one there is — the call frame is on another origin
+        // and cannot borrow it.
+        else if (state.mode === "rest") openCall(speakGreeting());
       });
 
       var tags = el("span", "bvb-tags");
@@ -405,7 +409,12 @@
       } else {
         var talk = el("button", "bvb-talk", words.talk || "Talk to " + agent);
         talk.type = "button";
-        talk.addEventListener("click", openCall);
+        // Wrapped, not passed: this is a tap like the circle's, so it gets the
+        // greeting too — and handing `openCall` the click event straight would
+        // quietly make it the clip's length.
+        talk.addEventListener("click", function () {
+          openCall(speakGreeting());
+        });
         row.appendChild(talk);
       }
 
@@ -471,6 +480,108 @@
       } catch (e) {
         /* already still */
       }
+    }
+
+    /**
+     * Belle's opening words, said out of this page, on the visitor's tap.
+     *
+     * The clip has been looping silently in the circle since first paint, so
+     * by the time anybody taps it is decoded, buffered and already playing —
+     * all this does is take the mute off and start it again from the top,
+     * inside the gesture, which is the one thing that makes a phone allow a
+     * sound. Nothing is downloaded and nothing is waited for, so the first
+     * word lands on the tap rather than after the connection.
+     *
+     * Returns how long she will be talking for, in milliseconds, which the
+     * frame needs so it can time the live face's arrival to her last word.
+     * Zero means no greeting: no clip, a poster-only bubble, reduced motion,
+     * Data Saver, or a clip the browser has not got far enough with to promise
+     * anything. Zero is the old behaviour in every one of those cases — the
+     * frame connects as it always did and the live Belle says the whole
+     * greeting herself.
+     */
+    function speakGreeting() {
+      var video = state.video;
+      // `greets` is the config saying this clip is our greeting and has words
+      // in it. Without it the circle is showing the provider's stock preview of
+      // the face, which is silent — unmuting that would greet nobody and cost
+      // the live hello as well.
+      if (!cfg.greets) return 0;
+      // HAVE_FUTURE_DATA or better: it is genuinely playing, not merely created.
+      if (!video || !video.play || stillOnly() || video.readyState < 3) return 0;
+      var ms = Math.round((Number(video.duration) > 0 ? video.duration : 0) * 1000);
+      if (!ms) return 0;
+      try {
+        video.loop = false;
+        video.removeAttribute("loop");
+        video.muted = false;
+        video.removeAttribute("muted");
+        video.currentTime = 0;
+        var playing = video.play();
+        // Refused after all. Put the circle back the way it was and tell the
+        // frame at once, so it neither waits for a clip that is not speaking
+        // nor leaves the visitor with a Belle who never says hello.
+        if (playing && playing.catch) playing.catch(greetingFailed);
+      } catch (e) {
+        greetingFailed();
+        return 0;
+      }
+      video.addEventListener("ended", greetingEnded);
+      video.addEventListener("error", greetingFailed);
+      state.greeting = true;
+      return ms;
+    }
+
+    /** Silent and looping again, as the resting bubble has always been. */
+    function restoreSilentPreview() {
+      var video = state.video;
+      state.greeting = false;
+      if (!video) return;
+      try {
+        video.removeEventListener("ended", greetingEnded);
+        video.removeEventListener("error", greetingFailed);
+        video.muted = true;
+        video.setAttribute("muted", "");
+        video.loop = true;
+        video.setAttribute("loop", "");
+      } catch (e) {
+        /* an element mid-teardown needs nothing put back */
+      }
+    }
+
+    function greetingEnded() {
+      restoreSilentPreview();
+      tellFrame({ type: "greeting_ended" });
+    }
+
+    function greetingFailed() {
+      restoreSilentPreview();
+      tellFrame({ type: "greeting_failed" });
+    }
+
+    /**
+     * A word to the call frame.
+     *
+     * Said more than once on purpose: the frame is created in the same instant
+     * as the tap and may not have a listener yet, and these two messages
+     * decide whether the visitor is greeted twice or not at all. Repeating a
+     * message the frame has already acted on costs nothing — both are
+     * idempotent on the other side.
+     */
+    function tellFrame(message) {
+      var attempts = 0;
+      var send = function () {
+        attempts++;
+        try {
+          if (state.call && state.call.contentWindow) {
+            state.call.contentWindow.postMessage({ source: "belline-host", type: message.type }, opts.origin);
+          }
+        } catch (e) {
+          /* a frame that has gone cannot be told */
+        }
+        if (attempts < 4) env.setTimeout(send, 80);
+      };
+      send();
     }
 
     function afterPaint(fn) {
@@ -567,7 +678,7 @@
       playPreview();
     }
 
-    function openCall() {
+    function openCall(greetingMs) {
       if (state.call || !state.root) return;
       stopRinging();
       var frame = doc.createElement("iframe");
@@ -576,7 +687,13 @@
         "/embed/" +
         encodeURIComponent(opts.key) +
         "/video?autostart=1&bubble=1&o=" +
-        encodeURIComponent(opts.hostOrigin);
+        encodeURIComponent(opts.hostOrigin) +
+        // How long this page will be greeting for. In the URL rather than a
+        // message because the frame is built in the same instant as the tap:
+        // it has to know before its first render, and a message would race its
+        // own listener into existence. A failure is a message, because by then
+        // there is a frame to hear it.
+        (greetingMs > 0 ? "&greeting=" + encodeURIComponent(String(greetingMs)) : "");
       frame.className = "bvb-frame";
       frame.title = "Video call with " + agent;
       // The microphone and sound, never the camera.
@@ -639,6 +756,9 @@
       var frame = state.call;
       if (!frame) return;
       state.call = null;
+      // A call that ends during the greeting takes the greeting with it, and
+      // leaves the circle the silent loop it was resting as.
+      if (state.greeting) restoreSilentPreview();
       if (!(how && how.fromFrame)) {
         try {
           if (frame.contentWindow) frame.contentWindow.postMessage({ source: "belline-host", type: "end" }, opts.origin);
@@ -873,7 +993,15 @@
     return {
       /** Bring the resting bubble back from its small face. */
       reopen: reopen,
-      openCall: openCall,
+      /**
+       * Open the call from the page's own button (site.js's hero).
+       *
+       * It speaks the greeting like any other tap: the caller is inside a real
+       * click handler, which is the only place the sound can be started.
+       */
+      openCall: function () {
+        openCall(speakGreeting());
+      },
       closeCall: closeCall,
       dismiss: dismiss,
       /** Tuck a call into its corner, or grow it back (a phone does this by itself). */

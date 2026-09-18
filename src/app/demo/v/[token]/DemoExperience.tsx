@@ -38,6 +38,8 @@ type Props = {
   promisedSeconds: number | null;
   previewClipUrl: string;
   previewPosterUrl: string;
+  /** The clip is our own greeting, with words in it — not the provider's silent stock preview. */
+  previewGreets: boolean;
   siteOrigin: string;
   packages: DemoPackage[];
   setupClaim: string;
@@ -138,6 +140,10 @@ export default function DemoExperience(props: Props) {
                   previewPosterUrl={props.previewPosterUrl}
                   tapLabel="Tap to meet Belle"
                   introBody="She starts talking straight away. Your browser asks for the microphone so she can hear you; your camera stays off."
+                  // The tap is on this page's own button, so the greeting clip
+                  // is ours to speak — which is what finally makes "she starts
+                  // talking straight away" true rather than nearly true.
+                  speakGreeting={props.previewGreets}
                   listenFirst
                   preloadClient
                   promisedSeconds={props.promisedSeconds}

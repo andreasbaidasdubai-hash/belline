@@ -22,9 +22,14 @@ after first paint over a poster, captioned *"Hi, I'm Belle, the AI concierge.
 Tap to talk."*, with an "AI concierge" label. Reduced motion or Data Saver: the
 poster, no video. No clip: a lettered placeholder (plus "MOCK — not a live
 avatar" in mock mode). **Nothing live exists yet**: no session, no microphone,
-no Daily. A tap on the bubble or "Talk to Belle" opens the round call view
-(`/embed/<key>/video?autostart=1`), which asks for the microphone and only
-then creates the Tavus session. The resting bubble is the call circle's own
+no Daily. A tap on the bubble or "Talk to Belle" **unmutes that same clip and
+plays it from the top as Belle's opening words** — out of the tap itself, which
+is the only gesture a phone will give sound to — and opens the round call view
+(`/embed/<key>/video?autostart=1`) underneath, which asks for the microphone
+and creates the Tavus session while she is still talking. The live face fades
+in over her last word, and the live session does not say hello a second time.
+All of that is [The greeting clip](#the-greeting-clip); without a clip it is
+what it always was — a silent wait and a live greeting. The resting bubble is the call circle's own
 size on every fresh load (about 320px, 240px on a phone), with "Talk to Belle"
 and round chat and WhatsApp icons under it (no voice icon: on the web, voice
 is the face). Only the × shrinks it to a small face, for the tab's session
@@ -80,6 +85,9 @@ layer → SSE. Time to first token is recorded per turn.
 | `src/lib/video/client/calls.ts` | Daily call (lazy `daily-js`) and mock call adapters |
 | `public/embed-video.js` | The greeting bubble and the call frame it opens (no SDK, no session) |
 | `scripts/video-greeting-clip.ts` | Owner-run: generates the greeting clip with Tavus (`npm run video:clip`) |
+| `src/lib/video/greeting-clip.ts` | The clip's script, the handover lead, and the greeting it leaves for the live session |
+| `src/lib/video/client/greeting.ts` | Playing the clip from the tap, and reporting honestly whether it was heard |
+| `public/video/greeting-*.mp4`, `.jpg` | The clip and its poster, committed and served from our own origin |
 | `src/app/embed/[key]/video/` | The round call view page and `VideoPanel.tsx` |
 | `src/app/api/video/…` | session start/end/handover, event, mock relay, webhook, LLM |
 | `src/app/(internal)/sales/video/`, `src/app/api/sales/video/` | Staff console |
@@ -123,8 +131,8 @@ All placeholders are in `.env.example`.
 | `VIDEO_TAVUS_SPECULATIVE` | optional | `on` enables Tavus `speculative_inference` (off: a half-heard sentence must not run a booking) |
 | `VIDEO_TAVUS_TEST_MODE` | optional | `on`: free, unjoinable conversations — credential check only |
 | `VIDEO_TAVUS_DELETE_AFTER_END` | optional | `on`: hard-delete each conversation at Tavus when it ends |
-| `VIDEO_GREETING_CLIP_URL` | optional | The bubble's muted greeting clip (https, or a path on the app). Per venue: `greetingClipUrl` in `video.json` |
-| `VIDEO_GREETING_POSTER_URL` | optional | Its poster image (shown first, and instead of the clip under reduced motion / Data Saver) |
+| `VIDEO_GREETING_CLIP_URL` | optional | Belle's greeting clip (https, or a path on the app). **Unset: the one we ship**, `/video/greeting-rf90eb925bd8.mp4`. Per venue: `greetingClipUrl` in `video.json` |
+| `VIDEO_GREETING_POSTER_URL` | optional | Its poster image (shown first, and instead of the clip under reduced motion / Data Saver). Unset: `/video/greeting-rf90eb925bd8.jpg` |
 
 Missing credentials disable video quietly: no button, and the panel page and
 session route answer with a readable refusal plus Chat and Voice.
@@ -154,13 +162,15 @@ session route answer with a readable refusal plus Chat and Voice.
    venue and face (`belline-venue-<venue id>`) at boot and when a venue is
    allowed, with its own derived key. Leave them; replaced ones are deleted
    automatically after the longest possible call.
-8. **Greeting clip (once, costs credits).** From a machine with the key:
-   `node --import tsx --env-file=.env scripts/video-greeting-clip.ts --agent Belle --business Belline --yes --download public/video`.
-   It calls `POST /v2/videos` with `replica_id` = the face and the greeting script, polls
-   `GET /v2/videos/{id}` until `ready`, and saves `greeting-rf90eb925bd8.mp4` and `.jpg`.
-   Re-encode the mp4 small (a few hundred KB, a few seconds), commit it under `public/video/`,
-   and set `VIDEO_GREETING_CLIP_URL=/video/greeting-rf90eb925bd8.mp4` and
-   `VIDEO_GREETING_POSTER_URL=/video/greeting-rf90eb925bd8.jpg`. Without them the bubble shows a placeholder.
+8. **Greeting clip — already done for `rf90eb925bd8`.** The clip and its poster
+   are committed in `public/video/` and are the default, so there is nothing to
+   set. Only a deployment on a *different* face needs a new pair: from a machine
+   with the key,
+   `node --import tsx --env-file=.env scripts/video-greeting-clip.ts --agent Belle --business Belline --yes --download public/video --script "<GREETING_CLIP_SCRIPT>"`.
+   It calls `POST /v2/videos` with `replica_id` = the face, polls `GET /v2/videos/{id}`
+   until `ready`, and saves the mp4 and a thumbnail. Then re-encode small and point
+   `VIDEO_GREETING_CLIP_URL` / `VIDEO_GREETING_POSTER_URL` at the result. See
+   [The greeting clip](#the-greeting-clip) for the script, the poster and the sizes.
 9. **Optional credential check:** `VIDEO_TAVUS_TEST_MODE=on` for one start — Tavus
    creates a free conversation you cannot join; turn it off again.
 
@@ -182,11 +192,110 @@ session route answer with a readable refusal plus Chat and Voice.
   plain stream when it cannot. Regenerate the pictures with
   `node --import tsx scripts/build-video-backgrounds.ts`.
 
+## The greeting clip
+
+**The problem.** A live session takes several seconds to exist: a conversation
+at Tavus, a Daily room, a replica joining it. Measured on staging, 18 September
+2026, from the tap to Belle's first word: **8.9 s at 1280, 9.4 s at 390.** All
+of it silent. The founder called it the worst part of the experience, and he
+was right — nothing on the screen was broken, there was simply nobody there.
+
+**The fix.** A 5.6-second clip of the same face (`rf90eb925bd8`), pre-rendered
+once with Tavus's video generation API, served from `public/video/`, and played
+**out of the visitor's own tap** while the live session connects underneath.
+Tap-to-first-word becomes the time it takes a buffered video element to unmute:
+**about 30 ms at both widths.**
+
+### What she says, and why it is that
+
+> Hi, I'm Belle. I'm an AI, not a person. Give me a moment to come online, and
+> then I'm listening.
+
+One file plays on three surfaces — a venue's website bubble, the dashboard's
+Ask Belle, and a prospect's personalised demo page — so every word has to be
+true on all three. That rules out more than it looks. **No business name:** on
+a customer's site Belle works for them, on the demo page she is Belline's.
+**No role noun:** "concierge" on the website, "assistant" in the dashboard,
+"receptionist" on the demo page — "an AI" is the only one true everywhere, and
+the honest one. **No promise:** the live Belle differs by surface and by venue,
+so the clip promises only the thing it can keep, which is that she is coming.
+The words live in `src/lib/video/greeting-clip.ts` as `GREETING_CLIP_SCRIPT`
+and are pinned in `check:video`.
+
+### One greeting, not two
+
+The clip says hello, so the live session must not. When — and only when — the
+browser reports the clip really played, the session POST carries `greeted:
+true`, and `greetingAfterClip` drops the greeting's leading self-introduction
+and keeps everything after it:
+
+| Greeting | Becomes |
+|---|---|
+| `Hi, I'm Belle, the AI concierge for Azure Spa. How may I help you today?` | `How may I help you today?` |
+| `Hi, I'm Belle, Belline's AI assistant. I can see your account — …` | `I can see your account — …` |
+| `Hi Sam, I'm Belle, Belline's AI receptionist. I had a look at …` | `I had a look at …` |
+
+Dropping only the hello is what lets a demo link keep every word of the
+research it was written from, and a venue keep its own opening line. `greeted`
+is a boolean and nothing else: **the browser can shorten the opening, never
+write it.**
+
+### The handover
+
+`call.join()` is the moment the live Belle starts talking, because Tavus speaks
+`custom_greeting` once somebody is in the room. So the join is what we hold.
+It fires `HANDOVER_LEAD_MS` (1.2 s) before the clip's last frame, which spends
+the room's connect time under her closing words instead of in the silence after
+them. The live face is revealed on `liveFaceOn = faceVisible && !greetingSpeaking`
+— both halves matter — and the two cross-fade over 400 ms. Same face, same
+chair, so it reads as one person rather than a cut. The clip's poster is its own
+final frame, which is also the frame it holds while waiting, so there is nothing
+to flash.
+
+### Mobile Safari, and why the bubble is different
+
+A browser grants sound only to the handler the tap is still inside. On the
+website bubble the tap happens in the **venue's page**, and the call frame is
+cross-origin, so the frame cannot borrow that gesture — this is the old "Tap to
+hear Belle" second tap. So the bubble plays the clip itself
+(`public/embed-video.js` `speakGreeting`), puts its length in the frame's URL
+(`&greeting=<ms>`, needed before the frame's first render), and posts
+`greeting_ended` / `greeting_failed` afterwards. The panel's own surfaces — Ask
+Belle and the demo page — have their tap inside the frame and play it
+themselves. The element is `playsInline` and starts life `muted` + `autoplay`,
+so it is decoded and buffered long before anybody taps.
+
+### Falling back
+
+Every one of these leaves `greeted` false, the greeting whole, and the call
+exactly as it was before clips existed:
+
+- no clip configured, or the file 404s;
+- the clip is the provider's stock face preview rather than one of ours
+  (`videoBubbleConfig.greets` is false — that file is silent, and unmuting it
+  would greet the visitor with nothing *and* cost them the live hello);
+- `play()` is refused, or takes longer than `PLAY_TIMEOUT_MS` (400 ms);
+- reduced motion or Data Saver: the clip is hidden, and she does not speak from
+  a face nobody can see;
+- the page around the bubble says `greeting_failed` within `HOST_CONFIRM_MS`
+  (250 ms), which the frame waits out before believing the URL.
+
+### Files
+
+| Path | What |
+|---|---|
+| `src/lib/video/greeting-clip.ts` | The script, the lead time, and `greetingAfterClip` |
+| `src/lib/video/client/greeting.ts` | Playing it from the tap, and knowing honestly whether it was heard |
+| `public/video/greeting-rf90eb925bd8.mp4` | 640×360, 5.6 s, 106 KB, faststart, AAC mono |
+| `public/video/greeting-rf90eb925bd8.jpg` | Its final frame, 17 KB |
+| `tests-video/greeting-clip.spec.ts` | The join, in a browser, at both widths |
+
 ## Go-live checklist
 
-- [ ] **Greeting clip** in the bubble (step 8 above): generated, re-encoded
-      small, committed, `VIDEO_GREETING_CLIP_URL` / `VIDEO_GREETING_POSTER_URL`
-      set — the founder wants this before go-live.
+- [x] **Greeting clip** — generated, re-encoded to 106 KB, committed, and the
+      default (18 September 2026). Still to do by hand: watch the handover on a
+      real iPhone and a mid-range Android, listening for a double hello and
+      looking for a seam ([The greeting clip](#the-greeting-clip)).
 - [ ] Shared PAL mode verified on staging (the model route logs no
       "carried no session token" line; `session_create_ms` shows `shared_warm`).
 - [ ] Voice probe run and the voice decision taken ([voice.md](voice.md)).
@@ -317,9 +426,17 @@ configured, and shown as medians in the sales console.
 - Speculative inference is off, which costs some latency.
 - Perception and camera are not built (by design for the prototype).
 - The greeting clip is a pre-rendered video, not the live avatar; the live face
-  appears only after the tap. On iOS the first tap may need a second one to hear
-  sound ("Tap to hear Belle"), because the tap happened in the host page and the
-  audio plays in the frame.
+  appears only after it has finished ([The greeting clip](#the-greeting-clip)).
+  Her *greeting* is audible from the tap, in the host page, so it does not need
+  the second tap. The live face's own voice still can: "Tap to hear Belle"
+  remains for the conversation after the greeting, because that audio plays in
+  the frame and the tap happened outside it.
+- The clip is English, and one file for every venue and language, so a German
+  venue hears an English hello before a live greeting that is also English
+  (video is English-only anyway, above).
+- The clip is fixed at the length it was rendered, so a session that connects
+  faster than 5.6 s still waits for her to finish. Hearing her is better than
+  watching her, but it is a floor on the total, not only on the silence.
 - The widget config is cached up to 60 s, so turning video off can leave a
   bubble visible for a minute; a tap then gets a readable refusal, not a session.
 
