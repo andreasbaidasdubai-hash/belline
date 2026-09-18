@@ -722,6 +722,14 @@ export interface EmbedAppearance {
   whatsappLabel?: string;
   /** A name from the palette, or a hex the contrast rule allows. */
   accent?: string;
+  /**
+   * The message button's own colour, where it is the second button (the mode
+   * that offers both). A palette name or a hex, by the same contrast rule.
+   * Unset leaves it the quiet paper button it has always been, so the pair
+   * still reads as one offer with a primary in it. Where the message button is
+   * the only button it is the main one and takes `accent`.
+   */
+  chatAccent?: string;
   shape?: "pill" | "round";
   corner?: "right" | "left";
   /** Show the WhatsApp button when the venue has a number. Default on. */

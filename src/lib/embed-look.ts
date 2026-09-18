@@ -97,18 +97,27 @@ export function parseAppearance(
     if (text) out[field] = text;
   }
 
-  if (input.accent !== undefined && input.accent !== null && input.accent !== "") {
-    const hex = accentHex(String(input.accent));
+  // Both buttons' colours by the same rule. The message button's is optional
+  // in a way the main one's is not: "" clears it back to the quiet paper
+  // button, which is the only way an owner can undo having picked one.
+  for (const field of ["accent", "chatAccent"] as const) {
+    const given = input[field];
+    if (given === undefined || given === null) continue;
+    if (given === "") {
+      if (field === "chatAccent") out.chatAccent = undefined;
+      continue;
+    }
+    const hex = accentHex(String(given));
     if (!hex) {
-      return { ok: false, problem: { field: "accent", message: "Pick a colour from the palette, or give a hex like #2F4A3A." } };
+      return { ok: false, problem: { field, message: "Pick a colour from the palette, or give a hex like #2F4A3A." } };
     }
     const contrast = Math.max(contrastRatio(hex, PAPER), contrastRatio(hex, INK));
     if (contrast < APPEARANCE_RULES.minContrast) {
       // Only a mid-tone fails: anything dark takes paper text, anything pale
       // takes ink. What cannot be read is a colour that is neither.
-      return { ok: false, problem: { field: "accent", message: "That colour doesn't leave enough contrast for the words on the button. Try a deeper or a lighter shade." } };
+      return { ok: false, problem: { field, message: "That colour doesn't leave enough contrast for the words on the button. Try a deeper or a lighter shade." } };
     }
-    out.accent = EMBED_PALETTE[String(input.accent).toLowerCase()] ? String(input.accent).toLowerCase() : hex;
+    out[field] = EMBED_PALETTE[String(given).toLowerCase()] ? String(given).toLowerCase() : hex;
   }
 
   if (input.shape !== undefined) {
@@ -156,6 +165,10 @@ export function resolveAppearance(
 ) {
   const accent = accentHex(appearance?.accent) ?? EMBED_PALETTE.indigo;
   const text = textOn(accent);
+  // The message button's own colour, where the venue gave it one. Null, not a
+  // default: null is the quiet paper button, and the widget's stylesheet holds
+  // that as its own fallback rather than having it sent on every load.
+  const chatAccent = appearance?.chatAccent ? accentHex(appearance.chatAccent) : null;
   // The logo only where the owner chose it *and* there is one. A choice
   // outliving its logo draws the bell rather than an empty circle.
   const buttonMark: "bell" | "logo" = appearance?.buttonMark === "logo" && logoUrl ? "logo" : "bell";
@@ -168,6 +181,9 @@ export function resolveAppearance(
     // The mark on the filled button takes the words' colour: white on indigo and
     // other deep accents, ink on pale ones.
     accentMark: text,
+    chatAccent,
+    chatAccentText: chatAccent ? textOn(chatAccent) : null,
+    chatAccentMark: chatAccent ? textOn(chatAccent) : null,
     shape: appearance?.shape ?? "pill",
     corner: appearance?.corner ?? "right",
     whatsapp: appearance?.whatsapp ?? true,
