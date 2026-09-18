@@ -246,7 +246,17 @@ interface MemoryTables {
   seq: number;
 }
 
-const memory: MemoryTables = blankTables();
+/**
+ * Pinned on the global, like the Postgres pool in `db/client.ts` and for the
+ * same reason: Next bundles route handlers and server components separately
+ * and re-evaluates modules on edit, so a module-level object is not one object
+ * — it is one per bundle. Without this, a domain added through the API is
+ * invisible to the page that lists domains, and the no-database mode looks
+ * broken in exactly the way that would send somebody hunting for a bug in the
+ * engine.
+ */
+const globalRef = globalThis as unknown as { __bellineSendingMemory?: MemoryTables };
+const memory: MemoryTables = (globalRef.__bellineSendingMemory ??= blankTables());
 
 function blankTables(): MemoryTables {
   return {
