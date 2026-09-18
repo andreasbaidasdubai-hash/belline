@@ -80,12 +80,15 @@ async function startCall(page: Page) {
   await expect(page.getByText("MOCK — not a live avatar")).toBeVisible();
   await expect(page.getByRole("button", { name: "End call" })).toBeVisible();
   // One greeting, not two. Where the tap played the clip, the panel says so and
-  // this session drops its own hello but keeps everything after it; where it
-  // did not, the whole greeting comes as it always has (greeting-clip.ts).
-  // Either way Belline's substance is said exactly once.
+  // this session drops its own hello, arrives on the pick-up instead and keeps
+  // everything after it; where it did not, the whole greeting comes as it
+  // always has (greeting-clip.ts). Either way Belline's substance is said
+  // exactly once, and the handover is never handed over into silence.
   const greeted = ((res.request().postDataJSON() ?? {}) as { greeted?: boolean }).greeted === true;
   expect(body.session.greeting).toMatch(/Belline answers your business's calls/);
-  expect(body.session.greeting).toMatch(greeted ? /^Belline answers your business's calls/ : /^Hi, I'm Belle, Belline's AI concierge\./);
+  expect(body.session.greeting).toMatch(
+    greeted ? /^Right, I'm with you\. Belline answers your business's calls/ : /^Hi, I'm Belle, Belline's AI concierge\./,
+  );
   return body.session;
 }
 
@@ -217,7 +220,7 @@ test("the controls stay clear of each other at 320px", async ({ page }, info) =>
   await shot(page, info, "02b-call-view-320");
   await page.getByRole("button", { name: "End call" }).click();
 });
-test("microphone refused: an explanation, the chat offered, and a session made beside the prompt is ended at once", async ({ page, context, baseURL }, info) => {
+test("microphone refused: an explanation, the chat offered, and no room ever opened", async ({ page, context }, info) => {
   await refuseMic(context);
   const created: { sessionId: string; clientToken: string }[] = [];
   page.on("response", async (r) => {
@@ -231,10 +234,27 @@ test("microphone refused: an explanation, the chat offered, and a session made b
   await expect(page.getByRole("button", { name: "Chat instead" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Voice call" })).toBeVisible();
   await shot(page, info, "06-mic-denied");
-  // The session starts beside the prompt to save the wait; a refusal ends it.
+  // No room is opened before there is anybody who could be put in it: a
+  // microphone that says no costs the account nothing at all. (A room made
+  // while the visitor is still at the prompt is the one that runs its
+  // participant_absent timer out with her talking to nobody in it.)
   await page.waitForTimeout(1500);
-  expect(created.length).toBeLessThanOrEqual(1);
-  for (const session of created) await expectEnded(page, baseURL!, session);
+  expect(created).toEqual([]);
+});
+
+test("a room that goes quiet: she says something herself, and the panel offers typing", async ({ page }, info) => {
+  await openPanel(page);
+  await startCall(page);
+  await captionsOn(page);
+  // Nobody says anything. After QUIET_NUDGE_MS she does, once — the line comes
+  // from the server in the venue's language and is spoken verbatim, so this is
+  // her sentence and not a model's answer to it.
+  await expect(page.locator(".bv-caption")).toContainText(/Take your time/, { timeout: 25_000 });
+  await expect(page.locator(".bv-note")).toContainText("Ask her whenever you're ready");
+  await expect(page.locator(".bv-note")).toContainText("type instead");
+  await expect(page.getByRole("button", { name: "Type instead" })).toBeVisible();
+  await shot(page, info, "17-quiet-prompt");
+  await page.getByRole("button", { name: "End call" }).click();
 });
 test("a double click starts one session", async ({ page }) => {
   await openPanel(page);

@@ -135,6 +135,10 @@ test("the tap gives her a voice, and the live session then does not say hello tw
   const said = await greeting;
   expect(said).not.toMatch(/^Hi, I'm Belle/);
   expect(said).toMatch(/Belline answers your business's calls/);
+  // And she arrives rather than resuming mid-sentence: the pick-up is the one
+  // line that belongs to the seconds between the clip's last word and the live
+  // face's first (greeting-clip.ts `greetingAfterClip`).
+  expect(said).toMatch(/^Right, I'm with you\./);
 
   await shot(page, info, "21-greeting-speaking");
 });

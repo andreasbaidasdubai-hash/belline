@@ -9,7 +9,7 @@ import { todayIn } from "../time";
 import { openException } from "../exceptions";
 import { BELLINE_TENANT_ID } from "../tenancy";
 import { BELLINE_LOCATION_ID, BELLINE_VIDEO_GREETING } from "../seed-belline";
-import { answersIn } from "../language";
+import { answersIn, lineFor } from "../language";
 import { concurrentVideoLimit, videoAvailability, type VideoOffReason, type VideoSessionKind } from "./availability";
 import type { VideoConfig } from "./config";
 import { recordProviderAtCapacity, recordVideoEnding } from "./delivery";
@@ -101,6 +101,17 @@ export interface VideoSession {
   timers: ReturnType<typeof setTimeout>[];
   /** The receptionist behind the face; created on the first model request. See engine.ts. */
   agent?: unknown;
+  /**
+   * How many times the provider has asked us for words (engine.ts).
+   *
+   * Zero at the end of a call that really ran means the visitor was never
+   * answered by anything: either nobody ever got into the room, or nobody in it
+   * was ever heard. Both are faults, and both used to be invisible — the call
+   * record shows a completed call, the endings table shows an ordinary ending,
+   * and only the founder noticing tells us. `raiseSilentSession` is what makes
+   * them say so.
+   */
+  modelRequests?: number;
   /** The model turn in flight, so a newer request can cut it off. */
   turn?: { abort: AbortController; done: Promise<void> };
   /**
@@ -149,6 +160,12 @@ export interface ClientSession {
   captions: boolean;
   perception: boolean;
   greeting: string;
+  /**
+   * What she says out loud if the room goes quiet — her words, in the venue's
+   * language, so the panel never has to invent a sentence for her. The panel
+   * picks `noMic` or `waiting` by whether a microphone ever arrived.
+   */
+  quiet: { noMic: string; waiting: string };
   /** Replace the stream's green with this picture (a path on this app). Absent: show the stream as it is. */
   background?: { id: string; src: string; tone: "light" | "dark" };
 }
@@ -309,7 +326,22 @@ export function openingFor(
   greeted: boolean,
 ): string {
   const full = demo?.greeting.trim() || support?.greeting.trim() || videoGreeting(location);
-  return greeted ? greetingAfterClip(full) : full;
+  return greeted ? greetingAfterClip(full, lineFor(location, "video.handover.pickup")) : full;
+}
+
+/**
+ * What she says, unprompted, when the room has been quiet too long.
+ *
+ * Written here rather than in the panel because they are her words and have to
+ * be the venue's language, and the panel is one English component. Which of the
+ * two is spoken is the browser's to decide: only it knows whether a microphone
+ * ever arrived.
+ */
+export function quietPrompts(location: Location): { noMic: string; waiting: string } {
+  return {
+    noMic: lineFor(location, "video.quiet.no_mic"),
+    waiting: lineFor(location, "video.quiet.waiting"),
+  };
 }
 
 export async function startVideoSession(
@@ -564,6 +596,7 @@ async function create(
 
 function clientPayload(session: VideoSession, _config: VideoConfig, provider: VideoAvatarProvider): ClientSession {
   const background = videoBackground(session.backgroundId);
+  const location = getLocation(session.locationId);
   return {
     sessionId: session.id,
     provider: session.provider,
@@ -576,6 +609,7 @@ function clientPayload(session: VideoSession, _config: VideoConfig, provider: Vi
     captions: provider.capabilities.captions,
     perception: false,
     greeting: session.greeting,
+    quiet: location ? quietPrompts(location) : { noMic: "", waiting: "" },
     ...(session.greenscreen && background?.src ? { background: { id: background.id, src: background.src, tone: background.tone } } : {}),
   };
 }
@@ -676,6 +710,59 @@ function finishCall(call: Call, location: Location, session: VideoSession): void
     endedBy: session.endedBy ?? "provider",
     seconds: Math.max(0, Math.round(seconds)),
     maxCallSeconds: session.maxCallSeconds,
+  });
+  raiseSilentSession(location, session, Math.max(0, Math.round(seconds)));
+}
+
+/**
+ * Below this, a call with nothing in it is not a fault.
+ *
+ * A visitor who taps, sees the face and shuts the bubble again has had a
+ * perfectly ordinary few seconds and asked nothing; the room was never going to
+ * be used. Past it, the session outlived the greeting, the handover and the
+ * first pause, and a visitor was sitting in front of it the whole time.
+ */
+export const SILENT_SESSION_SECONDS = 20;
+
+/**
+ * A call that ran and was never asked for a word.
+ *
+ * This is the shape the founder reported twice as "Belle is not speaking", and
+ * the shape nothing in the system could see: the call record says completed,
+ * the endings table says the provider ended it, and the only trace is the
+ * *absence* of `[video] … model request` lines in a log nobody greps for an
+ * absence. Two production sessions ended at 53s and 66s that way — a
+ * `participant_absent_timeout` of 60s with nobody ever in the room.
+ *
+ * So the absence gets a line of its own and a ticket. Belline's own, whichever
+ * venue it was on: a room a visitor cannot get into is our plumbing, not the
+ * customer's. `openException` keeps one open row per venue and kind, so a bad
+ * afternoon is one ticket rather than forty.
+ */
+function raiseSilentSession(location: Location, session: VideoSession, seconds: number): void {
+  if ((session.modelRequests ?? 0) > 0) return;
+  if (seconds < SILENT_SESSION_SECONDS) return;
+  const joined = Boolean(session.joinedAt);
+  console.warn(
+    `[video] ${session.id} ran ${seconds}s with no model request — nobody was answered (joined=${joined}, ended ${session.endReason ?? "?"} by ${session.endedBy ?? "?"})`,
+  );
+  recordVideoMetric(location, { name: "no_model_requests", sessionId: session.id, ms: seconds * 1000, detail: joined ? "joined" : "never_joined" });
+  openException({
+    tenantId: BELLINE_TENANT_ID,
+    locationId: location.id,
+    kind: "video_session_never_answered",
+    reason: joined
+      ? `A ${seconds}s video call was joined and never asked us for a single word: the visitor was never heard.`
+      : `A ${seconds}s video call was created and nobody ever got into the room, so the face spoke to an empty room.`,
+    context: {
+      sessionId: session.id,
+      provider: session.provider,
+      seconds,
+      joined,
+      endReason: session.endReason ?? "",
+      endedBy: session.endedBy ?? "",
+    },
+    source: "system",
   });
 }
 

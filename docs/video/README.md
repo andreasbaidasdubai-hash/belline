@@ -233,14 +233,25 @@ and keeps everything after it:
 
 | Greeting | Becomes |
 |---|---|
-| `Hi, I'm Belle, the AI concierge for Azure Spa. How may I help you today?` | `How may I help you today?` |
-| `Hi, I'm Belle, Belline's AI assistant. I can see your account — …` | `I can see your account — …` |
-| `Hi Sam, I'm Belle, Belline's AI receptionist. I had a look at …` | `I had a look at …` |
+| `Hi, I'm Belle, the AI concierge for Azure Spa. How may I help you today?` | `Right, I'm with you. How may I help you today?` |
+| `Hi, I'm Belle, Belline's AI assistant. I can see your account — …` | `Right, I'm with you. I can see your account — …` |
+| `Hi Sam, I'm Belle, Belline's AI receptionist. I had a look at …` | `Right, I'm with you. I had a look at …` |
 
 Dropping only the hello is what lets a demo link keep every word of the
 research it was written from, and a venue keep its own opening line. `greeted`
 is a boolean and nothing else: **the browser can shorten the opening, never
 write it.**
+
+**The pick-up in front of it** is `video.handover.pickup` in the copy table, so
+it arrives in the venue's own language. It is there because the clip ends on
+"give me a moment to come online" and the room then takes a few more seconds to
+exist — measured on staging, 18 September: the clip speaks from 0.3 s to 5.9 s,
+the room is joined at 8.5 s and her first live word lands at 9.2 s. Without a
+pick-up the next thing the visitor hears is the middle of a sentence out of a
+face that has just changed: two recordings rather than one person. It never
+says hello and never says her name, because the clip has done both. And with
+`CONTINUATION_FALLBACK` behind it, what she says after the clip is **never
+nothing**, whatever the venue's greeting was.
 
 ### The handover
 
@@ -282,11 +293,65 @@ exactly as it was before clips existed:
 - the page around the bubble says `greeting_failed` within `HOST_CONFIRM_MS`
   (250 ms), which the frame waits out before believing the URL.
 
+## Silence, and who breaks it
+
+Two faults live here, and neither of them looks like a fault from outside. Both
+were reported by the founder, twice, as **"Belle is not speaking"**.
+
+### A room with nobody in it
+
+The panel used to create the session *beside* the microphone prompt so the two
+waits overlapped. That is fine for a browser that has already granted the
+microphone and wrong for every first-time visitor: while they read a permission
+dialog, the room at Tavus exists and its `participant_absent_timeout` (60 s, our
+`VIDEO_JOIN_TIMEOUT_SECONDS`) is already running. The face says `custom_greeting`
+into an empty room, the browser arrives after it or never, and the provider
+shuts the room down. Measured in production on 18 September: two sessions dead
+at **53 s and 66 s**, with not one `[video] … model request` between them.
+
+So the order is reversed: **no room before the microphone**. The greeting clip
+is what pays for the wait now, so the seconds handed back to the prompt are
+seconds the visitor spends listening to her rather than watching nothing, and a
+returning browser resolves `getUserMedia` in milliseconds and loses nothing.
+`listenFirst` (the personalised demo page) still creates the room on the tap,
+deliberately — that surface's whole point is that the face talks whatever the
+prompt is doing — and it is the surface that ends its own session when the
+microphone then fails.
+
+### A room that has gone quiet
+
+After the handover she has said her opening and stopped. A visitor who does not
+know they may simply talk — or whose microphone is blocked, missing, muted at
+the operating system, or picking up nothing — meets a face that never starts
+again, and nothing on screen says anything is wrong, because nothing is: she is
+listening to silence for five minutes.
+
+So once, after `QUIET_NUDGE_MS` (12 s) of nobody in the room making a sound, she
+says something herself. The line comes from the server in the venue's language
+(`video.quiet.no_mic` when no microphone ever reached the room,
+`video.quiet.waiting` when one did and heard nothing) and is sent as
+`conversation.echo`, spoken verbatim — not `conversation.respond`, which would
+hand our sentence to the model and speak whatever came back. The panel says the
+same thing in writing beside it, with "Type instead" already on screen. Once:
+a visitor reading something else does not need asking twice.
+
+### Telling us, rather than the founder telling us
+
+A call that ran and was never asked for a word is a fault, and it used to be
+invisible — the call record says completed, the endings table says the provider
+ended it, and the only trace is the *absence* of model-request lines, which
+nobody greps a log for. `sessions.ts` `raiseSilentSession` turns that absence
+into a presence: one `[video] … ran Ns with no model request` line, a
+`no_model_requests` metric with `joined` / `never_joined`, and a
+`video_session_never_answered` ticket on the Issues page beside the other video
+faults. Calls shorter than `SILENT_SESSION_SECONDS` (20 s) are exempt — a
+visitor who taps, looks and closes the bubble has done nothing wrong.
+
 ### Files
 
 | Path | What |
 |---|---|
-| `src/lib/video/greeting-clip.ts` | The script, the lead time, and `greetingAfterClip` |
+| `src/lib/video/greeting-clip.ts` | The script, the lead time, `greetingAfterClip` and `QUIET_NUDGE_MS` |
 | `src/lib/video/client/greeting.ts` | Playing it from the tap, and knowing honestly whether it was heard |
 | `public/video/greeting-rf90eb925bd8.mp4` | 640×360, 5.6 s, 106 KB, faststart, AAC mono |
 | `public/video/greeting-rf90eb925bd8.jpg` | Its final frame, 17 KB |

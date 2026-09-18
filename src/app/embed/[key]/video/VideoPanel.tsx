@@ -20,7 +20,7 @@ import {
 } from "@/lib/video/client/machine";
 import { END_ACTIONS, endCopy, endedUnexpectedly, type VideoEndCause } from "@/lib/video/end-reason";
 import { hostGreeting, noGreeting, playGreeting, type PlayingGreeting } from "@/lib/video/client/greeting";
-import { HANDOVER_LEAD_MS } from "@/lib/video/greeting-clip";
+import { HANDOVER_LEAD_MS, QUIET_NUDGE_MS } from "@/lib/video/greeting-clip";
 import type { CallAdapter, CallSession } from "@/lib/video/client/calls";
 import Greenscreen from "./Greenscreen";
 
@@ -49,9 +49,18 @@ import Greenscreen from "./Greenscreen";
  *
  * Decisions worth keeping:
  *
- * **Nothing is spent before the tap.** The microphone is asked for inside
- * Start (or straight away when the bubble's tap already said "talk"), and the
- * session is created only once the microphone is granted.
+ * **Nothing is spent before the tap, and no room before the microphone.** The
+ * microphone is asked for inside Start (or straight away when the bubble's tap
+ * already said "talk"), and the session is created only once the browser has
+ * granted it — a room whose visitor is still at a permission dialog is a room
+ * she talks into alone while the provider's absent timer runs it out. The
+ * greeting clip is what pays for that wait. `listenFirst` is the one surface
+ * that still creates the room first, deliberately.
+ *
+ * **She is never left mute.** After the handover, if nobody in the room makes a
+ * sound for `QUIET_NUDGE_MS`, she says one line of her own — different
+ * depending on whether a microphone ever arrived — and the panel says so in
+ * words with the typing offer beside it.
  *
  * **The camera is never asked for.** Perception is off, so there is no camera
  * button to find and no camera prompt to refuse.
@@ -148,7 +157,14 @@ type Props = {
   preloadClient?: boolean;
 };
 
-type Session = CallSession & { maxCallSeconds: number; warnBeforeSeconds: number; captions: boolean; perception: boolean };
+type Session = CallSession & {
+  maxCallSeconds: number;
+  warnBeforeSeconds: number;
+  captions: boolean;
+  perception: boolean;
+  /** What she says if the room goes quiet, in the venue's language (lib/video/sessions.ts). */
+  quiet?: { noMic: string; waiting: string };
+};
 
 /** What `POST /session/end` answers (lib/video/http.ts `endedPayload`). */
 type EndedAnswer = { cause: VideoEndCause; seconds: number; recap: { role: "agent" | "caller"; text: string }[] };
@@ -227,6 +243,10 @@ export default function VideoPanel({
   const startedAtRef = useRef(0);
   const firstResponseRef = useRef(false);
   const endingRef = useRef(false);
+  /** When anybody in the room last made a sound. The quiet prompt counts from here. */
+  const lastVoiceRef = useRef(0);
+  /** She has already said the quiet prompt on this call. Once is a nudge; twice is nagging. */
+  const nudgedRef = useRef(false);
   /** The call's turns, handed over when the visitor carries on in chat. */
   const recapRef = useRef<{ role: "agent" | "caller"; text: string }[]>([]);
   const startButtonRef = useRef<HTMLButtonElement>(null);
@@ -345,6 +365,10 @@ export default function VideoPanel({
   const onCallEvent = useCallback(
     (event: CallEvent) => {
       dispatch({ type: "call", event, now: Date.now() });
+      // Anything anybody says, and the moment the room opens, resets the quiet
+      // clock. `on: false` counts too: the wait that matters starts when the
+      // last voice stops, not when it started.
+      if (event.type === "joined" || event.type === "speaking" || event.type === "caption") lastVoiceRef.current = Date.now();
       if (event.type === "speaking" && event.who === "agent" && event.on && !firstResponseRef.current) {
         firstResponseRef.current = true;
         report("first_response", Date.now() - startedAtRef.current);
@@ -369,6 +393,9 @@ export default function VideoPanel({
   startRef.current = async () => {
     endingRef.current = false;
     firstResponseRef.current = false;
+    // "Start again" is a new room and a new silence: she may nudge once more.
+    nudgedRef.current = false;
+    lastVoiceRef.current = 0;
     recapRef.current = [];
     sessionRef.current = null;
     setNote(null);
@@ -395,18 +422,37 @@ export default function VideoPanel({
       return;
     }
 
-    // Everything slow starts at once, after the tap and never before it: the
-    // call client's code (and Daily's, for a live face), the session (3–4 s at
-    // Tavus), and the microphone prompt. Only a microphone the browser has
-    // already refused holds the session back, since it could never be used.
+    // The call client's code (and Daily's, for a live face) downloads from here,
+    // after the tap and never before it. The room does not: see below.
     const client = import("@/lib/video/client/calls").then((m) => {
       m.preloadCallClient(provider);
       return m;
     });
     client.catch(() => undefined);
-    const refused = await micAlreadyRefused();
-    const sessionReply = refused ? null : requestSession();
 
+    /**
+     * The microphone first, and only then the room.
+     *
+     * This used to be the other way round — the session was created beside the
+     * prompt so the two waits overlapped — and it cost us the worst bug this
+     * surface has had. A first-time visitor gets a browser permission dialog
+     * they may not answer for half a minute, and meanwhile the room at Tavus
+     * exists with its `participant_absent_timeout` already running: the face
+     * says her opening line into an empty room, the browser arrives after it or
+     * not at all, and the visitor watches a silent picture until the provider
+     * shuts it down. Measured in production on 18 September: two sessions dead
+     * at 53s and 66s of a 60s absent timeout, with not one model request
+     * between them. From the visitor's chair that is exactly "Belle is not
+     * speaking".
+     *
+     * The overlap was worth having when the tap was followed by nine seconds of
+     * silence. It is not worth having now: the greeting clip covers the wait
+     * out of the tap (`beginGreeting`), so the seconds this gives back to the
+     * prompt are seconds the visitor spends listening to her rather than
+     * watching nothing. A browser that has already been granted the microphone
+     * — every visit after the first — resolves this in a few milliseconds and
+     * loses nothing at all.
+     */
     report("mic_prompted");
     let track: MediaStreamTrack | undefined;
     try {
@@ -419,18 +465,16 @@ export default function VideoPanel({
       const code = micErrorCode(err);
       report(code === "mic_denied" ? "mic_denied" : "client_error", undefined, code);
       dispatch({ type: "fail", code, retryable: code !== "mic_denied" });
-      discardSession(sessionReply, "mic_refused");
       return;
     }
     if (!track) {
       dispatch({ type: "fail", code: "mic_missing", retryable: true });
-      discardSession(sessionReply, "mic_missing");
       return;
     }
     micRef.current = track;
     dispatch({ type: "mic_granted" });
 
-    const reply = await (sessionReply ?? requestSession());
+    const reply = await requestSession();
     if (!reply.res) {
       stopMic();
       report("client_error", undefined, "network");
@@ -657,19 +701,6 @@ export default function VideoPanel({
     );
   }
 
-  /** A session made beside a microphone that then failed: ended at once, never left to its timer. */
-  function discardSession(reply: Promise<SessionReply> | null, reason: string) {
-    void reply?.then(({ res, data }) => {
-      const session = data.session;
-      if (!res?.ok || !session) return;
-      void fetch(`${base}/session/end`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId: session.sessionId, clientToken: session.clientToken, reason }),
-        keepalive: true,
-      }).catch(() => undefined);
-    });
-  }
   // The call client's code only, on load, where the page asked: the tap then has nothing to download.
   useEffect(() => {
     if (!preloadClient) return;
@@ -867,6 +898,50 @@ export default function VideoPanel({
     }, VIDEO_HEARTBEAT_SECONDS * 1000);
     return () => clearInterval(timer);
   }, [state.phase, report]);
+
+  /**
+   * A room that has gone quiet, and the one thing that gets her out of it.
+   *
+   * The handover leaves Belle having said her opening and then stopped, and a
+   * visitor who does not know they are allowed to talk — or whose microphone is
+   * blocked, missing, muted at the operating system, or simply picking up
+   * nothing — meets a face that has finished speaking and never starts again.
+   * Nothing on the screen says anything is wrong, because nothing is: she is
+   * listening to silence, politely, for five minutes. That is the shape the
+   * founder reported as "Belle is not speaking".
+   *
+   * So once, after `QUIET_NUDGE_MS` of nobody making a sound, she says
+   * something. Her words, not a paraphrase: the line comes from the server in
+   * the venue's own language (`video.quiet.*`) and is echoed verbatim rather
+   * than run through the model, which could answer it with anything. Which of
+   * the two lines it is, is the one thing only the browser knows — whether a
+   * microphone ever arrived at all.
+   *
+   * Once. A visitor who is reading something else does not need to be asked
+   * twice, and the typing offer stays on screen after she has stopped.
+   */
+  useEffect(() => {
+    if (state.phase !== "live" || nudgedRef.current) return;
+    const timer = setInterval(() => {
+      const call = callRef.current;
+      const quiet = sessionRef.current?.quiet;
+      if (!call || endingRef.current || nudgedRef.current) return;
+      if (state.agentSpeaking || state.visitorSpeaking) return;
+      if (!lastVoiceRef.current || Date.now() - lastVoiceRef.current < QUIET_NUDGE_MS) return;
+      nudgedRef.current = true;
+      const deaf = !micRef.current;
+      const line = deaf ? quiet?.noMic : quiet?.waiting;
+      if (line) call.speak(line);
+      report("quiet_prompt", Date.now() - startedAtRef.current, deaf ? "no_mic" : "waiting");
+      const typeInstead = chatHref || onChat ? ", or type instead" : "";
+      setNote(
+        deaf
+          ? `${agentName} can't hear you: no microphone is reaching her. Check it${typeInstead}.`
+          : `${agentName} is listening. Ask her whenever you're ready${typeInstead}.`,
+      );
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [state.phase, state.agentSpeaking, state.visitorSpeaking, agentName, chatHref, onChat, report]);
 
   const limit = sessionRef.current?.maxCallSeconds ?? maxCallSeconds;
   const warnBefore = sessionRef.current?.warnBeforeSeconds ?? 30;
@@ -1169,19 +1244,6 @@ export default function VideoPanel({
       )}
     </div>
   );
-}
-
-/** The browser has already said no to the microphone for this site (where it will say). */
-async function micAlreadyRefused(): Promise<boolean> {
-  try {
-    const query = navigator.permissions?.query({ name: "microphone" as PermissionName });
-    if (!query) return false;
-    // Never a wait of its own: a browser slow to say is treated as not having refused.
-    const status = await Promise.race([query, new Promise<null>((resolve) => setTimeout(() => resolve(null), 150))]);
-    return status?.state === "denied";
-  } catch {
-    return false;
-  }
 }
 
 function MicIcon({ off }: { off: boolean }) {
