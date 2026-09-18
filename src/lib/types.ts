@@ -1,6 +1,7 @@
 import type { BrainVersion } from "./brain";
 import type { GoogleLink } from "./integrations/google";
 import type { OutlookLink } from "./integrations/outlook";
+import type { PartnerId, PartnerVenueLink } from "./integrations/partners/contract";
 import type { BillingCycle, LegacyPlanId, ProductId } from "./billing/plans";
 import type { Market } from "./markets";
 import type { LanguageChannel, LanguageCode } from "../config/languages";
@@ -276,6 +277,17 @@ export interface Location {
   outlookConnectAbandonedAt?: string;
   /** When Microsoft last said the owner's organisation must approve Belline first. Cleared by a connection. */
   outlookAdminApprovalAt?: string;
+  /**
+   * This venue's own side of a partner booking system: the studio's site id at
+   * Mindbody, the centre id at Zenoti, the venue id at SevenRooms, and the
+   * per-venue grant each of them issues.
+   *
+   * A partner key authenticates Belline, not the salon, so nothing here can be
+   * inferred from env. Empty on every venue today — no partner has issued
+   * Belline credentials (see integrations/partners/registry.ts) — and a venue
+   * without it stays on requests however the flags are set.
+   */
+  partners?: Partial<Record<PartnerId, PartnerVenueLink>>;
   /**
    * What one booking is typically worth here.
    *
@@ -1386,6 +1398,16 @@ export interface Booking {
    * Absent when the venue has no connection. See integrations/calendar-sync.ts.
    */
   calendarSync?: CalendarSync;
+  /**
+   * The partner booking system's own id for this booking, and the reference a
+   * guest would read out to the salon, where the partner issues one.
+   *
+   * Set only by a partner provider (booking/partner-provider.ts). The partner's
+   * record is the source of truth for a venue on Fresha or Zenoti; this is how
+   * Belline finds it again to move or cancel it.
+   */
+  partnerBookingId?: string;
+  partnerRef?: string;
   /**
    * When this guest is due back, and for what.
    *

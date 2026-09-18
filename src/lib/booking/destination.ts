@@ -1,5 +1,6 @@
 import type { DestinationKind, Location } from "../types";
 import { flag } from "../flags";
+import { partnerUsable } from "../integrations/partners";
 
 /**
  * Where this venue's bookings go, without loading the booking engine.
@@ -30,7 +31,7 @@ export function onBellineDiary(location: Pick<Location, "onboarding">): boolean 
   return destinationOf(location) === "belline";
 }
 
-type Venue = Pick<Location, "onboarding"> & { google?: Location["google"]; outlook?: Location["outlook"] };
+type Venue = Pick<Location, "onboarding"> & { google?: Location["google"]; outlook?: Location["outlook"]; partners?: Location["partners"] };
 
 /**
  * Can Belline book into this venue's Google Calendar right now?
@@ -56,17 +57,23 @@ export function outlookUsable(location: Venue, env: Record<string, string | unde
 /**
  * Does this venue take requests rather than confirmed bookings?
  *
- * Partner systems count as requests until their adapters exist. Google and
- * Outlook count as requests whenever their connection is not usable — flag
- * off, never connected, or the token expired — so a calendar Belline cannot
- * see is never booked into. An owner who chose one is not told it works; the
- * agent takes the details and the team confirms.
+ * Google and Outlook count as requests whenever their connection is not
+ * usable — flag off, never connected, or the token expired — so a calendar
+ * Belline cannot see is never booked into. An owner who chose one is not told
+ * it works; the agent takes the details and the team confirms.
+ *
+ * A partner booking system is asked the same question by its own adapter
+ * (integrations/partners): the partner's flag on, this deployment holding
+ * credentials, and this venue connected — its centre id or site id, and in
+ * production the grant its owner issued. Every partner answers no today, so
+ * every partner venue takes requests, which is what the website promises.
  */
 export function takesRequestsOnly(location: Venue): boolean {
   const kind = destinationOf(location);
   if (kind === "belline") return false;
   if (kind === "google") return !googleUsable(location);
   if (kind === "outlook") return !outlookUsable(location);
+  if (kind === "partner") return !partnerUsable(location);
   return true;
 }
 

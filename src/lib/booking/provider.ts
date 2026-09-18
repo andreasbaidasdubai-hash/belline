@@ -19,6 +19,8 @@ import { holdForSlot, MAX_QUOTED_HOLDS } from "./holds";
 import { destinationOf, googleUsable, outlookUsable, takesRequestsOnly } from "./destination";
 import { googleCalendarProvider } from "./google-provider";
 import { outlookCalendarProvider } from "./outlook-provider";
+import { partnerIdOf, partnerUsable } from "../integrations/partners";
+import { partnerProviderFor } from "./partner-providers";
 
 export { takesRequestsOnly } from "./destination";
 
@@ -283,12 +285,21 @@ export const requestOnlyProvider: BookingProvider = {
  * have to be undone.
  *
  * Belline's diary where the venue uses it; Google Calendar or Outlook where the
- * venue chose it and the connection works (see calendar-provider.ts); requests
- * for everything else. Partner systems have no adapter yet, and a calendar
- * connection that expired falls back to requests on the next call.
+ * venue chose it and the connection works (see calendar-provider.ts); a partner
+ * booking system where the venue chose one and that partner is connected (see
+ * partner-provider.ts); requests for everything else. A calendar connection
+ * that expired falls back to requests on the next call, and so does a partner
+ * that withdrew us.
+ *
+ * Every partner falls to requests today, because none of them has issued
+ * Belline credentials. That is not a placeholder to be tidied away: it is the
+ * product being honest, and it is what the website promises.
  */
 export function providerFor(location: Location): BookingProvider {
   if (destinationOf(location) === "google" && googleUsable(location)) return googleCalendarProvider;
   if (destinationOf(location) === "outlook" && outlookUsable(location)) return outlookCalendarProvider;
+  if (destinationOf(location) === "partner" && partnerUsable(location)) {
+    return partnerProviderFor(partnerIdOf(location)!);
+  }
   return takesRequestsOnly(location) ? requestOnlyProvider : localProvider;
 }
