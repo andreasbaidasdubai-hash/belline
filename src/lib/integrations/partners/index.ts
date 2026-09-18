@@ -2,6 +2,7 @@ import type { Location } from "../../types";
 import { partnerMode, type PartnerConnector, type PartnerId, type PartnerVenue } from "./contract";
 import { booksyConnector } from "./booksy";
 import { calcomConnector } from "./calcom";
+import { doctolibConnector } from "./doctolib";
 import { eatappConnector } from "./eatapp";
 import { freshaConnector } from "./fresha";
 import { mindbodyConnector } from "./mindbody";
@@ -34,6 +35,7 @@ export const PARTNER_CONNECTORS: Record<PartnerId, PartnerConnector> = {
   eatapp: eatappConnector,
   booksy: booksyConnector,
   vagaro: vagaroConnector,
+  doctolib: doctolibConnector,
 };
 
 export function partnerConnector(id: PartnerId): PartnerConnector {

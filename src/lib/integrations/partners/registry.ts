@@ -556,6 +556,72 @@ export const PARTNERS: Record<PartnerId, PartnerFacts> = {
     ],
   },
 
+  /**
+   * Doctolib: the hardest door on the list, and the one the German launch needs.
+   *
+   * Clinics in France and Germany, and dominant in both. Nothing technical is
+   * public. `developers.doctolib.com` resolves and answers **401**;
+   * `developers.doctolib.fr` does not exist; `doctolib.de/api` and
+   * `doctolib.fr/api` are 404; `partners.doctolib.fr` redirects to the consumer
+   * site; and `partnerportal.doctolib.com` is a Salesforce login wall that asks
+   * for a company custom domain, so it is reachable only once a commercial
+   * relationship already exists. There is no API reference, no base URL, no
+   * auth model and no sandbox.
+   *
+   * The partner routes that do exist all lead to lead-capture forms rather than
+   * to an API. The German one is framed around partner discounts — a
+   * reseller and consultancy channel. The French taxonomy lists télésecrétariat,
+   * IT consultants, equipment makers and distributors, training bodies and
+   * "other", with **no category for a software vendor and none a voice agent
+   * would fit**. Doctolib Connect does expose a SCIM API, but SCIM provisions
+   * users; it has nothing to do with appointments.
+   *
+   * Every integration Doctolib names publicly is with a practice-management
+   * software vendor — PRO MEDISOFT, zollsoft's tomedo — and runs the *other*
+   * direction: Doctolib's calendar syncs into the practice's own software to
+   * avoid double entry. Doctolib publishes no third-party booking API, no
+   * book-on-behalf-of-a-patient flow and no patient OAuth model.
+   *
+   * **And this one is not only a commercial problem.** Appointment data here is
+   * health data: Doctolib holds HDS certification in France (health-data
+   * hosting) and its public position is that only authorised healthcare
+   * providers reach patient data; Germany adds medical confidentiality under
+   * §203 StGB on top of GDPR Article 9. A voice agent booking on a patient's
+   * behalf is a non-clinical third party touching regulated health data, which
+   * is an argument to be had with lawyers before it is one to have with an API
+   * team. Doctolib does not publish a prohibition — it simply does not address
+   * it, and inferring permission from that silence would be the wrong reading.
+   *
+   * The honest planning assumption for the German-speaking launch: **do not
+   * plan on Doctolib.** A clinic on Doctolib is one where Belline takes the
+   * request and the practice confirms, and that should be designed for rather
+   * than treated as a gap to be closed.
+   */
+  doctolib: {
+    id: "doctolib",
+    name: "Doctolib",
+    model: "appointments",
+    api: { documented: false, availability: false, create: false, reschedule: false, cancel: false, staffSelection: false, catalogue: false },
+    auth: "Not published. developers.doctolib.com exists and answers 401; the partner portal is a login wall.",
+    sandbox: "none",
+    gate: {
+      what:
+        "No public developer programme and no technical application route. The realistic first step is the German partnership form at info.doctolib.de/commercial-partnerships/ or the French one at info.doctolib.fr/partenariats-doctolib/ — both lead-capture forms whose partner categories have no slot for a software vendor or a voice agent, and the German one is framed around reseller discounts. Expect a commercial conversation, and expect the regulatory question about a non-clinical third party touching health data to be the real obstacle rather than the API.",
+      apply: "https://info.doctolib.de/commercial-partnerships/",
+      docs: "https://info.doctolib.fr/partenariats-doctolib/logiciels-solutions/",
+    },
+    liveNeeds: [],
+    venueNeeds: [],
+    limits: [
+      "Nothing technical is public: no endpoints, no base URL, no auth model, no sandbox. developers.doctolib.com answers 401 and the partner portal needs a company domain issued after a commercial relationship exists.",
+      "Doctolib publishes no third-party booking API and no book-on-behalf-of-a-patient flow. Every integration it names publicly runs the other way — its calendar syncing into a practice's own software.",
+      "Every named partner is a practice-management software vendor or a telephone secretarial service. The published partner taxonomies have no category a voice agent fits into, and no self-service route.",
+      "Appointment data here is health data. Doctolib holds HDS certification in France and positions patient data as reachable only by authorised healthcare providers; Germany adds medical confidentiality under §203 StGB to GDPR Article 9. The obstacle is a legal argument about a non-clinical third party, not an integration task.",
+      "Doctolib does not publish a prohibition on third-party booking — it does not address it at all. Absence of a refusal is not permission, and nothing here should be planned as though it were.",
+      "For the German-speaking launch the honest assumption is that Doctolib will not be connected. A clinic on Doctolib takes requests, and the product should be designed for that rather than waiting.",
+    ],
+  },
+
   // -------------------------------------------------------------------------
   // The restaurant two. A different model, not a variant of the one above.
   // -------------------------------------------------------------------------
