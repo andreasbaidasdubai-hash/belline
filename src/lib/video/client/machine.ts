@@ -369,6 +369,25 @@ export function respondMessage(conversationId: string, text: string) {
   };
 }
 
+/**
+ * The interaction that makes the face say `text` and nothing else.
+ *
+ * `respond` would hand the words to the model as though the visitor had said
+ * them, and the model would answer something we have not read. This one is
+ * spoken verbatim, which is what the quiet prompt needs: it is a line we wrote,
+ * in the venue's language, that has to say exactly what it says
+ * (`video.quiet.*`). It also leaves the transcript alone — nobody said it to
+ * her.
+ */
+export function echoMessage(conversationId: string, text: string) {
+  return {
+    message_type: "conversation",
+    event_type: "conversation.echo",
+    conversation_id: conversationId,
+    properties: { text },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Server-sent events from the model route (the mock's ears)
 

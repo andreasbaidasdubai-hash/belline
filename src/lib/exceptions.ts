@@ -43,6 +43,7 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "handoff_requested",
   "video_calls_cut_short",
   "video_provider_at_capacity",
+  "video_session_never_answered",
   "google_sync_failed",
   "google_token_expired",
   "google_misconfigured",
@@ -106,6 +107,11 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
   video_provider_at_capacity: {
     label: "Video provider full",
     next: "Tavus refused a call because the account is at its concurrent-conversation limit, so a visitor was turned away after we had already said yes. No API reports the plan's number: open the Tavus dashboard, read the tier's concurrency, and set VIDEO_PROVIDER_MAX_CONCURRENT to it (or below). Until it matches, our own ceilings can promise more rooms than the account has.",
+    belle: false,
+  },
+  video_session_never_answered: {
+    label: "Video call nobody was answered on",
+    next: "A video call ran and the provider never asked us for a single word, so the visitor heard the opening and then nothing. Read the [video] lines for the session id on it: `joined=false` means the browser never got into the room — check the microphone gate and the Tavus participant_absent_timeout; `joined=true` means the room was fine and the visitor was never heard, which points at the microphone or the panel's quiet prompt.",
     belle: false,
   },
   google_sync_failed: {

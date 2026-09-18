@@ -63,8 +63,28 @@ export const GREETING_CLIP_SECONDS = Math.round(GREETING_CLIP_SCRIPT.split(/\s+/
  */
 export const HANDOVER_LEAD_MS = 1200;
 
-/** Said when the greeting had nothing after its hello. */
+/**
+ * Said when the greeting had nothing after its hello.
+ *
+ * English only, and only ever reached by a venue whose whole greeting was an
+ * introduction. The pick-up in front of it comes from the copy table in the
+ * venue's own language (`video.handover.pickup`), and every greeting this
+ * fallback could replace was already an English default.
+ */
 export const CONTINUATION_FALLBACK = "How can I help?";
+
+/**
+ * How long the live face may be in the room saying nothing before she says
+ * something unprompted.
+ *
+ * Measured on staging on 18 September: from the tap, the clip speaks at 0.3s
+ * and stops at 5.9s, the room is joined at 8.5s and her first live word lands
+ * at 9.2s. So the handover itself already has a gap of about three seconds in
+ * it, and this must be longer than that or it would talk over her arrival.
+ * After that the silence is the visitor's, and the only ones who break it are
+ * the ones who knew they were allowed to.
+ */
+export const QUIET_NUDGE_MS = 12_000;
 
 /**
  * A leading self-introduction: the sentence the clip has already said.
@@ -81,15 +101,29 @@ const SELF_INTRODUCTION =
   /^\s*(?:hi|hello|hey|good (?:morning|afternoon|evening))\b[^.!?]*[.!?]?\s*(?:I'?m|my name is)\b[^.!?]*[.!?]\s*/i;
 
 /**
- * The greeting, minus the hello the clip has already said.
+ * The greeting, minus the hello the clip has already said, plus the moment she
+ * arrives.
  *
- * Only ever called when the clip really played. What remains is the part that
- * was never in the clip and could not have been: the venue's own words, the
- * account the support session can see, the research behind a personalised
- * demo. If the greeting was nothing but a hello, there is nothing to carry
- * over and Belle simply hands the turn back.
+ * Only ever called when the clip really played. What remains of the greeting is
+ * the part that was never in the clip and could not have been: the venue's own
+ * words, the account the support session can see, the research behind a
+ * personalised demo.
+ *
+ * **Why there is a pick-up in front of it.** The clip ends on "give me a moment
+ * to come online, and then I'm listening", and then the room takes about three
+ * seconds to exist. Without a pick-up the next thing the visitor hears is the
+ * middle of a sentence from a face that has just changed — two recordings, not
+ * one person. `pickup` is one short line that belongs to the pause it fills:
+ * she is here now, carry on. It never says hello and never says her name,
+ * because the clip has done both, and it comes from the copy table so a German
+ * venue does not arrive in English (`video.handover.pickup`).
+ *
+ * If the greeting was nothing but a hello, there is nothing to carry over and
+ * she hands the turn back instead — but she is never silent, which is the whole
+ * point of this function.
  */
-export function greetingAfterClip(greeting: string): string {
-  const rest = greeting.replace(SELF_INTRODUCTION, "").trim();
-  return rest || CONTINUATION_FALLBACK;
+export function greetingAfterClip(greeting: string, pickup = ""): string {
+  const rest = greeting.replace(SELF_INTRODUCTION, "").trim() || CONTINUATION_FALLBACK;
+  const lead = pickup.trim();
+  return lead ? `${lead} ${rest}` : rest;
 }

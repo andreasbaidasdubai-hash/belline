@@ -1,4 +1,4 @@
-import { createTavusMapper, readSseText, respondMessage, type CallEvent } from "./machine";
+import { createTavusMapper, echoMessage, readSseText, respondMessage, type CallEvent } from "./machine";
 
 /**
  * The two ways the panel talks to a face: a Tavus room over Daily, or the mock.
@@ -37,6 +37,12 @@ export interface CallAdapter {
   setMicTrack(track: MediaStreamTrack): Promise<void>;
   /** Say this on the visitor's behalf: the face answers as if they had spoken it. */
   say(text: string): void;
+  /**
+   * Have the face say exactly this, with no model in between. For lines that
+   * are ours and must not be paraphrased — the quiet prompt when a room has
+   * gone silent (`machine.ts` `echoMessage`).
+   */
+  speak(text: string): void;
   /** Leave the room, stop everything, and never emit again. Safe to call twice. */
   leave(): Promise<void>;
 }
@@ -154,6 +160,9 @@ async function createTavusCall(opts: CallOptions): Promise<CallAdapter> {
     },
     say(text) {
       if (session.conversationId) call.sendAppMessage(respondMessage(session.conversationId, text), "*");
+    },
+    speak(text) {
+      if (session.conversationId) call.sendAppMessage(echoMessage(session.conversationId, text), "*");
     },
     async leave() {
       if (gone) return;
@@ -315,6 +324,12 @@ function createMockCall(opts: CallOptions): CallAdapter {
     },
     say(text) {
       void send(text);
+    },
+    speak(text) {
+      // Verbatim here too: the mock's face says the line rather than answering it.
+      emit({ type: "speaking", who: "agent", on: true });
+      emit({ type: "caption", who: "agent", text });
+      later(() => emit({ type: "speaking", who: "agent", on: false }), speakFor(text));
     },
     async leave() {
       if (gone) return;

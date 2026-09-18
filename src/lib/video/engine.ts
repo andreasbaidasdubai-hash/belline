@@ -167,7 +167,10 @@ export async function handleChatCompletions(req: Request, env: Env = process.env
       .join(",")} caller=${userText.length}`,
   );
 
-  // A model request means somebody is in the room and talking.
+  // A model request means somebody is in the room and talking. Counted as well
+  // as recorded: a session that ends having never been asked for a word is a
+  // fault, and the count is the only thing that knows (sessions.ts).
+  session.modelRequests = (session.modelRequests ?? 0) + 1;
   markVideoJoined(session);
 
   // Anything still streaming belongs to the previous turn.

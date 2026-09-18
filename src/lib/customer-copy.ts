@@ -99,6 +99,32 @@ export const CUSTOMER_COPY = {
     en: "I've taken this as far as I can here. Please give us a ring and someone will pick it up from where we left off.",
     de: "Weiter komme ich hier leider nicht. Bitte rufen Sie uns an, dann macht jemand genau an dieser Stelle weiter.",
   },
+  /**
+   * The live face's first words after the pre-rendered greeting clip.
+   *
+   * The clip has already said hello and promised she was coming, so this is the
+   * moment she arrives rather than a second introduction: one short sentence
+   * that picks the conversation up, with the venue's own greeting minus its
+   * hello carried straight on after it (lib/video/greeting-clip.ts).
+   */
+  "video.handover.pickup": {
+    en: "Right, I'm with you.",
+    de: "So, jetzt bin ich da.",
+  },
+  /**
+   * Nothing has come back for a while and her microphone never arrived: said
+   * once, out loud, so a visitor whose microphone is blocked, missing or simply
+   * silent is not left watching a face that has stopped talking.
+   */
+  "video.quiet.no_mic": {
+    en: "I can't hear anything from your side — your microphone may be off. You can type to me instead.",
+    de: "Von Ihrer Seite höre ich nichts – vielleicht ist Ihr Mikrofon aus. Sie können mir stattdessen auch schreiben.",
+  },
+  /** The same wait, with a microphone that is working: an invitation, not a complaint. */
+  "video.quiet.waiting": {
+    en: "Take your time. Ask me whenever you're ready, or type instead if that's easier.",
+    de: "Lassen Sie sich Zeit. Fragen Sie mich, wann immer Sie möchten – oder schreiben Sie mir, wenn das einfacher ist.",
+  },
   "embed.voice_off": {
     en: "Calling isn't switched on for this website. Send a message instead and we'll reply.",
     de: "Anrufe sind auf dieser Website nicht eingeschaltet. Schreiben Sie uns gern eine Nachricht, wir antworten Ihnen.",

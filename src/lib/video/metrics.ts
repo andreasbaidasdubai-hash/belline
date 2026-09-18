@@ -46,6 +46,14 @@ export const CLIENT_METRICS = [
    * (sessions.ts).
    */
   "alive",
+  /**
+   * She broke a silence nobody else was going to break: `ms` is how long after
+   * the tap, and `detail` is `no_mic` (no microphone ever reached the room) or
+   * `waiting` (one did, and it heard nothing). A run of `no_mic` says the
+   * microphone gate is failing somewhere real browsers go; a run of `waiting`
+   * says visitors do not know they may speak.
+   */
+  "quiet_prompt",
 ] as const;
 
 export const SERVER_METRICS = [
@@ -65,6 +73,14 @@ export const SERVER_METRICS = [
   "provider_at_capacity",
   /** A live session let go of because its page stopped saying it was there. */
   "session_swept",
+  /**
+   * A call that ran and was never asked for a word: `ms` is how long it ran and
+   * `detail` is `joined` or `never_joined`. The absence of a model request is
+   * the only trace a call like this leaves, and an absence is not something
+   * anybody greps a log for — so it is written down as a presence, and raises a
+   * ticket beside it (sessions.ts `raiseSilentSession`).
+   */
+  "no_model_requests",
 ] as const;
 
 export type VideoMetricName = (typeof CLIENT_METRICS)[number] | (typeof SERVER_METRICS)[number];

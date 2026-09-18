@@ -1731,6 +1731,7 @@ export type ExceptionKind =
   | "handoff_requested"
   | "video_calls_cut_short"
   | "video_provider_at_capacity"
+  | "video_session_never_answered"
   | "google_sync_failed"
   | "google_token_expired"
   | "google_misconfigured"
