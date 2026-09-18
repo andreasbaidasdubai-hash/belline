@@ -27,6 +27,10 @@ const env: Record<string, string> = {
   VIDEO_MAX_CALL_SECONDS: "45",
   VIDEO_WARN_BEFORE_SECONDS: "20",
   VIDEO_MAX_CONCURRENT_PER_VENUE: "20",
+  // These specs all run on loc_belline, which takes the Belline ceiling now,
+  // and every ceiling is clamped to what the account is configured to allow.
+  VIDEO_MAX_CONCURRENT_BELLINE: "20",
+  VIDEO_PROVIDER_MAX_CONCURRENT: "50",
   VIDEO_MAX_SESSIONS_PER_DAY: "500",
   TAVUS_API_KEY: "",
   // The face picker spec signs an owner up; the code is read from the stub outbox.

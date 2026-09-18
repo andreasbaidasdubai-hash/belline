@@ -157,6 +157,20 @@ async function sweepBilling(): Promise<void> {
 setTimeout(() => void sweepBilling().catch((err) => console.error("[billing] sweep failed:", err)), 60_000).unref?.();
 setInterval(() => void sweepBilling().catch((err) => console.error("[billing] sweep failed:", err)), BILLING_SWEEP_MS).unref?.();
 
+// Video sessions whose page has gone quiet — a phone asleep, a tab the OS
+// killed, an unload beacon that never arrived. Each holds a room open at the
+// provider and a slot under the venue's concurrency ceiling, and without this
+// it holds both until the call's own maximum. A start sweeps first in any case
+// (lib/video/sessions.ts), so this interval is about not paying for a room
+// nobody is sitting in, rather than about the ceiling being right.
+const VIDEO_SWEEP_MS = 15_000;
+async function sweepVideoSessions(): Promise<void> {
+  const { sweepStaleVideoSessions } = await import("./src/lib/video/sessions");
+  const swept = sweepStaleVideoSessions();
+  if (swept) console.log(`[video] let go of ${swept} session${swept === 1 ? "" : "s"} whose page had gone`);
+}
+setInterval(() => void sweepVideoSessions().catch((err) => console.error("[video] sweep failed:", err)), VIDEO_SWEEP_MS).unref?.();
+
 const server = createServer((req, res) => {
   // The socket address, for the signup rate limit when no proxy header is
   // present. Always overwritten, so a client cannot choose its own bucket.

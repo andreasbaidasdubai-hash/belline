@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyVisitorToken } from "@/lib/auth";
 import { isClientMetric, recordVideoMetric } from "@/lib/video/metrics";
-import { markVideoJoined } from "@/lib/video/sessions";
+import { markVideoAlive, markVideoJoined } from "@/lib/video/sessions";
 import { readBody } from "@/lib/video/http";
 import { demoSessionForClient, linkFromParams, NO_STORE } from "@/lib/sales/video-demo/http";
 
@@ -25,6 +25,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const session = demoSessionForClient(link, venue, body.sessionId, body.clientToken);
     if (!session.ok) return session.response;
     sessionId = session.session.id;
+    // The page is still open: never swept for silence (sessions.ts).
+    markVideoAlive(session.session);
     if (body.name === "ready" || body.name === "first_frame") markVideoJoined(session.session);
   } else {
     const claim = verifyVisitorToken(typeof body.token === "string" ? body.token : undefined);

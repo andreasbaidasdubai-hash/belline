@@ -70,7 +70,7 @@ const { toolsFor } = await import("../src/lib/agent/tools");
 const { startCall } = await import("../src/lib/calls");
 const { billableVoiceMinutes } = await import("../src/lib/billing/usage");
 const { videoConfig, missingVideoConfig, GREETING_CLIP_PATH, GREETING_POSTER_PATH } = await import("../src/lib/video/config");
-const { videoAvailability, videoOffered, videoBubbleConfig } = await import("../src/lib/video/availability");
+const { videoAvailability, videoOffered, videoBubbleConfig, concurrentVideoLimit, dailyVideoLimit } = await import("../src/lib/video/availability");
 const { GREETING_CLIP_SCRIPT, greetingAfterClip, CONTINUATION_FALLBACK } = await import("../src/lib/video/greeting-clip");
 const { setKillSwitch, setVenueVideo, readVideoControl } = await import("../src/lib/video/control");
 const { signVideoToken, verifyVideoToken, tokenFromSystemMessages } = await import("../src/lib/video/tokens");
@@ -616,7 +616,9 @@ await test("4f. pre-warming: at boot and when video is allowed, for listed venue
 await test("5. a creation failure offers chat and voice, leaves no PAL behind and closes the call record as failed", async () => {
   const fake = fakeTavus((method, url) =>
     method === "POST" && url.endsWith("/v2/conversations")
-      ? { status: 400, body: { message: "User has reached maximum concurrent conversations" } }
+      // Not a concurrency refusal, which is its own thing now (6b): something
+      // about this request Tavus would not take.
+      ? { status: 400, body: { message: "Invalid face_id for this account" } }
       : tavusHappyPath(method, url),
   );
   const restore = setEnv({ ...TAVUS_ENV, FLAG_STUBS: undefined });
@@ -626,7 +628,6 @@ await test("5. a creation failure offers chat and voice, leaves no PAL behind an
     assert.equal(result.ok, false);
     if (result.ok) return;
     assert.equal(result.reason, "provider_failed");
-    assert.equal(result.retryable, true, "a concurrency limit is worth retrying");
     assert.ok(fake.calls.some((c) => c.method === "DELETE" && c.url.endsWith("/v2/pals/p_session_1")), "the PAL is deleted");
     const call = listCalls(A.id).find((c) => c.video?.endReason === "create_failed");
     assert.equal(call?.status, "failed");
@@ -679,6 +680,176 @@ await test("6. a double click creates one session — concurrent and repeated st
   const third3 = await sessions.startVideoSession(location, "visitor-6c");
   assert.equal(third3.ok, false);
   assert.equal(!third3.ok && third3.reason, "busy");
+});
+
+await test("6a. the concurrency ceiling is split like the daily one: Belline's own venue is not held to a customer site's two", async () => {
+  const belline = getLocation("loc_belline")!;
+  const config = videoConfig({});
+
+  // The shipped numbers. Two is right for a restaurant's website and was
+  // never right for loc_belline, which carries the homepage bubble, every
+  // personalised demo link, Ask Belle and our own testing at once.
+  assert.equal(config.maxConcurrentPerVenue, 2);
+  assert.equal(config.maxConcurrentBelline, 8);
+  assert.equal(concurrentVideoLimit(A, config), 2, "a customer venue keeps the small number");
+  assert.equal(concurrentVideoLimit(belline, config), 8, "Belline's own venue gets its own");
+
+  // Exactly the split `dailyVideoLimit` already makes, and for the same venue.
+  assert.ok(dailyVideoLimit(belline, config) > dailyVideoLimit(A, config));
+
+  // Demo and support sessions run on loc_belline and are Belline's to pay for,
+  // so they are held to Belline's number whatever venue they name.
+  assert.equal(concurrentVideoLimit(A, config, "demo"), 8);
+  assert.equal(concurrentVideoLimit(A, config, "support"), 8);
+  assert.equal(concurrentVideoLimit(belline, config, "website"), 8);
+
+  // Each is its own environment variable, on the pattern the daily caps use.
+  assert.equal(concurrentVideoLimit(A, videoConfig({ VIDEO_MAX_CONCURRENT_PER_VENUE: "4" })), 4);
+  const raised = { VIDEO_MAX_CONCURRENT_BELLINE: "12", VIDEO_PROVIDER_MAX_CONCURRENT: "20" };
+  assert.equal(concurrentVideoLimit(belline, videoConfig(raised)), 12);
+  assert.equal(concurrentVideoLimit(A, videoConfig(raised)), 2, "Belline's number is not a customer's");
+
+  // And it is a real ceiling on real starts, not only a number.
+  const restore = setEnv({ VIDEO_MAX_CONCURRENT_BELLINE: "3", VIDEO_MAX_SESSIONS_PER_DAY_BELLINE: "1000" });
+  try {
+    setVenueVideo(belline.id, true, "check");
+    const venue = getLocation("loc_belline")!;
+    for (const who of ["b1", "b2", "b3"]) {
+      const r = await sessions.startVideoSession(venue, who);
+      assert.equal(r.ok, true, `${who} should start where a customer venue would already be full`);
+    }
+    const fourth = await sessions.startVideoSession(venue, "b4");
+    assert.equal(fourth.ok, false);
+    assert.equal(!fourth.ok && fourth.reason, "busy");
+  } finally {
+    restore();
+  }
+});
+
+await test("6b. our ceiling can never silently exceed the provider's, and the provider's own refusal is classified apart and ticketed", async () => {
+  // Tavus publishes a different concurrency per tier and no API reports the
+  // plan, so the account's number is configured — and clamps ours.
+  const clamped = videoConfig({ VIDEO_MAX_CONCURRENT_BELLINE: "40", VIDEO_PROVIDER_MAX_CONCURRENT: "3" });
+  assert.equal(concurrentVideoLimit(getLocation("loc_belline")!, clamped), 3, "a venue may not promise more rooms than the account has");
+  assert.equal(concurrentVideoLimit(A, videoConfig({ VIDEO_PROVIDER_MAX_CONCURRENT: "1" })), 1);
+
+  // The whole deployment is held to it too, not only each venue: two venues at
+  // two each must not open four rooms on an account that allows two.
+  const restore = setEnv({ VIDEO_PROVIDER_MAX_CONCURRENT: "2", VIDEO_MAX_CONCURRENT_PER_VENUE: "2" });
+  try {
+    assert.ok((await sessions.startVideoSession(getLocation(A.id)!, "p1")).ok);
+    assert.ok((await sessions.startVideoSession(getLocation(A.id)!, "p2")).ok);
+    const other = await sessions.startVideoSession(getLocation(B.id)!, "p3");
+    assert.equal(other.ok, false, "a second venue cannot spend the account's last room");
+    assert.equal(!other.ok && other.reason, "busy");
+  } finally {
+    restore();
+  }
+  sessions.clearVideoSessions();
+
+  // And when Tavus refuses for concurrency anyway, that is not our "busy" and
+  // not a generic failure: it says our configured number is above the plan's.
+  const fake = fakeTavus((method, url) =>
+    method === "POST" && url.endsWith("/v2/conversations")
+      ? { status: 429, body: { message: "Maximum concurrent conversations reached for your plan" } }
+      : tavusHappyPath(method, url),
+  );
+  const env = setEnv({ ...TAVUS_ENV, FLAG_STUBS: undefined });
+  try {
+    const provider = new TavusProvider(videoConfig(), fake.fetchImpl);
+    const result = await sessions.startVideoSession(getLocation(A.id)!, "visitor-cap", { provider });
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.reason, "provider_busy", "theirs, not ours");
+    assert.equal(result.status, 429);
+    assert.equal(result.retryable, true);
+
+    // On the staff Issues page, the way a run of short calls already is.
+    const tickets = listExceptions({ status: "all", kind: "video_provider_at_capacity" });
+    assert.equal(tickets.length, 1);
+    assert.equal(tickets[0].context?.configuredCeiling, videoConfig().providerMaxConcurrent);
+    assert.ok(String(tickets[0].reason).includes("concurrency"));
+    assert.ok(recentVideoMetrics().some((m) => m.name === "provider_at_capacity"));
+
+    // The visitor is told the same thing either way — whose limit it was is
+    // our business — but they are never told the provider's words.
+    assert.equal(machine.startErrorCode(result.status, result.reason), "busy");
+  } finally {
+    env();
+  }
+});
+
+await test("6c. a visitor who vanishes stops holding a slot: the page's heartbeat, and the sweep that acts when it stops", async () => {
+  const location = getLocation(A.id)!;
+  const restore = setEnv({ VIDEO_MAX_CONCURRENT_PER_VENUE: "1" });
+  try {
+    const first = await sessions.startVideoSession(location, "gone-1");
+    assert.ok(first.ok);
+    if (!first.ok) return;
+
+    // The deal, in one place: the panel speaks every 15s, the server waits for
+    // three of them. Before this, a page that simply stopped held its slot
+    // until the call's own maximum — 305s with the shipped configuration.
+    assert.equal(machine.VIDEO_HEARTBEAT_SECONDS, 15);
+    assert.equal(sessions.VIDEO_STALE_AFTER_SECONDS, 45);
+
+    // A panel that has never said anything is left alone: it may be an older
+    // one that does not know how to, and cutting it off mid-sentence would be
+    // worse than the slot it holds until the backstop timer.
+    assert.equal(sessions.sweepStaleVideoSessions(Date.now() + 10 * 60_000), 0);
+    assert.equal(sessions.liveVideoSessions(location.id).length, 1);
+
+    // One timing from the page is enough to put it under the rule.
+    const heard = await eventRoute.POST(
+      post(`http://localhost/api/video/${A.embed!.key}/event`, { name: "alive", sessionId: first.client.sessionId, clientToken: first.client.clientToken }),
+      params(A.embed!.key),
+    );
+    assert.equal(heard.status, 200, "the heartbeat is a name the closed list accepts");
+    assert.equal(sessions.getVideoSession(first.session.id)?.heardFrom, true);
+
+    // Still talking: nothing happens.
+    assert.equal(sessions.sweepStaleVideoSessions(Date.now() + 30_000), 0);
+    assert.equal(sessions.liveVideoSessions(location.id).length, 1);
+
+    // Then the phone sleeps. Three missed heartbeats and the slot is free —
+    // synchronously, so the very next start is counted against the truth.
+    assert.equal(sessions.sweepStaleVideoSessions(Date.now() + 60_000), 1);
+    assert.equal(sessions.liveVideoSessions(location.id).length, 0);
+    assert.equal(sessions.getVideoSession(first.session.id)?.endReason, "visitor_gone");
+    assert.ok(recentVideoMetrics().some((m) => m.name === "session_swept"));
+
+    // Which is the founder's failure, and it is gone: the venue was refusing
+    // callers while no conversation was live anywhere.
+    const next = await sessions.startVideoSession(location, "gone-2");
+    assert.equal(next.ok, true, "the next visitor is not refused by a session nobody is in");
+  } finally {
+    restore();
+  }
+});
+
+await test("6d. a refused call says what is true, offers the chat, and blames nobody", () => {
+  const busy = machine.errorCopy("busy", "Belle");
+  assert.equal(busy, "Belle is on another call right now. Try again in a minute, or chat instead.");
+  assert.ok(!/every video line|busy right now/i.test(busy), "not a switchboard with something wrong in it");
+  assert.ok(/chat/i.test(busy), "the way round it is offered");
+  assert.ok(busy.length < 120, "short enough to read on a phone");
+
+  // The daily ceiling used to borrow this wording. "Try again in a minute" was
+  // never true of it: in a minute it will still be today.
+  const today = machine.errorCopy("no_calls_today", "Belle");
+  assert.equal(machine.startErrorCode(429, "daily_limit"), "no_calls_today");
+  assert.equal(machine.startErrorCode(429, "busy"), "busy");
+  assert.equal(machine.startErrorCode(429, "provider_busy"), "busy");
+  assert.ok(!/try again in a minute/i.test(today));
+  assert.ok(/chat/i.test(today));
+
+  // The venue's own agent, never a Belline name on a customer's site, and no
+  // pronoun guessed for a face the venue chose.
+  assert.ok(machine.errorCopy("busy", "Nadia").startsWith("Nadia"));
+  for (const copy of [busy, today, machine.errorCopy("busy", "Nadia")]) {
+    assert.ok(!/\b(she|he|her|his)\b/i.test(copy), `no pronoun in: ${copy}`);
+    assert.ok(!/sorry|unfortunately|error|failed/i.test(copy), `no apology or breakage in: ${copy}`);
+  }
 });
 
 await test("7. end cleans up on both sides, once: provider told, PAL deleted, call closed and metered, later ends are no-ops", async () => {

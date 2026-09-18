@@ -19,12 +19,26 @@ export type VideoErrorCode =
   | "mic_missing"
   | "mic_unsupported"
   | "unavailable"
+  /** Every room that may be open is open — ours or the provider's limit. */
   | "busy"
+  /** No more video calls today. Not the same thing as busy, and not worth waiting for. */
+  | "no_calls_today"
   | "failed"
   | "network"
   | "expired";
 
 export type Phase = "intro" | "mic" | "connecting" | "live" | "ended" | "error";
+
+/**
+ * How often an open panel tells the server it is still there.
+ *
+ * Here rather than in `sessions.ts` because the panel is the one that has to
+ * obey it and cannot import a server module; the server reads it from here, so
+ * the two halves of the deal are one number. The server lets go of a session it
+ * has not heard from for `VIDEO_STALE_AFTER_SECONDS` — three of these — which
+ * is what stops a closed tab holding a concurrency slot for minutes.
+ */
+export const VIDEO_HEARTBEAT_SECONDS = 15;
 
 export interface PanelState {
   phase: Phase;
@@ -149,8 +163,14 @@ export function errorCopy(code: VideoErrorCode, agent: string): string {
       return "This browser can't start a video call here. The chat works everywhere.";
     case "unavailable":
       return "Video calls aren't available right now.";
+    // Not "every video line is busy", which reads as a switchboard with
+    // something wrong in it, and blamed the visitor for arriving. What is
+    // actually true is that she is already talking to somebody, which is an
+    // ordinary thing that needs no apology and has an obvious way round it.
     case "busy":
-      return "Every video line is busy right now. Try again in a minute, or chat instead.";
+      return `${agent} is on another call right now. Try again in a minute, or chat instead.`;
+    case "no_calls_today":
+      return `${agent} has no more video calls today. The chat is open now.`;
     case "expired":
       return "This page has been open a while. Reload it to start a call.";
     case "network":
@@ -282,7 +302,12 @@ export function micErrorCode(err: unknown): VideoErrorCode {
 /** Session-start failures from the server, to what the visitor is told. */
 export function startErrorCode(status: number, error: string | undefined): VideoErrorCode {
   if (status === 401) return "expired";
-  if (error === "busy" || error === "daily_limit") return "busy";
+  // Ours and the provider's concurrency are one thing to the visitor: a call is
+  // happening and theirs cannot start yet. The daily ceiling is a different
+  // thing and used to borrow this wording — "try again in a minute" was never
+  // true of it, because in a minute it will still be tomorrow it clears.
+  if (error === "busy" || error === "provider_busy") return "busy";
+  if (error === "daily_limit") return "no_calls_today";
   if (status === 403 || status === 404 || status === 503) return "unavailable";
   return "failed";
 }

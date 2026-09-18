@@ -116,6 +116,13 @@ export class VideoProviderError extends Error {
     readonly status: number,
     /** Worth trying again in a moment: a timeout, a 5xx, a concurrency limit. */
     readonly retryable: boolean,
+    /**
+     * The provider refused because *its* account is at capacity, not because
+     * anything of ours went wrong. Kept apart from every other failure: it
+     * means our configured ceiling is above what the plan really allows, which
+     * is a thing somebody has to go and fix in the Tavus dashboard.
+     */
+    readonly concurrency = false,
   ) {
     super(message);
     this.name = "VideoProviderError";

@@ -422,11 +422,16 @@ export class TavusProvider implements VideoAvatarProvider {
       } catch {
         detail = "";
       }
-      const concurrency = /concurrent/i.test(detail);
+      // Tavus's wording for a plan at capacity, as seen in the docs and in the
+      // wild: "maximum concurrent conversations", "concurrency limit reached".
+      // No API reports the plan's number, so this string is the only signal
+      // that our configured ceiling is above the account's.
+      const concurrency = /concurren|at capacity/i.test(detail);
       throw new VideoProviderError(
         `Tavus ${method} ${path.split("/").slice(0, 3).join("/")} failed with ${res.status}${detail ? `: ${detail.slice(0, 160)}` : ""}`,
         res.status,
         res.status >= 500 || res.status === 429 || concurrency,
+        concurrency,
       );
     }
     if (!text) return {} as T;

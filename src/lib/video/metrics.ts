@@ -39,6 +39,13 @@ export const CLIENT_METRICS = [
   "fallback_chat",
   "fallback_voice",
   "client_error",
+  /**
+   * The panel saying it is still on screen, every `VIDEO_HEARTBEAT_SECONDS`.
+   * No timing, nothing about the visitor: its whole content is that it
+   * arrived, which is what stops a closed tab holding a concurrency slot
+   * (sessions.ts).
+   */
+  "alive",
 ] as const;
 
 export const SERVER_METRICS = [
@@ -54,6 +61,10 @@ export const SERVER_METRICS = [
   "ended",
   /** The same ending, classified, with the provider's raw reason in `detail` and the real length in `ms`. */
   "ended_cause",
+  /** The provider refused a start for concurrency on the account — not our ceiling. See delivery.ts. */
+  "provider_at_capacity",
+  /** A live session let go of because its page stopped saying it was there. */
+  "session_swept",
 ] as const;
 
 export type VideoMetricName = (typeof CLIENT_METRICS)[number] | (typeof SERVER_METRICS)[number];

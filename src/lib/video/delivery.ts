@@ -169,6 +169,43 @@ export function recordVideoEnding(
   return ending;
 }
 
+/**
+ * Tavus refused a call because the *account* is at capacity.
+ *
+ * Recorded and ticketed apart from our own `busy`, because it means something
+ * different and needs a different fix. Our refusal is the venue being full, and
+ * the ceilings are ours to raise. This one says `VIDEO_PROVIDER_MAX_CONCURRENT`
+ * is set above what the plan really allows — we let a visitor all the way to a
+ * room that was never going to open. Tavus publishes no plan endpoint, so this
+ * refusal is the only place that number is ever checked against reality.
+ *
+ * Raised on the first occurrence rather than after a pattern: unlike a call cut
+ * short, one of these is already a visitor turned away by a misconfiguration.
+ * `openException` keeps one open row per venue and kind, so it cannot flood.
+ */
+export function recordProviderAtCapacity(
+  location: Pick<Location, "id" | "tenantId" | "businessId">,
+  facts: { sessionId: string; provider: string; reason: string; ourCeiling: number; live: number },
+): void {
+  console.warn(
+    `[video] ${facts.sessionId} refused by ${facts.provider} for concurrency with ${facts.live} live here and a configured ceiling of ${facts.ourCeiling} — ${facts.reason || "no reason given"}`,
+  );
+  recordVideoMetric(location, { name: "provider_at_capacity", sessionId: facts.sessionId, detail: facts.provider });
+  openException({
+    tenantId: BELLINE_TENANT_ID,
+    locationId: location.id,
+    kind: "video_provider_at_capacity",
+    reason: `${facts.provider} refused a video call for concurrency while ${facts.live} were live and VIDEO_PROVIDER_MAX_CONCURRENT is ${facts.ourCeiling}.`,
+    context: {
+      provider: facts.provider,
+      providerReason: facts.reason.slice(0, 160),
+      configuredCeiling: facts.ourCeiling,
+      liveWhenRefused: facts.live,
+    },
+    source: "system",
+  });
+}
+
 function raiseShortfall(location: Pick<Location, "id" | "tenantId">, latest: VideoEnding): void {
   const cut = recentVideoEndings().filter(short);
   if (cut.length < SHORTFALL_SAMPLES) return;

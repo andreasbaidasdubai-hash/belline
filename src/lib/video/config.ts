@@ -73,7 +73,33 @@ export interface VideoConfig {
    * sessions, and never against the customer's allowance.
    */
   maxSupportSessionsPerDay: number;
+  /**
+   * Concurrent sessions on a customer venue's website. Small on purpose: a
+   * restaurant's site does not have two people on video at once, and every open
+   * room costs money.
+   */
   maxConcurrentPerVenue: number;
+  /**
+   * Belline's own venue (loc_belline) again, for the same reason the daily
+   * ceiling is split. Every one of these runs on loc_belline at once: the
+   * homepage bubble, every personalised demo link a prospect is sitting on, the
+   * dashboard's Ask Belle support calls, and our own testing. The customer
+   * number (2) turned all of those into one queue of two and refused the
+   * founder on a demo.
+   */
+  maxConcurrentBelline: number;
+  /**
+   * What the Tavus account itself allows at once.
+   *
+   * Tavus's published concurrency varies by tier and no API reports the plan
+   * (docs/video/tavus-notes.md), so this is a number somebody has to set from
+   * the dashboard. Every ceiling above is clamped to it, so raising a venue's
+   * number can never silently promise more rooms than the account has — and a
+   * refusal that comes from Tavus anyway is classified apart from ours
+   * (`provider_busy`) and raises a ticket, because it means this number is
+   * wrong rather than that we are busy.
+   */
+  providerMaxConcurrent: number;
   /** The bubble's muted greeting clip and its poster, for every venue without its own. */
   greetingClipUrl: string;
   greetingPosterUrl: string;
@@ -152,6 +178,8 @@ export function videoConfig(env: Env = process.env): VideoConfig {
     maxDemoSessionsPerDay: num(env.VIDEO_DEMO_MAX_SESSIONS_PER_DAY, 200, 1, 5000),
     maxSupportSessionsPerDay: num(env.VIDEO_SUPPORT_MAX_SESSIONS_PER_DAY, 100, 1, 5000),
     maxConcurrentPerVenue: num(env.VIDEO_MAX_CONCURRENT_PER_VENUE, 2, 1, 50),
+    maxConcurrentBelline: num(env.VIDEO_MAX_CONCURRENT_BELLINE, 8, 1, 50),
+    providerMaxConcurrent: num(env.VIDEO_PROVIDER_MAX_CONCURRENT, 10, 1, 200),
     greetingClipUrl: httpsOrPath(env.VIDEO_GREETING_CLIP_URL, GREETING_CLIP_PATH),
     greetingPosterUrl: httpsOrPath(env.VIDEO_GREETING_POSTER_URL, GREETING_POSTER_PATH),
     venues: (env.VIDEO_AVATAR_VENUES ?? "")

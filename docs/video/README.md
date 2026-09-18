@@ -76,8 +76,8 @@ layer → SSE. Time to first token is recorded per turn.
 | `src/lib/video/config.ts` | Env vars (names only ever leave it) |
 | `src/lib/video/tokens.ts` | `llm` / `webhook` / `client` tokens |
 | `src/lib/video/control.ts` | Kill switch and venue list in `DATA_DIR/video.json` |
-| `src/lib/video/availability.ts` | Flag, config, kill switch, list, widget, live, plan, daily ceiling |
-| `src/lib/video/sessions.ts` | Single-flight create, timers, idempotent end, handover, metering |
+| `src/lib/video/availability.ts` | Flag, config, kill switch, list, widget, live, plan, daily and concurrent ceilings |
+| `src/lib/video/sessions.ts` | Single-flight create, ceilings, the stale-session sweep, timers, idempotent end, handover, metering |
 | `src/lib/video/engine.ts` | The model route: auth, authority, turn, guards, SSE |
 | `src/lib/video/stub-agent.ts` | Scripted receptionist for the mock under stubs |
 | `src/lib/video/metrics.ts` | Timings to the event table and an in-memory list |
@@ -123,7 +123,9 @@ All placeholders are in `.env.example`.
 | `VIDEO_MAX_SESSIONS_PER_DAY_BELLINE` | optional | Website sessions a day on Belline's own venue (`loc_belline`, the homepage bubble), default 300 |
 | `VIDEO_DEMO_MAX_SESSIONS_PER_DAY` | optional | Personalised demo-link sessions a day, all links together, default 200. Never counted against a venue's website ceiling; each link also has `VIDEO_DEMO_SESSIONS_PER_DAY` (3) |
 | `VIDEO_SUPPORT_MAX_SESSIONS_PER_DAY` | optional | Owners talking to Belle on video from the dashboard's Ask Belle, default 100 (1–5000). Run on Belline's own venue (`loc_belline`) and paid from Belline's support budget: counted apart from its website and demo sessions, never against the customer's allowance. A session starts only when the owner presses Start. |
-| `VIDEO_MAX_CONCURRENT_PER_VENUE` | optional | Default 2 |
+| `VIDEO_MAX_CONCURRENT_PER_VENUE` | optional | Calls at once on a customer venue's website, default 2 (1–50) |
+| `VIDEO_MAX_CONCURRENT_BELLINE` | optional | Calls at once on Belline's own venue (`loc_belline`), default 8 (1–50). Split from the customer number for the same reason the daily one is: `loc_belline` carries the homepage bubble, every personalised demo link, the dashboard's Ask Belle support calls and our own testing, all at the same time. Demo and support sessions take this ceiling whatever venue they name. Unlike the daily caps the kinds are **not** counted apart here — a room is a room at the provider |
+| `VIDEO_PROVIDER_MAX_CONCURRENT` | optional | What the Tavus **account** allows at once, default 10 (1–200). Tavus's concurrency varies by tier and no API reports the plan, so this is read off the dashboard by hand. Every ceiling above is clamped to it, and the whole deployment is held to it, so our numbers can never silently promise more rooms than the account has. A refusal that comes from Tavus anyway is classified as `provider_busy`, logged, and raises a `video_provider_at_capacity` ticket on the Issues page saying to correct this number |
 | `VIDEO_TAVUS_PAL_MODE` | optional | `shared` (default: one PAL per venue and face, made and kept by Belline, pre-warmed) or `per_session` (a PAL per call; the rollback) |
 | `VIDEO_FAST_MODEL` | optional | Video small talk on this model first, any tool turn on the venue's model. Default `claude-haiku-4-5`; `off` disables |
 | `VIDEO_TAVUS_TTS_ENGINE`, `VIDEO_TAVUS_EXTERNAL_VOICE_ID` | optional | Voice option (b): a public ElevenLabs/Cartesia voice on the face ([voice.md](voice.md)) |
@@ -399,13 +401,52 @@ console is held — email confirmed, trial not suspended. A visitor on a live
 venue's website is not owner work and is not asked; the plan, the caps above
 and video's own daily and concurrent ceilings bound it instead.
 
+## Concurrency, and visitors who simply vanish
+
+The concurrent ceiling is split exactly as the daily one is
+(`concurrentVideoLimit` beside `dailyVideoLimit`): `VIDEO_MAX_CONCURRENT_BELLINE`
+(8) for `loc_belline`, which carries the homepage bubble, every personalised
+demo link, Ask Belle and our own testing at once, and
+`VIDEO_MAX_CONCURRENT_PER_VENUE` (2) for a customer's website, which does not.
+Both are clamped to `VIDEO_PROVIDER_MAX_CONCURRENT`, the account's own limit,
+which Tavus does not expose and somebody has to read off the dashboard.
+
+The reason this needed fixing was not the number alone. A room that nobody is
+in still counted. Every tidy ending already worked — the End button, the panel
+closing, the `pagehide` beacon, Tavus's own `participant_left_timeout` and its
+callback — but a phone that sleeps, a tab the OS kills, a beacon lost on a dead
+connection or a callback that cannot reach the origin left the session `live`
+in the registry until the backstop timer at `VIDEO_MAX_CALL_SECONDS + 5s`. With
+a ceiling of 2, two of those refused every visitor for five minutes while
+nothing at all was running at the provider — which is exactly what the founder
+met on the demo page.
+
+So the panel says it is still there every `VIDEO_HEARTBEAT_SECONDS` (15,
+`client/machine.ts`, where the panel can read it), any event it reports counts
+as saying so, and `sweepStaleVideoSessions` lets go of anything unheard from for
+`VIDEO_STALE_AFTER_SECONDS` (45 — three missed beats). It runs on an interval in
+`server.ts` so a room is not left open at the provider, and — the part that
+matters — at the top of every start, before the ceiling is counted, so the guard
+can never be stricter than the truth even with no interval running. A session
+that has never reported anything is left to the backstop timer instead: it may
+be an older panel that does not know how to, and cutting that one off
+mid-sentence would be worse than the slot it holds. Reconciling against Tavus
+instead was considered and dropped: a request per sweep, nothing for the mock,
+and still wrong for the seconds between their timeout and ours.
+
+When a call really is refused, the visitor hears the same short thing whoever's
+limit it was — "<agent> is on another call right now. Try again in a minute, or
+chat instead." The daily ceiling gets its own words, because "try again in a
+minute" was never true of it.
+
 ## Timings and events
 
 Server: `session_create_started`, `session_created` (ms), `session_create_failed`,
-`llm_first_token` (ms), `booking_or_lead`, `handover_requested`, `ended` (duration).
+`llm_first_token` (ms), `booking_or_lead`, `handover_requested`, `ended` (duration),
+`provider_at_capacity`, `session_swept`.
 Panel: `video_selected`, `mic_prompted`, `mic_denied`, `ready` (ms), `first_frame`
 (ms), `first_response` (ms), `reconnecting`, `fallback_chat`, `fallback_voice`,
-`client_error`. Written to the event table as `video.*` where Postgres is
+`client_error`, `alive` (the heartbeat). Written to the event table as `video.*` where Postgres is
 configured, and shown as medians in the sales console.
 
 ## Known limitations

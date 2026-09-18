@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isClientMetric, recordVideoMetric } from "@/lib/video/metrics";
-import { markVideoJoined } from "@/lib/video/sessions";
+import { markVideoAlive, markVideoJoined } from "@/lib/video/sessions";
 import { NO_STORE, readBody } from "@/lib/video/http";
 import { currentUser } from "@/lib/auth-server";
 import { bellineVenue } from "@/lib/belle/identity";
@@ -26,6 +26,8 @@ export async function POST(req: Request) {
     const found = await supportSessionFor(body.sessionId, body.clientToken);
     if (!found.ok) return found.response;
     sessionId = found.session.id;
+    // The page is still open: never swept for silence (sessions.ts).
+    markVideoAlive(found.session);
     if (body.name === "ready" || body.name === "first_frame") markVideoJoined(found.session);
   } else if (!(await currentUser())) {
     return NextResponse.json({ error: "not_authorised" }, { status: 401, headers: NO_STORE });

@@ -14,6 +14,7 @@ import {
   reduce,
   startErrorCode,
   statusText,
+  VIDEO_HEARTBEAT_SECONDS,
   type CallEvent,
   type VideoErrorCode,
 } from "@/lib/video/client/machine";
@@ -848,6 +849,24 @@ export default function VideoPanel({
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [state.phase]);
+
+  /**
+   * Say we are still here, while a call is on.
+   *
+   * Every tidy way of leaving already tells the server — the End button, the
+   * panel closing, the `pagehide` beacon. This is for the untidy ones: a phone
+   * that sleeps, a tab the OS kills, a beacon lost on a dead connection. Without
+   * it the server keeps believing the room is live until the call's own maximum,
+   * and that belief is what refuses the next visitor with "busy" while nothing
+   * at all is running (lib/video/sessions.ts).
+   */
+  useEffect(() => {
+    if (state.phase !== "connecting" && state.phase !== "live") return;
+    const timer = setInterval(() => {
+      if (sessionRef.current && !endingRef.current) report("alive");
+    }, VIDEO_HEARTBEAT_SECONDS * 1000);
+    return () => clearInterval(timer);
+  }, [state.phase, report]);
 
   const limit = sessionRef.current?.maxCallSeconds ?? maxCallSeconds;
   const warnBefore = sessionRef.current?.warnBeforeSeconds ?? 30;

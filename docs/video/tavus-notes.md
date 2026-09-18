@@ -332,6 +332,18 @@ say, and what they do not:
   300s is legal on the lowest tier there is. Third-party write-ups list
   different tier names and allowances, so that page has been revised recently
   and may not describe the account we were provisioned under.
+- **Concurrency is a plan number too, and the same problem.** The same pricing
+  row gives Basic 1 concurrent conversation, Starter 3 and Growth 10. Nothing in
+  the API says which we are on, and exceeding it is a 400 or 429 whose only
+  signal is the words "maximum concurrent conversations" in the message. So it
+  is configured rather than discovered: `VIDEO_PROVIDER_MAX_CONCURRENT` (default
+  10, the Growth figure) is read off the dashboard by hand, every venue ceiling
+  is clamped to it, and the deployment as a whole is held to it. A refusal that
+  still comes back from Tavus is therefore evidence that the number is wrong,
+  not that we are busy: `lib/video/sessions.ts` returns `provider_busy` rather
+  than `busy`, and `lib/video/delivery.ts` raises a `video_provider_at_capacity`
+  ticket — beside the `video_calls_cut_short` one, and for the same reason. No
+  API will tell us, so the only way to know is to watch what happens.
 - **No API reports the plan, the tier or the minutes left.** Every path in
   https://docs.tavus.io/openapi.yaml is lipsync, replacements, videos, faces,
   voices, memory-stores or conversations. `GET /v2/conversations` returns rows

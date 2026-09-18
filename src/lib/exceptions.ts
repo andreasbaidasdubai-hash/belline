@@ -42,6 +42,7 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "account_recovery",
   "handoff_requested",
   "video_calls_cut_short",
+  "video_provider_at_capacity",
   "google_sync_failed",
   "google_token_expired",
   "google_misconfigured",
@@ -100,6 +101,11 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
   video_calls_cut_short: {
     label: "Video calls ending early",
     next: "The provider is ending calls before the length we ask for, and no API reports the plan or the minutes left. Open the Tavus dashboard: check the plan's maximum conversation duration and whether the month's CVI minutes are used up. Until it is fixed the pages stop promising a length they cannot keep.",
+    belle: false,
+  },
+  video_provider_at_capacity: {
+    label: "Video provider full",
+    next: "Tavus refused a call because the account is at its concurrent-conversation limit, so a visitor was turned away after we had already said yes. No API reports the plan's number: open the Tavus dashboard, read the tier's concurrency, and set VIDEO_PROVIDER_MAX_CONCURRENT to it (or below). Until it matches, our own ceilings can promise more rooms than the account has.",
     belle: false,
   },
   google_sync_failed: {

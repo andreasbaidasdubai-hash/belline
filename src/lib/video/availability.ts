@@ -92,6 +92,33 @@ export function dailyVideoLimit(location: Pick<Location, "id">, config: VideoCon
   return location.id === BELLINE_LOCATION_ID ? config.maxSessionsPerDayBelline : config.maxSessionsPerDay;
 }
 
+/**
+ * How many video calls may be running at once on this venue.
+ *
+ * Split exactly as the daily ceiling is, and for the same reason. Belline's own
+ * venue carries the homepage bubble, every personalised demo link, the
+ * dashboard's support calls and our own testing, all on `loc_belline`; a
+ * customer's site carries one website. Demo and support sessions run on
+ * Belline's venue whatever `location` says, so they get Belline's number too.
+ *
+ * Unlike the daily ceilings, the three kinds are *not* counted apart here. A
+ * room is a room at the provider, so a demo and a website call are competing
+ * for the same live capacity and have to be counted in the same pool — which is
+ * also why the answer is clamped to `providerMaxConcurrent`: our ceiling can be
+ * lower than the account's, never higher.
+ */
+export function concurrentVideoLimit(
+  location: Pick<Location, "id">,
+  config: VideoConfig,
+  kind: VideoSessionKind = "website",
+): number {
+  const venue =
+    kind === "demo" || kind === "support" || location.id === BELLINE_LOCATION_ID
+      ? config.maxConcurrentBelline
+      : config.maxConcurrentPerVenue;
+  return Math.max(1, Math.min(venue, config.providerMaxConcurrent));
+}
+
 export function videoAvailability(
   location: Location,
   opts: { env?: Env; skipLive?: boolean; skipDailyLimit?: boolean; kind?: VideoSessionKind } = {},

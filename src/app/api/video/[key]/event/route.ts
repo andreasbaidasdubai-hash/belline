@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyVisitorToken } from "@/lib/auth";
 import { isClientMetric, recordVideoMetric } from "@/lib/video/metrics";
-import { markVideoJoined } from "@/lib/video/sessions";
+import { markVideoAlive, markVideoJoined } from "@/lib/video/sessions";
 import { NO_STORE, readBody, sessionForClient, venueByEmbedKey } from "@/lib/video/http";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +29,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ key: string }>
     const found = sessionForClient(location, body.sessionId, body.clientToken);
     if (!found.ok) return found.response;
     sessionId = found.session.id;
+    // Any event from the panel proves the page is still open, so none of them
+    // can be swept for silence. The heartbeat ("alive") is the one that arrives
+    // when nothing else is happening.
+    markVideoAlive(found.session);
     if (body.name === "ready" || body.name === "first_frame") markVideoJoined(found.session);
   } else {
     const claim = verifyVisitorToken(typeof body.token === "string" ? body.token : undefined);

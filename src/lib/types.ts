@@ -1730,6 +1730,7 @@ export type ExceptionKind =
   | "account_recovery"
   | "handoff_requested"
   | "video_calls_cut_short"
+  | "video_provider_at_capacity"
   | "google_sync_failed"
   | "google_token_expired"
   | "google_misconfigured"

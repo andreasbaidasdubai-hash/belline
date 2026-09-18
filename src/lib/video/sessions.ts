@@ -10,11 +10,12 @@ import { openException } from "../exceptions";
 import { BELLINE_TENANT_ID } from "../tenancy";
 import { BELLINE_LOCATION_ID, BELLINE_VIDEO_GREETING } from "../seed-belline";
 import { answersIn } from "../language";
-import { videoAvailability, type VideoOffReason, type VideoSessionKind } from "./availability";
+import { concurrentVideoLimit, videoAvailability, type VideoOffReason, type VideoSessionKind } from "./availability";
 import type { VideoConfig } from "./config";
-import { recordVideoEnding } from "./delivery";
+import { recordProviderAtCapacity, recordVideoEnding } from "./delivery";
 import { classifyVideoEnd, type VideoEndCause } from "./end-reason";
 import { venueVideoSettings } from "./control";
+import { VIDEO_HEARTBEAT_SECONDS } from "./client/machine";
 import { greetingAfterClip } from "./greeting-clip";
 import { videoBackground } from "./backgrounds";
 import { venueLook } from "./faces";
@@ -65,6 +66,19 @@ export interface VideoSession {
   status: "creating" | "live" | "ended";
   createdAt: number;
   joinedAt?: number;
+  /**
+   * When the visitor's panel was last heard from — its heartbeat, or any of the
+   * timings it reports. `sweepStaleVideoSessions` reads this: a page that has
+   * gone quiet is a slot nobody is sitting in.
+   */
+  lastSeenAt?: number;
+  /**
+   * This session's panel has spoken to us at least once. Only such a session is
+   * ever swept for silence: one that has never reported anything might be an
+   * older panel that does not know how to, and killing that one mid-sentence
+   * would be worse than the slot it holds until the backstop timer.
+   */
+  heardFrom?: boolean;
   endedAt?: number;
   endReason?: string;
   /** Who ended it. With the reason and the real length, this is what `classifyVideoEnd` needs. */
@@ -139,9 +153,18 @@ export interface ClientSession {
   background?: { id: string; src: string; tone: "light" | "dark" };
 }
 
+/**
+ * `busy` is our own ceiling; `provider_busy` is Tavus refusing for concurrency
+ * on the account. The visitor hears the same thing either way — it is not their
+ * problem whose limit it was — but the two mean opposite things to us: one says
+ * the venue is genuinely full, the other says `VIDEO_PROVIDER_MAX_CONCURRENT`
+ * is set above what the account really allows, which is a ticket.
+ */
+export type StartRefusal = VideoOffReason | "busy" | "provider_busy" | "provider_failed" | "no_provider";
+
 export type StartResult =
   | { ok: true; session: VideoSession; client: ClientSession; reused: boolean }
-  | { ok: false; reason: VideoOffReason | "busy" | "provider_failed" | "no_provider"; retryable: boolean; status: number };
+  | { ok: false; reason: StartRefusal; retryable: boolean; status: number };
 
 interface Registry {
   sessions: Map<string, VideoSession>;
@@ -160,6 +183,33 @@ const FORGET_AFTER_MS = 15 * 60 * 1000;
 /** The provider's own maximum fires first; ours is the backstop. */
 const END_GRACE_SECONDS = 5;
 
+/**
+ * A visitor who is simply gone, and the slot they were holding.
+ *
+ * Every tidy ending already works: the End button, the panel closing, the
+ * `pagehide` beacon, the provider's callback when its own
+ * `participant_left_timeout` fires. What none of them covers is the untidy one
+ * — the phone that sleeps, the tab killed by the OS, the beacon dropped on a
+ * dead connection, the callback that cannot reach a staging origin. In those
+ * cases the room is gone at Tavus and the registry here still says `live`, so
+ * the next visitor is refused by a ceiling that is counting nobody. Until now
+ * that lasted until the backstop timer at `maxCallSeconds + 5s` — five minutes
+ * with the shipped configuration, longer with a raised one.
+ *
+ * So the panel says it is still there, and a sweep lets go of the ones that
+ * stopped saying it. No provider call is involved: reconciling against Tavus
+ * would need a request per sweep, would not work against the mock, and would
+ * still be wrong for the seconds between their timeout and ours.
+ */
+/** Three missed heartbeats. Short enough to free a slot inside a minute, long enough to survive a tunnel. */
+export const VIDEO_STALE_AFTER_SECONDS = VIDEO_HEARTBEAT_SECONDS * 3;
+/**
+ * A session still being made holds a slot too. Every provider call has its own
+ * 15s timeout and a start makes a few, so a start that is somehow still
+ * "creating" after this is not one anybody is waiting for.
+ */
+export const VIDEO_CREATING_STALE_SECONDS = 90;
+
 export function getVideoSession(sessionId: string): VideoSession | undefined {
   return registry().sessions.get(sessionId);
 }
@@ -168,6 +218,57 @@ export function liveVideoSessions(locationId?: string): VideoSession[] {
   return [...registry().sessions.values()].filter(
     (s) => s.status !== "ended" && (!locationId || s.locationId === locationId),
   );
+}
+
+/**
+ * The panel is still on screen. Called by every timing it reports and by its
+ * heartbeat, so a session only looks stale when the page has really stopped.
+ */
+export function markVideoAlive(session: VideoSession, now: number = Date.now()): void {
+  session.lastSeenAt = now;
+  session.heardFrom = true;
+}
+
+/**
+ * Let go of sessions whose visitor has gone, so they stop holding a slot.
+ *
+ * Synchronous in the part that matters: `endVideoSession` sets the status
+ * before it awaits the provider, so the count is right the moment this returns
+ * even though the provider is told afterwards. Returns how many were let go of.
+ *
+ * Called on every start, right before the ceiling is counted — the one place it
+ * cannot be missed — and on an interval in `server.ts` so a room is not left
+ * open at the provider while nobody happens to be starting a call.
+ */
+export function sweepStaleVideoSessions(now: number = Date.now()): number {
+  let swept = 0;
+  for (const session of registry().sessions.values()) {
+    if (session.status === "ended") continue;
+    if (session.status === "creating") {
+      if (now - session.createdAt < VIDEO_CREATING_STALE_SECONDS * 1000) continue;
+      // Nothing to tell the provider: there is no conversation id yet, and if
+      // one arrives the create path sees `ended` and closes the room itself.
+      session.status = "ended";
+      session.endedAt = now;
+      session.endReason = "create_stalled";
+      session.endedBy = "timer";
+      session.timers.forEach(clearTimeout);
+      session.timers = [];
+      forgetLater(session.id);
+      swept++;
+      continue;
+    }
+    // A panel that has never reported anything is not one we can call silent.
+    if (!session.heardFrom) continue;
+    const since = now - (session.lastSeenAt ?? session.createdAt);
+    if (since < VIDEO_STALE_AFTER_SECONDS * 1000) continue;
+    console.log(`[video] ${session.id} letting go: nothing from the page for ${Math.round(since / 1000)}s`);
+    const location = getLocation(session.locationId);
+    if (location) recordVideoMetric(location, { name: "session_swept", sessionId: session.id, ms: since });
+    void endVideoSession(session.id, "visitor_gone", { by: "timer" });
+    swept++;
+  }
+  return swept;
 }
 
 export function findVideoSessionByConversation(conversationId: string): VideoSession | undefined {
@@ -262,7 +363,20 @@ export async function startVideoSession(
   const live = [...reg.sessions.values()].find((s) => s.visitorKey === visitorKey && s.status === "live");
   if (live) return { ok: true, session: live, client: clientPayload(live, available.config, provider), reused: true };
 
-  if (liveVideoSessions(location.id).length >= available.config.maxConcurrentPerVenue) {
+  // Nobody is refused because of a visitor who has already gone. This runs
+  // before the count, every time, so the guard can never be stricter than the
+  // truth even if the sweep interval is not running at all.
+  sweepStaleVideoSessions();
+
+  // Two ceilings, both ours. The venue's, split so Belline's own venue — the
+  // homepage bubble, the demo links, Ask Belle and our testing, all on
+  // loc_belline — is not held to a customer site's two. And the account's,
+  // which no venue's number may exceed: more rooms than Tavus allows would
+  // only turn our refusal into theirs.
+  if (liveVideoSessions(location.id).length >= concurrentVideoLimit(location, available.config, kind)) {
+    return { ok: false, reason: "busy", retryable: true, status: 429 };
+  }
+  if (liveVideoSessions().length >= available.config.providerMaxConcurrent) {
     return { ok: false, reason: "busy", retryable: true, status: 429 };
   }
 
@@ -413,7 +527,11 @@ async function create(
     return { ok: true, session, client: clientPayload(session, config, provider), reused: false };
   } catch (err) {
     const retryable = err instanceof VideoProviderError ? err.retryable : true;
-    const detail = err instanceof VideoProviderError ? `status_${err.status}` : "error";
+    // The provider's account is full, which is not the same failure as the
+    // provider being broken: our ceiling let this visitor through when the plan
+    // would not have. Kept apart, logged and ticketed (delivery.ts).
+    const atCapacity = err instanceof VideoProviderError && err.concurrency;
+    const detail = atCapacity ? "at_capacity" : err instanceof VideoProviderError ? `status_${err.status}` : "error";
     // The provider's words go to the log, which never sees a key or a token.
     console.warn(`[video] ${sessionId} could not start: ${err instanceof Error ? err.message : String(err)}`);
     session.status = "ended";
@@ -429,6 +547,17 @@ async function create(
     });
     recordVideoMetric(location, { name: "session_create_failed", sessionId, ms: Date.now() - startedAt, detail });
     forgetLater(sessionId);
+    if (atCapacity) {
+      recordProviderAtCapacity(location, {
+        sessionId,
+        provider: provider.name,
+        reason: err instanceof Error ? err.message : String(err),
+        ourCeiling: config.providerMaxConcurrent,
+        // This one is already ended; the others are what was really running.
+        live: liveVideoSessions().length,
+      });
+      return { ok: false, reason: "provider_busy", retryable: true, status: 429 };
+    }
     return { ok: false, reason: "provider_failed", retryable, status: 502 };
   }
 }
@@ -609,6 +738,7 @@ export async function applyVideoEvent(session: VideoSession, event: VideoEvent):
 /** The visitor joined the room (reported by the panel, and by the provider's callback). */
 export function markVideoJoined(session: VideoSession): void {
   session.joinedAt ??= Date.now();
+  markVideoAlive(session);
 }
 
 /**
