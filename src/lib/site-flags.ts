@@ -80,7 +80,13 @@ export function applyHeroLanguages(html: string, env: Env = process.env): string
  */
 export function heroChannels(pageLanguage: "en" | "de", env: Env = process.env): string[] {
   const phone = publicFlag("channel.phone", env);
-  const whatsapp = publicFlag("channel.whatsapp.selfserve", env) || publicFlag("channel.whatsapp.embedded", env);
+  // Any of the three: the channel offered at all (`channel.whatsapp` — our
+  // team connects the number), or either self-connect route. The eyebrow
+  // claims that Belline answers WhatsApp, not who sets the number up.
+  const whatsapp =
+    publicFlag("channel.whatsapp", env) ||
+    publicFlag("channel.whatsapp.selfserve", env) ||
+    publicFlag("channel.whatsapp.embedded", env);
   const words =
     pageLanguage === "en"
       ? { site: "your website", phone: "telephone", whatsapp: "WhatsApp" }

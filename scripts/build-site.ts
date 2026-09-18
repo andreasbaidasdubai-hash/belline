@@ -28,6 +28,19 @@ import {
 } from "./site-locale";
 import { GERMAN_PAGES } from "./site-pricing-de";
 import { TRIAL } from "../src/lib/billing/plans";
+import { flag } from "../src/lib/flags";
+
+/**
+ * Are the German pages part of this build?
+ *
+ * `language.de` already decides whether the product answers in German and
+ * whether the hero may say so. It decides the pages themselves too: a build
+ * with the flag off writes no /de-de, /de-at or /de-ch, and the country picker
+ * offers only the countries whose pages exist. Publishing a German page is a
+ * legal act in Germany — it needs an Impressum with a real company behind it —
+ * so "the pages exist but nobody links them" is not good enough.
+ */
+const GERMAN = flag("language.de");
 
 const SOURCE = "public";
 /**
@@ -347,7 +360,7 @@ for (const page of pages) {
 // market's planned prices, its own language tag and Swiss spelling for de-CH.
 // The legal pages are convenience translations; the English pages govern and
 // each German one says so and links to it.
-for (const [source, kind] of Object.entries(GERMAN_SOURCES)) {
+for (const [source, kind] of Object.entries(GERMAN ? GERMAN_SOURCES : {})) {
   const german = fs.readFileSync(path.join(SOURCE, source), "utf8");
   for (const page of Object.values(GERMAN_PAGES)) {
     const env = process.env;

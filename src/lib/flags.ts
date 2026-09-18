@@ -22,6 +22,7 @@ import { isLocalDbUrl } from "./db/guard";
 export const FLAG_NAMES = [
   "numbers.pool",
   "channel.phone",
+  "channel.whatsapp",
   "channel.whatsapp.selfserve",
   "channel.whatsapp.embedded",
   "billing.stripe",
@@ -60,6 +61,12 @@ const DEFS: Record<Exclude<StaticFlag, "stubs">, FlagDef> = {
   // Numbers are bought by a person; nothing in env says the pool has any.
   "numbers.pool": { needs: TWILIO, explicit: true },
   "channel.phone": { needs: [...TWILIO, "ANTHROPIC_API_KEY", "DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY"], explicit: false },
+  // WhatsApp as a channel Belline can deliver at all: a connected Meta account
+  // and somebody on our side adding the venue's number in Meta's dashboard.
+  // That is how every WhatsApp venue is connected today, so it is what the
+  // site may claim. The two below are narrower — they say who may do the
+  // connecting, and an owner cannot do it yet.
+  "channel.whatsapp": { needs: META, explicit: true },
   // Meta business verification and the token rotation come first.
   "channel.whatsapp.selfserve": { needs: META, explicit: true },
   "channel.whatsapp.embedded": { needs: META, explicit: true },

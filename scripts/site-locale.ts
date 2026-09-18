@@ -24,6 +24,7 @@ import { applyIntegrations } from "./site-integrations";
 import { GERMAN_PAGES, applyPricingDe, type DachMarket } from "./site-pricing-de";
 import { applySiteFlags, swissSpelling } from "../src/lib/site-flags";
 import { trialSentenceDe } from "../src/lib/billing/speak-de";
+import { flag } from "../src/lib/flags";
 
 type Env = Record<string, string | undefined>;
 
@@ -51,6 +52,20 @@ export const COUNTRY_PAGES: readonly CountryPage[] = [
 ];
 
 const pageOf = (code: SiteCountry) => COUNTRY_PAGES.find((p) => p.code === code)!;
+
+/**
+ * The country pages this build actually publishes.
+ *
+ * The three DACH pages are German, and a German page published in Germany owes
+ * a reader an Impressum naming a real company (§5 DDG). So `language.de`
+ * decides whether they are built at all (scripts/build-site.ts), and the
+ * picker, the alternates and the sitemap must offer exactly what was built —
+ * a picker that links /de-de on a build without /de-de sends people to a 404,
+ * and an hreflang that names a missing page tells search engines it exists.
+ */
+export function publishedCountries(): readonly CountryPage[] {
+  return flag("language.de") ? COUNTRY_PAGES : COUNTRY_PAGES.filter((p) => p.code === "AE");
+}
 
 /** The legal pages, by English source: the English path and the German slug under each country. */
 export const LEGAL_PAGES = {
@@ -98,7 +113,7 @@ export function renderLocalePicker(current: SiteCountry): string {
   const here = pageOf(current);
   const currentLanguage = languagesFor(current)[0].label;
 
-  const countries = COUNTRY_PAGES.map((p) => {
+  const countries = publishedCountries().map((p) => {
     const mark = p.code === current ? ' aria-current="page"' : "";
     const hreflang = p.lang === "en" ? "en" : p.lang;
     return `            <li><a href="${p.path}" hreflang="${hreflang}"${mark}><span class="locale-code" aria-hidden="true">${p.code}</span><span class="locale-name">${esc(p.name[de ? "de" : "en"])}</span><span class="locale-money">${p.currency}</span></a></li>`;
@@ -149,7 +164,7 @@ function alternates(links: { lang: string; href: string }[], xDefault: string): 
 /** Every landing page names every other, and itself. */
 export function landingAlternates(): string {
   return alternates(
-    COUNTRY_PAGES.map((p) => ({ lang: p.lang, href: `${ORIGIN}${p.path === "/" ? "/" : p.path}` })),
+    publishedCountries().map((p) => ({ lang: p.lang, href: `${ORIGIN}${p.path === "/" ? "/" : p.path}` })),
     `${ORIGIN}/`,
   );
 }
@@ -160,7 +175,7 @@ export function legalAlternates(page: LegalPage): string {
   return alternates(
     [
       { lang: "en", href: `${ORIGIN}${legal.english}` },
-      ...COUNTRY_PAGES.filter((p) => p.code !== "AE").map((p) => ({ lang: p.lang, href: `${ORIGIN}${p.path}/${legal.german}` })),
+      ...publishedCountries().filter((p) => p.code !== "AE").map((p) => ({ lang: p.lang, href: `${ORIGIN}${p.path}/${legal.german}` })),
     ],
     `${ORIGIN}${legal.english}`,
   );
