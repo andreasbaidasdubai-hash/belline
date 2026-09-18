@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 export const STAFF_MENU = [
   { href: "/sales", label: "Today" },
   { href: "/sales/leads", label: "Leads" },
+  { href: "/sales/outreach", label: "Outreach" },
   { href: "/sales/customers", label: "Customers" },
   { href: "/sales/issues", label: "Issues" },
   { href: "/sales/revenue", label: "Revenue" },
