@@ -1,5 +1,6 @@
 import type { Location } from "../../types";
 import { partnerMode, type PartnerConnector, type PartnerId, type PartnerVenue } from "./contract";
+import { calcomConnector } from "./calcom";
 import { freshaConnector } from "./fresha";
 import { mindbodyConnector } from "./mindbody";
 import { msbookingsConnector } from "./msbookings";
@@ -23,6 +24,7 @@ export const PARTNER_CONNECTORS: Record<PartnerId, PartnerConnector> = {
   zenoti: zenotiConnector,
   mindbody: mindbodyConnector,
   msbookings: msbookingsConnector,
+  calcom: calcomConnector,
   treatwell: treatwellConnector,
   opentable: opentableConnector,
   sevenrooms: sevenroomsConnector,

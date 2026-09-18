@@ -330,6 +330,111 @@ export const PARTNERS: Record<PartnerId, PartnerFacts> = {
     ],
   },
 
+  /**
+   * Cal.com: the only one on this list with no gatekeeper at all.
+   *
+   * Open source (AGPLv3), a published REST API at `https://api.cal.com/v2`,
+   * and a key the account holder mints for themselves in their own settings.
+   * No programme, no application, no partnership, no review. A salon owner
+   * could connect Belline this afternoon.
+   *
+   *   GET  /v2/slots?eventTypeId=&start=&end=&timeZone=&format=range
+   *   POST /v2/bookings
+   *   POST /v2/bookings/{uid}/reschedule
+   *   POST /v2/bookings/{uid}/cancel
+   *   GET  /v2/event-types
+   *
+   * Every endpoint is pinned to a dated contract through a mandatory
+   * `cal-api-version` header, and the versions differ per endpoint — slots is
+   * `2024-09-04`, bookings `2026-02-25`, event types `2024-06-14`. Cal.com's
+   * own note says that sending the wrong value silently falls back to an older
+   * version of the endpoint, which is the most dangerous kind of failure: the
+   * call succeeds and means something else. The adapter pins all three and
+   * `check:calcom` fails if any is dropped.
+   *
+   * ## The booking-page shape, and where Cal.com differs from Calendly
+   *
+   * This is the second worked example of the shape Calendly established, and
+   * the two are not interchangeable. What they share: the *event type* decides
+   * the length, not Belline; availability is the owner's real calendar, their
+   * buffers, their notice and their caps, computed by the partner and never
+   * reconstructed here; a booking needs an attendee email address; a pooled
+   * event type lets the partner choose the host, so no name may be promised;
+   * and neither holds a slot while a caller decides.
+   *
+   * Where they part:
+   *
+   * - **Cal.com can move a booking.** `POST /v2/bookings/{uid}/reschedule` is a
+   *   real endpoint. Calendly has none, so a move there is a create followed by
+   *   a cancel, two emails and two of the day's booking allowance. Cal.com
+   *   keeps the guest's booking as one thing.
+   * - **Cal.com can be self-hosted**, so the base URL is a property of the
+   *   venue rather than a constant. A self-hosted instance may be on an older
+   *   release than the pinned `cal-api-version`, which is a failure mode
+   *   Calendly simply cannot have.
+   * - **The version header.** Calendly has nothing like it.
+   * - **Rate limits are flat**: 120 requests a minute on an API key, against
+   *   Calendly's per-plan booking allowances (10 a minute, 50 an hour, 100 a
+   *   day, five a day on a trial).
+   * - **Managed event types are a trap Calendly has no equivalent of.** A
+   *   managed event type is a template; Cal.com's docs say slots cannot be
+   *   fetched for the parent at all, and the child event type ids must be used
+   *   instead. A venue mapped to a parent would look connected and quote
+   *   nothing.
+   *
+   * The credential model is Zenoti's rather than Calendly's: the key belongs to
+   * the venue and is sealed on it, because Cal.com's OAuth — the `x-cal-client-id`
+   * and `x-cal-secret-key` platform clients that would let an owner self-connect
+   * from Belline's setup — is a paid Platform product and an official-partner
+   * listing, which is a decision to make later rather than a prerequisite now.
+   */
+  calcom: {
+    id: "calcom",
+    name: "Cal.com",
+    model: "appointments",
+    api: {
+      documented: true,
+      availability: true,
+      create: true,
+      reschedule: true,
+      cancel: true,
+      // True only where the event type is a solo one; a round-robin or
+      // collective type lets Cal.com choose, and the adapter refuses to name a
+      // person for those. See `limits`.
+      staffSelection: true,
+      catalogue: true,
+    },
+    auth:
+      "Authorization: Bearer <cal_live_… key>, minted by the account holder in their own Cal.com settings, plus a mandatory per-endpoint cal-api-version header. Platform OAuth clients exist but are a paid product.",
+    sandbox: "self-serve",
+    gate: {
+      what:
+        "Nothing to apply for, and nobody to ask. The venue's own Cal.com account holder creates an API key in their settings and gives it to Belline, exactly as a Zenoti admin does — except that here it is free, self-serve and takes a minute. The only thing that would need Cal.com's agreement is the paid Platform plan and a verified OAuth client, which would let owners self-connect from Belline's setup instead of pasting a key, and would be needed to be listed in Cal.com's own app store.",
+      apply: "https://cal.com/docs/api-reference/v2/introduction",
+      docs: "https://cal.com/docs/api-reference/v2/introduction",
+    },
+    liveNeeds: [],
+    venueNeeds: [
+      "the venue's own Cal.com API key, sealed",
+      "the event type id for each service Belline may book",
+      "the IANA time zone the account answers in",
+      "the base URL, where the venue self-hosts",
+    ],
+    limits: [
+      "A booking needs an attendee email address. Cal.com's POST /v2/bookings will not take one without it, and it is where the confirmation and the reschedule and cancel links go. A caller who will not give an address cannot be booked, and is taken as a request instead.",
+      "The event type fixes the length. Belline's own service duration chooses which event type to use and what to say on the phone; it never overrides Cal.com's.",
+      "A round-robin or collective event type lets Cal.com choose the host, so Belline must not promise the caller a particular person on those.",
+      "Managed event types are templates: Cal.com documents that slots cannot be fetched for the parent, only for the per-member child event types. A venue mapped to a parent id would look connected and quote nothing.",
+      "Nothing holds a slot. Between quoting a time and writing the booking, Cal.com may have given it to somebody else, and the caller is told at the time rather than afterwards.",
+      "Every endpoint needs its own dated cal-api-version header, and Cal.com says an absent or wrong value silently falls back to an older version of that endpoint rather than failing.",
+      "120 requests a minute on an API key. A busy evening asking for slots has to be cached rather than polled.",
+      "A self-hosted instance may run an older release than the pinned API versions, so the base URL and the version are a pair the venue has to be asked about together.",
+      "The key is the account holder's and is not scoped to one event type: it can read and write everything that account can. Sealed and audited like Zenoti's.",
+      "UNVERIFIED: whether Cal.com's free plan can take API bookings. Calendly's cannot, which is the kind of difference that only shows up on a customer's first call, and it must be checked on a real free account before a venue is connected.",
+      "The website's gate is weaker here than for a partner Belline holds credentials with. Mindbody cannot say 'Available' until Mindbody has approved us, because its liveNeeds hold credentials the approval issues; Cal.com has no such credential to wait for, so the only thing between the flag and the word 'Available' is somebody setting PARTNER_CALCOM_ENV=live on a deployment. Zenoti is the same shape. That is a human act rather than a partner's, and it is the one to be careful with.",
+    ],
+  },
+
   // -------------------------------------------------------------------------
   // The restaurant two. A different model, not a variant of the one above.
   // -------------------------------------------------------------------------

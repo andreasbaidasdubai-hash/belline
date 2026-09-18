@@ -18,6 +18,7 @@ export const PARTNER_PROVIDERS: Record<PartnerId, BookingProvider> = {
   zenoti: partnerProvider(PARTNER_CONNECTORS.zenoti),
   mindbody: partnerProvider(PARTNER_CONNECTORS.mindbody),
   msbookings: partnerProvider(PARTNER_CONNECTORS.msbookings),
+  calcom: partnerProvider(PARTNER_CONNECTORS.calcom),
   treatwell: partnerProvider(PARTNER_CONNECTORS.treatwell),
   opentable: partnerProvider(PARTNER_CONNECTORS.opentable),
   sevenrooms: partnerProvider(PARTNER_CONNECTORS.sevenrooms),
