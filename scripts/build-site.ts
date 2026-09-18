@@ -267,6 +267,18 @@ const TEXT = /\.(html|css|js|json)$/i;
 const HASHED = /\.(css|js|mp3|svg|png|jpg|jpeg|webp|ico|woff2?)$/i;
 
 /**
+ * The two widget entry points, never renamed.
+ *
+ * `embed.js` and `embed-video.js` are loaded from the app's own origin — by a
+ * customer's website, and by our site.js for Belle's bubble — so their URLs
+ * belong to the app, not to this build. Hashing them rewrote
+ * `appOrigin + "/embed-video.js"` inside site.js to a name only the marketing
+ * host has, and on a deployment where the two are different hosts the browser
+ * refused it and Belle's bubble never replaced the still hero.
+ */
+const NEVER_HASHED = new Set(["embed.js", "embed-video.js"]);
+
+/**
  * The brand tokens, inlined.
  *
  * public/site.css imports /brand/tokens.css so the dashboard and the site read
@@ -289,7 +301,7 @@ function assetBytes(asset: string): Buffer {
 
 const hashedName = new Map<string, string>();
 for (const asset of assets) {
-  if (!HASHED.test(asset)) continue;
+  if (!HASHED.test(asset) || NEVER_HASHED.has(asset)) continue;
   const bytes = assetBytes(asset);
   const hash = crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 8);
   const ext = path.posix.extname(asset);
