@@ -4,7 +4,6 @@ import { requireUser } from "@/lib/auth-server";
 import { signVisitorToken } from "@/lib/auth";
 import { bellineVenue, dashboardBelleVenue } from "@/lib/belle/identity";
 import { onViewAs } from "@/lib/belle/server";
-import { listLocationsFor } from "@/lib/store";
 import { videoAvailability, videoBubbleConfig } from "@/lib/video/availability";
 import VideoPanel from "@/app/embed/[key]/video/VideoPanel";
 
@@ -28,7 +27,7 @@ export const metadata: Metadata = {
 export default async function BelleVideoPage() {
   const user = await requireUser();
   if (await onViewAs()) notFound();
-  const own = dashboardBelleVenue(user, listLocationsFor(user.tenantId), null);
+  const own = dashboardBelleVenue(user, null);
   const venue = bellineVenue();
   if (!own || !venue) notFound();
 

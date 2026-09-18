@@ -1,5 +1,5 @@
 import type { Location, Session, User } from "../types";
-import { getLocation } from "../store";
+import { getLocation, listLocationsFor } from "../store";
 import { seedIfEmpty } from "../seed";
 import { BELLINE_LOCATION_ID } from "../seed-belline";
 import { chatAllowed } from "../embed";
@@ -53,10 +53,20 @@ export function isViewAs(session: Session | undefined | null): boolean {
  * Only their own account's venue that they may change (Belle saves what she
  * is told), and never on a read-only view-as session: Belle changes things,
  * opens tickets and starts video, and a view can do none of them.
+ *
+ * `includeInternal`, and that one word is the whole of founder item f6/4.
+ * Belline's own account is a tenant like any other, and its venue is marked
+ * internal so it stays out of customers' lists (store.ts `listLocations`) —
+ * which meant every Belline login, the one the team actually works in, had no
+ * bell on any dashboard page at all. It is still that person's own venue and
+ * still one they may change; only customers' lists need it hidden.
+ *
+ * One definition, read here rather than handed in, so the dashboard shell and
+ * the video frame cannot answer this question differently.
  */
-export function dashboardBelleVenue(user: User, venues: Location[], session: Session | undefined | null): Location | undefined {
+export function dashboardBelleVenue(user: User, session: Session | undefined | null): Location | undefined {
   if (isViewAs(session)) return undefined;
-  return venues.find((l) => l.tenantId === user.tenantId && canEditAgent(user, l.id));
+  return listLocationsFor(user.tenantId, { includeInternal: true }).find((l) => canEditAgent(user, l.id));
 }
 
 /** May an owner talk to Belle on video about their account right now? Belline's support budget, not theirs. */
