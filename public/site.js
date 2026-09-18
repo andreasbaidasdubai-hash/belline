@@ -1061,6 +1061,12 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       if (heroDemo) heroDemo.classList.add("has-video-hero");
     } else {
       document.body.appendChild(root);
+      // Corner from the first paint (reduced motion, or a phone that does not
+      // travel): the hero would otherwise keep its own still portrait of the
+      // same face, so the visitor meets two Belles at once, one of them inert.
+      // The hero figure goes, exactly as it does when × lands her.
+      if (figure) figure.classList.add("is-small");
+      if (heroDemo) heroDemo.classList.remove("has-video-hero");
     }
     remeasure();
     // Made small earlier in this session: landed, not in the hero.
@@ -1090,9 +1096,18 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       travelOff();
       if (bubble.parentNode !== document.body) document.body.appendChild(bubble);
       figure.classList.remove("has-bubble");
+      // Reduced motion turned on mid-visit, or the window became a phone: she
+      // lands, and the hero's still portrait of her goes with her (see place).
+      // `small()` already reached here through shrink(), which does the same.
+      if (cornerOnly()) figure.classList.add("is-small");
       if (heroDemo) heroDemo.classList.remove("has-video-hero");
       if (slot) slot.style.minHeight = "";
-    } else if (!corner && slot && !inHero() && !figure.classList.contains("is-small")) {
+    } else if (!corner && slot && !inHero() && (!figure.classList.contains("is-small") || !small())) {
+      // She may come home: either the hero figure was never hidden, or it was
+      // hidden only because she was cornered from the start and that reason has
+      // gone (reduced motion switched off, the window widened). × is the one
+      // reason that persists — `small()` — and it keeps her in the corner.
+      figure.classList.remove("is-small");
       travelOff();
       slot.appendChild(bubble);
       figure.classList.add("has-bubble");
