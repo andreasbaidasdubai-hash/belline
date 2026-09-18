@@ -67,6 +67,8 @@ export default function BelleDock({
   // Chat, or the video page framed in its place. The video page asks for a
   // press on Start before any session exists.
   const [view, setView] = useState<"chat" | "video">("chat");
+  /** Turns from a video call the owner has just come out of, carried into the chat. */
+  const [fromVideo, setFromVideo] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [faceFailed, setFaceFailed] = useState(false);
   const [phone, setPhone] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -85,6 +87,31 @@ export default function BelleDock({
     }
     if (stored === "open" && !window.matchMedia(PHONE).matches) setOpen(true);
   }, [storageKey]);
+
+  /**
+   * "Continue in chat", pressed inside the video frame.
+   *
+   * A call that ended — because the time ran out, or because the provider cut
+   * it — used to leave the owner in a frame whose only button was Start again;
+   * the way back to chat was a header button outside it. Now the frame asks,
+   * and the turns come with it so Belle is not told the same thing twice.
+   */
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      const data = e.data as { type?: unknown; action?: unknown; recap?: unknown } | null;
+      if (!data || data.type !== "belline.belle.video" || data.action !== "chat") return;
+      const recap = Array.isArray(data.recap) ? data.recap : [];
+      setFromVideo(
+        recap
+          .filter((t): t is { role: string; text: string } => Boolean(t) && typeof (t as { text?: unknown }).text === "string")
+          .map((t) => ({ role: t.role === "caller" ? ("user" as const) : ("assistant" as const), content: String(t.text).slice(0, 600) })),
+      );
+      setView("chat");
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia(PHONE);
@@ -189,7 +216,7 @@ export default function BelleDock({
           </div>
         </div>
         <div hidden={view !== "chat"} style={{ display: view === "chat" ? "flex" : "none", flexDirection: "column", flex: 1, minHeight: 0 }}>
-          <BelleChat fill locationId={locationId} step={step} greeting={greeting} inputRef={inputRef} handover />
+          <BelleChat fill locationId={locationId} step={step} greeting={greeting} inputRef={inputRef} handover priorTurns={fromVideo} />
         </div>
         {video && view === "video" && (
           <iframe title="Talk to Belle on video" src="/embed/belle/video" className="belle-launch-frame" allow="camera; microphone; autoplay" />

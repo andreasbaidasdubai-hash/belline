@@ -36,6 +36,7 @@ export function BelleChat({
   fill = false,
   inputRef,
   handover = false,
+  priorTurns,
 }: {
   locationId: string;
   step?: string;
@@ -47,12 +48,27 @@ export function BelleChat({
   inputRef?: React.RefObject<HTMLInputElement | null>;
   /** Offer "Talk to a person", which opens a ticket for the Belline team (api/belle/handover). */
   handover?: boolean;
+  /**
+   * A conversation had somewhere else — a video call the owner has just come
+   * out of — folded into this one, once, when it arrives. It goes to the turn
+   * endpoint with everything else, so Belle carries on rather than starting
+   * over and the owner does not say it all twice.
+   */
+  priorTurns?: { role: "user" | "assistant"; content: string }[];
 }) {
   const [lines, setLines] = useState<Line[]>([{ role: "assistant", content: greeting }]);
   const [draft, setDraft] = useState(initialDraft ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const folded = useRef(false);
+
+  // Once only: a second video call adds its own turns, it does not replay the first.
+  useEffect(() => {
+    if (folded.current || !priorTurns?.length) return;
+    folded.current = true;
+    setLines((prev) => [...prev, ...priorTurns]);
+  }, [priorTurns]);
 
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: "smooth", block: "end" });

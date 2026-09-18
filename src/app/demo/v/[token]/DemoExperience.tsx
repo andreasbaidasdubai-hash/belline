@@ -34,6 +34,8 @@ type Props = {
   videoLive: boolean;
   provider: "tavus" | "mock";
   maxCallSeconds: number;
+  /** What calls here really run to, for the intro's promise. Null: no number can be promised. */
+  promisedSeconds: number | null;
   previewClipUrl: string;
   previewPosterUrl: string;
   siteOrigin: string;
@@ -47,6 +49,12 @@ type Line = { who: "belle" | "you"; text: string };
 export default function DemoExperience(props: Props) {
   const { token, businessName, firstName, opening, visitorToken, videoOn, packages } = props;
   const [mode, setMode] = useState<"video" | "chat">(videoOn ? "video" : "chat");
+  /**
+   * The call the chat is carrying on from, when a call ended and the prospect
+   * pressed "Continue in chat". Belle is given it too (api/video-demo/chat),
+   * so the person does not say the same thing twice in two mediums.
+   */
+  const [fromVideo, setFromVideo] = useState<{ role: "agent" | "caller"; text: string }[]>([]);
   const [annual, setAnnual] = useState(false);
   const base = `/api/video-demo/${encodeURIComponent(token)}`;
   const go = (plan?: string) => {
@@ -132,12 +140,16 @@ export default function DemoExperience(props: Props) {
                   introBody="She starts talking straight away. Your browser asks for the microphone so she can hear you; your camera stays off."
                   listenFirst
                   preloadClient
-                  onChat={() => setMode("chat")}
+                  promisedSeconds={props.promisedSeconds}
+                  onChat={(recap) => {
+                    setFromVideo(recap);
+                    setMode("chat");
+                  }}
                 />
               </div>
             ) : (
               <>
-                <DemoChat base={base} visitorToken={visitorToken} opening={opening} />
+                <DemoChat base={base} visitorToken={visitorToken} opening={opening} priorTurns={fromVideo} />
                 {videoOn ? (
                   <button type="button" className="dx-link" onClick={() => setMode("video")}>
                     Talk to Belle on video instead
@@ -281,8 +293,24 @@ export default function DemoExperience(props: Props) {
   );
 }
 
-function DemoChat({ base, visitorToken, opening }: { base: string; visitorToken: string; opening: string }) {
-  const [lines, setLines] = useState<Line[]>([{ who: "belle", text: opening }]);
+function DemoChat({
+  base,
+  visitorToken,
+  opening,
+  priorTurns = [],
+}: {
+  base: string;
+  visitorToken: string;
+  opening: string;
+  /** A video call this chat is carrying on from: shown here, and given to Belle on the first turn. */
+  priorTurns?: { role: "agent" | "caller"; text: string }[];
+}) {
+  const [lines, setLines] = useState<Line[]>([
+    { who: "belle", text: opening },
+    ...priorTurns.map((t) => ({ who: t.role === "caller" ? ("you" as const) : ("belle" as const), text: t.text })),
+  ]);
+  // Spent on the first turn only: after that the server holds the thread.
+  const carry = useRef(priorTurns);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -306,8 +334,14 @@ function DemoChat({ base, visitorToken, opening }: { base: string; visitorToken:
       const res = await fetch(`${base}/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: visitorToken, chatId: chatId.current, text: said }),
+        body: JSON.stringify({
+          token: visitorToken,
+          chatId: chatId.current,
+          text: said,
+          ...(carry.current.length ? { priorTurns: carry.current } : {}),
+        }),
       });
+      carry.current = [];
       const data = (await res.json().catch(() => ({}))) as { reply?: string; error?: string };
       if (res.ok && data.reply) setLines((l) => [...l, { who: "belle", text: data.reply! }]);
       else if (data.error === "chat_limit" || data.error === "message_limit")

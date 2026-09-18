@@ -291,3 +291,37 @@ Mobile web works in iOS Safari and Android Chrome without a native SDK.
 - Faces beyond the plan cost extra. Prices are not in the docs and are not
   hard-coded in Belline.
 - Rate limits: **not documented**. Concurrency: only the 400 error text.
+
+### What actually limits a conversation (read 18 September 2026)
+
+A founder's call on staging ended at 88 seconds of the 300 we ask for, with
+`system.shutdown` and a `shutdown_reason` we map to `max_call_duration`. Other
+recent calls ended at 85. Neither of our own ceilings applied. What the docs
+say, and what they do not:
+
+- **`max_call_duration` is a request, capped silently.** Default 3600s, no
+  published maximum, and a higher value is "automatically capped to your plan's
+  maximum" —
+  https://docs.tavus.io/sections/conversational-video-interface/conversation/customizations/call-duration-and-timeout
+  No error comes back when the cap bites, and the docs never say which
+  `shutdown_reason` a plan cap produces.
+- **Every published tier allows at least 300s.** The pricing page's "Maximum
+  conversation duration" row: Basic (free) 5 min, 25 CVI minutes a month, 1
+  concurrent; Starter 5 min, 100, 3; Growth uncapped, 1250, 10
+  (https://www.tavus.io/pricing). **So a plan cap cannot explain 88 seconds** —
+  300s is legal on the lowest tier there is. Third-party write-ups list
+  different tier names and allowances, so that page has been revised recently
+  and may not describe the account we were provisioned under.
+- **No API reports the plan, the tier or the minutes left.** Every path in
+  https://docs.tavus.io/openapi.yaml is lipsync, replacements, videos, faces,
+  voices, memory-stores or conversations. `GET /v2/conversations` returns rows
+  and a `total_count` and nothing about quota. There is no billing, usage,
+  account or limits endpoint, so **a pre-flight quota check cannot be built**
+  and the Tavus dashboard is the only place the answer exists.
+- **Left unexplained, and therefore watched rather than guessed at:** the
+  month's CVI minutes running out mid-call (undocumented behaviour, undocumented
+  reason string), and the `participant_absent_timeout` contradiction noted above
+  if Tavus implements it as inactivity-while-present. `lib/video/delivery.ts`
+  records every ending with the provider's own words and the real duration,
+  opens a `video_calls_cut_short` ticket once it is a pattern, and stops the
+  pages promising a length we are not delivering.

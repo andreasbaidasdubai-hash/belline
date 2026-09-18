@@ -6,7 +6,8 @@ import { bellineVenue, dashboardBelleVenue } from "@/lib/belle/identity";
 import { onViewAs } from "@/lib/belle/server";
 import { listLocationsFor } from "@/lib/store";
 import { videoAvailability, videoBubbleConfig } from "@/lib/video/availability";
-import VideoPanel from "@/app/embed/[key]/video/VideoPanel";
+import { deliveredCeiling } from "@/lib/video/delivery";
+import BelleVideoFrame from "./BelleVideoFrame";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export default async function BelleVideoPage() {
   const face = videoBubbleConfig(venue);
 
   return (
-    <VideoPanel
+    <BelleVideoFrame
       embedKey="be_belline_site"
       apiBase="/api/belle/video"
       freshToken={signVisitorToken(venue.id, `owner_${user.id}`)}
@@ -51,6 +52,7 @@ export default async function BelleVideoPage() {
       agentName="Belle"
       provider={availability.config.provider}
       maxCallSeconds={availability.config.maxCallSeconds}
+      promisedSeconds={deliveredCeiling(availability.config.maxCallSeconds).seconds}
       previewClipUrl={face.clipUrl}
       previewPosterUrl={face.posterUrl}
       introTitle="Talk to Belle on video"

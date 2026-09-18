@@ -8,6 +8,7 @@ import { widgetOpenFor } from "@/lib/embed-preview";
 import { isActivated } from "@/lib/onboarding/journey";
 import { lineFor } from "@/lib/language";
 import { videoAvailability, videoBubbleConfig, venueFaceId } from "@/lib/video/availability";
+import { deliveredCeiling } from "@/lib/video/delivery";
 import { facePreview } from "@/lib/video/face-preview";
 import { venueByEmbedKey } from "@/lib/video/http";
 import VideoPanel from "./VideoPanel";
@@ -97,6 +98,8 @@ export default async function VideoPage({
       agentName={location.agent.displayName}
       provider={availability.config.provider}
       maxCallSeconds={availability.config.maxCallSeconds}
+      // What calls here really run to, not what we ask the provider for.
+      promisedSeconds={deliveredCeiling(availability.config.maxCallSeconds).seconds}
       chatHref={chatHref}
       voiceHref={voiceHref}
       // From the greeting bubble: the visitor already tapped to talk.

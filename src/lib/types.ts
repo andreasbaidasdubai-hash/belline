@@ -1557,6 +1557,13 @@ export interface Call {
     support?: boolean;
     /** Why it ended, in the provider's words or ours. Never shown to a visitor. */
     endReason?: string;
+    /** Who ended it: the visitor, the provider, one of our timers, a person here. */
+    endedBy?: "visitor" | "unload" | "provider" | "timer" | "kill_switch" | "agent" | "staff";
+    /**
+     * The ceiling this call was created with, so "it ended at 88 of the 300
+     * seconds it was allowed" is answerable from the record alone.
+     */
+    maxCallSeconds?: number;
   };
   /**
    * A voicemail the caller chose to leave on a venue that had not gone live.
@@ -1714,6 +1721,7 @@ export type ExceptionKind =
   | "billing_dispute"
   | "account_recovery"
   | "handoff_requested"
+  | "video_calls_cut_short"
   | "google_sync_failed"
   | "google_token_expired"
   | "google_misconfigured"

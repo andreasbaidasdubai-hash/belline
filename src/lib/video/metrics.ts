@@ -39,6 +39,8 @@ export const SERVER_METRICS = [
   "handover_requested",
   "duration_warning",
   "ended",
+  /** The same ending, classified, with the provider's raw reason in `detail` and the real length in `ms`. */
+  "ended_cause",
 ] as const;
 
 export type VideoMetricName = (typeof CLIENT_METRICS)[number] | (typeof SERVER_METRICS)[number];

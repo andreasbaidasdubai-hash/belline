@@ -41,6 +41,7 @@ export const EXCEPTION_KINDS: readonly ExceptionKind[] = [
   "billing_dispute",
   "account_recovery",
   "handoff_requested",
+  "video_calls_cut_short",
   "google_sync_failed",
   "google_token_expired",
   "google_misconfigured",
@@ -96,6 +97,11 @@ export const KIND_META: Record<ExceptionKind, KindMeta> = {
     belle: false,
   },
   handoff_requested: { label: "Prospect asked for a person", next: "Reply in the Belline inbox.", belle: false },
+  video_calls_cut_short: {
+    label: "Video calls ending early",
+    next: "The provider is ending calls before the length we ask for, and no API reports the plan or the minutes left. Open the Tavus dashboard: check the plan's maximum conversation duration and whether the month's CVI minutes are used up. Until it is fixed the pages stop promising a length they cannot keep.",
+    belle: false,
+  },
   google_sync_failed: {
     label: "Bookings not reaching Google Calendar",
     next: "Check the server log for the venue's [google] lines. Belline retries on its own; if Google keeps refusing, ask the owner to reconnect.",

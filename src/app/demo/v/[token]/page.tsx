@@ -4,6 +4,7 @@ import { newVisitorId } from "@/lib/webchat";
 import { isActivated } from "@/lib/onboarding/journey";
 import { videoAvailability, videoBubbleConfig, venueFaceId } from "@/lib/video/availability";
 import { videoConfig } from "@/lib/video/config";
+import { deliveredCeiling } from "@/lib/video/delivery";
 import { facePreview } from "@/lib/video/face-preview";
 import { bellineVenue } from "@/lib/sales/video-demo/http";
 import { pageViewAllowed, resolveDemoToken } from "@/lib/sales/video-demo/service";
@@ -71,6 +72,7 @@ export default async function VideoDemoPage({ params }: { params: Promise<{ toke
       videoLive={videoLive()}
       provider={config.provider}
       maxCallSeconds={config.maxCallSeconds}
+      promisedSeconds={deliveredCeiling(config.maxCallSeconds).seconds}
       previewClipUrl={preview.clipUrl}
       previewPosterUrl={preview.posterUrl}
       siteOrigin={siteOrigin()}

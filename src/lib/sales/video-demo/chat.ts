@@ -68,6 +68,9 @@ export async function sweepDemoChats(now = Date.now()): Promise<number> {
   return closed;
 }
 
+/** Turns carried in from an ended video call. Enough for the thread, not the whole call. */
+const CARRIED_TURNS = 20;
+
 export type ChatTurn =
   | { ok: true; reply: string; opening?: string; messagesLeft: number }
   | { ok: false; status: number; error: "chat_limit" | "message_limit" | "empty" };
@@ -79,6 +82,13 @@ export async function demoChatTurn(input: {
   chatId: string;
   text: string;
   reserve: () => Promise<boolean>;
+  /**
+   * The video call this chat is carrying on from, when the visitor pressed
+   * "Continue in chat" after one ended. Used only when the chat is created:
+   * it seeds Belle's history and the call record, so the prospect is not made
+   * to repeat everything they had just said out loud.
+   */
+  priorTurns?: { role: "agent" | "caller"; text: string }[];
   env?: Record<string, string | undefined>;
 }): Promise<ChatTurn> {
   const text = input.text.replace(/\s+/g, " ").trim().slice(0, 1000);
@@ -96,18 +106,31 @@ export async function demoChatTurn(input: {
     saveCall(call);
     const context = sessionContextFor(input.link);
     opening = context.greeting;
+    // Carried over from a video call that ended: the same conversation, in a
+    // different medium, not a new one. Bounded, because it arrives from a
+    // browser — though every line of it was written by this server.
+    const carried = (input.priorTurns ?? [])
+      .filter((t) => typeof t?.text === "string" && t.text.trim())
+      .slice(-CARRIED_TURNS)
+      .map((t) => ({ role: t.role === "caller" ? ("caller" as const) : ("agent" as const), text: t.text.trim().slice(0, 600) }));
     chat = {
       key,
       linkId: input.link.id,
       callId: call.id,
-      agent: new AgentSession(input.venue, call, { channel: "text", briefing: context.briefing }),
+      agent: new AgentSession(input.venue, call, {
+        channel: "text",
+        briefing: context.briefing,
+        history: carried.map((t) => ({ role: t.role === "caller" ? ("user" as const) : ("assistant" as const), content: t.text })),
+      }),
       messages: 0,
       lastAt: Date.now(),
       callerLines: [],
       reported: false,
     };
     // The opening is Belle's first message, as it is the video's first words.
-    call.transcript.push({ role: "agent", text: context.greeting, at: new Date().toISOString() });
+    const at = new Date().toISOString();
+    call.transcript.push({ role: "agent", text: context.greeting, at });
+    for (const t of carried) call.transcript.push({ role: t.role, text: t.text, at });
     chats().set(key, chat);
     await recordDemoEvent(input.link.id, "chat_started");
   }

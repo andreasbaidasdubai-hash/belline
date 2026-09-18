@@ -10,12 +10,14 @@ import {
   errorCopy,
   micErrorCode,
   once,
+  promiseLine,
   reduce,
   startErrorCode,
   statusText,
   type CallEvent,
   type VideoErrorCode,
 } from "@/lib/video/client/machine";
+import { END_ACTIONS, endCopy, endedUnexpectedly, type VideoEndCause } from "@/lib/video/end-reason";
 import type { CallAdapter, CallSession } from "@/lib/video/client/calls";
 import Greenscreen from "./Greenscreen";
 
@@ -89,8 +91,20 @@ type Props = {
   introTitle?: string;
   introBody?: string;
   startLabel?: string;
-  /** Switching to chat is handled by the page (the demo page's own chat), not a navigation. */
-  onChat?: () => void;
+  /**
+   * Switching to chat is handled by the page (the demo page's own chat), not a
+   * navigation. `recap` is the call's turns, so the chat can open with the
+   * conversation already in it and the visitor does not start again from
+   * nothing. Empty when the call ended before anything was said.
+   */
+  onChat?: (recap: { role: "agent" | "caller"; text: string }[]) => void;
+  /**
+   * How long a call really runs, for the intro's promise: what we have been
+   * delivering, not what we ask the provider for (lib/video/delivery.ts).
+   * Null: recent calls do not agree on a length, so the page promises none.
+   * Undefined: no measurement was passed, so `maxCallSeconds` stands.
+   */
+  promisedSeconds?: number | null;
   /**
    * One tap and the face talks (the personalised demo page). The tap starts the
    * session, the call client and the microphone prompt together; the call joins
@@ -107,9 +121,14 @@ type Props = {
 
 type Session = CallSession & { maxCallSeconds: number; warnBeforeSeconds: number; captions: boolean; perception: boolean };
 
+/** What `POST /session/end` answers (lib/video/http.ts `endedPayload`). */
+type EndedAnswer = { cause: VideoEndCause; seconds: number; recap: { role: "agent" | "caller"; text: string }[] };
+
 const TOKEN_KEY = "belline.video.visitor";
 /** How long "Call ended" shows in the bubble before the page shrinks it back. */
 const ENDED_LINGER_MS = 1200;
+/** How long the bubble waits for the end route to say why, before giving up on a reason. */
+const CAUSE_WAIT_MS = 2000;
 
 export default function VideoPanel({
   embedKey,
@@ -130,6 +149,7 @@ export default function VideoPanel({
   introBody,
   startLabel,
   onChat,
+  promisedSeconds,
   listenFirst,
   tapLabel,
   preloadClient,
@@ -155,6 +175,8 @@ export default function VideoPanel({
   const startedAtRef = useRef(0);
   const firstResponseRef = useRef(false);
   const endingRef = useRef(false);
+  /** The call's turns, handed over when the visitor carries on in chat. */
+  const recapRef = useRef<{ role: "agent" | "caller"; text: string }[]>([]);
   const startButtonRef = useRef<HTMLButtonElement>(null);
 
   const base = apiBase ?? `/api/video/${encodeURIComponent(embedKey)}`;
@@ -209,22 +231,40 @@ export default function VideoPanel({
     micRef.current = null;
   }, []);
 
-  /** Tell the server. A beacon when the page is going away, a keepalive fetch otherwise. */
+  /**
+   * Tell the server, and hear back why the call ended.
+   *
+   * The answer is the only place the real reason exists: from here our own
+   * ceiling, the provider's, and a room that simply went away are the same
+   * event — the face leaves. A beacon on unload cannot read an answer, and
+   * does not need one, because there is no panel left to tell.
+   */
   const endOnServer = useCallback(
-    (reason: string, beacon = false) => {
+    async (reason: string, beacon = false): Promise<EndedAnswer | null> => {
       const session = sessionRef.current;
-      if (!session) return;
+      if (!session) return null;
       const payload = JSON.stringify({ sessionId: session.sessionId, clientToken: session.clientToken, reason });
       if (beacon && typeof navigator.sendBeacon === "function") {
         navigator.sendBeacon(`${base}/session/end`, new Blob([payload], { type: "text/plain" }));
-        return;
+        return null;
       }
-      void fetch(`${base}/session/end`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: payload,
-        keepalive: true,
-      }).catch(() => undefined);
+      try {
+        const res = await fetch(`${base}/session/end`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: payload,
+          keepalive: true,
+        });
+        if (!res.ok) return null;
+        const body = (await res.json()) as Partial<EndedAnswer>;
+        return typeof body?.cause === "string"
+          ? { cause: body.cause, seconds: Number(body.seconds) || 0, recap: Array.isArray(body.recap) ? body.recap : [] }
+          : null;
+      } catch {
+        // The server will end it anyway, on its own timer. The panel keeps
+        // the calm generic wording rather than inventing a reason.
+        return null;
+      }
     },
     [base],
   );
@@ -240,9 +280,12 @@ export default function VideoPanel({
       if (videoRef.current) videoRef.current.srcObject = null;
       if (audioRef.current) audioRef.current.srcObject = null;
       setFaceVisible(false);
-      endOnServer(reason);
       // Silent when a failure is about to be shown instead.
       if (!opts.silent) dispatch({ type: "ended", reason });
+      const answer = await endOnServer(reason);
+      if (!answer) return;
+      recapRef.current = answer.recap;
+      if (!opts.silent) dispatch({ type: "end_cause", cause: answer.cause, seconds: answer.seconds });
     },
     [endOnServer, stopMic],
   );
@@ -255,7 +298,10 @@ export default function VideoPanel({
         report("first_response", Date.now() - startedAtRef.current);
       }
       if (event.type === "network" && event.state === "reconnecting") report("reconnecting");
-      if (event.type === "left") void end("visitor");
+      // The room closing is not the visitor's doing until the server says it
+      // was. `dropped` is what makes an early provider shutdown visible
+      // instead of being filed as one more person who hung up.
+      if (event.type === "left") void end(event.reason === "left" ? "visitor" : "dropped");
       if (event.type === "error") {
         report("client_error", undefined, event.code);
         void end("error", { silent: true });
@@ -271,6 +317,7 @@ export default function VideoPanel({
   startRef.current = async () => {
     endingRef.current = false;
     firstResponseRef.current = false;
+    recapRef.current = [];
     sessionRef.current = null;
     setNote(null);
     dispatch({ type: "start" });
@@ -349,7 +396,7 @@ export default function VideoPanel({
     setBackground(session.background?.src ?? "");
     // Closed while the session was being made: it ends now rather than waiting out its timer.
     if (endingRef.current) {
-      endOnServer("visitor");
+      void endOnServer("visitor");
       stopMic();
       return;
     }
@@ -415,7 +462,7 @@ export default function VideoPanel({
     sessionRef.current = session;
     setBackground(session.background?.src ?? "");
     if (endingRef.current) {
-      endOnServer("visitor");
+      void endOnServer("visitor");
       dropMic();
       return;
     }
@@ -536,7 +583,7 @@ export default function VideoPanel({
     const leave = () => {
       if (!sessionRef.current || endingRef.current) return;
       endingRef.current = true;
-      endOnServer("unload", true);
+      void endOnServer("unload", true);
       void callRef.current?.leave();
       stopMic();
     };
@@ -577,12 +624,24 @@ export default function VideoPanel({
     if (faceVisible) tellHost({ type: "face" });
   }, [faceVisible, tellHost]);
 
-  // Inside the bubble, an ended call gives the page back its resting bubble.
+  /**
+   * Inside the bubble, an ended call gives the page back its resting bubble —
+   * but only when the visitor ended it.
+   *
+   * A call that stopped on its own is the one moment the bubble must not just
+   * fold away: "it vanished and I don't know why" is exactly what the founder
+   * met. So an unexpected end keeps the frame open with the reason and the two
+   * ways on, and the visitor closes it themselves.
+   */
+  const lingering = state.phase === "ended" && state.endedCause !== undefined && endedUnexpectedly(state.endedCause);
   useEffect(() => {
-    if (!bubble || state.phase !== "ended") return;
-    const timer = setTimeout(() => tellHost({ type: "ended" }), ENDED_LINGER_MS);
+    if (!bubble || state.phase !== "ended" || lingering) return;
+    // Until the end route has answered, the bubble waits: folding away first
+    // and learning why second is how the reason got lost in the first place.
+    const wait = state.endedCause === undefined ? CAUSE_WAIT_MS : 0;
+    const timer = setTimeout(() => tellHost({ type: "ended" }), ENDED_LINGER_MS + wait);
     return () => clearTimeout(timer);
-  }, [bubble, state.phase, tellHost]);
+  }, [bubble, state.phase, state.endedCause, lingering, tellHost]);
 
   // Escape (inside the bubble) ends the call.
   useEffect(() => {
@@ -646,8 +705,12 @@ export default function VideoPanel({
   async function switchTo(kind: "chat" | "voice") {
     if (kind === "chat" && onChat) {
       report("fallback_chat");
-      await end("switch_chat", { silent: true });
-      onChat();
+      // Silent only while the call is still up: from an ended panel the words
+      // on screen are the reason they are switching, and must not be wiped.
+      await end("switch_chat", { silent: state.phase !== "ended" });
+      // The turns go with them, so the chat opens on the conversation they
+      // were already having rather than on an empty box.
+      onChat(recapRef.current);
       return;
     }
     const href = kind === "chat" ? chatHref : voiceHref;
@@ -678,6 +741,10 @@ export default function VideoPanel({
   const captionChars = bubble && typeof window !== "undefined" ? Math.max(28, Math.floor((window.innerWidth - 48) / 7.4)) : 90;
   const caption = showCaptions && state.phase === "live" ? captionLine(state, agentName, captionChars) : "";
   const canRetry = (state.phase !== "error" || state.retryable) && state.error !== "unavailable" && state.error !== "expired";
+  // What this page promised about length, and what it says when the call is
+  // over. The promise is only quoted back in the one case where we kept it.
+  const promised = promisedSeconds === undefined ? maxCallSeconds : promisedSeconds;
+  const ended = endCopy(state.endedCause ?? "visitor", agentName, promised === null ? "" : durationWords(promised));
 
   return (
     <div
@@ -781,7 +848,7 @@ export default function VideoPanel({
         )}
       </section>
 
-      {resting && !(bubble && state.phase !== "error") && (
+      {resting && !(bubble && state.phase !== "error" && !lingering) && (
         <div className="bv-panel">
           {state.phase === "intro" && tapLabel && introBody && <p className="bv-small">{introBody}</p>}
           {state.phase === "intro" && !tapLabel && (
@@ -798,17 +865,25 @@ export default function VideoPanel({
               {errorCopy(state.error, agentName)}
             </p>
           )}
-          {state.phase === "ended" && <p>The call has ended. Thanks for talking with {agentName}.</p>}
+          {/* An ended call says what happened and offers the way on. Never the
+              raw reason, never the provider's name, and never a word that
+              suggests the visitor broke it (lib/video/end-reason.ts). */}
+          {state.phase === "ended" && (
+            <div className="bv-ended" role="status">
+              <h2 className="bv-ended-t">{ended.title}</h2>
+              <p>{ended.body}</p>
+            </div>
+          )}
 
           <div className="bv-actions">
             {canRetry && !(tapLabel && state.phase === "intro") && (
               <button ref={startButtonRef} type="button" className="bv-btn bv-primary" onClick={() => void start()}>
-                {state.phase === "intro" ? (startLabel ?? "Start video call") : state.phase === "ended" ? "Start again" : "Try again"}
+                {state.phase === "intro" ? (startLabel ?? "Start video call") : state.phase === "ended" ? END_ACTIONS.again : "Try again"}
               </button>
             )}
             {(chatHref || onChat) && (
               <button type="button" className="bv-btn" onClick={() => void switchTo("chat")}>
-                {bubble ? "Type instead" : "Chat instead"}
+                {state.phase === "ended" ? END_ACTIONS.chat : bubble ? "Type instead" : "Chat instead"}
               </button>
             )}
             {voiceHref && !bubble && (
@@ -817,7 +892,7 @@ export default function VideoPanel({
               </button>
             )}
           </div>
-          {state.phase === "intro" && <p className="bv-small">Calls end after {durationWords(maxCallSeconds)}.</p>}
+          {state.phase === "intro" && <p className="bv-small">{promiseLine(promised)}</p>}
         </div>
       )}
 
@@ -1039,6 +1114,11 @@ html, body { margin: 0; height: 100%; background: var(--bl-ground) }
   letter-spacing: var(--bl-track-h2); font-size: 19px; line-height: 1.25 }
 .bv-panel p { margin: 0; color: var(--bl-text-2); font-size: 14px }
 .bv-panel .bv-error { color: var(--bl-danger) }
+/* The end of a call: a calm heading and one sentence, never an alarm colour —
+   a call ending early is our problem to fix, not a warning to the visitor. */
+.bv-ended { display: grid; gap: 6px }
+.bv-ended-t { margin: 0; font-family: var(--bl-font-display); font-weight: var(--bl-weight-heading);
+  letter-spacing: var(--bl-track-h2); font-size: 17px; line-height: 1.3; color: var(--bl-ink-900) }
 .bv-small { font-size: 12.5px !important; color: var(--bl-muted) !important }
 .bv-actions { display: flex; flex-wrap: wrap; gap: 8px }
 
@@ -1130,6 +1210,8 @@ html, body { background: transparent !important; height: auto; overflow: hidden 
 .is-bubble .bv-panel { margin: 10px auto 12px; padding: 14px 16px; gap: 10px; width: auto; max-width: 100vw;
   background: var(--bl-ground); border: 1px solid var(--bl-blue-line); border-radius: 18px; box-shadow: var(--bl-elev-float) }
 .is-bubble .bv-panel p { font-size: 13px; line-height: 1.45 }
+.is-bubble .bv-ended-t { font-size: 15px }
+.is-bubble .bv-ended { text-align: center }
 .is-bubble .bv-actions { justify-content: center }
 .is-bubble .bv-btn { min-height: 40px; font-size: 13.5px; padding: 0 14px }
 `;

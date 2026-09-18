@@ -333,6 +333,54 @@ test("an English venue's guard is unchanged by any of this", () => {
   assert.equal(repairReply("I have 4:30 free.", checkTimes("I have 4:30 free.", [])), honestAlternative(checkTimes("I have 4:30 free.", [])));
 });
 
+console.log("\n\x1b[1mThe promise a page makes about a call's length\x1b[0m\n");
+
+/**
+ * The same rule as the rest of this file, turned on ourselves.
+ *
+ * Belle may not quote a time no tool returned. A page may not quote a length
+ * no call delivered. "Calls end after 5 minutes" was the number we send Tavus;
+ * Tavus was ending calls at 88 seconds. The page was inventing an availability
+ * exactly as surely as a receptionist offering a slot nobody had.
+ */
+const { deliveredCeiling } = await import("../src/lib/video/delivery");
+const { promiseLine } = await import("../src/lib/video/client/machine");
+
+const cut = (seconds: number) => ({
+  at: new Date().toISOString(),
+  locationId: "loc_x",
+  sessionId: `vs_${seconds}`,
+  provider: "tavus",
+  reason: "max_call_duration reached",
+  endedBy: "provider" as const,
+  cause: "cut_short" as const,
+  seconds,
+  maxCallSeconds: 300,
+});
+
+test("a page never promises a length longer than the calls it has delivered", () => {
+  // The founder's own case: three calls around 86 seconds, a 300-second promise.
+  const promised = deliveredCeiling(300, [cut(88), cut(85), cut(86)]).seconds;
+  assert.notEqual(promised, 300, "the page still promised a length no recent call reached");
+  assert.ok(promised !== null && promised <= 85, `promised ${promised}s when the shortest call ran 85s`);
+});
+
+test("when the calls agree on no length, the page promises no number at all", () => {
+  // Inventing "about two minutes" out of 20, 140 and 240 seconds would be the
+  // same sin in a nicer coat: a number nothing measured.
+  assert.equal(deliveredCeiling(300, [cut(20), cut(140), cut(240)]).seconds, null);
+  const line = promiseLine(null);
+  assert.doesNotMatch(line, /\d/, `a page with nothing to promise said a number: ${line}`);
+  assert.match(line, /chat/i, "the honest line still leaves the visitor somewhere to go");
+});
+
+test("a promise that is being kept is left alone", () => {
+  // The guard must not cry wolf here either: while calls run the full length,
+  // the plain useful sentence stays.
+  assert.equal(deliveredCeiling(300, []).seconds, 300);
+  assert.equal(promiseLine(300), "Calls end after 5 minutes.");
+});
+
 console.log(
   failed === 0
     ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n`

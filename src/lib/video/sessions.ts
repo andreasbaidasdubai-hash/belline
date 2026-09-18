@@ -12,6 +12,8 @@ import { BELLINE_LOCATION_ID, BELLINE_VIDEO_GREETING } from "../seed-belline";
 import { answersIn } from "../language";
 import { videoAvailability, type VideoOffReason, type VideoSessionKind } from "./availability";
 import type { VideoConfig } from "./config";
+import { recordVideoEnding } from "./delivery";
+import { classifyVideoEnd, type VideoEndCause } from "./end-reason";
 import { venueVideoSettings } from "./control";
 import { videoBackground } from "./backgrounds";
 import { venueLook } from "./faces";
@@ -64,6 +66,8 @@ export interface VideoSession {
   joinedAt?: number;
   endedAt?: number;
   endReason?: string;
+  /** Who ended it. With the reason and the real length, this is what `classifyVideoEnd` needs. */
+  endedBy?: EndedBy;
   conversationId?: string;
   ephemeralPalId?: string;
   /** The face this call shows, and whether its green is replaced in the panel. */
@@ -430,6 +434,7 @@ export async function endVideoSession(
   session.status = "ended";
   session.endedAt = Date.now();
   session.endReason = reason.slice(0, 80);
+  session.endedBy = opts.by;
   session.timers.forEach(clearTimeout);
   session.timers = [];
   session.turn?.abort.abort();
@@ -485,6 +490,8 @@ function finishCall(call: Call, location: Location, session: VideoSession): void
     video: {
       ...(call.video ?? { provider: session.provider, sessionId: session.id }),
       endReason: session.endReason,
+      ...(session.endedBy ? { endedBy: session.endedBy } : {}),
+      maxCallSeconds: session.maxCallSeconds,
       seconds: Math.max(0, Math.round(seconds)),
     },
   };
@@ -495,6 +502,34 @@ function finishCall(call: Call, location: Location, session: VideoSession): void
   meterCallTime(finished, location, seconds, { stt: false });
   meterVideoTime(finished, seconds, session.provider);
   recordVideoMetric(location, { name: "ended", sessionId: session.id, ms: seconds * 1000, detail: session.endReason });
+  // What actually happened, kept where a pattern of short calls can be seen:
+  // the provider's own words, the real length, and the ceiling it was given.
+  recordVideoEnding(location, {
+    sessionId: session.id,
+    provider: session.provider,
+    reason: session.endReason ?? "",
+    endedBy: session.endedBy ?? "provider",
+    seconds: Math.max(0, Math.round(seconds)),
+    maxCallSeconds: session.maxCallSeconds,
+  });
+}
+
+/**
+ * Why this session ended, in the one vocabulary a visitor's panel may show.
+ *
+ * The panel cannot work this out for itself: from the browser, our own ceiling,
+ * the provider's, and the room simply going away all look identical — the face
+ * leaves and the room closes. Only the server knows which it was, so the end
+ * routes hand this back and the panel says the right thing.
+ */
+export function videoEndCause(session: VideoSession): VideoEndCause {
+  const seconds = Math.max(0, Math.round(((session.endedAt ?? Date.now()) - session.createdAt) / 1000));
+  return classifyVideoEnd({
+    reason: session.endReason ?? "",
+    endedBy: session.endedBy ?? "provider",
+    seconds,
+    maxCallSeconds: session.maxCallSeconds,
+  });
 }
 
 function forgetLater(sessionId: string): void {

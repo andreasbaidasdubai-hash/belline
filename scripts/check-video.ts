@@ -79,6 +79,9 @@ const { videoProvider, setVideoProviderForTests } = await import("../src/lib/vid
 const sessions = await import("../src/lib/video/sessions");
 const { handleChatCompletions, guardVideoClause } = await import("../src/lib/video/engine");
 const { clearVideoMetrics, recentVideoMetrics } = await import("../src/lib/video/metrics");
+const { classifyVideoEnd, endCopy, endedUnexpectedly, END_ACTIONS } = await import("../src/lib/video/end-reason");
+const { clearVideoEndings, deliveredCeiling, recentVideoEndings } = await import("../src/lib/video/delivery");
+const { listExceptions } = await import("../src/lib/exceptions");
 const machine = await import("../src/lib/video/client/machine");
 const configRoute = await import("../src/app/api/embed/[key]/config/route");
 const sessionRoute = await import("../src/app/api/video/[key]/session/route");
@@ -102,6 +105,9 @@ async function test(name: string, fn: () => void | Promise<void>) {
     failed++;
   } finally {
     sessions.clearVideoSessions();
+    // Endings are a rolling window the promise and the shortfall ticket read:
+    // one case's short calls must not decide what the next case promises.
+    clearVideoEndings();
     resetMockVideo();
     setVideoProviderForTests(null);
   }
@@ -691,7 +697,9 @@ await test("7. end cleans up on both sides, once: provider told, PAL deleted, ca
       body: JSON.stringify({ sessionId: client.sessionId, clientToken: client.clientToken, reason: "unload" }),
     });
     const res = await endRoute.POST(endReq, params(A.embed!.key));
-    assert.deepEqual(await res.json(), { ok: true, ended: true });
+    // The answer also says why, for the panel (case 7d): a closed-list cause,
+    // the real length and the turns — never the provider's own words.
+    assert.deepEqual(await res.json(), { ok: true, ended: true, cause: "visitor", seconds: 0, recap: [] });
     assert.ok(fake.calls.some((c) => c.method === "POST" && c.url.endsWith("/v2/conversations/c_123/end")));
     assert.ok(fake.calls.some((c) => c.method === "DELETE" && c.url.endsWith("/v2/pals/p_session_1")));
     assert.equal(session.timers.length, 0, "no timer left to fire");
@@ -760,6 +768,125 @@ await test("7b. the provider's shutdown callback ends the session; its token onl
   assert.equal(shut.status, 200);
   assert.equal(session.status, "ended");
   assert.equal(getCall(session.callId)?.video?.endReason, "max_call_duration reached");
+});
+
+await test("7d. an early or unexpected end: the panel is told why, in words a visitor may read, and never the provider's", async () => {
+  // A founder's call on staging stopped at 88 seconds of the 300 we ask for.
+  // Everything we had recorded said "completed", and the panel said "the call
+  // has ended" — which is how an account-tier cutoff stayed invisible for a
+  // fortnight. The difference between "our limit" and "somebody cut it" is the
+  // only thing here worth pinning.
+  const at = (reason: string, endedBy: Parameters<typeof classifyVideoEnd>[0]["endedBy"], seconds: number) =>
+    classifyVideoEnd({ reason, endedBy, seconds, maxCallSeconds: 300 });
+
+  // The provider's own maximum, reached: the limit we promised, doing its job.
+  assert.equal(at("max_call_duration reached", "provider", 298), "time_limit");
+  assert.equal(at("max_duration", "timer", 305), "time_limit");
+  // The same words, a third of the way in: somebody else's ceiling, not ours.
+  assert.equal(at("max_call_duration reached", "provider", 88), "cut_short");
+  // The visitor's own doing, however it reached us.
+  assert.equal(at("client_visitor", "visitor", 40), "visitor");
+  assert.equal(at("client_unload", "unload", 40), "visitor");
+  assert.equal(at("participant_left_timeout reached", "provider", 40), "visitor");
+  assert.equal(at("never_joined", "timer", 60), "visitor");
+  // The room, not a decision.
+  assert.equal(at("daily_room_has_been_deleted", "provider", 30), "connection");
+  assert.equal(at("agent_left", "provider", 30), "connection");
+  assert.equal(at("agent_ended", "agent", 120), "wrapped_up");
+
+  assert.equal(endedUnexpectedly("visitor"), false);
+  assert.equal(endedUnexpectedly("wrapped_up"), false);
+  for (const cause of ["time_limit", "cut_short", "connection"] as const) assert.equal(endedUnexpectedly(cause), true);
+
+  // Three different sentences, none of them blaming the visitor, none of them
+  // carrying a raw reason or a provider's name.
+  const said = (["time_limit", "cut_short", "connection"] as const).map((c) => endCopy(c, "Belle", "5 minutes"));
+  assert.equal(new Set(said.map((s) => s.title)).size, 3, "the three cases read the same");
+  for (const copy of said) {
+    const text = `${copy.title} ${copy.body}`;
+    assert.doesNotMatch(text, /tavus|daily|max_call_duration|shutdown|provider|client_|_timeout/i, `a raw reason reached the visitor: ${text}`);
+    // "where you left off" is fine; "you hung up" is not. The line between
+    // them is whether the sentence puts the ending on them.
+    assert.doesNotMatch(text, /you (hung up|disconnected|dropped)|because you|your fault|you ended (the|it)|you closed/i, `the visitor was blamed: ${text}`);
+  }
+  // Only the case where we kept the promise quotes it back.
+  assert.match(endCopy("time_limit", "Belle", "5 minutes").body, /5 minutes/);
+  assert.doesNotMatch(endCopy("time_limit", "Belle", "").body, /\d/, "a page that promised no number must not invent one at the end");
+  assert.doesNotMatch(endCopy("cut_short", "Belle", "5 minutes").body, /5 minutes/, "a call cut short never quotes a promise it broke");
+
+  // And the end route hands that cause back, because the browser cannot tell:
+  // our ceiling, the provider's and a vanished room are one event from there.
+  const location = getLocation(A.id)!;
+  const started = await sessions.startVideoSession(location, "visitor-7d");
+  assert.ok(started.ok);
+  if (!started.ok) return;
+  // The provider cut it at 88 seconds; the panel only knows the room closed.
+  // The length comes off the call record, which is where it survives a restart.
+  saveCall({
+    ...getCall(started.session.callId)!,
+    startedAt: new Date(Date.now() - 88_000).toISOString(),
+    transcript: [
+      { role: "agent", text: "Hello.", at: new Date().toISOString() },
+      { role: "caller", text: "Do you open Sundays?", at: new Date().toISOString() },
+    ],
+  });
+  started.session.createdAt = Date.now() - 88_000;
+  await sessions.endVideoSession(started.session.id, "max_call_duration reached", { by: "provider" });
+  const answer = (await (
+    await endRoute.POST(
+      new Request("http://x/", { method: "POST", body: JSON.stringify({ sessionId: started.client.sessionId, clientToken: started.client.clientToken, reason: "dropped" }) }),
+      params(A.embed!.key),
+    )
+  ).json()) as { cause: string; seconds: number; recap: { role: string; text: string }[] };
+  assert.equal(answer.cause, "cut_short", "a call cut short was reported to the panel as an ordinary end");
+  assert.ok(answer.seconds >= 80, `the real length was lost: ${answer.seconds}`);
+  // The turns come back so "Continue in chat" does not start from nothing.
+  assert.deepEqual(answer.recap.map((t) => t.role), ["agent", "caller"]);
+  assert.equal(JSON.stringify(answer).includes("max_call_duration"), false, "the provider's words reached the browser");
+
+  // The panel is where those words are shown, and where the two ways on live.
+  const panel = read("src/app/embed/[key]/video/VideoPanel.tsx");
+  assert.match(panel, /endCopy\(state\.endedCause \?\? "visitor", agentName/);
+  assert.match(panel, /END_ACTIONS\.again/);
+  assert.match(panel, /END_ACTIONS\.chat/);
+  assert.equal(END_ACTIONS.again, "Start again");
+  assert.equal(END_ACTIONS.chat, "Continue in chat");
+  // Inside the bubble an unexpected end stays open instead of folding away.
+  assert.match(panel, /const lingering = state\.phase === "ended" && state\.endedCause !== undefined && endedUnexpectedly\(state\.endedCause\)/);
+  // And the dashboard's framed panel now has a way back to chat at all.
+  assert.match(read("src/app/embed/belle/video/BelleVideoFrame.tsx"), /onChat=\{\(recap\) =>/);
+  assert.match(read("src/app/setup/BelleDock.tsx"), /belline\.belle\.video/);
+});
+
+await test("7e. a run of short calls is visible: the real length and the provider's reason, and a ticket once it is a pattern", async () => {
+  const location = getLocation(A.id)!;
+  // Three calls cut at about the same point, well inside the 300s we ask for.
+  for (const [i, seconds] of [85, 88, 86].entries()) {
+    const started = await sessions.startVideoSession(location, `visitor-7e-${i}`);
+    assert.ok(started.ok);
+    if (!started.ok) return;
+    saveCall({ ...getCall(started.session.callId)!, startedAt: new Date(Date.now() - seconds * 1000).toISOString() });
+    started.session.createdAt = Date.now() - seconds * 1000;
+    await sessions.endVideoSession(started.session.id, "max_call_duration reached", { by: "provider" });
+  }
+  const endings = recentVideoEndings();
+  assert.equal(endings.length, 3);
+  // Each one keeps the provider's own words and the length it really ran, so
+  // the Issues page can show the pattern rather than three completed calls.
+  assert.deepEqual(new Set(endings.map((e) => e.cause)), new Set(["cut_short"]));
+  assert.deepEqual(new Set(endings.map((e) => e.reason)), new Set(["max_call_duration reached"]));
+  assert.ok(endings.every((e) => e.seconds >= 80 && e.maxCallSeconds === 300), "the real length was not recorded");
+  assert.ok(recentVideoMetrics().some((m) => m.name === "ended_cause" && m.detail?.startsWith("cut_short:")));
+
+  // And it is somebody's job now, on the page where the team already looks.
+  const ticket = listExceptions({ status: "all", kind: "video_calls_cut_short" });
+  assert.equal(ticket.length, 1, "a run of short calls opened no ticket");
+  assert.match(ticket[0].reason, /85–88s|85-88s/);
+  assert.equal(ticket[0].context.askedFor, 300);
+  assert.equal(ticket[0].context.providerReason, "max_call_duration reached");
+  // The console page reads that list rather than inventing its own.
+  assert.match(read("src/app/(internal)/sales/issues/page.tsx"), /recentVideoEndings\(\)/);
+  assert.match(read("src/app/(internal)/sales/issues/VideoEndings.tsx"), /The provider&apos;s words/);
 });
 
 await test("7c. the model route answers while the session is still being created, and refuses once it has ended", async () => {
@@ -1180,7 +1307,7 @@ await test("8. a refused microphone is explained, with the chat offered, and any
   assert.ok(startBody.indexOf("requestSession()") < startBody.indexOf("getUserMedia({"), "the session starts beside the prompt, not after it");
   assert.match(startBody, /dispatch\(\{ type: "fail", code, retryable: code !== "mic_denied" \}\);\s*discardSession\(sessionReply, "mic_refused"\);/);
   assert.match(panel, /function discardSession[\s\S]{0,400}\/session\/end/);
-  assert.match(startBody, /if \(endingRef\.current\) \{\s*endOnServer\("visitor"\);/, "closed while connecting ends the session as soon as it exists");
+  assert.match(startBody, /if \(endingRef\.current\) \{\s*void endOnServer\("visitor"\);/, "closed while connecting ends the session as soon as it exists");
   assert.match(startBody, /m\.preloadCallClient\(provider\)/, "the call client downloads while the session is made");
   assert.equal(/facingMode|video:\s*true/.test(panel), false, "the camera is never requested");
   assert.match(panel, /video: false/);
@@ -1198,7 +1325,10 @@ await test("9. the duration: a warning shortly before the end, then a clean end 
   assert.equal(machine.durationWords(90), "1 minute 30 seconds");
   assert.equal(machine.durationWords(45), "45 seconds");
   assert.equal(machine.durationWords(1), "1 second");
-  assert.match(read("src/app/embed/[key]/video/VideoPanel.tsx"), /Calls end after \{durationWords\(maxCallSeconds\)\}/);
+  // The promise is made from what we deliver, not from what we ask for: see
+  // case 9b and lib/video/delivery.ts.
+  assert.match(read("src/app/embed/[key]/video/VideoPanel.tsx"), /\{promiseLine\(promised\)\}/);
+  assert.equal(machine.promiseLine(300), "Calls end after 5 minutes.");
   const live = { ...machine.INITIAL, phase: "live" as const, joinedAt: 1 };
   assert.equal(machine.reduce(live, { type: "warn" }).warned, true);
   assert.equal(videoConfig({ VIDEO_MAX_CALL_SECONDS: "5", VIDEO_WARN_BEFORE_SECONDS: "99" }).maxCallSeconds, 30, "a floor on the maximum");
@@ -1237,6 +1367,53 @@ await test("9. the duration: a warning shortly before the end, then a clean end 
 
 // ---------------------------------------------------------------------------
 console.log("\n  Tenancy and secrets");
+
+await test("9b. the promise about length is made from what we deliver, and dropped when we cannot keep one", () => {
+  // "Calls end after 5 minutes" was true of the number we send Tavus and false
+  // of every call the founder actually had. A promise is about delivery, so it
+  // is derived from delivery.
+  const ending = (seconds: number, reason = "max_call_duration reached") => ({
+    at: new Date().toISOString(),
+    locationId: "loc_x",
+    sessionId: `vs_${seconds}`,
+    provider: "tavus",
+    reason,
+    endedBy: "provider" as const,
+    cause: seconds >= 285 ? ("time_limit" as const) : ("cut_short" as const),
+    seconds,
+    maxCallSeconds: 300,
+  });
+
+  // Nothing delivered yet: what we ask for stands. It is not a lie until it is.
+  assert.deepEqual(deliveredCeiling(300, []), { seconds: 300, samples: 0, shortfall: false });
+  // Calls that run the full length: the promise is kept and stays.
+  assert.equal(deliveredCeiling(300, [ending(298), ending(295), ending(300)]).seconds, 300);
+  // One short call is not yet a pattern; the page does not flinch at noise.
+  assert.equal(deliveredCeiling(300, [ending(88), ending(297), ending(299)]).seconds, 300);
+
+  // Three consistent short calls: the ceiling is somebody else's now. We
+  // promise the shortest we delivered, rounded down, so a call beats it.
+  const cut = deliveredCeiling(300, [ending(88), ending(85), ending(86)]);
+  assert.equal(cut.shortfall, true);
+  assert.equal(cut.seconds, 75, "the promise must be one every recent call cleared");
+  assert.equal(machine.promiseLine(cut.seconds), "Calls end after 1 minute 15 seconds.");
+
+  // Short, but nothing like each other: there is no number to give, so none is
+  // given — and the sentence left behind is still true.
+  const wild = deliveredCeiling(300, [ending(20), ending(140), ending(240)]);
+  assert.equal(wild.seconds, null);
+  assert.equal(wild.shortfall, true);
+  const honest = machine.promiseLine(null);
+  assert.doesNotMatch(honest, /\d/, `a page that cannot promise a number said one: ${honest}`);
+  assert.match(honest, /chat/i, "the truthful line still tells them what they can do");
+  // Too short to be worth a number at all.
+  assert.equal(deliveredCeiling(300, [ending(30), ending(32), ending(31)]).seconds, null);
+
+  // Every surface takes its promise from there, not from the configured ceiling.
+  for (const page of ["src/app/embed/[key]/video/page.tsx", "src/app/embed/belle/video/page.tsx", "src/app/demo/v/[token]/page.tsx"]) {
+    assert.match(read(page), /promisedSeconds=\{deliveredCeiling\(/, `${page} still promises the number we ask for`);
+  }
+});
 
 await test("10. tenant isolation: tokens open one conversation at one venue, on every door", async () => {
   const a = await startViaRoute(A);
@@ -2018,7 +2195,7 @@ await test("closing during a call asks the frame to end the session, removes it,
     new Request("http://x/", { method: "POST", body: JSON.stringify({ sessionId: started.client.sessionId, clientToken: started.client.clientToken, reason: "unload" }) }),
     params(A.embed!.key),
   );
-  assert.deepEqual(await res.json(), { ok: true, ended: true });
+  assert.deepEqual(await res.json(), { ok: true, ended: true, cause: "visitor", seconds: 0, recap: [] });
   assert.equal(mockVideoRecord().ended.length, 1);
 });
 
