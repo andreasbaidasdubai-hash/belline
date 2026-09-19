@@ -71,6 +71,11 @@ export default function VideoLook({ locationId, agentName }: { locationId: strin
   const face = faces.find((f) => f.id === faceId);
   const background = backgrounds.find((b) => b.id === backgroundId);
   const showsBackground = Boolean(face?.backgrounds && background?.src);
+  // Every curated face is Phoenix-4.5 today, and Tavus cannot replace the room
+  // behind one. A picker of five backgrounds where none of them can ever show
+  // is a promise the call does not keep, so it is hidden while that is true
+  // and returns by itself the day a face that takes one is offered again.
+  const anyBackgrounds = faces.some((f) => f.backgrounds);
   const dirty = Boolean(saved && (saved.faceId !== faceId || saved.backgroundId !== backgroundId));
   const ownRoom = useMemo(() => backgrounds.find((b) => !b.src), [backgrounds]);
 
@@ -131,7 +136,7 @@ export default function VideoLook({ locationId, agentName }: { locationId: strin
         <div className="vl-pickers">
           <fieldset>
             <legend>Face</legend>
-            {!confirmed && <p className="vl-hint">Previews appear once video is connected to Tavus.</p>}
+            {!confirmed && <p className="vl-hint">Video isn&rsquo;t connected to Tavus here, so these are the stills we ship. The moving previews appear once it is.</p>}
             <div className="vl-faces" role="radiogroup" aria-label="Face">
               {faces.map((f) => (
                 <label key={f.id} className={`vl-face${f.id === faceId ? " is-on" : ""}`}>
@@ -151,7 +156,7 @@ export default function VideoLook({ locationId, agentName }: { locationId: strin
             </div>
           </fieldset>
 
-          <fieldset>
+          <fieldset hidden={!anyBackgrounds}>
             <legend>Background</legend>
             <div className="vl-bgs" role="radiogroup" aria-label="Background">
               {backgrounds.map((b) => (

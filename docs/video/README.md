@@ -137,7 +137,7 @@ All placeholders are in `.env.example`.
 | `VIDEO_LLM_SECRET` | tavus | 40+ random chars; signs session tokens |
 | `TAVUS_PAL_ID` | optional | PAL (formerly persona) whose `tts`/`stt`/`conversational_flow` each session copies; required in shared mode |
 | `VIDEO_AVATAR_PROVIDER` | optional | `tavus` (default) or `mock` |
-| `VIDEO_AVATAR_VENUES` | optional | Comma-separated venue ids allowed by env (the console can add/remove) |
+| `VIDEO_AVATAR_VENUES` | optional | `*` every venue · comma-separated ids only those · empty none (the console can add/remove either way) |
 | `VIDEO_PUBLIC_ORIGIN` | optional | Where Tavus reaches the app; defaults to `PUBLIC_ORIGIN`; must be https |
 | `VIDEO_MAX_CALL_SECONDS` | optional | Default 300 (30–1800) |
 | `VIDEO_WARN_BEFORE_SECONDS` | optional | Default 30 |
@@ -169,8 +169,24 @@ session route answer with a readable refusal plus Chat and Voice.
 2. **API key.** PAL Maker → **API Key** → **Create New Key**, name it
    `belline-staging`, optionally restrict to Railway's egress IPs → copy it into
    Railway staging as **`TAVUS_API_KEY`**.
-3. **Stock face.** Faces → Stock. The founder chose **`rf90eb925bd8`**. Put it in
-   **`TAVUS_FACE_ID`**. (Any `r…` stock id works; never a personal replica.)
+3. **Stock face.** Faces → Stock. The founder chose **`rf90eb925bd8`** (Ruby ·
+   Office). Put it in **`TAVUS_FACE_ID`**. (Any `r…` stock id works; never a
+   personal replica.)
+
+   That is also the default of the **eight curated faces** an owner picks from
+   in Your business → Agent — Ruby · Office, Priya · Office, Dr. Adams, Dr. Lee,
+   Olivia · Office, Mateo, Rose · Business, Victor · Office, all Phoenix-4.5,
+   in `src/lib/video/faces.ts`. Not Tavus's whole catalogue: a picker of a
+   hundred and forty faces is one nobody finishes. Each has a still committed
+   under `public/video/faces/` by `scripts/build-face-stills.ts`, so the picker
+   shows faces rather than initials before Tavus has been asked anything; run
+   that script and commit its output after editing `CURATED_FACES`, or
+   `check:video` fails.
+
+   One consequence to know about: Tavus cannot replace the room behind a
+   Phoenix-4.5 face, so every offered face keeps its own, and the **background
+   picker is hidden** while that is true. It comes back on its own the day a
+   Phoenix-4 look is added to the list.
 4. **Template PAL (recommended, for the voice).** PALs → Create:
    - name `belline-template`, pipeline mode **full**, default face `rf90eb925bd8`;
    - pick the **voice** (TTS) and turn-taking you like; leave perception **off**;
@@ -458,9 +474,20 @@ in production mode anyway.
 ## Switching it on and off
 
 - **Flag:** `FLAG_VIDEO_AVATAR=on` / `off` (needs a restart).
-- **Venue list:** `VIDEO_AVATAR_VENUES`, or **Sales console → Video → Allow
-  video / Remove** (instant, stored in `DATA_DIR/video.json`; a console
-  removal beats the env list).
+- **Which venues:** `VIDEO_AVATAR_VENUES` takes one of three values, and the
+  three are not interchangeable:
+  - **`*`** — every venue where the flag is on. This is what production runs:
+    the video receptionist is part of the product, not a pilot.
+  - **`loc_a,loc_b`** — only those venues. The allowlist is kept for the day an
+    operator wants one back (a staged rollout, a Tavus incident, a market we
+    have not priced).
+  - **empty** — no venue at all, which is what an unconfigured deployment gets.
+    It does not mean "all": a deployment that has said nothing about video must
+    never start spending Tavus minutes on every customer's visitors.
+
+  Either way, **Sales console → Video → Allow video / Remove** wins per venue
+  (instant, stored in `DATA_DIR/video.json`), in both directions — that is how
+  a single venue is switched off while the star holds the gate open.
 - **Kill switch:** **Sales console → Video → Turn video off everywhere now**.
   Instant for new sessions; live calls hear a short goodbye and end. The
   widget's public config is cached up to 60 s, so the button can linger that
@@ -488,6 +515,38 @@ request. `/api/video/<key>/session` holds it to `paidWorkRefusal`, as the test
 console is held — email confirmed, trial not suspended. A visitor on a live
 venue's website is not owner work and is not asked; the plan, the caps above
 and video's own daily and concurrent ceilings bound it instead.
+
+### Today's share of the month
+
+`VIDEO_MAX_SESSIONS_PER_DAY` (20) caps **rooms**, not spend, and the two
+stopped agreeing the day video was opened to every venue rather than to
+Belline's own. Twenty five-minute sessions is 100 minutes of video — 250 voice
+minutes at the 2.5 ratio — and Starter's whole month is 75. A website could
+have spent three months of the smallest plan between opening and closing, and
+the only thing stopping it would have been the pool running dry, with the
+telephone going dead behind it.
+
+So a paying venue's website also gets a **daily seconds budget**:
+`dailyVideoSecondsLimit` in `video/availability.ts`, `VIDEO_DAILY_SHARE` (a
+fifth) of the plan's monthly video allowance, never less than one whole call.
+
+| Plan | Voice minutes | Video minutes | Video a day |
+|---|---|---|---|
+| Starter | 75 | 30 | 6 (the one-call floor) |
+| Growth | 250 | 100 | 20 |
+| Scale | 500 | 200 | 40 |
+
+Over it, `videoAvailability` returns `daily_minutes` (429, and the visitor
+hears the same "no more video calls today" as the session ceiling), and
+`videoCallLimitSeconds` shortens the call that would cross it rather than
+letting it run five minutes past. The budget counts **seconds a room was
+open**, including a call that ended `failed`, because Tavus charged for those
+too. It does not apply to Belline's own venue, demos, support calls, exempt
+venues, older non-pooled products, or a trial — a trial's thirty minutes are a
+total rather than a month, so there is nothing to pace.
+
+Packs are excluded from the figure the share is taken of, so a venue that has
+topped up twice is still paced against the plan it bought.
 
 ## Concurrency, and visitors who simply vanish
 

@@ -55,24 +55,104 @@
   "@graph": [
     {
       "@type": "Organization",
+      "@id": "https://belline.ai/#organization",
       "name": "Belline",
       "url": "https://belline.ai/",
       "logo": "https://belline.ai/brand/png/belline-mark-512.png",
+      "image": "https://belline.ai/brand/belline-og.png",
       "email": "hello@belline.ai",
       "telephone": "+1-571-778-5920",
-      "areaServed": "AE",
+      "areaServed": { "@type": "Country", "name": "United Arab Emirates" },
+      "knowsLanguage": ["en"],
+      "contactPoint": [
+        {
+          "@type": "ContactPoint",
+          "contactType": "sales",
+          "email": "hello@belline.ai",
+          "telephone": "+1-571-778-5920",
+          "areaServed": "AE",
+          "availableLanguage": ["English"]
+        }
+      ],
       "description": "Ein KI-Empfang für Unternehmen, die Anrufe, Nachrichten oder Buchungen erhalten. Beantwortet Ihre Website, WhatsApp und Ihr Telefon aus Ihren eigenen Informationen und gibt den Rest an Ihr Team weiter."
     },
     {
       "@type": "SoftwareApplication",
+      "@id": "https://belline.ai/#software",
       "name": "Belline",
       "applicationCategory": "BusinessApplication",
+      "applicationSubCategory": "AI receptionist",
       "operatingSystem": "Web",
+      "inLanguage": "en",
+      "provider": { "@id": "https://belline.ai/#organization" },
       "url": "https://belline.ai/de-de",
       "offers": [
-        { "@type": "Offer", "name": "Belline Starter", "price": "69", "priceCurrency": "EUR", "billingIncrement": "P1M", "availability": "https://schema.org/PreOrder" },
-        { "@type": "Offer", "name": "Belline Growth", "price": "129", "priceCurrency": "EUR", "billingIncrement": "P1M", "availability": "https://schema.org/PreOrder" },
-        { "@type": "Offer", "name": "Belline Scale", "price": "249", "priceCurrency": "EUR", "billingIncrement": "P1M", "availability": "https://schema.org/PreOrder" }
+        {
+          "@type": "Offer",
+          "name": "Belline Starter",
+          "description": "For a small business that wants every enquiry answered.",
+          "price": "69",
+          "priceCurrency": "EUR",
+          "availability": "https://schema.org/PreOrder",
+          "url": "https://belline.ai/de-de",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "price": "69",
+            "priceCurrency": "EUR",
+            "billingDuration": 1,
+            "billingIncrement": 1,
+            "unitCode": "MON"
+          },
+          "itemOffered": {
+            "@type": "Service",
+            "name": "Belline Starter",
+            "serviceType": "AI receptionist"
+          }
+        },
+        {
+          "@type": "Offer",
+          "name": "Belline Growth",
+          "description": "For a business that wants Belline answering and booking across every channel it has.",
+          "price": "129",
+          "priceCurrency": "EUR",
+          "availability": "https://schema.org/PreOrder",
+          "url": "https://belline.ai/de-de",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "price": "129",
+            "priceCurrency": "EUR",
+            "billingDuration": 1,
+            "billingIncrement": 1,
+            "unitCode": "MON"
+          },
+          "itemOffered": {
+            "@type": "Service",
+            "name": "Belline Growth",
+            "serviceType": "AI receptionist"
+          }
+        },
+        {
+          "@type": "Offer",
+          "name": "Belline Scale",
+          "description": "For higher-volume teams with more complex reception rules.",
+          "price": "249",
+          "priceCurrency": "EUR",
+          "availability": "https://schema.org/PreOrder",
+          "url": "https://belline.ai/de-de",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "price": "249",
+            "priceCurrency": "EUR",
+            "billingDuration": 1,
+            "billingIncrement": 1,
+            "unitCode": "MON"
+          },
+          "itemOffered": {
+            "@type": "Service",
+            "name": "Belline Scale",
+            "serviceType": "AI receptionist"
+          }
+        }
       ]
     },
     {

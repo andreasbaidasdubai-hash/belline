@@ -23,6 +23,22 @@
  *  - the link to the privacy notice pointing at a page this same build
  *    decided not to publish.
  *
+ * Since the design pass the page also carries Belle's face, and that brings
+ * its own ways of being quietly wrong:
+ *
+ *  - the portrait's filename copied into the page instead of read from
+ *    `video/config.ts`, so the day the face is regenerated all four domains
+ *    show a broken image to the one audience that is already suspicious;
+ *  - the still becoming a live call. A video session costs Tavus minutes and
+ *    these visitors did not ask for a demo — they came to check an email;
+ *  - the picture losing its link, or the link losing the one visible line of
+ *    text that says it is a link, leaving a page with a face and no route;
+ *  - the reassurance sliding back down the page under the product
+ *    description. It is the reason the page exists and it goes first;
+ *  - the prose growing back, or "How to stop, permanently" being trimmed to
+ *    make room for it. That section is the most trust-building thing here and
+ *    it is pinned by word count, not only by phrases.
+ *
  * Nothing here sends and nothing here writes to site/: the page is rendered
  * in memory from the same function the build calls.
  *
@@ -52,6 +68,7 @@ const notice = await import("../src/lib/legal/outreach-privacy");
 const unsub = await import("../src/lib/sales/sending/unsubscribe");
 const suppression = await import("../src/lib/sales/compliance/suppression");
 const marketing = await import("../src/lib/marketing");
+const video = await import("../src/lib/video/config");
 const { senderPage } = await import("./site-sender");
 
 const EMPTY = identityMod.legalIdentity({});
@@ -83,6 +100,27 @@ function formed(domain: SendingDomainInfo): string {
     policyUrl: `${domain.site}/privacy`,
     unsubscribePath: unsub.UNSUBSCRIBE_PATH,
   });
+}
+
+/** The visible words of a fragment of the page, tags and entities gone. */
+function words(html: string): string[] {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z]+;|&#\d+;/gi, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** Everything a visitor reads between the lockup and the footer. */
+function article(html: string): string {
+  return /<article[^>]*>([\s\S]*?)<\/article>/.exec(html)?.[1] ?? "";
+}
+
+/** "How to stop, permanently", from its heading to the end of the article. */
+function stopSection(html: string): string {
+  const body = article(html);
+  const from = body.indexOf("<h2>How to stop, permanently</h2>");
+  return from === -1 ? "" : body.slice(from);
 }
 
 let passed = 0;
@@ -214,6 +252,86 @@ for (const domain of domains.SENDING_DOMAINS) {
     );
     assert.ok(live.includes("Belline FZ-LLC · Dubai"), "the formed page does not carry the real letterhead");
     assert.ok(!/neither exists yet/.test(live), "the formed page still apologises for a notice that is up");
+  });
+
+  // --- Belle, and where the page puts her --------------------------------------
+
+  test(`${domain.domain}: Belle's face, round, linking to belline.ai`, () => {
+    const figure = /<figure class="sender-belle">([\s\S]*?)<\/figure>/.exec(page)?.[1];
+    assert.ok(figure, "no portrait of Belle on the page");
+    // The anchor round the picture, and the picture inside it.
+    const link = /<a class="sender-face" href="([^"]+)">\s*<img ([^>]*)>/.exec(figure!);
+    assert.ok(link, "the picture is not wrapped in a link");
+    assert.equal(link![1], domain.site, "Belle's picture does not link to belline.ai");
+    assert.match(link![2], /alt="[^"]{12,}"/, "the picture has no alt text a screen reader can use");
+    // Round, with the hero's own ring: the shape is the stylesheet's, and it
+    // is the site's stylesheet, so a page that lost the class loses the face.
+    assert.match(read("public/site.css"), /\.sender-face\s*\{[^}]*border-radius:\s*50%/, "the portrait is no longer round");
+  });
+
+  test(`${domain.domain}: the poster frame, read from video/config.ts and not copied`, () => {
+    assert.ok(page.includes(`src="${video.GREETING_POSTER_PATH}"`), "the page does not show the greeting clip's poster");
+    // Root-absolute, because this one file is served on four hostnames and an
+    // absolute belline.ai URL would be a cross-origin request from every one
+    // of them.
+    assert.ok(video.GREETING_POSTER_PATH.startsWith("/"), "the poster is not a same-origin path");
+    assert.ok(!/<img[^>]+src="https?:/.test(page), "an image on the page is loaded from another origin");
+    // The file the src names is one the build has to copy.
+    assert.ok(
+      fs.existsSync(path.join(ROOT, "public", video.GREETING_POSTER_PATH.replace(/^\//, ""))),
+      `public${video.GREETING_POSTER_PATH} does not exist`,
+    );
+    // And the filename lives in one place. A literal here is the failure where
+    // a regenerated face leaves four suspicious strangers with a broken image.
+    const source = read("scripts/site-sender.ts");
+    assert.match(source, /GREETING_POSTER_PATH/, "site-sender.ts does not read the poster's path from video/config.ts");
+    assert.ok(!/greeting-[a-z0-9]+\.jpg/.test(source), "site-sender.ts hard-codes the poster's filename");
+  });
+
+  test(`${domain.domain}: a still picture, never a video session`, () => {
+    // A live call here would spend Tavus minutes on people who came to check
+    // whether an email was real, not to be given a demo.
+    for (const live of ["<video", "<iframe", "embed-video.js", "/call", "bell-fab", "autoplay"]) {
+      assert.ok(!page.includes(live), `the verification page starts a live session: ${live}`);
+    }
+    assert.match(page, /<img [^>]*src="[^"]+\.jpg"/, "Belle is not a still image");
+  });
+
+  test(`${domain.domain}: the picture is visibly a link, not a guess`, () => {
+    const figure = /<figure class="sender-belle">([\s\S]*?)<\/figure>/.exec(page)?.[1] ?? "";
+    assert.match(figure, /This is Belle/, "the caption does not say who she is");
+    assert.match(figure, /email we sent you/, "the caption does not connect her to the message");
+    // A second, underlined link in words under the picture: an image gives a
+    // reader no cue that it can be clicked.
+    const meet = /<a class="sender-meet" href="([^"]+)">([^<]+)<\/a>/.exec(figure);
+    assert.ok(meet, "no worded link under the picture");
+    assert.equal(meet![1], domain.site, "the worded link does not go to belline.ai");
+    assert.match(meet![2], /belline\.ai/, "the worded link does not name where it goes");
+    assert.match(read("public/site.css"), /a\.sender-meet\s*\{[^}]*text-decoration:\s*underline/, "the worded link is not underlined");
+  });
+
+  test(`${domain.domain}: the reassurance is first, above everything else`, () => {
+    const yes = page.indexOf('class="sender-yes"');
+    assert.ok(yes > -1, "the page no longer says plainly that the message was genuine");
+    assert.match(page, /nobody else sends\s+from this domain/, "the page does not say nobody else sends from the domain");
+    // Before the product description, before the first heading, and inside
+    // the same block as her face rather than a screen below it.
+    assert.ok(yes < page.indexOf('class="sender-what"'), "the product description comes before the reassurance");
+    assert.ok(yes < page.indexOf("<h2>"), "the reassurance is below the first section heading");
+    const top = /<div class="sender-top">([\s\S]*?)<\/div>\s*<h2>/.exec(page)?.[1] ?? "";
+    assert.ok(top.includes('class="sender-yes"') && top.includes('class="sender-belle"'), "the reassurance does not sit beside her face");
+  });
+
+  test(`${domain.domain}: half the prose, and none of it taken from "How to stop"`, () => {
+    // The page was 289 words of unbroken grey. It is allowed to grow a little
+    // and not back into a wall; the number is a ceiling, not a target.
+    const all = words(article(page));
+    assert.ok(all.length <= 280, `the page is back to ${all.length} words of prose`);
+    // The stop instructions are the most trust-building part of the page and
+    // are explicitly not where the cuts come from.
+    const stop = words(stopSection(page));
+    assert.ok(stop.length >= 85, `"How to stop, permanently" has been trimmed to ${stop.length} words`);
+    assert.ok(stop.length / all.length >= 0.3, "the stop section is no longer a third of the page");
   });
 
   test(`${domain.domain}: no sales pitch on a page somebody came to for the exit`, () => {

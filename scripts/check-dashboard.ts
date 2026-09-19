@@ -261,8 +261,8 @@ await test("adding a location, the agent's face and payment details are reachabl
   // "Where can I change the face of the Agent?" — linked from the website
   // settings, and only where that picker is really on the agent page.
   const sections = read("src/app/(app)/channels/sections.tsx");
-  assert.match(sections, /facePicker=\{flag\("video\.avatar"\) && venueAllowlisted\(location, videoConfig\(\)\)\}/);
-  assert.match(read("src/app/(app)/agents/page.tsx"), /flag\("video\.avatar"\) && venueAllowlisted\(location, videoConfig\(\)\)/, "the link's condition and the picker's have drifted apart");
+  assert.match(sections, /facePicker=\{videoSettable\(location\)\}/);
+  assert.match(read("src/app/(app)/agents/page.tsx"), /videoSettable\(location\) \? \(/, "the link's condition and the picker's have drifted apart");
   const editor = read("src/app/(app)/website/WidgetEditor.tsx");
   assert.match(editor, /\{facePicker && \(/);
   assert.match(editor, /href="\/agents"/);

@@ -307,7 +307,10 @@ export function startErrorCode(status: number, error: string | undefined): Video
   // thing and used to borrow this wording — "try again in a minute" was never
   // true of it, because in a minute it will still be tomorrow it clears.
   if (error === "busy" || error === "provider_busy") return "busy";
-  if (error === "daily_limit") return "no_calls_today";
+  // Two ceilings, one sentence. "No more video calls today" is true whether
+  // the day ran out of sessions or out of the venue's share of its month, and
+  // which of the two it was is the venue's business, not the visitor's.
+  if (error === "daily_limit" || error === "daily_minutes") return "no_calls_today";
   if (status === 403 || status === 404 || status === 503) return "unavailable";
   return "failed";
 }

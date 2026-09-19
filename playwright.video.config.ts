@@ -23,7 +23,11 @@ const env: Record<string, string> = {
   PORT: String(VIDEO_PORT),
   FLAG_VIDEO_AVATAR: "on",
   VIDEO_AVATAR_PROVIDER: "mock",
-  VIDEO_AVATAR_VENUES: "loc_belline",
+  // Every venue, which is what production runs. The face-picker spec signs a
+  // brand-new customer venue up and expects to find the picker there without
+  // anybody switching it on for that venue first; "loc_belline" would only
+  // have tested the one venue the allowlist already held.
+  VIDEO_AVATAR_VENUES: "*",
   VIDEO_MAX_CALL_SECONDS: "45",
   VIDEO_WARN_BEFORE_SECONDS: "20",
   VIDEO_MAX_CONCURRENT_PER_VENUE: "20",

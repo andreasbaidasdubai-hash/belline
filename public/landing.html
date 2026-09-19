@@ -36,24 +36,112 @@
   "@graph": [
     {
       "@type": "Organization",
+      "@id": "https://belline.ai/#organization",
       "name": "Belline",
       "url": "https://belline.ai/",
       "logo": "https://belline.ai/brand/png/belline-mark-512.png",
+      "image": "https://belline.ai/brand/belline-og.png",
       "email": "hello@belline.ai",
       "telephone": "+1-571-778-5920",
-      "areaServed": "AE",
+      "areaServed": { "@type": "Country", "name": "United Arab Emirates" },
+      "knowsLanguage": ["en"],
+      "contactPoint": [
+        {
+          "@type": "ContactPoint",
+          "contactType": "sales",
+          "email": "hello@belline.ai",
+          "telephone": "+1-571-778-5920",
+          "areaServed": "AE",
+          "availableLanguage": ["English"]
+        },
+        {
+          "@type": "ContactPoint",
+          "contactType": "customer support",
+          "email": "hello@belline.ai",
+          "areaServed": "AE",
+          "availableLanguage": ["English"]
+        }
+      ],
       "description": "An AI receptionist for UAE businesses that take calls, messages or bookings. It answers your website, WhatsApp and phone from your own information and passes the rest to your team."
     },
     {
       "@type": "SoftwareApplication",
+      "@id": "https://belline.ai/#software",
       "name": "Belline",
       "applicationCategory": "BusinessApplication",
+      "applicationSubCategory": "AI receptionist",
       "operatingSystem": "Web",
       "url": "https://belline.ai/",
+      "inLanguage": "en",
+      "provider": { "@id": "https://belline.ai/#organization" },
+      "description": "An AI receptionist that answers a small business's website chat, website voice button, WhatsApp and forwarded telephone from the business's own information, takes booking and callback requests, and hands anything it should not answer to a person.",
       "offers": [
-        { "@type": "Offer", "name": "Belline Starter", "price": "249", "priceCurrency": "AED", "billingIncrement": "P1M" },
-        { "@type": "Offer", "name": "Belline Growth", "price": "499", "priceCurrency": "AED", "billingIncrement": "P1M" },
-        { "@type": "Offer", "name": "Belline Scale", "price": "999", "priceCurrency": "AED", "billingIncrement": "P1M" }
+        {
+          "@type": "Offer",
+          "name": "Belline Starter",
+          "description": "For a small business that wants every enquiry answered.",
+          "price": "249",
+          "priceCurrency": "AED",
+          "availability": "https://schema.org/InStock",
+          "url": "https://belline.ai/#price",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "price": "249",
+            "priceCurrency": "AED",
+            "billingDuration": 1,
+            "billingIncrement": 1,
+            "unitCode": "MON"
+          },
+          "itemOffered": {
+            "@type": "Service",
+            "name": "Belline Starter",
+            "serviceType": "AI receptionist"
+          }
+        },
+        {
+          "@type": "Offer",
+          "name": "Belline Growth",
+          "description": "For a business that wants Belline answering and booking across every channel it has.",
+          "price": "499",
+          "priceCurrency": "AED",
+          "availability": "https://schema.org/InStock",
+          "url": "https://belline.ai/#price",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "price": "499",
+            "priceCurrency": "AED",
+            "billingDuration": 1,
+            "billingIncrement": 1,
+            "unitCode": "MON"
+          },
+          "itemOffered": {
+            "@type": "Service",
+            "name": "Belline Growth",
+            "serviceType": "AI receptionist"
+          }
+        },
+        {
+          "@type": "Offer",
+          "name": "Belline Scale",
+          "description": "For higher-volume teams with more complex reception rules.",
+          "price": "999",
+          "priceCurrency": "AED",
+          "availability": "https://schema.org/InStock",
+          "url": "https://belline.ai/#price",
+          "priceSpecification": {
+            "@type": "UnitPriceSpecification",
+            "price": "999",
+            "priceCurrency": "AED",
+            "billingDuration": 1,
+            "billingIncrement": 1,
+            "unitCode": "MON"
+          },
+          "itemOffered": {
+            "@type": "Service",
+            "name": "Belline Scale",
+            "serviceType": "AI receptionist"
+          }
+        }
       ]
     },
     {

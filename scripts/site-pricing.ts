@@ -265,13 +265,46 @@ export function renderRoi(market: Market): { options: string; sentence: string; 
   return { options, sentence, detail };
 }
 
-function renderOffers(market: Market): string {
+/**
+ * The plans as structured data.
+ *
+ * `billingIncrement` used to sit directly on the Offer, where schema.org has
+ * no such property: a validator reads it as noise and a reader learns nothing
+ * about the period, so "249 AED" could as easily have been a one-off payment.
+ * It belongs on a `UnitPriceSpecification`, which is where "one month at a
+ * time" is actually sayable. Each Offer now also names what it is an offer
+ * *of*, so the three read as three services rather than three numbers, and
+ * carries `availability` — the one field that has to differ between a market
+ * we sell in and a waitlist page (see renderOffersDe).
+ */
+export function renderOffers(market: Market, availability = "https://schema.org/InStock"): string {
   const currency = MARKETS[market].currency;
   return sellable(market)
-    .map(
-      (p) =>
-        `        { "@type": "Offer", "name": ${JSON.stringify(`Belline ${p.name}`)}, "price": "${priceOf(p.id, market) / 100}", "priceCurrency": "${currency}", "billingIncrement": "P1M" }`,
-    )
+    .map((p) => {
+      const price = String(priceOf(p.id, market) / 100);
+      const offer = {
+        "@type": "Offer",
+        name: `Belline ${p.name}`,
+        description: p.summary,
+        price,
+        priceCurrency: currency,
+        availability,
+        url: "https://belline.ai/#price",
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price,
+          priceCurrency: currency,
+          billingDuration: 1,
+          billingIncrement: 1,
+          unitCode: "MON",
+        },
+        itemOffered: { "@type": "Service", name: `Belline ${p.name}`, serviceType: "AI receptionist" },
+      };
+      return JSON.stringify(offer, null, 2)
+        .split("\n")
+        .map((line) => `        ${line}`)
+        .join("\n");
+    })
     .join(",\n");
 }
 

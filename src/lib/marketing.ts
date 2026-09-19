@@ -38,6 +38,11 @@ const TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".ico": "image/x-icon",
   ".json": "application/json; charset=utf-8",
+  // robots.txt, llms.txt and the sitemap. Without these they were served as
+  // application/octet-stream under `nosniff`, which is a download rather than
+  // something to read — and llms.txt exists to be read.
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
   ".woff2": "font/woff2",
 };
 
