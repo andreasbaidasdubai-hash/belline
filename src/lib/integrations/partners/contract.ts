@@ -48,7 +48,8 @@ export type PartnerId =
   | "booksy"
   | "vagaro"
   | "doctolib"
-  | "simplybook";
+  | "simplybook"
+  | "zohobookings";
 
 /** How the partner's own product thinks about a booking. */
 export type PartnerModel =
@@ -188,9 +189,28 @@ export interface PartnerVenueLink {
    * wrong for most of the world while looking like a broken venue, so a
    * SimplyBook venue without this recorded is simply not connected.
    *
-   * Everyone else's host is a constant and this stays empty.
+   * Everyone else's host is a constant and this stays empty. Zoho Bookings in
+   * particular does **not** use it — its API host is read from `api_domain` on
+   * each token response and never stored. See `accountsServer`.
    */
   baseUrl?: string;
+  /**
+   * Which Zoho data centre this venue's account lives in, as its own accounts
+   * host: `https://accounts.zoho.sa`, `.eu`, `.com`, and five more.
+   *
+   * Only Zoho Bookings has this, and it is not a nicety. Zoho's OAuth is
+   * partitioned by data centre: a grant issued at `accounts.zoho.eu` can only
+   * be refreshed at `accounts.zoho.eu`, and the API host that token works
+   * against is a different one again. So this records where the venue's own
+   * grant was made — the `accounts-server` Zoho itself put on the callback,
+   * never a guess from a dialling code or a country.
+   *
+   * The *API* host is deliberately not stored beside it. Zoho's own
+   * instruction is "never hardcode a single region's URL; always use the
+   * api_domain from the access token response", so `api_domain` is read off
+   * every token refresh and used for that call only. See zohobookings.ts.
+   */
+  accountsServer?: string;
   /**
    * Mindbody's per-studio activation, Zenoti's per-centre grant: the partner
    * key gets us to the door, this is the studio letting us in. Sealed like any

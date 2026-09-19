@@ -4,20 +4,20 @@ What Belline can and cannot do through each booking system we have looked at,
 researched from the partners' own documentation on **18 September 2026**, and
 what the founder would have to apply for.
 
-Thirteen partners, in three batches. The first six — Fresha, Zenoti, Mindbody,
+Fourteen partners, in three batches. The first six — Fresha, Zenoti, Mindbody,
 Treatwell, OpenTable, SevenRooms — are the ones on the website's integrations
 strip. The second six — Microsoft Bookings, Cal.com, Eat App, Booksy, Vagaro,
-Doctolib — are **not on the strip at all**; see "Why the later seven are not on
-the website" at the foot of this document. The third batch begins with
-**SimplyBook.me**, researched on **19 September 2026**: a system small Gulf
-businesses actually run, and one that turned out to be buildable. It is not on
-the strip either.
+Doctolib — are **not on the strip at all**; see "Why the later eight are not on
+the website" at the foot of this document. The third batch is two, researched on
+**19 September 2026**: **SimplyBook.me** and **Zoho Bookings**, both of which
+small Gulf businesses actually run, and both of which turned out to be
+buildable. They are not on the strip either.
 
 The founder's question for the third batch was the commercial one — *does the
 customer have to be on a paid tier for the API?* — because several booking
 products put their API behind their most expensive plan, which would make an
-integration worthless to the salons we sell to. **For SimplyBook.me the answer
-is no**, and that is the most important finding here:
+integration worthless to the salons we sell to. **For both of these the answer
+is no**, and that is the single most important finding in this batch:
 
 - **SimplyBook.me** delivers the API as an ordinary *custom feature*. Free
   allows one custom feature, Basic (€11.90) three, Standard (€24.90) eight,
@@ -25,6 +25,9 @@ is no**, and that is the most important finding here:
   API", which is volume, not access. What it really costs a customer is one
   feature slot, so in practice a working salon moves up a tier — a €13
   conversation, not a €600 one.
+- **Zoho Bookings** does not gate the API at all. It meters it: every endpoint
+  page carries the same table — Free **250 calls a day per user**, Basic 1,000,
+  Premium 3,000. A one-user salon on the free plan can be connected.
 
 Nothing here is connected. No partner has issued Belline credentials, no
 application has been made, and every `booking.partner.<id>` flag is off on every
@@ -52,6 +55,7 @@ are built, and they live in `src/lib/integrations/google.ts` and `outlook.ts`.
 | **Vagaro** | none published | none published | nothing | docs are readable and contain **no booking API** — read-oriented areas and webhooks only | Enterprise Sales form, and ask the one question: is there an unpublished endpoint that reads availability and writes an appointment? |
 | **Doctolib** | none published | none published | nothing | no public API; and appointment data is regulated **health data** — the obstacle is legal, not technical | The German partnership form, expecting a reseller conversation. **Do not hold the launch for it.** |
 | **SimplyBook.me** | `GET /admin/schedule/available-slots` | `POST /admin/bookings`, `PUT` to move, `DELETE` to cancel | **full adapter, all four operations**; REST v2, publicly specced in OpenAPI | nothing of ours — but the venue must spend a custom-feature slot, mint an API User Key, turn 2FA off for that user, and tell us which of **thirteen** regional hosts it is on | Nothing to apply for. Ask the salon to enable the API custom feature and issue Belline an API User Key. |
+| **Zoho Bookings** | `GET /availableslots` | `POST /appointment`, `/rescheduleappointment`, `/updateappointment` with `action=cancel` | **full adapter, all four operations**; one OAuth app serves every data centre | Belline must register an OAuth client and **enable each data centre** in the API console — one left off cannot be connected at all, and there is no read-only scope | Register one client at `api-console.zoho.com`, enable `.com`/`.eu`/`.sa` (and `.ae` if offered), tick "Use the same OAuth credentials for all data centers". |
 
 Priority for the first six follows what our customers use: Fresha and Zenoti
 (Gulf salons and clinics), then Mindbody, then Treatwell, then the restaurant
@@ -609,6 +613,99 @@ calculator implies none, but the definitive matrix is behind a login.
 **Apply for:** nothing. The work is the venue's: enable the API custom feature,
 mint an API User Key, turn 2FA off for that user, and tell us the host.
 
+## Zoho Bookings — free-tier API, and one question that decides everything
+
+API access is on every plan (250 calls a day on Free, 1,000 on Basic, 3,000 on
+Premium), all four operations are documented, and one Belline OAuth app can
+serve every customer. The whole risk is in one place.
+
+```
+GET  {api_domain}/bookings/v1/json/availableslots
+GET  {api_domain}/bookings/v1/json/services?workspace_id=
+POST {api_domain}/bookings/v1/json/appointment            form-data
+POST {api_domain}/bookings/v1/json/rescheduleappointment  form-data
+POST {api_domain}/bookings/v1/json/updateappointment      form-data, action=cancel
+```
+
+Two shapes worth knowing before reading the code. Every write is **multipart
+form-data**, not JSON — the only partner here that works that way — with nested
+values passed as JSON strings inside form fields. And there is **no cancel
+endpoint**: cancelling is `updateappointment` with `action=cancel`.
+
+One scope covers all of it, **`zohobookings.data.CREATE`**, and there is no
+read-only alternative — every endpoint page, including `/services` and
+`/staffs`, lists that same write scope. So the consent screen a customer signs
+grants full write access to their bookings even though Belline only reads a
+catalogue and writes one appointment. That belongs in what setup tells an owner
+before they click, not in a footnote.
+
+### The data centre, which is the failure the founder named
+
+Zoho is partitioned into separate data centres and they are separate worlds. A
+grant issued at `accounts.zoho.eu` can only be exchanged and refreshed at
+`accounts.zoho.eu`, and the API host it works against is a different hostname
+again. Point a `.eu` token at a `.com` host and it is simply not a valid token.
+
+This is worse than a plain error: it would look like a working integration for
+whichever data centre we happened to develop against and fail for everybody
+else. Three facts, all Zoho's own, make it survivable.
+
+1. **One client id serves every data centre.** Zoho's multi-DC page: "The Client
+   ID will be common for all DCs, but the Client Secret can be either common to
+   all the DCs or unique for each DC depending on your preference." So **yes —
+   a single Belline OAuth app can serve a UAE customer**, provided the founder
+   enables each data centre in the API console's Settings tab and ticks "Use the
+   same OAuth credentials for all data centers". **A data centre left disabled
+   cannot be connected at all**, and nobody finds out until a customer in it
+   tries.
+2. **Zoho tells us which one the customer is in.** The authorisation callback
+   carries `location` (a short code) and `accounts-server` (that region's
+   accounts host — note the hyphen). Belline records what Zoho said and never
+   infers a data centre from a country or a dialling code.
+3. **The API host comes off the token.** Zoho's own instruction: "Never hardcode
+   a single region's URL. Always use the api_domain from the access token
+   response." Zoho's own examples spell `api_domain` as `https://api.zoho.eu`
+   in one place and `https://www.zohoapis.in` in another, so it cannot even be
+   string-built from the region. It is read from every refresh and used for that
+   call only.
+
+There is deliberately **no region table in the adapter**, and `check:zohobookings`
+fails if a `zohoapis` or `accounts.zoho.*` hostname is ever written into it.
+
+### The UAE detail to know before anything else
+
+`https://accounts.zoho.com/oauth/serverinfo` is a public endpoint listing the
+live data centres. It returns **eleven**, including `"ae":"https://accounts.zoho.ae"`
+— the Dubai and Abu Dhabi data centres Zoho launched in January 2026.
+**Zoho Bookings' own documentation does not list AE.** Its table has eight rows
+and stops at `.sa`.
+
+So a UAE salon that signed up this year may be on a data centre the Bookings
+documentation does not admit exists, while `.sa` is the documented Gulf one.
+Zoho assigns the data centre at sign-up from the account's IP and a business
+cannot move itself afterwards. Whether `www.zohoapis.ae/bookings/` actually
+serves Bookings is unverified — the host resolves and a bare call is rejected
+rather than 404'd, which is suggestive and is not proof.
+
+**None of that changes the design, and that is the point of the design.** The
+venue's grant says where it lives, the token says which API host to use, and a
+venue that has recorded neither is not connected. This must never be
+"simplified" into a region table later.
+
+**Could do:** quote the venue's real availability, take a booking, move one,
+cancel one, ask for a particular staff member, read the services.
+**Could not do:** book without the service and the staff member; hold a slot;
+rely on an idempotency key; ask for a narrower scope than full write; spend a
+token in a data centre other than the one that issued it.
+**Unverified, and marked so in the source:** which data centre a UAE business is
+actually assigned; whether the writes also accept `x-www-form-urlencoded`; and
+whether the daily allowance counts per Bookings user or per API user.
+
+**Apply for:** nothing that needs Zoho's approval. Register one client at
+<https://api-console.zoho.com> as a Server-based Application, enable every data
+centre a customer might be in, and share one secret across them. A Marketplace
+listing is optional and separate.
+
 ## Restaurants are not salons with tables
 
 OpenTable, SevenRooms and Eat App are not appointment systems, and forcing them
@@ -652,10 +749,10 @@ time, and nothing is pre-announced. For a voice agent — where the caller is
 still talking while the slot ages — that is a real limitation and belongs in the
 conversation design, not only in a footnote.
 
-## Why the later seven are not on the website
+## Why the later eight are not on the website
 
-Microsoft Bookings, Cal.com, Eat App, Booksy, Vagaro, Doctolib and
-SimplyBook.me are **not in `INTEGRATIONS`** in
+Microsoft Bookings, Cal.com, Eat App, Booksy, Vagaro, Doctolib, SimplyBook.me
+and Zoho Bookings are **not in `INTEGRATIONS`** in
 `scripts/site-integrations.ts`, so they do not appear on the landing page in any
 state — not even "On our roadmap".
 
@@ -668,22 +765,26 @@ Two reasons, and both are the founder's call to reverse:
 2. **Which partners to list is a positioning decision, not a build one.** The
    existing six were put on the strip at the founder's request on 2026-09-16.
    Adding Booksy, Vagaro and Doctolib would advertise three doors we have found
-   closed; adding Cal.com or SimplyBook.me would advertise the two things on
-   the list that already work, which may be exactly right — but
+   closed; adding Cal.com, SimplyBook.me or Zoho Bookings would advertise the
+   three things on the list that already work, which may be exactly right — but
    it is a decision, not a default.
 
 Each new provider's own check asserts it is absent from the strip, and
-`check:msbookings`, `check:calcom` and `check:simplybook` additionally prove the honesty gate would hold if it were added: flag on, key
+`check:msbookings`, `check:calcom`, `check:simplybook` and `check:zohobookings`
+additionally prove the honesty gate would hold if it were added: flag on, key
 set, stubs on — still "On our roadmap".
 
-One caveat the founder should know before adding Cal.com or SimplyBook.me. For
-a partner whose credentials belong to the **venue** rather than to Belline —
+One caveat the founder should know before adding Cal.com or SimplyBook.me. For a
+partner whose credentials belong to the **venue** rather than to Belline —
 Cal.com, Zenoti and now SimplyBook.me — `liveNeeds` is empty, so nothing is
 waiting on a partner's approval, and setting `PARTNER_<ID>_ENV=live` on a
 deployment is enough to turn the tag to "Available". For Mindbody the gate is
 Mindbody's own decision, because `liveNeeds` holds the credentials that approval
-issues. Both behaviours are deliberate (`contract.ts`), but they are not equally
-strong, and the weaker one is a human act rather than a partner's.
+issues, and **Zoho Bookings is the same stronger shape** — its `liveNeeds` hold
+Belline's own OAuth client, so the website cannot say "Available" until that
+client actually exists. Both behaviours are deliberate (`contract.ts`), but they
+are not equally strong, and the weaker one is a human act rather than a
+partner's.
 
 ## How it is built
 
@@ -691,7 +792,7 @@ strong, and the weaker one is a human act rather than a partner's.
 | --- | --- |
 | `src/lib/integrations/partners/registry.ts` | The research above, as data: what each API offers, what gates it, what it cannot do. |
 | `src/lib/integrations/partners/contract.ts` | What Belline needs from a partner, and the off/sandbox/live modes. |
-| `src/lib/integrations/partners/<id>.ts` | One adapter per partner. Six are real clients (Zenoti, Mindbody, Microsoft Bookings, Cal.com, Eat App, SimplyBook.me); seven are documented refusals. |
+| `src/lib/integrations/partners/<id>.ts` | One adapter per partner. Seven are real clients (Zenoti, Mindbody, Microsoft Bookings, Cal.com, Eat App, SimplyBook.me, Zoho Bookings); seven are documented refusals. |
 | `src/lib/integrations/partners/sandbox.ts` | A partner that exists only in this process, for the checks to drive. |
 | `src/lib/integrations/partners/closed.ts` | The shared shape for a partner with no reachable API. |
 | `src/lib/booking/partner-provider.ts` | The booking destination: ask the partner, never guess, never fall through to Belline's diary. |
@@ -702,14 +803,23 @@ Flags follow the existing shape: `booking.partner.<id>` needs
 credentials is what makes it live rather than sandbox — and only live may ever
 change what the website says.
 
-Two fields on `PartnerVenueLink` exist for partners whose host or clock is not a
-constant. `timeZone`, because Cal.com books an exact instant rather than a wall
-time. And `baseUrl`, for the two partners whose host belongs to the venue —
+Three fields on `PartnerVenueLink` exist for partners whose host or clock is not
+a constant. `timeZone`, because Cal.com books an exact instant rather than a
+wall time. `baseUrl`, for the two partners whose host belongs to the venue —
 Cal.com because it can be self-hosted, and SimplyBook.me because it runs
-thirteen regional hosts and a company is on exactly one.
+thirteen regional hosts and a company is on exactly one. And `accountsServer`,
+added for Zoho Bookings: the accounts host Zoho itself named on the callback, so
+a grant is refreshed in the data centre that issued it. Zoho's *API* host is
+deliberately not stored anywhere — it is read from `api_domain` on each token
+response, which is Zoho's own written instruction.
+
+One shared change: `PartnerRequest` gained an optional `form`, because Zoho
+Bookings takes multipart form-data on every write and nothing else. Every other
+adapter still posts JSON, and an adapter setting both is a bug.
 
 Checks: `check:partners` (the shared contract) plus `check:fresha`,
 `check:zenoti`, `check:mindbody`, `check:treatwell`, `check:opentable`,
 `check:sevenrooms`, `check:msbookings`, `check:calcom`, `check:eatapp`,
-`check:booksy`, `check:vagaro`, `check:doctolib` and `check:simplybook`. All are
-in `check:all`, and every one blocks outbound fetches for the whole run.
+`check:booksy`, `check:vagaro`, `check:doctolib`, `check:simplybook` and
+`check:zohobookings`. All are in `check:all`, and every one blocks outbound
+fetches for the whole run.

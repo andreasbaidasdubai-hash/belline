@@ -935,6 +935,136 @@ export const PARTNERS: Record<PartnerId, PartnerFacts> = {
     ],
   },
 
+  /**
+   * Zoho Bookings: a real API on every plan, and one question that decides
+   * whether it works for a UAE customer at all.
+   *
+   * Researched 2026-09-19. The plan answer first, because it is good news and
+   * it is documented rather than inferred: every Zoho Bookings endpoint page
+   * carries the same API limits table — **Free 250 calls a day per user, Basic
+   * 1,000, Premium 3,000, Zoho One 3,000.** API access is not a plan feature
+   * at all; it is a rate limit. A one-user salon on the free plan can be
+   * connected. Basic is AED 21.90 and Premium AED 32.85 per user per month on
+   * the annual terms Zoho quotes in the UAE.
+   *
+   *   GET  {api_domain}/bookings/v1/json/availableslots
+   *   GET  {api_domain}/bookings/v1/json/services?workspace_id=
+   *   POST {api_domain}/bookings/v1/json/appointment            form-data
+   *   POST {api_domain}/bookings/v1/json/rescheduleappointment  form-data
+   *   POST {api_domain}/bookings/v1/json/updateappointment      form-data, action=cancel
+   *
+   * The bodies are multipart form-data rather than JSON, on every write. It is
+   * the only partner in this directory that works that way, and nested values
+   * (`customer_details`) go in as a JSON string inside a form field. There is
+   * no separate cancel endpoint: cancelling is `updateappointment` with
+   * `action=cancel`.
+   *
+   * One scope covers everything: **`zohobookings.data.CREATE`**. There is no
+   * read-only scope — every endpoint page, including `/services` and
+   * `/staffs`, lists that same write scope. So the consent screen a customer
+   * sees grants full write access to their bookings even though Belline only
+   * needs to read a catalogue and write one appointment. That is a
+   * conversation to have honestly at setup, not a footnote.
+   *
+   * ## The data-centre question, which is the whole risk
+   *
+   * Zoho is partitioned into separate data centres and they are separate
+   * worlds. A grant issued at `accounts.zoho.eu` can only be exchanged and
+   * refreshed at `accounts.zoho.eu`, and the API host it works against is a
+   * different hostname again. Point a `.eu` token at a `.com` host and it is
+   * simply not a valid token.
+   *
+   * This is the failure the founder asked about, and it is worse than a plain
+   * error: it would look like a working integration for whichever data centre
+   * we happened to develop against and fail for everybody else. Three facts
+   * from Zoho's own documentation make it survivable.
+   *
+   * 1. **One client id serves every data centre.** Zoho's multi-DC page says
+   *    "The Client ID will be common for all DCs, but the Client Secret can be
+   *    either common to all the DCs or unique for each DC depending on your
+   *    preference." So a single Belline OAuth app can serve a UAE customer —
+   *    provided the founder enables each data centre in the API console's
+   *    Settings tab and ticks "Use the same OAuth credentials for all data
+   *    centers". A data centre left disabled cannot be connected at all.
+   * 2. **Zoho tells us which one the customer is in.** The authorisation
+   *    callback carries `location` (a short code) and `accounts-server` (that
+   *    region's accounts host, spelled with a hyphen). Belline records what
+   *    Zoho said rather than inferring anything from a country or a dialling
+   *    code, which is the only way this is ever right.
+   * 3. **The API host comes off the token, not off a table.** Zoho's own
+   *    instruction, quoted because it is the rule this adapter is built on:
+   *    "Never hardcode a single region's URL. Always use the api_domain from
+   *    the access token response." Zoho's own examples show `api_domain` as
+   *    `https://api.zoho.eu` in one place and `https://www.zohoapis.in` in
+   *    another, so the value cannot even be string-built from `location`. It
+   *    is read from every token response and used for that call only.
+   *
+   * ## The UAE detail the founder should know before anything else
+   *
+   * `https://accounts.zoho.com/oauth/serverinfo` is a public endpoint that
+   * lists the live data centres, and it returns **eleven**, including
+   * `"ae":"https://accounts.zoho.ae"` — the Dubai and Abu Dhabi data centres
+   * Zoho launched in January 2026. **Zoho Bookings' own documentation does not
+   * list AE.** Its table has eight rows and stops at `.sa`.
+   *
+   * So a UAE salon that signed up this year may well be on a data centre the
+   * Bookings documentation does not admit exists, and `.sa` is the documented
+   * Gulf one. Zoho assigns the data centre at sign-up from the account's IP
+   * and a business cannot move itself afterwards. Whether
+   * `www.zohoapis.ae/bookings/` actually serves Bookings is unverified — the
+   * host resolves and a bare call is rejected rather than 404'd, which is
+   * suggestive and is not proof.
+   *
+   * None of that changes the design, and that is the point of the design: the
+   * venue's own grant says where it lives, the token says which API host to
+   * use, and a venue that has recorded neither is not connected. Nothing here
+   * may be "simplified" into a region table later.
+   */
+  zohobookings: {
+    id: "zohobookings",
+    name: "Zoho Bookings",
+    model: "appointments",
+    api: {
+      documented: true,
+      availability: true,
+      create: true,
+      reschedule: true,
+      cancel: true,
+      staffSelection: true,
+      catalogue: true,
+    },
+    auth:
+      "OAuth 2.0 against the venue's own Zoho data centre, scope zohobookings.data.CREATE (there is no read-only scope). Belline's single client id serves every data centre; the refresh token and the accounts host belong to the venue, and the API host is read from api_domain on each token response.",
+    sandbox: "none",
+    gate: {
+      what:
+        "Register one Zoho OAuth client as a Server-based Application at https://api-console.zoho.com, then open its Settings tab and enable every data centre a customer might be in — at least .com, .eu and .sa for the Gulf, and .ae if the console offers it — ticking 'Use the same OAuth credentials for all data centers' so one secret serves them all. A data centre left disabled cannot be connected at all. Nothing needs Zoho's approval, there is no partner programme to join and a Marketplace listing is optional; the customer's own plan needs no upgrade, because API access is on Free, Basic and Premium alike.",
+      apply: "https://api-console.zoho.com",
+      docs: "https://www.zoho.com/bookings/help/api/v1/oauthauthentication.html",
+    },
+    liveNeeds: ["PARTNER_ZOHOBOOKINGS_CLIENT_ID", "PARTNER_ZOHOBOOKINGS_CLIENT_SECRET"],
+    venueNeeds: [
+      "the accounts host Zoho named on the callback (accounts-server)",
+      "the venue's refresh token, sealed",
+      "the workspace id, and the service id and staff id for each service Belline may book",
+      "the IANA time zone the account answers in",
+    ],
+    limits: [
+      "The data centre is the whole risk. A token issued at one Zoho accounts host is not valid at another, and the API host is different again — so the venue's own accounts-server is recorded from Zoho's callback and the API host is read from api_domain on every token response. Belline keeps no region table and never infers a data centre from a country.",
+      "Zoho's live serverinfo endpoint lists a UAE data centre (accounts.zoho.ae, launched January 2026) that the Zoho Bookings documentation does not list at all. A UAE salon may therefore be on a data centre whose Bookings API host is undocumented, and whether www.zohoapis.ae serves Bookings is unconfirmed.",
+      "A data centre the founder did not enable in the API console cannot be connected, however good the customer's account is. Enabling one is a tick-box, but nobody finds out it was missed until a customer tries.",
+      "There is no read-only scope. zohobookings.data.CREATE grants full write access to the venue's bookings, and it is the only scope on offer even for reading the service list — so the consent screen asks a customer for more than Belline uses, and setup must say so.",
+      "GET /availableslots returns bare start times with no end time, so the length has to come from the service record — and the adapter offers nothing at all when it cannot read a duration, rather than assuming one.",
+      "Worse, the slot times come back in whatever format the venue chose under Settings → General → Time Format, so the same endpoint answers '14:00' for one salon and '02:00 PM' for the next. Both are parsed and anything else yields no times.",
+      "Bodies are multipart form-data on every write, with nested values as JSON strings inside form fields. It is the only partner here that works that way.",
+      "Nothing holds a slot, and there is no idempotency key on the booking call. Belline's own key check is the only guard against a retried create becoming two appointments.",
+      "Calls are metered by plan — 250 a day on Free, 1,000 on Basic, 3,000 on Premium — and Zoho counts them against the venue's own allowance, not ours. A busy day of slot lookups spends a free customer's budget.",
+      "There is no sandbox for Zoho Bookings, unlike Zoho CRM and Books. A free one-user account is the nearest thing, and it is real.",
+      "UNVERIFIED: which data centre a UAE business is actually assigned at sign-up. Zoho chooses it from the account's IP address and a business cannot move itself afterwards. The design does not depend on the answer, and must not be changed so that it does.",
+      "UNVERIFIED: whether the write endpoints also accept application/x-www-form-urlencoded. The documentation says form-data and the adapter sends multipart, which is the documented shape.",
+      "UNVERIFIED: whether the daily call allowance is counted per Bookings user or per API user. Zoho's table says 'per user' without saying which, so the smaller reading is the safe one to plan against.",
+    ],
+  },
 };
 
 export const PARTNER_IDS = Object.keys(PARTNERS) as PartnerId[];

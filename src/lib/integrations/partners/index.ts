@@ -14,6 +14,7 @@ import { simplybookConnector } from "./simplybook";
 import { treatwellConnector } from "./treatwell";
 import { vagaroConnector } from "./vagaro";
 import { zenotiConnector } from "./zenoti";
+import { zohobookingsConnector } from "./zohobookings";
 
 /**
  * Every partner booking system Belline has an adapter for, connected or not.
@@ -38,6 +39,7 @@ export const PARTNER_CONNECTORS: Record<PartnerId, PartnerConnector> = {
   vagaro: vagaroConnector,
   doctolib: doctolibConnector,
   simplybook: simplybookConnector,
+  zohobookings: zohobookingsConnector,
 };
 
 export function partnerConnector(id: PartnerId): PartnerConnector {
