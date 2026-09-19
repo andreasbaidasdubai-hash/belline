@@ -317,6 +317,8 @@ export interface SendingStore {
    * row, a second stop, or a second line on the lead's timeline.
    */
   findInbound(provider: string, providerMessageId: string): Promise<InboundReply | null>;
+  /** Note on the recorded message that it paused a sequence, and until when. */
+  markReplyPaused(id: number, until: string | null): Promise<void>;
   /** Record a staff decision on a message the classifier was unsure about. */
   resolveReview(id: number, patch: { isOptOut: boolean; needsReview: false; handledBy: string }): Promise<InboundReply | null>;
 
@@ -608,6 +610,10 @@ function memoryStore(): SendingStore {
         (r) => r.provider === provider && r.providerMessageId === providerMessageId,
       );
       return row ? { ...row } : null;
+    },
+    async markReplyPaused(id, until) {
+      const row = memory.replies.find((r) => r.id === id);
+      if (row) row.pausedUntil = until;
     },
     async resolveReview(id, patch) {
       const row = memory.replies.find((r) => r.id === id);
@@ -1142,6 +1148,9 @@ function postgresStore(): SendingStore {
         [provider, providerMessageId],
       );
       return rows[0] ? toReply(rows[0]) : null;
+    },
+    async markReplyPaused(id, until) {
+      await query(`update sales.inbound_reply set paused_until = $2 where id = $1`, [id, until]);
     },
     async resolveReview(id, patch) {
       const rows = await query<any>(

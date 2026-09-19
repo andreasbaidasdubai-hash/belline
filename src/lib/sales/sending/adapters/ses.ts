@@ -20,6 +20,13 @@
  */
 
 import crypto from "node:crypto";
+import {
+  amzDates,
+  canonicalRequest as sigv4Canonical,
+  sha256Hex,
+  sigv4Authorization as sigv4Sign,
+  type CanonicalInput as Sigv4CanonicalInput,
+} from "../../../aws/sigv4";
 import type { OutboundEmail, SendAdapter, SendReceipt } from "../provider";
 
 export interface SesConfig {
@@ -38,69 +45,30 @@ export interface SesConfig {
 const SERVICE = "ses";
 const SEND_TIMEOUT_MS = 15_000;
 
-function sha256Hex(value: string | Buffer): string {
-  return crypto.createHash("sha256").update(value).digest("hex");
-}
-
-function hmac(key: Buffer | string, value: string): Buffer {
-  return crypto.createHmac("sha256", key).update(value, "utf8").digest();
-}
-
-/** `20260918T101530Z` and `20260918`, the two forms SigV4 wants. */
-export function amzDates(now: Date): { amzDate: string; dateStamp: string } {
-  const iso = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
-  return { amzDate: iso, dateStamp: iso.slice(0, 8) };
-}
-
-export interface CanonicalInput {
-  method: string;
-  path: string;
-  host: string;
-  amzDate: string;
-  payload: string;
-  contentType?: string;
-}
-
-/** The canonical request, exposed so it can be tested against a fixed vector. */
-export function canonicalRequest(input: CanonicalInput): { canonical: string; signedHeaders: string } {
-  const payloadHash = sha256Hex(input.payload);
-  const headers: [string, string][] = [
-    ["content-type", input.contentType ?? "application/json"],
-    ["host", input.host],
-    ["x-amz-content-sha256", payloadHash],
-    ["x-amz-date", input.amzDate],
-  ];
-  headers.sort((a, b) => (a[0] < b[0] ? -1 : 1));
-  const canonicalHeaders = headers.map(([k, v]) => `${k}:${v.trim()}\n`).join("");
-  const signedHeaders = headers.map(([k]) => k).join(";");
-  const canonical = [input.method, input.path, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
-  return { canonical, signedHeaders };
-}
-
-export interface SignInput extends CanonicalInput {
+/**
+ * The signer moved to `src/lib/aws/sigv4.ts` when a second and third caller
+ * appeared — reading inbound mail out of S3, and the SES control-plane calls
+ * that set a sending domain up. These wrappers keep this module's own surface
+ * and its pinned test vector exactly as they were, including the default
+ * content type, which is part of the signature.
+ */
+export type CanonicalInput = Omit<Sigv4CanonicalInput, "contentType"> & { contentType?: string };
+export type SignInput = CanonicalInput & {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
   dateStamp: string;
+};
+
+export function canonicalRequest(input: CanonicalInput): { canonical: string; signedHeaders: string } {
+  return sigv4Canonical({ ...input, contentType: input.contentType ?? "application/json" });
 }
 
-/** The finished `Authorization` header value. */
 export function sigv4Authorization(input: SignInput): string {
-  const { canonical, signedHeaders } = canonicalRequest(input);
-  const scope = `${input.dateStamp}/${input.region}/${SERVICE}/aws4_request`;
-  const toSign = ["AWS4-HMAC-SHA256", input.amzDate, scope, sha256Hex(canonical)].join("\n");
-
-  let key = hmac(`AWS4${input.secretAccessKey}`, input.dateStamp);
-  key = hmac(key, input.region);
-  key = hmac(key, SERVICE);
-  key = hmac(key, "aws4_request");
-  const signature = crypto.createHmac("sha256", key).update(toSign, "utf8").digest("hex");
-
-  return (
-    `AWS4-HMAC-SHA256 Credential=${input.accessKeyId}/${scope}, ` +
-    `SignedHeaders=${signedHeaders}, Signature=${signature}`
-  );
+  return sigv4Sign({ ...input, service: SERVICE, contentType: input.contentType ?? "application/json" });
 }
+
+export { amzDates, sha256Hex };
 
 /** RFC 2047 for a display name that is not plain ASCII. */
 function encodeWord(value: string): string {
