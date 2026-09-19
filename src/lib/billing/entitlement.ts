@@ -170,6 +170,39 @@ export function videoSecondsLeft(location: Location, today: string): number | nu
   return left === null ? null : Math.floor((left * 60) / VIDEO_VOICE_MINUTE_RATIO);
 }
 
+/**
+ * The venue's whole monthly video allowance in seconds — what the plan
+ * includes, not what is left — or null where no monthly figure applies (an
+ * exempt venue, an older product whose minutes are not pooled).
+ *
+ * `videoSecondsLeft` above answers "may this call run"; this answers "how big
+ * is the month", which is what a *daily* ceiling has to be drawn from. The two
+ * differ in two places that matter:
+ *
+ *   - packs are excluded (`included - packUnits`), so a venue that has already
+ *     topped up twice is still measured against the plan it bought rather than
+ *     against a figure that grows every time it overspends;
+ *   - a `packs` policy does not make it null. `videoSecondsLeft` returns null
+ *     there because the next pack will cover the call, which is true of one
+ *     call and no answer at all to a website spending the month in an
+ *     afternoon.
+ *
+ * A trial has no month either, and gets none: its thirty minutes are a total,
+ * not an allowance that comes back, so there is nothing to pace. Spending them
+ * in an afternoon is what a trial is for, and the cap that stops the thirty-
+ * first minute is the same cap either way.
+ */
+export function monthlyVideoSecondsIncluded(location: Location, today: string): number | null {
+  if (exempt(location)) return null;
+  if (governs(location)) {
+    const meter = accountFor(location, today)?.usage.meters.find((m) => m.id === "minutes");
+    if (!meter || meter.included === null) return null;
+    const base = Math.max(0, meter.included - meter.packUnits);
+    return base > 0 ? Math.floor((base * 60) / VIDEO_VOICE_MINUTE_RATIO) : null;
+  }
+  return null;
+}
+
 /** Does the venue's plan include this channel? A trial includes all of them. */
 export function channelIncluded(location: Location, channel: Channel): boolean {
   if (exempt(location)) return true;

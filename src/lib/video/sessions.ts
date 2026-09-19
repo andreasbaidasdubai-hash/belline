@@ -10,8 +10,15 @@ import { openException } from "../exceptions";
 import { BELLINE_TENANT_ID } from "../tenancy";
 import { BELLINE_LOCATION_ID, BELLINE_VIDEO_GREETING } from "../seed-belline";
 import { answersIn, lineFor } from "../language";
-import { concurrentVideoLimit, videoAvailability, type VideoOffReason, type VideoSessionKind } from "./availability";
-import type { VideoConfig } from "./config";
+import {
+  concurrentVideoLimit,
+  dailyVideoSecondsLimit,
+  videoAvailability,
+  videoSecondsToday,
+  type VideoOffReason,
+  type VideoSessionKind,
+} from "./availability";
+import { videoConfig, type VideoConfig } from "./config";
 import { recordProviderAtCapacity, recordVideoEnding } from "./delivery";
 import { classifyVideoEnd, type VideoEndCause } from "./end-reason";
 import { venueVideoSettings } from "./control";
@@ -370,7 +377,7 @@ export async function startVideoSession(
   const kind: VideoSessionKind = opts.demo ? "demo" : opts.support ? "support" : "website";
   const available = videoAvailability(location, { env, skipLive: opts.preview, kind });
   if (!available.on) {
-    const status = available.reason === "daily_limit" ? 429 : 403;
+    const status = available.reason === "daily_limit" || available.reason === "daily_minutes" ? 429 : 403;
     return { ok: false, reason: available.reason, retryable: false, status };
   }
   const provider = opts.provider ?? videoProvider(env, available.config);
@@ -415,7 +422,7 @@ export async function startVideoSession(
   // The allowance, not only the deployment's ceiling, decides how long this
   // call may run: video uses voice minutes at VIDEO_VOICE_MINUTE_RATIO, so a
   // call that would run past what is left ends at it instead.
-  const limit = videoCallLimitSeconds(location, available.config.maxCallSeconds);
+  const limit = videoCallLimitSeconds(location, available.config.maxCallSeconds, todayIn(location.timezone), available.config);
   if (limit === null) return { ok: false, reason: "not_entitled", retryable: false, status: 403 };
   const config = limit === available.config.maxCallSeconds ? available.config : { ...available.config, maxCallSeconds: limit, warnBeforeSeconds: Math.min(available.config.warnBeforeSeconds, Math.floor(limit / 2)) };
 
@@ -439,11 +446,24 @@ const MIN_VIDEO_CALL_SECONDS = 30;
 
 /**
  * How long a video call may run for this venue: the deployment's ceiling, or
- * less when the voice-minute allowance ends sooner. Null when what is left is
- * too short to open a call at all.
+ * less when the voice-minute allowance — or today's share of it — ends sooner.
+ * Null when what is left is too short to open a call at all.
+ *
+ * The daily share is the same budget `videoAvailability` refuses on, applied
+ * again here so the call that crosses it is shortened rather than allowed to
+ * run five minutes past it. Without this the ceiling would only ever be
+ * checked between calls, and a venue could end the day one whole session over.
  */
-export function videoCallLimitSeconds(location: Location, ceiling: number, today: string = todayIn(location.timezone)): number | null {
-  const left = videoSecondsLeft(location, today);
+export function videoCallLimitSeconds(
+  location: Location,
+  ceiling: number,
+  today: string = todayIn(location.timezone),
+  config?: VideoConfig,
+): number | null {
+  const month = videoSecondsLeft(location, today);
+  const dayBudget = dailyVideoSecondsLimit(location, config ?? videoConfig(), "website", today);
+  const day = dayBudget === null ? null : Math.max(0, dayBudget - videoSecondsToday(location, "website"));
+  const left = month === null ? day : day === null ? month : Math.min(month, day);
   if (left === null) return ceiling;
   const usable = left - VIDEO_ALLOWANCE_MARGIN_SECONDS;
   if (usable < MIN_VIDEO_CALL_SECONDS) return null;

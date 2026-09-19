@@ -2,3 +2,9 @@ User-agent: *
 Allow: /
 
 Sitemap: https://belline.ai/sitemap.xml
+
+# What Belline is, what it costs, where it works and what it will not do, in
+# Markdown, for something reading rather than rendering. Generated from the
+# product catalogue on every build (scripts/site-llms.ts), and described at
+# https://llmstxt.org
+# https://belline.ai/llms.txt

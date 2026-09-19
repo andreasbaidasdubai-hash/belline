@@ -458,7 +458,7 @@ test("the pricing applies to landing.html whatever its line endings", () => {
     let out = "";
     assert.doesNotThrow(() => { out = applyPricing(html); }, `${name}: applyPricing threw`);
     assert.match(out, /<select name="plan">\r?\n\s*<option value="\d+"[\s\S]*?data-name="Growth"/, `${name}: the ROI plan list was not regenerated`);
-    assert.match(out, /"offers": \[\r?\n\s*\{ "@type": "Offer"/, `${name}: the structured-data offers were not regenerated`);
+    assert.match(out, /"offers": \[\r?\n\s*\{\r?\n\s*"@type": "Offer",\r?\n\s*"name": "Belline /, `${name}: the structured-data offers were not regenerated`);
     assert.match(out, /<p class="roi-out" id="roi-out" aria-live="polite">About AED [\d,]+ a month<\/p>/, `${name}: the ROI answer was not regenerated`);
     assert.ok(out.includes(`data-gen="faq-allowance">${overLimitSentence()}<`), `${name}: the allowance answer was not generated`);
   }

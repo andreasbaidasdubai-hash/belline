@@ -20,6 +20,29 @@ type Env = Record<string, string | undefined>;
  */
 export type PalMode = "per_session" | "shared";
 
+/**
+ * Which venues the environment opens the video receptionist to.
+ *
+ *   - `none`  nothing set: no venue, whatever the flag says;
+ *   - `list`  the named venue ids and only those (the original allowlist);
+ *   - `all`   every venue, asked for out loud with `VIDEO_AVATAR_VENUES=*`.
+ *
+ * The three are kept apart on purpose. Video costs real Tavus minutes per
+ * visitor, so "nobody configured this" and "open it to everybody" must never
+ * be the same value: an empty variable stays `none`, exactly as it always has,
+ * and a deployment spends on everyone's behalf only once somebody typed the
+ * star. The list survives because an operator may want it back — a staged
+ * rollout, a provider incident, a market we have not priced yet.
+ *
+ * Staff's per-venue switch in the video control file outranks all three, in
+ * both directions (video/availability.ts `venueAllowlisted`), so a single
+ * venue can still be turned off under the wildcard.
+ */
+export type VideoVenueScope = "none" | "list" | "all";
+
+/** The value of `VIDEO_AVATAR_VENUES` that opens video to every venue. */
+export const ALL_VENUES = "*";
+
 export interface VideoConfig {
   provider: VideoProviderName;
   tavus: {
@@ -103,7 +126,17 @@ export interface VideoConfig {
   /** The bubble's muted greeting clip and its poster, for every venue without its own. */
   greetingClipUrl: string;
   greetingPosterUrl: string;
-  /** Venue ids allowed by the environment, beside the ones staff add in the console. */
+  /**
+   * How far `VIDEO_AVATAR_VENUES` opens video: nothing set, a list, or every
+   * venue. The ops page says which of the three is in force, because "no venue
+   * is on the list" and "every venue is" look identical from a row of Yes/No.
+   */
+  venueScope: VideoVenueScope;
+  /**
+   * Venue ids allowed by the environment, beside the ones staff add in the
+   * console. Empty under `none` and under `all`, where naming ids would only
+   * invite somebody to read the short list as the whole answer.
+   */
   venues: string[];
 }
 
@@ -140,6 +173,25 @@ function httpsOrPath(raw: string | undefined, fallback = ""): string {
  */
 export const GREETING_CLIP_PATH = "/video/greeting-rf90eb925bd8.mp4";
 export const GREETING_POSTER_PATH = "/video/greeting-rf90eb925bd8.jpg";
+
+/**
+ * `VIDEO_AVATAR_VENUES`, read into a scope and a list.
+ *
+ * A star anywhere in the value means every venue: `*` on its own is the way to
+ * write it, and `loc_one,*` is somebody who has just opened the gate and left
+ * the old list behind rather than a contradiction worth refusing over. The
+ * remaining ids are dropped in that case so nothing downstream can mistake
+ * them for the whole set.
+ */
+function venueScopeOf(raw: string | undefined): { venueScope: VideoVenueScope; venues: string[] } {
+  const parts = (raw ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  if (parts.some((p) => p === ALL_VENUES || p.toLowerCase() === "all")) return { venueScope: "all", venues: [] };
+  if (!parts.length) return { venueScope: "none", venues: [] };
+  return { venueScope: "list", venues: parts };
+}
 
 function on(raw: string | undefined): boolean {
   return ["on", "1", "true", "yes"].includes((raw ?? "").trim().toLowerCase());
@@ -182,10 +234,7 @@ export function videoConfig(env: Env = process.env): VideoConfig {
     providerMaxConcurrent: num(env.VIDEO_PROVIDER_MAX_CONCURRENT, 10, 1, 200),
     greetingClipUrl: httpsOrPath(env.VIDEO_GREETING_CLIP_URL, GREETING_CLIP_PATH),
     greetingPosterUrl: httpsOrPath(env.VIDEO_GREETING_POSTER_URL, GREETING_POSTER_PATH),
-    venues: (env.VIDEO_AVATAR_VENUES ?? "")
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean),
+    ...venueScopeOf(env.VIDEO_AVATAR_VENUES),
   };
 }
 

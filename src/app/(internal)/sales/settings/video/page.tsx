@@ -3,9 +3,16 @@ import { isBellineStaff } from "@/lib/auth";
 import { listLocations } from "@/lib/store";
 import { seedIfEmpty } from "@/lib/seed";
 import { flagState } from "@/lib/flags";
-import { videoConfig, missingVideoConfig } from "@/lib/video/config";
+import { videoConfig, missingVideoConfig, type VideoVenueScope } from "@/lib/video/config";
 import { readVideoControl } from "@/lib/video/control";
-import { dailyVideoLimit, venueAllowlisted, videoAvailability, videoSessionsToday } from "@/lib/video/availability";
+import {
+  dailyVideoLimit,
+  dailyVideoSecondsLimit,
+  venueAllowlisted,
+  videoAvailability,
+  videoSecondsToday,
+  videoSessionsToday,
+} from "@/lib/video/availability";
 import { liveVideoSessions } from "@/lib/video/sessions";
 import { recentVideoMetrics, type VideoMetricName } from "@/lib/video/metrics";
 import { ConsoleHeader, EmptyState, KeyValues, Pill, ago } from "../../ui";
@@ -33,11 +40,32 @@ const TIMINGS: { name: VideoMetricName; label: string }[] = [
 
 const REASON: Record<string, string> = {
   flag_off: "switched off for everyone",
+  unsafe: "the stand-in face is refused here",
+  not_configured: "server settings missing",
+  killed: "turned off everywhere",
   kill_switch: "turned off everywhere",
-  not_allowlisted: "not on the list",
+  not_allowlisted: "not open to this location",
   venue_disabled: "off in the location's settings",
+  widget_off: "the website button is off",
+  not_live: "the location has not gone live",
+  not_entitled: "not in their plan, or the allowance has run out",
   daily_cap: "today's limit reached",
+  daily_limit: "today's session limit reached",
+  daily_minutes: "today's share of their monthly minutes is spent",
   not_in_plan: "not in their plan",
+};
+
+/**
+ * What `VIDEO_AVATAR_VENUES` is doing, in a sentence.
+ *
+ * A column of Yes and No cannot tell "nobody is on the list" from "everybody
+ * is", and those two are the difference between a quiet month and a Tavus
+ * bill, so the page says which of the three it is out loud.
+ */
+const SCOPE: Record<VideoVenueScope, string> = {
+  none: "The environment opens video to no location (VIDEO_AVATAR_VENUES is empty). Only the ones allowed here have it.",
+  list: "The environment opens video to a named list (VIDEO_AVATAR_VENUES), plus any location allowed here.",
+  all: "The environment opens video to every location (VIDEO_AVATAR_VENUES is a star). Remove one below to switch it off for that location only.",
 };
 
 function median(values: number[]): number | null {
@@ -89,6 +117,9 @@ export default async function VideoSettings() {
 
       <section className="panel staff-section" style={{ marginBottom: 16 }}>
         <div className="panel-head">Locations with the website button on</div>
+        <p className="staff-note" style={{ padding: "10px 16px 0", margin: 0 }}>
+          {SCOPE[config.venueScope]}
+        </p>
         {venues.length === 0 ? (
           <EmptyState title="No location has the website button on">Video can only be offered where the website button is switched on.</EmptyState>
         ) : (
@@ -100,6 +131,7 @@ export default async function VideoSettings() {
                   <th>On the list</th>
                   <th>Offered now</th>
                   <th className="num">Today</th>
+                  <th className="num">Minutes today</th>
                   <th>
                     <span className="sr-only">Action</span>
                   </th>
@@ -116,6 +148,16 @@ export default async function VideoSettings() {
                       <td>{availability.on ? <Pill tone="ok">Yes</Pill> : `No: ${REASON[availability.reason] ?? availability.reason.replace(/_/g, " ")}`}</td>
                       <td className="num">
                         {videoSessionsToday(v)} of {dailyVideoLimit(v, config)}
+                      </td>
+                      <td className="num">
+                        {(() => {
+                          // A share of the venue's month, so no website can spend
+                          // it all in an afternoon. Dashes where no monthly figure
+                          // applies: our own venue, an internal one, an older plan.
+                          const budget = dailyVideoSecondsLimit(v, config);
+                          const used = Math.round(videoSecondsToday(v) / 60);
+                          return budget === null ? `${used} min` : `${used} of ${Math.floor(budget / 60)} min`;
+                        })()}
                       </td>
                       <td>{listed ? <VideoAction action="disallow" locationId={v.id} label="Remove" confirm={`Stop offering video on ${v.name}'s website?`} /> : <VideoAction action="allow" locationId={v.id} label="Allow video" />}</td>
                     </tr>

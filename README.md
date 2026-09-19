@@ -236,6 +236,7 @@ who has missed twice being handed to a person rather than refused by a machine.
 | `src/lib/guests.ts` | Guest recognition, derived from booking history. |
 | `src/lib/store.ts` | Persistence. One narrow interface; swap for Postgres here. |
 | `public/*.html` | Landing page and the three written documents. |
+| `scripts/site-llms.ts` | `/llms.txt` and the sector pages' JSON-LD, generated from the catalogue, the markets module, the language registry and the flags. `npm run check:seo` fails if either drifts from them. |
 
 ---
 

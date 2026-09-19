@@ -5,6 +5,7 @@
   <url><loc>https://belline.ai/clinics</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://belline.ai/salons</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://belline.ai/restaurants</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://belline.ai/llms.txt</loc><changefreq>weekly</changefreq><priority>0.3</priority></url>
   <url><loc>https://belline.ai/privacy</loc><changefreq>yearly</changefreq><priority>0.2</priority></url>
   <url><loc>https://belline.ai/terms</loc><changefreq>yearly</changefreq><priority>0.2</priority></url>
   <url><loc>https://belline.ai/de-de</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>

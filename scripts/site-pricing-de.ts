@@ -232,13 +232,42 @@ function applyGeneratedDe(html: string, market: DachMarket): string {
   return html;
 }
 
+/**
+ * The same offers as the English page's, with two differences that matter: the
+ * market's own currency, and `PreOrder` — DACH is priced and not open, and a
+ * reader of the structured data has no other way to learn that from this page.
+ * Shape and reasoning: `renderOffers` in site-pricing.ts.
+ */
+const DACH_PATH: Record<DachMarket, string> = { DE: "de-de", AT: "de-at", CH: "de-ch" };
+
 function renderOffersDe(market: DachMarket): string {
   const currency = market === "CH" ? "CHF" : "EUR";
   return offered(market)
-    .map(
-      (p) =>
-        `        { "@type": "Offer", "name": ${JSON.stringify(`Belline ${p.name}`)}, "price": "${priceOf(p.id, market) / 100}", "priceCurrency": "${currency}", "billingIncrement": "P1M", "availability": "https://schema.org/PreOrder" }`,
-    )
+    .map((p) => {
+      const price = String(priceOf(p.id, market) / 100);
+      const offer = {
+        "@type": "Offer",
+        name: `Belline ${p.name}`,
+        description: p.summary,
+        price,
+        priceCurrency: currency,
+        availability: "https://schema.org/PreOrder",
+        url: `https://belline.ai/${DACH_PATH[market]}`,
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price,
+          priceCurrency: currency,
+          billingDuration: 1,
+          billingIncrement: 1,
+          unitCode: "MON",
+        },
+        itemOffered: { "@type": "Service", name: `Belline ${p.name}`, serviceType: "AI receptionist" },
+      };
+      return JSON.stringify(offer, null, 2)
+        .split("\n")
+        .map((line) => `        ${line}`)
+        .join("\n");
+    })
     .join(",\n");
 }
 

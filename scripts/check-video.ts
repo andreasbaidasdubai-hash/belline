@@ -70,7 +70,18 @@ const { toolsFor } = await import("../src/lib/agent/tools");
 const { startCall } = await import("../src/lib/calls");
 const { billableVoiceMinutes } = await import("../src/lib/billing/usage");
 const { videoConfig, missingVideoConfig, GREETING_CLIP_PATH, GREETING_POSTER_PATH } = await import("../src/lib/video/config");
-const { videoAvailability, videoOffered, videoBubbleConfig, concurrentVideoLimit, dailyVideoLimit } = await import("../src/lib/video/availability");
+const {
+  videoAvailability,
+  videoOffered,
+  videoSettable,
+  videoBubbleConfig,
+  concurrentVideoLimit,
+  dailyVideoLimit,
+  dailyVideoSecondsLimit,
+  videoSecondsToday,
+  venueAllowlisted,
+  VIDEO_DAILY_SHARE,
+} = await import("../src/lib/video/availability");
 const { GREETING_CLIP_SCRIPT, greetingAfterClip, CONTINUATION_FALLBACK, QUIET_NUDGE_MS } = await import("../src/lib/video/greeting-clip");
 const { copy } = await import("../src/lib/customer-copy");
 const { lineFor } = await import("../src/lib/language");
@@ -241,6 +252,74 @@ await test("2. enabled shows it — only on listed venues, and the kill switch h
     assert.equal(videoOffered(OFF), false);
   } finally {
     restore();
+  }
+});
+
+await test("2b. VIDEO_AVATAR_VENUES: a star opens every venue, empty opens none, a list opens those — and staff still switch one off", () => {
+  const scope = (VIDEO_AVATAR_VENUES?: string) => videoConfig({ ...MOCK_ENV, VIDEO_AVATAR_VENUES });
+  // Staff's switch outranks all three, so the environment's half is read with
+  // nobody's finger on it.
+  const control = readVideoControl();
+  const staffSwitches = control.venues;
+  control.venues = {};
+  fs.writeFileSync(path.join(process.env.DATA_DIR!, "video.json"), JSON.stringify(control));
+  try {
+  // Empty is not "all". A deployment that configured nothing must not start
+  // spending Tavus minutes on every customer's visitors.
+  assert.equal(scope(undefined).venueScope, "none");
+  assert.equal(scope("").venueScope, "none");
+  assert.equal(scope("  , ,").venueScope, "none");
+  assert.deepEqual(scope(undefined).venues, []);
+  assert.equal(venueAllowlisted(OFF, scope("")), false);
+
+  assert.equal(scope(`${OFF.id},${B.id}`).venueScope, "list");
+  assert.deepEqual(scope(`${OFF.id}, ${B.id}`).venues, [OFF.id, B.id]);
+  assert.equal(venueAllowlisted(OFF, scope(OFF.id)), true);
+  assert.equal(venueAllowlisted(B, scope(OFF.id)), false);
+
+  const all = scope("*");
+  assert.equal(all.venueScope, "all");
+  assert.deepEqual(all.venues, [], "under the star no id is a list anybody could mistake for the whole set");
+  assert.equal(scope("all").venueScope, "all", "the word reads the same as the symbol");
+  assert.equal(scope(`${OFF.id},*`).venueScope, "all", "a leftover list beside the star does not narrow it");
+  for (const v of [A, B, OFF]) assert.equal(venueAllowlisted(v, all), true, `${v.id} is not open under the star`);
+
+  // The reason staff's switch is read first: one venue off while the star holds the gate open.
+  const restore = setEnv({ VIDEO_AVATAR_VENUES: "*" });
+  try {
+    setVenueVideo(OFF.id, false, "check");
+    assert.equal(venueAllowlisted(OFF, videoConfig()), false, "staff cannot switch a venue off under the wildcard");
+    assert.equal(venueAllowlisted(A, videoConfig()), true, "one venue off took the rest with it");
+  } finally {
+    restore();
+  }
+  } finally {
+    control.venues = staffSwitches;
+    fs.writeFileSync(path.join(process.env.DATA_DIR!, "video.json"), JSON.stringify(control));
+  }
+});
+
+await test("2c. the face picker follows the standing conditions, not the minute-by-minute ones", () => {
+  const open = setEnv({ VIDEO_AVATAR_VENUES: "*" });
+  try {
+    const venue = getLocation(A.id)!;
+    assert.equal(videoSettable(venue), true, "video is open to every venue, so its owner may choose a face");
+    // Not the ones that come and go. A setting that disappeared because the
+    // last visitor of the day has just hung up would read as a fault.
+    assert.equal(videoSettable({ ...venue, embed: { ...venue.embed!, enabled: false } }), true, "the widget being off is not a reason to hide the setting");
+    // But the plan is: the picker says "on a video call from your website",
+    // and a venue whose plan has no voice button will never have one. The
+    // condition is `channelIncluded(location, "web_voice")` in
+    // video/availability.ts — the same question the widget asks.
+    assert.match(read("src/lib/video/availability.ts"), /export function videoSettable[\s\S]*?channelIncluded\(location, "web_voice"\)/);
+    setKillSwitch(true, "check");
+    try {
+      assert.equal(videoSettable(venue), false, "the kill switch hides the setting too");
+    } finally {
+      setKillSwitch(false, "check");
+    }
+  } finally {
+    open();
   }
 });
 
@@ -1309,58 +1388,86 @@ await test("the guards are unchanged under routing: authority rules before any m
 // ---------------------------------------------------------------------------
 console.log("\n  The face and the background");
 
-const { venueLook, CURATED_FACES, confirmedFaces, resetFaceCache } = await import("../src/lib/video/faces");
+const { venueLook, CURATED_FACES, DEFAULT_FACE_ID, faceStillPath, faceTakesBackground, unconfirmedFaces, confirmedFaces, resetFaceCache } = await import("../src/lib/video/faces");
 const { VIDEO_BACKGROUNDS, DEFAULT_BACKGROUND_ID } = await import("../src/lib/video/backgrounds");
 const { readLook, saveLook } = await import("../src/lib/video/look-settings");
 const { setVenueLook, venueVideoSettings } = await import("../src/lib/video/control");
-const { venueAllowlisted } = await import("../src/lib/video/availability");
 const { listUsers } = await import("../src/lib/store");
 const { canEditAgent } = await import("../src/lib/auth");
 const chroma = await import("../src/lib/video/client/chroma");
 
-const PHOENIX4_RUBY = "rcc28da86847";
+/** A curated face that is not the default, for "the owner changed it" cases. */
+const SECOND_FACE = "r4dc9377a68e";
 
-await test("the look: a Phoenix-4 face takes the Belline background by default; Phoenix-4.5 and unknown faces keep their room; bad ids fall back", () => {
+await test("the eight curated faces: the founder's list, all Phoenix-4.5, each with a committed still, Ruby first and the default", () => {
   const tavus = videoConfig({ ...TAVUS_ENV });
-  assert.ok(CURATED_FACES.length >= 8 && CURATED_FACES.length <= 12);
-  assert.equal(new Set(CURATED_FACES.map((f) => f.id)).size, CURATED_FACES.length);
+  assert.deepEqual(
+    CURATED_FACES.map((f) => f.name),
+    ["Ruby · Office", "Priya · Office", "Dr. Adams", "Dr. Lee", "Olivia · Office", "Mateo", "Rose · Business", "Victor · Office"],
+    "the eight the founder chose, in order — not Tavus's whole catalogue",
+  );
+  assert.equal(new Set(CURATED_FACES.map((f) => f.id)).size, 8);
+  assert.equal(CURATED_FACES[0].id, DEFAULT_FACE_ID, "Ruby is the default");
+  assert.equal(DEFAULT_FACE_ID, TAVUS_ENV.TAVUS_FACE_ID, "the default face and the shipped TAVUS_FACE_ID are the same face");
+  for (const f of CURATED_FACES) {
+    assert.equal(f.model, "phoenix-4.5", `${f.name} is not Phoenix-4.5`);
+    assert.match(f.id, /^r[0-9a-f]{11}$/, `${f.name} has an id that is not a Tavus stock face id`);
+    // A still that ships, so the picker never shows eight letters in eight circles.
+    const still = path.join(ROOT, "public", faceStillPath(f.id));
+    assert.ok(fs.existsSync(still), `${f.name}: no still — run scripts/build-face-stills.ts`);
+    assert.ok(fs.statSync(still).size < 120 * 1024, `${faceStillPath(f.id)} is small`);
+  }
+  // Unconfirmed previews still carry the shipped stills.
+  assert.deepEqual(unconfirmedFaces().map((f) => f.posterUrl), CURATED_FACES.map((f) => faceStillPath(f.id)));
+
   assert.ok(VIDEO_BACKGROUNDS.filter((b) => b.src).length >= 3 && VIDEO_BACKGROUNDS.length <= 6);
   for (const b of VIDEO_BACKGROUNDS.filter((x) => x.src)) {
     const file = path.join(ROOT, "public", b.src);
     assert.ok(fs.existsSync(file), b.src);
     assert.ok(fs.statSync(file).size < 120 * 1024, `${b.src} is small`);
   }
+
+  // Every offered face keeps its own room: Tavus cannot key Phoenix-4.5.
+  for (const f of CURATED_FACES) {
+    const look = venueLook({ faceId: f.id, backgroundId: DEFAULT_BACKGROUND_ID }, tavus);
+    assert.equal(look.faceId, f.id);
+    assert.equal(look.greenscreen, false, `${f.name} was sent to Tavus as keyable`);
+    assert.equal(look.background.id, "original");
+  }
   assert.deepEqual(
     (({ faceId, greenscreen, background }) => ({ faceId, greenscreen, bg: background.id }))(venueLook(undefined, tavus)),
-    { faceId: "rf90eb925bd8", greenscreen: false, bg: "original" },
-    "the deployment's Phoenix-4.5 face: Tavus cannot key it",
+    { faceId: DEFAULT_FACE_ID, greenscreen: false, bg: "original" },
+    "an owner who never chose gets Ruby, in her own room",
   );
-  const p4 = venueLook({ faceId: PHOENIX4_RUBY }, tavus);
-  assert.equal(p4.faceId, PHOENIX4_RUBY);
-  assert.equal(p4.greenscreen, true);
-  assert.equal(p4.background.id, DEFAULT_BACKGROUND_ID);
-  assert.equal(venueLook({ faceId: PHOENIX4_RUBY, backgroundId: "original" }, tavus).greenscreen, false);
-  assert.equal(venueLook({ faceId: PHOENIX4_RUBY, backgroundId: "evening-navy" }, tavus).background.id, "evening-navy");
+  // The green-screen machinery is still there, keyed off the model, for the day a Phoenix-4 look returns.
+  assert.equal(faceTakesBackground("phoenix-4"), true);
+  assert.equal(faceTakesBackground("phoenix-4.5"), false);
+  assert.equal(faceTakesBackground(undefined), false);
   // Something not curated in the file (edited by hand, or a face since removed) is never used.
-  assert.equal(venueLook({ faceId: "r_arbitrary_1", backgroundId: "javascript:x" }, tavus).faceId, "rf90eb925bd8");
-  assert.equal(venueLook({ faceId: PHOENIX4_RUBY, backgroundId: "javascript:x" }, tavus).background.id, DEFAULT_BACKGROUND_ID);
+  assert.equal(venueLook({ faceId: "r_arbitrary_1", backgroundId: "javascript:x" }, tavus).faceId, DEFAULT_FACE_ID);
 });
 
-await test("a Phoenix-4 face asks Tavus for the green screen and hands the panel its background; a Phoenix-4.5 face does neither", async () => {
+await test("no curated face asks Tavus for the green screen, because every one of them is Phoenix-4.5", async () => {
   const restore = setEnv({ ...TAVUS_ENV, FLAG_STUBS: undefined });
   try {
-    setVenueLook(A.id, { faceId: PHOENIX4_RUBY, backgroundId: "belline-light" }, "check");
+    assert.equal(
+      CURATED_FACES.some((f) => faceTakesBackground(f.model)),
+      false,
+      "a Phoenix-4 face is on the list again: restore the green-screen half of this test and unhide the background picker",
+    );
+    setVenueLook(A.id, { faceId: SECOND_FACE, backgroundId: "belline-light" }, "check");
     const fake = fakeTavus(tavusHappyPath);
     const provider = new TavusProvider(videoConfig(), fake.fetchImpl);
     const keyed = await sessions.startVideoSession(getLocation(A.id)!, "visitor-look-1", { provider });
     assert.ok(keyed.ok);
     if (!keyed.ok) return;
     const convo = fake.calls.find((c) => c.url.endsWith("/v2/conversations"))!;
-    assert.equal(convo.body.face_id, PHOENIX4_RUBY);
-    assert.equal(convo.body.properties.apply_greenscreen, true);
-    assert.deepEqual(keyed.client.background, { id: "belline-light", src: "/video/backgrounds/belline-light.jpg", tone: "light" });
+    assert.equal(convo.body.face_id, SECOND_FACE, "the owner's chosen face, not the deployment's");
+    // A saved background is kept but never promised: nothing offered can show it.
+    assert.equal("apply_greenscreen" in convo.body.properties, false);
+    assert.equal(keyed.client.background, undefined);
 
-    setVenueLook(A.id, { faceId: "rf90eb925bd8" }, "check");
+    setVenueLook(A.id, { faceId: DEFAULT_FACE_ID }, "check");
     const plain = fakeTavus(tavusHappyPath);
     const raw = await sessions.startVideoSession(getLocation(A.id)!, "visitor-look-2", { provider: new TavusProvider(videoConfig(), plain.fetchImpl) });
     assert.ok(raw.ok);
@@ -1383,10 +1490,10 @@ await test("owners choose from the curated faces and known backgrounds only, for
 
   // Nobody signed in, staff at the venue, another venue.
   assert.equal((await readLook(null, A.id, deps)).status, 401);
-  assert.equal((await saveLook({ ...owner, role: "staff" }, { locationId: A.id, faceId: PHOENIX4_RUBY }, deps)).status, 403);
+  assert.equal((await saveLook({ ...owner, role: "staff" }, { locationId: A.id, faceId: SECOND_FACE }, deps)).status, 403);
   if (foreign) {
     assert.equal((await readLook(owner, foreign, deps)).status, 403, "another tenant's venue is not readable");
-    assert.equal((await saveLook(owner, { locationId: foreign, faceId: PHOENIX4_RUBY }, deps)).status, 403);
+    assert.equal((await saveLook(owner, { locationId: foreign, faceId: SECOND_FACE }, deps)).status, 403);
     assert.equal(venueVideoSettings(foreign)?.faceId, undefined);
   }
 
@@ -1400,17 +1507,17 @@ await test("owners choose from the curated faces and known backgrounds only, for
   }
   // When Tavus answers, the face must be one it confirms on this account.
   const onlyRuby45 = async () => [{ id: "rf90eb925bd8", name: "Ruby · Office", model: "phoenix-4.5", backgrounds: false, clipUrl: "", posterUrl: "" }];
-  assert.equal((await saveLook(owner, { locationId: A.id, faceId: PHOENIX4_RUBY }, { ...deps, faces: onlyRuby45 })).status, 422);
+  assert.equal((await saveLook(owner, { locationId: A.id, faceId: SECOND_FACE }, { ...deps, faces: onlyRuby45 })).status, 422);
 
   // A good save: stored, pre-warmed, and it neither allows nor removes video.
   let warmed = "";
-  const ok = await saveLook(owner, { locationId: A.id, faceId: PHOENIX4_RUBY, backgroundId: "warm-lounge" }, { ...deps, prewarm: (l) => (warmed = l.id) });
+  const ok = await saveLook(owner, { locationId: A.id, faceId: SECOND_FACE, backgroundId: "warm-lounge" }, { ...deps, prewarm: (l) => (warmed = l.id) });
   assert.equal(ok.status, 200);
   assert.equal(warmed, A.id);
-  assert.equal(venueVideoSettings(A.id)?.faceId, PHOENIX4_RUBY);
+  assert.equal(venueVideoSettings(A.id)?.faceId, SECOND_FACE);
   assert.equal(venueVideoSettings(A.id)?.enabled, true, "A's staff switch is untouched");
   const stored = await readLook(owner, A.id, deps);
-  assert.deepEqual((stored.body as { current: unknown }).current, { faceId: PHOENIX4_RUBY, backgroundId: "warm-lounge" });
+  assert.deepEqual((stored.body as { current: unknown }).current, { faceId: SECOND_FACE, backgroundId: "warm-lounge" });
   assert.equal((stored.body as { confirmed: boolean }).confirmed, false);
   // An owner at a venue that only the environment lists keeps it listed after saving a look.
   const envOwner = canEditAgent(person(OFF), OFF.id) ? person(OFF) : null;
@@ -1425,7 +1532,7 @@ await test("owners choose from the curated faces and known backgrounds only, for
 
   // The page offers the picker only where video is on for the venue, and names the consent route for a custom face.
   const page = read("src/app/(app)/agents/page.tsx");
-  assert.match(page, /flag\("video\.avatar"\) && venueAllowlisted\(location, videoConfig\(\)\)/);
+  assert.match(page, /videoSettable\(location\) \? \(/);
   const ui = read("src/app/(app)/agents/VideoLook.tsx");
   assert.match(ui, /written consent/);
   assert.equal(/<button[^>]*>\s*(Upload|Create) (your )?(own )?face/i.test(ui), false, "a note, not a fake button");
@@ -1440,9 +1547,9 @@ await test("stock faces are confirmed with Tavus server-side, by id, cached; unu
     return new Response(
       JSON.stringify({
         data: [
-          { face_id: PHOENIX4_RUBY, face_name: "Ruby - Office", status: "completed", model_name: "phoenix-4", thumbnail_video_url: "https://cdn.example/r.mp4" },
-          { face_id: "rf90eb925bd8", status: "completed", model_name: "phoenix-4.5", thumbnail_video_url: "javascript:alert(1)" },
-          { face_id: "rc9cff32ceba", status: "error" },
+          { face_id: SECOND_FACE, face_name: "Priya - Office", status: "completed", model_name: "phoenix-4", thumbnail_video_url: "https://cdn.example/r.mp4", thumbnail_image_url: "https://cdn.example/r.jpg" },
+          { face_id: "rf90eb925bd8", status: "completed", model_name: "phoenix-4.5", thumbnail_video_url: "javascript:alert(1)", thumbnail_image_url: "javascript:alert(2)" },
+          { face_id: "r340d93adc9b", status: "error" },
           { face_id: "r_not_curated", status: "completed" },
         ],
         total_count: 4,
@@ -1452,14 +1559,18 @@ await test("stock faces are confirmed with Tavus server-side, by id, cached; unu
   }) as typeof fetch;
   const config = videoConfig({ TAVUS_API_KEY: "tvs_x", TAVUS_FACE_ID: "rf90eb925bd8" });
   const faces = (await confirmedFaces(config, fake, 1_000))!;
-  assert.deepEqual(faces.map((f) => f.id), ["rf90eb925bd8", PHOENIX4_RUBY], "curated order, completed, curated only");
+  assert.deepEqual(faces.map((f) => f.id), ["rf90eb925bd8", SECOND_FACE], "curated order, completed, curated only");
+  // Tavus's own model_name wins over ours, so a face it has re-rendered as
+  // Phoenix-4 takes a background again without anyone editing the list.
   assert.equal(faces[1].backgrounds, true);
   assert.equal(faces[0].backgrounds, false);
   assert.equal(faces[0].clipUrl, "", "a non-https preview never reaches the page");
+  assert.equal(faces[0].posterUrl, faceStillPath("rf90eb925bd8"), "a refused still falls back to the one we ship");
+  assert.equal(faces[1].posterUrl, "https://cdn.example/r.jpg", "Tavus's own still wins where it gave one");
   const url = new URL(calls[0]);
   assert.equal(url.pathname, "/v2/faces");
   assert.equal(url.searchParams.get("face_type"), "system");
-  assert.ok(url.searchParams.get("face_ids")!.split(",").includes(PHOENIX4_RUBY));
+  assert.ok(url.searchParams.get("face_ids")!.split(",").includes(SECOND_FACE));
   await confirmedFaces(config, fake, 2_000);
   assert.equal(calls.length, 1, "cached");
   assert.equal(await confirmedFaces(videoConfig({ VIDEO_AVATAR_PROVIDER: "mock" }), fake), null, "the mock asks nobody");
@@ -2946,6 +3057,85 @@ await test("daily ceilings: a customer venue's website, Belline's own website, a
   // decision covers all three: a demo link, an owner's support call, a visitor.
   assert.match(read("src/lib/video/sessions.ts"), /const kind: VideoSessionKind = opts\.demo \? "demo" : opts\.support \? "support" : "website";/);
   assert.match(read("src/lib/video/sessions.ts"), /\.\.\.\(demo \? \{ demoLinkId: demo\.linkId \} : \{\}\)/);
+});
+
+await test("today's share of the month: with video open to every venue, no website can spend a month of it in an afternoon", async () => {
+  const { monthlyVideoSecondsIncluded } = await import("../src/lib/billing/entitlement");
+  const { todayIn } = await import("../src/lib/time");
+  const config = videoConfig({});
+
+  // A paying venue, not one of the seed's demo fixtures: those are exempt, and
+  // a venue with no allowance to run out of would prove nothing here.
+  const paying = (products: "v2_starter" | "v2_growth", id = `loc_share_${products}`) => ({
+    ...getLocation(A.id)!,
+    id,
+    tenantId: `tnt_share_${products}`,
+    demo: undefined,
+    prospect: undefined,
+    internal: undefined,
+    subscription: { products: [products], market: "AE", cycle: "monthly", startedOn: "2026-09-01", status: "active" },
+  }) as typeof A;
+  const growth = paying("v2_growth");
+  const starter = paying("v2_starter");
+  const today = todayIn(growth.timezone);
+
+  assert.equal(VIDEO_DAILY_SHARE, 1 / 5, "a fifth: five days of full-tilt video is the fastest a month may go");
+  // Growth is 250 voice minutes a month, which is 100 minutes of video at 2.5.
+  assert.equal(monthlyVideoSecondsIncluded(growth, today), 6000);
+  assert.equal(dailyVideoSecondsLimit(growth, config), 1200);
+  assert.equal(monthlyVideoSecondsIncluded(starter, today), 1800, "Starter: 75 voice minutes, 30 of video");
+
+  // This is the hole the wildcard opened, stated as a number: the session count
+  // alone would let one website spend more than three whole months of the
+  // smallest plan between opening and closing.
+  assert.ok(
+    dailyVideoLimit(growth, config) * config.maxCallSeconds > 3 * monthlyVideoSecondsIncluded(starter, today)!,
+    "twenty sessions of five minutes is no longer three Starter months — the numbers below need rechecking",
+  );
+  // And the floor: never less than one whole call, or the first visitor of the
+  // day meets a widget that refuses everybody.
+  assert.equal(dailyVideoSecondsLimit(starter, config), Math.max(config.maxCallSeconds, 1800 / 5));
+
+  // Nothing to take a share of: our own venue, a demo, a support call, an
+  // exempt fixture. None of those spends a customer's allowance.
+  assert.equal(dailyVideoSecondsLimit(getLocation("loc_belline")!, config), null);
+  assert.equal(dailyVideoSecondsLimit(growth, config, "demo"), null);
+  assert.equal(dailyVideoSecondsLimit(growth, config, "support"), null);
+  assert.equal(dailyVideoSecondsLimit(getLocation(A.id)!, config), null, "a demo fixture has no month to share out");
+
+  // Spending it. Seconds a room was open, not seconds anybody invoiced: a call
+  // that ended `failed` cost Tavus exactly what one that ended well cost.
+  const spend = (seconds: number, status: "completed" | "failed" = "completed") => {
+    const call = startCall(growth, "embed", "website");
+    call.video = { provider: "mock", sessionId: `vs_share_${Math.random().toString(36).slice(2)}` };
+    call.status = status;
+    call.endedAt = new Date(Date.parse(call.startedAt) + seconds * 1000).toISOString();
+    saveCall(call);
+  };
+  spend(300);
+  spend(300, "failed");
+  assert.equal(videoSecondsToday(growth), 600, "a failed call still spent the minutes");
+
+  const open = setEnv({ VIDEO_AVATAR_VENUES: "*", VIDEO_MAX_SESSIONS_PER_DAY: "500" });
+  try {
+    assert.equal(videoAvailability(growth, { skipLive: true }).on, true, "ten minutes of twenty is not a full day");
+    while (videoSecondsToday(growth) + 30 <= dailyVideoSecondsLimit(growth, config)!) spend(300);
+
+    // Refused, under its own reason, so the console can tell "they have had
+    // twenty calls" from "they have had twenty minutes".
+    const off = videoAvailability(growth, { skipLive: true });
+    assert.equal(off.on, false);
+    assert.equal((off as { reason: string }).reason, "daily_minutes");
+    assert.equal(machine.startErrorCode(429, "daily_minutes"), "no_calls_today", "the visitor hears the same sentence either way");
+    assert.match(read("src/lib/video/sessions.ts"), /available\.reason === "daily_limit" \|\| available\.reason === "daily_minutes" \? 429 : 403/);
+    // The bell and the chat are untouched: this is video's budget, not the venue's.
+    assert.equal(videoAvailability(growth, { skipLive: true, skipDailyLimit: true }).on, true);
+    // And the last call before the ceiling is shortened, not allowed to run past it.
+    assert.equal(sessions.videoCallLimitSeconds(growth, 300, today, config), null, "no room left today");
+    assert.equal(sessions.videoCallLimitSeconds(getLocation("loc_belline")!, 300, today, config), 300, "our own venue has no share to run out of");
+  } finally {
+    open();
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
