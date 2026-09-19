@@ -26,6 +26,12 @@
   status = 301
   force = true
 
+# The location landing pages' old URLs are deliberately *not* listed here.
+# They are written into site/_redirects by `npm run site`, from
+# src/lib/seo-redirects.ts — the same table the app's own server and
+# `npm run check:seo` read. One list with three consumers; a hand-kept copy
+# here would be a fourth that drifts.
+
 [[headers]]
   for = "/*"
   [headers.values]
