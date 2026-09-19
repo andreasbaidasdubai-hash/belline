@@ -31,6 +31,19 @@ export interface PartnerRequest {
   path: string;
   query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
+  /**
+   * A multipart form body, where the partner will not take JSON.
+   *
+   * Only Zoho Bookings needs this: every one of its writes is documented as
+   * form-data, with nested values passed as JSON strings inside form fields.
+   * `body` and `form` are mutually exclusive, and the form wins — an adapter
+   * setting both is a bug rather than a preference.
+   *
+   * Undefined values are dropped rather than sent as the string "undefined",
+   * which is the shape of bug that reaches a guest's booking as a field the
+   * partner silently accepted.
+   */
+  form?: Record<string, string | undefined>;
   /** Beyond the auth headers the partner always needs. */
   headers?: Record<string, string>;
 }
@@ -68,16 +81,29 @@ export function httpTransport(facts: PartnerFacts, options: TransportOptions): P
       }
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? TIMEOUT_MS);
+      // A multipart body carries its own boundary, so the content-type must be
+      // left for fetch to set. Naming it here would produce a request the
+      // partner cannot parse.
+      let payload: BodyInit | undefined;
+      if (req.form) {
+        const form = new FormData();
+        for (const [key, value] of Object.entries(req.form)) {
+          if (value !== undefined) form.append(key, value);
+        }
+        payload = form;
+      } else if (req.body !== undefined) {
+        payload = JSON.stringify(req.body);
+      }
       try {
         const res = await fetch(url, {
           method: req.method,
           headers: {
             accept: "application/json",
-            ...(req.body === undefined ? {} : { "content-type": "application/json" }),
+            ...(payload === undefined || req.form ? {} : { "content-type": "application/json" }),
             ...options.auth,
             ...req.headers,
           },
-          body: req.body === undefined ? undefined : JSON.stringify(req.body),
+          body: payload,
           signal: controller.signal,
         });
         if (!res.ok) {

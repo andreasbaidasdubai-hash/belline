@@ -47,7 +47,8 @@ export type PartnerId =
   | "eatapp"
   | "booksy"
   | "vagaro"
-  | "doctolib";
+  | "doctolib"
+  | "simplybook";
 
 /** How the partner's own product thinks about a booking. */
 export type PartnerModel =
@@ -173,10 +174,21 @@ export interface PartnerVenueLink {
   /**
    * Where this venue's partner lives, when the venue hosts it itself.
    *
-   * Only Cal.com is open source, so only Cal.com has this: a self-hosted
-   * instance is on the venue's own domain and may be on an older release than
-   * the API versions the adapter pins. Everyone else's host is a constant and
-   * this stays empty.
+   * Two partners have this, for two different reasons, and both of them mean
+   * the host cannot be a constant in the adapter.
+   *
+   * **Cal.com** is open source, so a self-hosted instance is on the venue's own
+   * domain and may be on an older release than the API versions the adapter
+   * pins.
+   *
+   * **SimplyBook.me** runs thirteen regional and white-label hosts and a
+   * company lives on exactly one of them. This is the more dangerous of the
+   * two, because the wrong SimplyBook host does not fail as a wrong host: it
+   * answers that the company does not exist. A default would therefore be
+   * wrong for most of the world while looking like a broken venue, so a
+   * SimplyBook venue without this recorded is simply not connected.
+   *
+   * Everyone else's host is a constant and this stays empty.
    */
   baseUrl?: string;
   /**

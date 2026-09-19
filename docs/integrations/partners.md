@@ -4,11 +4,27 @@ What Belline can and cannot do through each booking system we have looked at,
 researched from the partners' own documentation on **18 September 2026**, and
 what the founder would have to apply for.
 
-Twelve partners, in two batches. The first six — Fresha, Zenoti, Mindbody,
+Thirteen partners, in three batches. The first six — Fresha, Zenoti, Mindbody,
 Treatwell, OpenTable, SevenRooms — are the ones on the website's integrations
 strip. The second six — Microsoft Bookings, Cal.com, Eat App, Booksy, Vagaro,
-Doctolib — are **not on the strip at all**; see "Why the second six are not on
-the website" at the foot of this document.
+Doctolib — are **not on the strip at all**; see "Why the later seven are not on
+the website" at the foot of this document. The third batch begins with
+**SimplyBook.me**, researched on **19 September 2026**: a system small Gulf
+businesses actually run, and one that turned out to be buildable. It is not on
+the strip either.
+
+The founder's question for the third batch was the commercial one — *does the
+customer have to be on a paid tier for the API?* — because several booking
+products put their API behind their most expensive plan, which would make an
+integration worthless to the salons we sell to. **For SimplyBook.me the answer
+is no**, and that is the most important finding here:
+
+- **SimplyBook.me** delivers the API as an ordinary *custom feature*. Free
+  allows one custom feature, Basic (€11.90) three, Standard (€24.90) eight,
+  Premium (€49.90) unlimited. The only Enterprise-gated line item is "High Load
+  API", which is volume, not access. What it really costs a customer is one
+  feature slot, so in practice a working salon moves up a tier — a €13
+  conversation, not a €600 one.
 
 Nothing here is connected. No partner has issued Belline credentials, no
 application has been made, and every `booking.partner.<id>` flag is off on every
@@ -35,6 +51,7 @@ are built, and they live in `src/lib/integrations/google.ts` and `outlook.ts`.
 | **Booksy** | none readable | none readable | nothing | `docs.booksy.com` exists and answers **401**; no programme, no form, no developer address | A cold commercial approach asking to be provisioned a documentation account. |
 | **Vagaro** | none published | none published | nothing | docs are readable and contain **no booking API** — read-oriented areas and webhooks only | Enterprise Sales form, and ask the one question: is there an unpublished endpoint that reads availability and writes an appointment? |
 | **Doctolib** | none published | none published | nothing | no public API; and appointment data is regulated **health data** — the obstacle is legal, not technical | The German partnership form, expecting a reseller conversation. **Do not hold the launch for it.** |
+| **SimplyBook.me** | `GET /admin/schedule/available-slots` | `POST /admin/bookings`, `PUT` to move, `DELETE` to cancel | **full adapter, all four operations**; REST v2, publicly specced in OpenAPI | nothing of ours — but the venue must spend a custom-feature slot, mint an API User Key, turn 2FA off for that user, and tell us which of **thirteen** regional hosts it is on | Nothing to apply for. Ask the salon to enable the API custom feature and issue Belline an API User Key. |
 
 Priority for the first six follows what our customers use: Fresha and Zenoti
 (Gulf salons and clinics), then Mindbody, then Treatwell, then the restaurant
@@ -519,6 +536,79 @@ practice confirms. That is a product to design deliberately, not a gap to leave
 open while an application is pending, because there is no application to be
 pending.
 
+## SimplyBook.me — open, complete, and priced for the customers we have
+
+The second partner on the whole list with no gatekeeper, and the first whose
+commercial shape suits a small Gulf salon rather than an enterprise. All four
+operations are documented, so it joins Microsoft Bookings and Cal.com as an
+adapter that could work the day a venue hands over a key.
+
+### Which API is current, because this is the question that misleads everyone
+
+SimplyBook has **two live APIs and neither is marked deprecated**, and the older
+one is the one every third-party guide describes.
+
+- **REST v2 — current, and what we built against.** SimplyBook publishes
+  OpenAPI 3.0 documents at `https://simplybook.me/api/swagger-admin` and
+  `.../swagger-public`, readable by anyone. The admin document alone carries 78
+  paths.
+- **JSON-RPC 2.0 — legacy, still answering** at `user-api.simplybook.me`, with
+  `getToken`, `getStartTimeMatrix` and `book`. It works, and choosing it would
+  have cost us two of the four operations: its public service has **no
+  reschedule at all**, and cancelling needs an
+  `md5(bookingId . bookingHash . secretKey)` signature computed from a hash
+  returned by the original booking.
+
+```
+POST   /admin/auth                       company + login + API user key
+POST   /admin/auth/refresh-token
+GET    /admin/schedule/available-slots   service_id, provider_id, date, count
+GET    /admin/services                   the duration, so none is invented
+POST   /admin/bookings
+PUT    /admin/bookings/{id}              a real move, not cancel-and-rebook
+DELETE /admin/bookings/{id}
+```
+
+### The credential, and the two traps in it
+
+`POST /admin/auth` takes `{company, login, password}` and the spec says
+`password` may be **either the user's real password or an API User Key** the
+business generates under Settings → API User Keys. Belline takes the key and
+never a password: those keys exist so a business can issue "separate keys per
+application", they can be revoked on their own, and they do not break when
+somebody changes their password. `check:simplybook` asserts the `api_user_key_`
+shape, because a pasted password would otherwise *work* — and that is the only
+moment anybody would notice.
+
+**Trap one: thirteen regional hosts.** `user-api-v2.simplybook.me` is the global
+default, and `simplybook.it`, `.asia`, `.us`, `.pro`, `.cc`, `.vip`,
+`enterpriseappointments.com` and further white-label hosts all exist. A company
+lives on exactly one, and the wrong host does not fail as a wrong host — it
+answers that the company does not exist. So the host is recorded on the venue
+and a venue without one is **not connected**, rather than tried against a
+default that would be wrong for most of the world while looking like a broken
+salon.
+
+**Trap two: two-factor authentication.** With 2FA on the API user, `POST
+/admin/auth` returns `require2fa` and *empty* tokens. There is no unattended
+path past it, so Belline says "not connected" in words a person can act on and
+does not retry. The check pins that it is attempted exactly once.
+
+**Could do:** quote the company's own bookable times, take a booking, move one,
+cancel one, ask for a particular provider, read the services and providers.
+**Could not do:** book without knowing both the service and the provider; hold a
+slot while a caller decides; rely on SimplyBook to deduplicate a retried create
+(there is no idempotency key); connect a company with 2FA on its API user.
+**Unverified, and marked so in the source:** the rate limits (neither OpenAPI
+document nor the help centre publishes a number, and the "5,000 a day, five a
+second" figures third-party guides quote appear on no SimplyBook page); the
+v2 access token's lifetime; and that the API feature is selectable on the Free
+plan *specifically* — no page states a restriction and their own subscription
+calculator implies none, but the definitive matrix is behind a login.
+
+**Apply for:** nothing. The work is the venue's: enable the API custom feature,
+mint an API User Key, turn 2FA off for that user, and tell us the host.
+
 ## Restaurants are not salons with tables
 
 OpenTable, SevenRooms and Eat App are not appointment systems, and forcing them
@@ -562,11 +652,12 @@ time, and nothing is pre-announced. For a voice agent — where the caller is
 still talking while the slot ages — that is a real limitation and belongs in the
 conversation design, not only in a footnote.
 
-## Why the second six are not on the website
+## Why the later seven are not on the website
 
-Microsoft Bookings, Cal.com, Eat App, Booksy, Vagaro and Doctolib are **not in
-`INTEGRATIONS`** in `scripts/site-integrations.ts`, so they do not appear on the
-landing page in any state — not even "On our roadmap".
+Microsoft Bookings, Cal.com, Eat App, Booksy, Vagaro, Doctolib and
+SimplyBook.me are **not in `INTEGRATIONS`** in
+`scripts/site-integrations.ts`, so they do not appear on the landing page in any
+state — not even "On our roadmap".
 
 Two reasons, and both are the founder's call to reverse:
 
@@ -577,21 +668,22 @@ Two reasons, and both are the founder's call to reverse:
 2. **Which partners to list is a positioning decision, not a build one.** The
    existing six were put on the strip at the founder's request on 2026-09-16.
    Adding Booksy, Vagaro and Doctolib would advertise three doors we have found
-   closed; adding Cal.com would advertise the one thing on the list that already
-   works, which may be exactly right — but it is a decision, not a default.
+   closed; adding Cal.com or SimplyBook.me would advertise the two things on
+   the list that already work, which may be exactly right — but
+   it is a decision, not a default.
 
 Each new provider's own check asserts it is absent from the strip, and
-`check:msbookings` and `check:calcom` additionally prove the honesty gate would
-hold if it were added: flag on, key set, stubs on — still "On our roadmap".
+`check:msbookings`, `check:calcom` and `check:simplybook` additionally prove the honesty gate would hold if it were added: flag on, key
+set, stubs on — still "On our roadmap".
 
-One caveat the founder should know before adding Cal.com. For a partner whose
-credentials belong to the **venue** rather than to Belline — Cal.com and Zenoti —
-`liveNeeds` is empty, so nothing is waiting on a partner's approval, and setting
-`PARTNER_<ID>_ENV=live` on a deployment is enough to turn the tag to "Available".
-For Mindbody the gate is Mindbody's own decision, because `liveNeeds` holds the
-credentials that approval issues. Both behaviours are deliberate
-(`contract.ts`), but they are not equally strong, and the weaker one is a human
-act rather than a partner's.
+One caveat the founder should know before adding Cal.com or SimplyBook.me. For
+a partner whose credentials belong to the **venue** rather than to Belline —
+Cal.com, Zenoti and now SimplyBook.me — `liveNeeds` is empty, so nothing is
+waiting on a partner's approval, and setting `PARTNER_<ID>_ENV=live` on a
+deployment is enough to turn the tag to "Available". For Mindbody the gate is
+Mindbody's own decision, because `liveNeeds` holds the credentials that approval
+issues. Both behaviours are deliberate (`contract.ts`), but they are not equally
+strong, and the weaker one is a human act rather than a partner's.
 
 ## How it is built
 
@@ -599,7 +691,7 @@ act rather than a partner's.
 | --- | --- |
 | `src/lib/integrations/partners/registry.ts` | The research above, as data: what each API offers, what gates it, what it cannot do. |
 | `src/lib/integrations/partners/contract.ts` | What Belline needs from a partner, and the off/sandbox/live modes. |
-| `src/lib/integrations/partners/<id>.ts` | One adapter per partner. Five are real clients (Zenoti, Mindbody, Microsoft Bookings, Cal.com, Eat App); seven are documented refusals. |
+| `src/lib/integrations/partners/<id>.ts` | One adapter per partner. Six are real clients (Zenoti, Mindbody, Microsoft Bookings, Cal.com, Eat App, SimplyBook.me); seven are documented refusals. |
 | `src/lib/integrations/partners/sandbox.ts` | A partner that exists only in this process, for the checks to drive. |
 | `src/lib/integrations/partners/closed.ts` | The shared shape for a partner with no reachable API. |
 | `src/lib/booking/partner-provider.ts` | The booking destination: ask the partner, never guess, never fall through to Belline's diary. |
@@ -610,12 +702,14 @@ Flags follow the existing shape: `booking.partner.<id>` needs
 credentials is what makes it live rather than sandbox — and only live may ever
 change what the website says.
 
-Two fields were added to `PartnerVenueLink` for Cal.com, and only Cal.com uses
-them: `timeZone`, because Cal.com books an exact instant rather than a wall time,
-and `baseUrl`, because Cal.com is the only one a venue can self-host.
+Two fields on `PartnerVenueLink` exist for partners whose host or clock is not a
+constant. `timeZone`, because Cal.com books an exact instant rather than a wall
+time. And `baseUrl`, for the two partners whose host belongs to the venue —
+Cal.com because it can be self-hosted, and SimplyBook.me because it runs
+thirteen regional hosts and a company is on exactly one.
 
 Checks: `check:partners` (the shared contract) plus `check:fresha`,
 `check:zenoti`, `check:mindbody`, `check:treatwell`, `check:opentable`,
 `check:sevenrooms`, `check:msbookings`, `check:calcom`, `check:eatapp`,
-`check:booksy`, `check:vagaro` and `check:doctolib`. All are in `check:all`, and
-every one blocks outbound fetches for the whole run.
+`check:booksy`, `check:vagaro`, `check:doctolib` and `check:simplybook`. All are
+in `check:all`, and every one blocks outbound fetches for the whole run.

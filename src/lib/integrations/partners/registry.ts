@@ -811,6 +811,130 @@ export const PARTNERS: Record<PartnerId, PartnerFacts> = {
       "A restaurant is not an appointment book (see the note below).",
     ],
   },
+
+  // -------------------------------------------------------------------------
+  // The third batch: two systems small Gulf businesses actually run, and the
+  // first two on this whole list whose API is neither closed nor priced out of
+  // our customers' reach.
+  // -------------------------------------------------------------------------
+
+  /**
+   * SimplyBook.me: an open, complete API, and a per-company key.
+   *
+   * Researched 2026-09-19. The plan question goes first because it is the one
+   * that decides whether any of this is worth offering: **the API is not gated
+   * behind the most expensive plan.** It is delivered as an ordinary "custom
+   * feature" — the business switches it on under Custom Features and reads its
+   * key from that feature's Settings — and SimplyBook's own subscription
+   * calculator treats it as a toggle with no plan floor. What the plan buys is
+   * *how many* custom features may be on at once: Free 1, Basic €11.90 3,
+   * Standard €24.90 8, Premium €49.90 unlimited. The Enterprise-only line item
+   * is "High Load API", which is volume, not access.
+   *
+   * So the cost to a customer is a feature slot rather than a tier. On Free
+   * the API would be their only custom feature; a working salon already spends
+   * slots on intake forms, memberships or POS, so in practice enabling this
+   * nudges a Basic customer up one. That is a conversation about €13 a month,
+   * not Vagaro's "you must also use our card processing".
+   *
+   * ## Which API is current
+   *
+   * Both of SimplyBook's APIs are live and neither is marked deprecated, which
+   * matters because the older one is the one every third-party guide describes.
+   *
+   * - **REST v2 — current, and what this adapter is written against.**
+   *   SimplyBook publishes OpenAPI 3.0 documents at
+   *   `https://simplybook.me/api/swagger-admin` and `.../swagger-public`, both
+   *   readable by anyone. The admin document carries 78 paths and every
+   *   operation Belline needs is in it.
+   * - **JSON-RPC 2.0 — legacy, still answering.** `user-api.simplybook.me`
+   *   with `getToken`, `getStartTimeMatrix` and `book`. It works, but its
+   *   cancellation needs an `md5(bookingId . bookingHash . secretKey)`
+   *   signature and its public service has no reschedule, so building on it
+   *   would cost two of the four operations for no gain.
+   *
+   *   POST   /admin/auth                       company + login + API user key
+   *   POST   /admin/auth/refresh-token
+   *   GET    /admin/schedule/available-slots   service_id, provider_id, date, count
+   *   GET    /admin/services                   duration, so no length is invented
+   *   GET    /admin/providers
+   *   POST   /admin/bookings                   start_datetime / end_datetime
+   *   PUT    /admin/bookings/{id}              a real move, not cancel-and-rebook
+   *   DELETE /admin/bookings/{id}
+   *
+   * ## The credential, and the two traps in it
+   *
+   * `POST /admin/auth` takes `{company, login, password}`, and the spec says
+   * `password` may be either the user's real password or an **API User Key**
+   * the business generates under Settings → API User Keys. Those keys exist so
+   * a business can issue "separate keys per application" without handing over
+   * its password, and they bypass IP verification. Belline takes the key and
+   * never a password: holding a salon owner's login is a liability, and it is
+   * the thing that breaks the moment they change it.
+   *
+   * **Trap one: there are thirteen regional hosts, not one.** The spec lists
+   * `user-api-v2.simplybook.me` (the global default) alongside
+   * `user-api-v2.simplybook.it`, `.asia`, `.us`, `.pro`, `.cc`, `.vip`,
+   * `enterpriseappointments.com` and further white-label hosts. A company
+   * lives on exactly one, and asking the wrong one answers a polite "company
+   * does not exist". The host is a property of the venue, and a venue without
+   * one is not connected.
+   *
+   * **Trap two: two-factor authentication.** `POST /admin/auth` answers with
+   * `require2fa` set and *empty* token fields when the account has 2FA on.
+   * There is no unattended path past that, so a venue with 2FA on its API user
+   * cannot be connected — and must be told so rather than retried.
+   *
+   * There is no OAuth, no marketplace, no app registration and no "Connect
+   * with SimplyBook" button. The credential model is Zenoti's and Cal.com's:
+   * the venue's own key, sealed on the venue, nothing in env.
+   */
+  simplybook: {
+    id: "simplybook",
+    name: "SimplyBook.me",
+    model: "appointments",
+    api: {
+      documented: true,
+      availability: true,
+      create: true,
+      // PUT /admin/bookings/{id} takes the same entity as the create and moves
+      // the appointment. Unlike Zenoti, this is one call and not a recipe.
+      reschedule: true,
+      cancel: true,
+      staffSelection: true,
+      catalogue: true,
+    },
+    auth:
+      "POST /admin/auth with the company login and an API User Key the business generates under Settings → API User Keys, exchanged for a bearer token and a refresh token. Per company; there is no OAuth and no partner application.",
+    sandbox: "none",
+    gate: {
+      what:
+        "Nothing to apply for and nobody to ask, but the venue has work to do: the business enables the API custom feature (Free allows one custom feature, Basic three, Standard eight, Premium unlimited), generates an API User Key under Settings → API User Keys, turns two-factor authentication off for that API user, and tells Belline which of SimplyBook's thirteen regional hosts its company lives on. The API is not gated behind the top plan — only 'High Load API' is Enterprise-only. Belline needs no credential of its own.",
+      apply: "https://simplybook.me/en/api/developer-api",
+      docs: "https://simplybook.me/api/swagger-admin",
+    },
+    liveNeeds: [],
+    venueNeeds: [
+      "the company login",
+      "an API User Key generated by the business, sealed",
+      "the regional API host the company lives on",
+      "the service id and provider id for each service Belline may book",
+    ],
+    limits: [
+      "The API is one of the venue's 'custom feature' slots. On the Free plan it would be their only one, so in practice enabling it moves a working salon up a tier — around €13 a month, not a top-tier purchase.",
+      "Free allows 50 bookings a month and Basic 100. For a busy salon that ceiling binds long before the API does, and it is the number to ask about rather than the plan name.",
+      "Thirteen regional hosts, and a company lives on exactly one. The wrong host answers 'company does not exist' rather than failing usefully, so the host is recorded on the venue and a venue without one is not connected.",
+      "An API user with two-factor authentication enabled cannot be used at all: the auth call returns require2fa and no token, and there is no unattended way past it.",
+      "The key authenticates a full admin user. It is not scoped to one service or one provider, so it can read and write everything that user can. Sealed and audited exactly like Zenoti's.",
+      "Nothing holds a slot. Between quoting a time and writing the booking SimplyBook may have given it away, and the caller is told at the time.",
+      "There is no idempotency key on POST /admin/bookings, so a retried create would be a second appointment and Belline's own key check is the only guard.",
+      "There is no sandbox. The nearest thing is a 14-day trial account, which SimplyBook says includes the API feature — real data on a real host, so a mistake there is a mistake in somebody's diary.",
+      "UNVERIFIED: the rate limits. Neither OpenAPI document nor the help centre publishes a number, and the figures third-party guides quote (5,000 a day, five a second) appear on no SimplyBook page. That 'High Load API' is sold separately to Enterprise implies the ordinary plans are throttled at an undisclosed level, so this adapter must be polite rather than confident.",
+      "UNVERIFIED: the access token's lifetime. The v2 document does not state one and the legacy JSON-RPC guide says an hour, so the adapter re-authenticates when a call is refused rather than trusting either number.",
+      "UNVERIFIED: that the API custom feature is selectable on the Free plan specifically. No SimplyBook page states a per-plan restriction and their own subscription calculator implies none, but the definitive matrix is inside the admin screen behind a login. To be confirmed on a real account before a price is quoted to a customer.",
+    ],
+  },
+
 };
 
 export const PARTNER_IDS = Object.keys(PARTNERS) as PartnerId[];

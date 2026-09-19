@@ -26,6 +26,7 @@ export const PARTNER_PROVIDERS: Record<PartnerId, BookingProvider> = {
   booksy: partnerProvider(PARTNER_CONNECTORS.booksy),
   vagaro: partnerProvider(PARTNER_CONNECTORS.vagaro),
   doctolib: partnerProvider(PARTNER_CONNECTORS.doctolib),
+  simplybook: partnerProvider(PARTNER_CONNECTORS.simplybook),
 };
 
 export function partnerProviderFor(id: PartnerId): BookingProvider {

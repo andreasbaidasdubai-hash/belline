@@ -10,6 +10,7 @@ import { msbookingsConnector } from "./msbookings";
 import { opentableConnector } from "./opentable";
 import { PARTNERS } from "./registry";
 import { sevenroomsConnector } from "./sevenrooms";
+import { simplybookConnector } from "./simplybook";
 import { treatwellConnector } from "./treatwell";
 import { vagaroConnector } from "./vagaro";
 import { zenotiConnector } from "./zenoti";
@@ -36,6 +37,7 @@ export const PARTNER_CONNECTORS: Record<PartnerId, PartnerConnector> = {
   booksy: booksyConnector,
   vagaro: vagaroConnector,
   doctolib: doctolibConnector,
+  simplybook: simplybookConnector,
 };
 
 export function partnerConnector(id: PartnerId): PartnerConnector {
