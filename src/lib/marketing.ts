@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { applySiteFlags, swissSpelling } from "./site-flags";
+import { sendingDomainFor, senderPageFile } from "./sales/sending/domains";
 import { applyIntegrations } from "../../scripts/site-integrations";
 
 /**
@@ -177,6 +178,33 @@ export function isMarketingHost(host: string | undefined): boolean {
   return !name.startsWith("app.") && name !== "localhost" && !name.startsWith("127.");
 }
 
+/**
+ * The root page for a request addressed to a cold-sending domain.
+ *
+ * We send outreach from four lookalike domains, and a recipient who wants to
+ * know whether the mail is real types the domain into a browser. Serving them
+ * belline.ai's landing page there would be a sales pitch in answer to "is this
+ * a scam", and serving nothing at all is the spam signal the pages exist to
+ * remove. So `/` on trybelline.com is trybelline.com's own page — built by
+ * scripts/build-site.ts from the one list in sales/sending/domains.ts.
+ *
+ * One deploy, four hostnames, chosen here: the same trick that already picks
+ * the website over the dashboard, one level down. Every other path on these
+ * hosts is left exactly as it was, deliberately — the privacy notice and the
+ * `/u` stop page have to resolve on the domain the mail came from, and
+ * `applyIndexing` already keeps every one of these hostnames out of search,
+ * since none of them is in PRODUCTION_HOSTS.
+ *
+ * Returns null on any other host, and null when the page has not been built,
+ * so the caller falls back to the landing page rather than 404ing.
+ */
+function senderRoot(host: string | undefined, root: string): string | null {
+  const domain = sendingDomainFor(host);
+  if (!domain) return null;
+  const file = path.resolve(root, senderPageFile(domain.domain));
+  return file.startsWith(root) && fs.existsSync(file) ? file : null;
+}
+
 /** Does this request carry a dashboard session cookie? Name only — never the value. */
 function signedIn(cookie: string | undefined): boolean {
   return cookie ? /(?:^|;\s*)belline_session=[^;\s]/.test(cookie) : false;
@@ -209,10 +237,12 @@ export function serveMarketing(req: IncomingMessage, res: ServerResponse): boole
   if (pathname === "/" && signedIn(req.headers.cookie)) return false;
 
   const root = path.resolve(ROOT);
-  // `/dental` is a directory with an index; `/` is the landing page.
+  // `/dental` is a directory with an index; `/` is the landing page — unless
+  // the request is addressed to one of the cold-sending domains, where `/` is
+  // that domain's own small page (see `senderRoot`).
   const candidates =
     pathname === "/"
-      ? [path.join(root, "index.html")]
+      ? [senderRoot(req.headers.host, root) ?? path.join(root, "index.html")]
       : [
           path.resolve(root, `.${pathname}`),
           path.resolve(root, `.${pathname}`, "index.html"),

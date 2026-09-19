@@ -22,25 +22,11 @@ import { verifyUnsubscribeToken } from "@/lib/sales/sending/unsubscribe";
 import { sendingStore } from "@/lib/sales/sending/store";
 import { suppressCompany } from "@/lib/sales/sending/replies";
 import { halt, blankState } from "@/lib/sales/sending/sequence";
+import { stopPage } from "../shell";
 
 export const dynamic = "force-dynamic";
 
-const PAGE = (heading: string, body: string, lang = "en") => `<!doctype html>
-<html lang="${lang}"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex">
-<title>${heading}</title>
-<style>
-  :root { color-scheme: light dark; }
-  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         margin: 0; display: grid; place-items: center; min-height: 100vh; padding: 24px;
-         background: #fbfaf8; color: #1a1a1a; }
-  @media (prefers-color-scheme: dark) { body { background: #131312; color: #f2f1ef; } }
-  main { max-width: 34rem; }
-  h1 { font-size: 1.35rem; margin: 0 0 .5rem; font-weight: 600; }
-  p { margin: 0; opacity: .85; }
-</style></head>
-<body><main><h1>${heading}</h1><p>${body}</p></main></body></html>`;
+const PAGE = (heading: string, body: string, lang = "en") => stopPage({ heading, body: `<p>${body}</p>`, lang });
 
 async function act(token: string): Promise<{ ok: boolean; lang: string }> {
   const claim = verifyUnsubscribeToken(token);

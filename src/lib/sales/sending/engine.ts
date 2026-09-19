@@ -12,6 +12,7 @@
 import { legalIdentity, identityIsEmpty, type LegalIdentity } from "../../legal/identity";
 import { resolveAdapter } from "./adapters";
 import { credentialState, REFUSED_PROVIDERS } from "./provider";
+import { SENDING_DOMAIN_NAMES } from "./domains";
 import { unsubscribeSecretPresent } from "./unsubscribe";
 import { effectiveRule, realRules, type CountryOverride, type EffectiveCountry } from "./countries";
 import { sendingStore, type SendingDomain, type SendingMailbox } from "./store";
@@ -79,8 +80,22 @@ export async function engineStatus(env: Env = process.env): Promise<EngineStatus
   const inert = !ready;
 
   const todo: string[] = [];
-  if (domains.filter((d) => d.purpose === "cold").length === 0) {
+  const cold = domains.filter((d) => d.purpose === "cold");
+  if (cold.length === 0) {
     todo.push("Register a lookalike sending domain and add it here. belline.ai must never carry cold mail.");
+  }
+  // Domains we own but this deployment has never been told about. Without
+  // this the engine sends happily from whichever two of the four made it into
+  // the database, and nobody notices the other two are idle — they were paid
+  // for, warmed up and DNS-configured, and their whole value is spreading the
+  // volume. SENDING_DOMAINS is the one list; their public pages are built from
+  // it too, so a domain missing here is also a domain whose page is up.
+  const known = new Set(cold.map((d) => d.domain.toLowerCase()));
+  const unregistered = SENDING_DOMAIN_NAMES.filter((d) => !known.has(d));
+  if (cold.length > 0 && unregistered.length > 0) {
+    todo.push(
+      `${unregistered.join(", ")}: owned and DNS-configured but not added to this deployment — run 'npm run domain:setup' for each.`,
+    );
   }
   for (const entry of readiness) {
     if (entry.ready) continue;
