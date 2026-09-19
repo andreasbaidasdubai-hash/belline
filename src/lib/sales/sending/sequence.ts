@@ -126,6 +126,8 @@ export function advance(input: AdvanceInput): SequenceState {
       stoppedAt: input.sentAt.toISOString(),
       nextDueAt: null,
       lastSentAt: input.sentAt.toISOString(),
+      pausedUntil: null,
+      pauseReason: null,
     };
   }
   const gapDays = input.spacing[step] ?? DEFAULT_STEPS[step]?.spacingDays ?? 7;
@@ -137,6 +139,9 @@ export function advance(input: AdvanceInput): SequenceState {
     stoppedAt: null,
     nextDueAt: new Date(input.sentAt.getTime() + gapDays * 86_400_000).toISOString(),
     lastSentAt: input.sentAt.toISOString(),
+    // A send is proof the pause is over.
+    pausedUntil: null,
+    pauseReason: null,
   };
 }
 
@@ -149,7 +154,63 @@ export function halt(state: SequenceState, reason: StopReason, at: Date): Sequen
     stopReason: reason,
     stoppedAt: at.toISOString(),
     nextDueAt: null,
+    // A stop outranks a pause and clears it, so a lead cannot be both.
+    pausedUntil: null,
+    pauseReason: null,
   };
+}
+
+/**
+ * The longest a single auto-reply may hold a sequence.
+ *
+ * An out-of-office that says "back in March" is usually a mistake, a stale
+ * rule, or a mailbox nobody owns any more. Six weeks is long enough for a real
+ * holiday and short enough that a wrong date does not lose the lead.
+ */
+export const MAX_PAUSE_DAYS = 42;
+
+/**
+ * Stand still until someone is back.
+ *
+ * This is the whole difference between a working pipeline and one that quietly
+ * dies. An out-of-office is evidence that the address is live and that nobody
+ * has read the message — the two facts that most argue for writing again
+ * later. So: the step does not move, the status stays `active`, the stop
+ * reason stays empty, and the only thing that changes is when the sequence
+ * next becomes due.
+ *
+ * Never applied to a sequence that has genuinely stopped: an auto-reply
+ * arriving after a human already answered must not resurrect anything.
+ */
+export function pause(state: SequenceState, until: Date, reason: string, now: Date): SequenceState {
+  if (state.status !== "active") return state;
+  const ceiling = new Date(now.getTime() + MAX_PAUSE_DAYS * 86_400_000);
+  const floor = new Date(now.getTime() + 60_000);
+  const at = new Date(Math.min(Math.max(until.getTime(), floor.getTime()), ceiling.getTime()));
+  // A later pause wins over an earlier one; an earlier one never shortens a
+  // pause already in place, because two auto-replies mean two reasons to wait.
+  const existing = state.pausedUntil ? Date.parse(state.pausedUntil) : 0;
+  const pausedUntil = new Date(Math.max(at.getTime(), existing)).toISOString();
+  return {
+    ...state,
+    pausedUntil,
+    pauseReason: reason.slice(0, 200),
+    // The next step is pushed out to the resume moment if it fell inside the
+    // pause. Left alone otherwise: a follow-up already further away is fine.
+    nextDueAt:
+      state.nextDueAt && state.nextDueAt < pausedUntil ? pausedUntil : state.nextDueAt,
+  };
+}
+
+/** Back from holiday. A no-op on a sequence that was not paused. */
+export function resume(state: SequenceState): SequenceState {
+  if (!state.pausedUntil) return state;
+  return { ...state, pausedUntil: null, pauseReason: null };
+}
+
+/** True when this sequence is standing still at `now`. */
+export function isPaused(state: SequenceState, now: Date): boolean {
+  return state.pausedUntil !== null && state.pausedUntil > now.toISOString();
 }
 
 export function blankState(leadId: number, companyId: number | null, countryCode: string | null): SequenceState {
@@ -163,11 +224,22 @@ export function blankState(leadId: number, companyId: number | null, countryCode
     nextDueAt: null,
     lastSentAt: null,
     countryCode,
+    pausedUntil: null,
+    pauseReason: null,
   };
 }
 
 /** Sequences whose next step is due, for the follow-up planner. */
 export function dueNow(states: readonly SequenceState[], now: Date): SequenceState[] {
   const at = now.toISOString();
-  return states.filter((s) => s.status === "active" && s.step > 0 && s.nextDueAt !== null && s.nextDueAt <= at);
+  return states.filter(
+    (s) =>
+      s.status === "active" &&
+      s.step > 0 &&
+      s.nextDueAt !== null &&
+      s.nextDueAt <= at &&
+      // Paused is not due. Without this line an out-of-office becomes a
+      // follow-up to somebody's holiday auto-responder, on the same day.
+      !(s.pausedUntil !== null && s.pausedUntil > at),
+  );
 }

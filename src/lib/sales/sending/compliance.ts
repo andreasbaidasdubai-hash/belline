@@ -29,6 +29,7 @@ export type BlockCode =
   | "country_off"
   | "identity_incomplete"
   | "sequence_stopped"
+  | "sequence_paused"
   | "step_cap"
   | "touch_cap"
   | "too_soon"
@@ -62,6 +63,15 @@ export interface ScreenInput {
   hasResearch: boolean;
   /** The lead's sequence has already stopped — replied, clicked, bounced. */
   sequenceStopped: string | null;
+  /**
+   * The lead's sequence is standing still until this moment — an out-of-office.
+   *
+   * Separate from `sequenceStopped` on purpose. Stopped is final and means a
+   * person answered; paused is temporary and means nobody has read anything
+   * yet. Collapsing them would either lose the lead or write to somebody's
+   * holiday responder.
+   */
+  sequencePausedUntil?: string | null;
   /** Guard problems on the drafted copy. A flagged draft never sends. */
   guardProblems: readonly string[];
   /** False when no unsubscribe secret is configured, so no link can be signed. */
@@ -128,6 +138,12 @@ export function screen(input: ScreenInput): ScreenResult {
   // 5. Have we already said enough.
   if (input.sequenceStopped) {
     add("sequence_stopped", `the sequence stopped: ${input.sequenceStopped}`);
+  }
+  if (input.sequencePausedUntil && input.sequencePausedUntil > now.toISOString()) {
+    add(
+      "sequence_paused",
+      `paused until ${input.sequencePausedUntil.slice(0, 10)} — they are away, and the sequence resumes by itself`,
+    );
   }
   if (input.step > input.country.maxSequenceSteps) {
     add(

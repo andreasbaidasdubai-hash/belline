@@ -201,7 +201,9 @@ export function sesAdapter(config: SesConfig): SendAdapter {
     name: "ses",
     domain: config.domain,
     async send(message: OutboundEmail): Promise<SendReceipt> {
-      const localId = `${crypto.randomUUID()}@${config.domain}`;
+      // The dispatcher's id when it gave one, so a reply can be threaded back
+      // to a row that already exists; a random one only as a last resort.
+      const localId = message.messageId ?? `${crypto.randomUUID()}@${config.domain}`;
       const raw = buildMime(message, localId);
       const payload = JSON.stringify({
         Content: { Raw: { Data: Buffer.from(raw, "utf8").toString("base64") } },

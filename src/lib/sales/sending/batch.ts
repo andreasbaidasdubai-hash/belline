@@ -333,6 +333,11 @@ export async function saveBatch(input: {
         email: item.identity.email,
       },
       unsubscribeToken: placeholder,
+      // Minted by the dispatcher at the moment of sending: they name the
+      // mailbox the message actually leaves from, and they have to be written
+      // down before the bytes go, not when the plan is drawn up.
+      rfcMessageId: null,
+      replyToken: null,
       provider: null,
       providerMsgId: null,
       blockedReason: null,

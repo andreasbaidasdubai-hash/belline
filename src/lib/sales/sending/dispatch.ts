@@ -30,6 +30,7 @@ import { screen } from "./compliance";
 import { assertSendable, type OutboundEmail, type SendAdapter } from "./provider";
 import { resolveAdapter } from "./adapters";
 import { unsubscribeHeaders, unsubscribeUrl, unsubscribeSecretPresent } from "./unsubscribe";
+import { mintMessageId, mintReplyToken, plusAddress } from "./threading";
 import { advance, blankState, spacingFor } from "./sequence";
 import {
   sendingStore,
@@ -95,6 +96,7 @@ export async function dispatch(
     hasDemoLink: true,
     hasResearch: true,
     sequenceStopped: sequence && sequence.status === "stopped" ? (sequence.stopReason ?? "stopped") : null,
+    sequencePausedUntil: sequence?.pausedUntil ?? null,
     guardProblems: [],
     canSignUnsubscribe: unsubscribeSecretPresent(env),
     engineReady: true,
@@ -108,6 +110,18 @@ export async function dispatch(
     return refuse(store, item, "no unsubscribe token on this item", false);
   }
 
+  // The two identifiers a reply will come back with. Minted here and written
+  // down in the same update that marks the item as sending, so the row an
+  // inbound message looks for is already there before the bytes leave.
+  let rfcMessageId: string;
+  let replyToken: string;
+  try {
+    replyToken = item.replyToken ?? mintReplyToken(item.id, env);
+    rfcMessageId = item.rfcMessageId ?? mintMessageId(item.id, mailbox.address.split("@")[1] ?? "", env);
+  } catch (err) {
+    return refuse(store, item, (err as Error).message, false);
+  }
+
   const url = unsubscribeUrl(deps.origin, item.unsubscribeToken);
   const message: OutboundEmail = {
     from: mailbox.address,
@@ -115,7 +129,10 @@ export async function dispatch(
     to: item.toAddress,
     subject: item.subject,
     text: item.body,
-    replyTo: mailbox.replyTo ?? undefined,
+    // The plus-address, not the bare mailbox: it is what identifies the send
+    // when a mail client strips the threading headers, which some do.
+    replyTo: plusAddress(mailbox.replyTo ?? mailbox.address, replyToken),
+    messageId: rfcMessageId,
     headers: unsubscribeHeaders({ url, mailto: mailbox.replyTo ?? mailbox.address }),
     tags: { belline_step: String(item.step), belline_item: String(item.id) },
   };
@@ -126,7 +143,7 @@ export async function dispatch(
     return refuse(store, item, (err as Error).message, false);
   }
 
-  await store.updateItem(item.id, { status: "sending" });
+  await store.updateItem(item.id, { status: "sending", rfcMessageId, replyToken });
 
   let receipt;
   try {
