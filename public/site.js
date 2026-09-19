@@ -711,8 +711,12 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
      slot is now and writes one transform on her and one on her circle. Nothing
      else changes while she flies — no width, no top, no left, no reflow — so
      the flight is a compositor job and the page never reflows under it.
-   - `prefers-reduced-motion`: no flight. She is simply in the corner, and the
-     hero keeps its still face and its "Talk to Belle" button.
+   - `prefers-reduced-motion`: the trip is a step, not a flight. She rests in
+     the hero exactly as she does for everybody else, and at the point the
+     flight would have been mostly over she is simply in the corner, at the
+     size she lands at, with nothing in between and no transition. She used to
+     be cornered from the first paint instead, which cost every visitor with
+     Windows' "Animation effects" off the hero's demonstration entirely.
    - Never mid-call. While a call is running the flight is off: the call keeps
      the picture-in-picture behaviour embed-video.js already has, and she never
      shrinks to a button with somebody talking to her.
@@ -729,12 +733,57 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
    buttons stay and every "Talk to Belle" rings Belline's voice call. */
 (function () {
   var chatFab = document.querySelector("[data-chat]");
-  if (!chatFab || typeof window.fetch !== "function") return;
-  var chatUrl = chatFab.getAttribute("data-chat") || "";
+  var chatUrl = chatFab ? chatFab.getAttribute("data-chat") || "" : "";
   var match = /^(https?:\/\/[^/]+)\/embed\/([^/]+)\/chat$/.exec(chatUrl);
-  if (!match) return;
+
+  /**
+   * The room the page painted for Belle, given up.
+   *
+   * A build with video live paints the layout the bubble will make rather
+   * than the one it will replace: `body.video-pending` (site.css) holds the
+   * hero's heading, paragraph, "Talk to Belle" and the three floating buttons
+   * back, and holds the slot at the bubble's own size. That promise is kept
+   * by exactly two callers, once between them:
+   *
+   *   `place` — she is here. `has-bubble` and `has-video-bubble` hold the
+   *   same things back from now on, and her real icons take the room.
+   *   `noBubble` — she is not coming (video off, the config refused, the
+   *   config never answered, or embed-video.js did not load). The hero's own
+   *   heading, button and floating buttons appear, and that is the page.
+   *
+   * Whichever runs first wins: a config that answers after the deadline still
+   * mounts her, and a failure after she is placed changes nothing.
+   */
+  var settled = false;
+  /**
+   * How long the page holds her place before giving up on the config.
+   *
+   * The config is a few hundred bytes from app.belline.ai and answers in well
+   * under a second; this is only so that a request which never answers at all
+   * cannot leave the hero without its heading and its button for good.
+   */
+  var DECIDE_MS = 4000;
+  var deadline = 0;
+
+  function keptFor(who) {
+    if (settled) return false;
+    settled = true;
+    if (deadline) window.clearTimeout(deadline);
+    document.body.classList.remove("video-pending");
+    return who === "none";
+  }
+
+  /** There will be no bubble: the hero's own demonstration is the page. */
+  function noBubble() {
+    if (!keptFor("none")) return;
+    var demo = document.querySelector(".hero-demo");
+    if (demo) demo.classList.remove("has-video-hero");
+  }
+
+  if (!chatFab || typeof window.fetch !== "function" || !match) return noBubble();
   var appOrigin = match[1];
   var key = match[2];
+  deadline = window.setTimeout(noBubble, DECIDE_MS);
 
   var ctl = null;
   var bubble = null;
@@ -815,13 +864,49 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
   /**
    * Does she make the trip on this screen at all?
    *
-   * Reduced motion: never — no flight, she is simply in the corner. A phone:
-   * PHONE_TRAVELS decides, and the hero is tall enough there that the trip is
-   * most of a screen's scrolling; see the note beside it.
+   * Only PHONE_TRAVELS decides, and it says yes; see the note beside it.
+   *
+   * Reduced motion used to answer yes here: she was simply in the corner from
+   * the first paint and the hero kept a still portrait of her instead. That
+   * is what the founder saw on Windows 11 in Edge with "Animation effects"
+   * off (2026-09-19) — Belle never moved, because she was never in the hero
+   * to move from, and every desktop visitor with that setting was handed a
+   * 64px face in the corner and never met the demonstration the hero is for.
+   * Reduced motion means less animation, not less product. She rests in the
+   * hero there too now, and `stepped` takes the motion out of the trip
+   * instead of taking the trip away.
    */
   function cornerOnly() {
-    if (query("(prefers-reduced-motion: reduce)")) return true;
     return !PHONE_TRAVELS && query(PHONE);
+  }
+
+  /**
+   * Reduced motion: she is in one place or the other, never in between.
+   *
+   * The trip stops being a flight and becomes a switch. She is in the hero
+   * until the scroll has carried her most of the way, and then she is in the
+   * corner — one step, at the size she lands at, with no frames between and
+   * no transition (site.css turns the landing transition off under the same
+   * query). Everything else is the same: the same two places, the same scroll
+   * positions, the same behaviour for ×, for a call and for the corner's
+   * stepping aside.
+   */
+  function stepped() {
+    return query("(prefers-reduced-motion: reduce)");
+  }
+
+  /**
+   * The flight's progress, or the step's.
+   *
+   * The dead band matters: without it a scroll that rests near the switching
+   * point would put her in the corner and back in the hero on alternate
+   * frames, which is more motion than the flight it replaced, not less.
+   */
+  function maybeStep(p) {
+    if (!stepped()) return p;
+    if (p >= 0.6) return 1;
+    if (p <= 0.4) return 0;
+    return progress >= 0.999 ? 1 : 0;
   }
 
   // --- where she is ----------------------------------------------------------
@@ -1034,7 +1119,7 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
     // them somewhere they had never scrolled to.
     if (inCall || docked) return;
     if (bubble.classList.contains("vb-float")) return;
-    carry(cornerOnly() || small() || !inHero() ? 1 : progressNow());
+    carry(cornerOnly() || small() || !inHero() ? 1 : maybeStep(progressNow()));
   }
 
   var queued = false;
@@ -1068,6 +1153,9 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       if (figure) figure.classList.add("is-small");
       if (heroDemo) heroDemo.classList.remove("has-video-hero");
     }
+    // She is in the page: the classes above hold back everything
+    // `video-pending` was holding back, and her own icons take its room.
+    keptFor("bubble");
     remeasure();
     // Made small earlier in this session: landed, not in the hero.
     if (root.getAttribute("data-state") === "mini") shrink();
@@ -1277,10 +1365,16 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       return r.ok ? r.json() : null;
     })
     .then(function (cfg) {
-      if (!cfg) return;
+      if (!cfg) return noBubble();
       waLink = typeof cfg.whatsappLink === "string" && /^https:\/\/wa\.me\//.test(cfg.whatsappLink) ? cfg.whatsappLink : null;
+      if (cfg.video !== true) {
+        // The floating buttons are the way in on this page, so they come back
+        // before WhatsApp is offered among them.
+        noBubble();
+        offerWhatsApp();
+        return;
+      }
       offerWhatsApp();
-      if (cfg.video !== true) return;
       window.__bellineVideoConfig = cfg.videoBubble || {};
       var still = window.__bellineVideoConfig.posterUrl;
       if (typeof still === "string" && still) poster = still.charAt(0) === "/" && still.charAt(1) !== "/" ? appOrigin + still : still;
@@ -1296,10 +1390,13 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
       var s = document.createElement("script");
       s.src = appOrigin + "/embed-video.js";
       s.async = true;
+      s.onerror = noBubble;
       document.head.appendChild(s);
     })
     .catch(function () {
-      /* no bubble is the right failure */
+      // No bubble is the right failure, and the hero's own demonstration and
+      // the floating buttons are what the page has instead.
+      noBubble();
     });
 })();
 /* --- monthly / annual ------------------------------------------------------

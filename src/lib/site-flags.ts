@@ -264,6 +264,31 @@ function outlookSwaps(file: string, w: Words): SiteSwap[] {
  * from the phone and WhatsApp flags.
  */
 const VIDEO_EN = {
+  /**
+   * Belle's place, held from the first painted frame.
+   *
+   * Without this the page paints the no-video hero — the still face under
+   * "Belle on video", its paragraph, a "Talk to Belle" button, and the three
+   * floating buttons in the corner — and site.js takes all of it away again
+   * once app.belline.ai's widget config has answered and the live bubble has
+   * mounted. Measured before this was written: the old layout was on screen
+   * for 60 ms on a fast config and 2.4 s on a slow one, at 1280 and at 390.
+   * That is the flash the founder reported (2026-09-19).
+   *
+   * So a build that says video is live paints the video layout. `body` carries
+   * `video-pending`, which hides the heading, the paragraph, the button and
+   * the three floating buttons and holds the slot at the live bubble's own
+   * size; `.hero-demo` carries `has-video-hero`, which is the column order the
+   * bubble asks for on a phone and the grid it asks for on a desktop. The
+   * still face stays exactly where it is and is what the visitor looks at
+   * until the real one lands in the same place at the same size — no gap and
+   * no spinner. site.js takes `video-pending` off the moment it knows there
+   * will be no bubble (`noBubble`), and only then does the no-video hero
+   * appear. These two are markup, not words: they are here because this flag
+   * is what decides whether the page has a bubble to leave room for.
+   */
+  pending: ["<body>", '<body class="video-pending">'],
+  heroDemo: ['<div class="wrap hero-in hero-demo">', '<div class="wrap hero-in hero-demo has-video-hero">'],
   lead: ["Belline puts an AI receptionist on your website chat and voice button,", "Belline puts an AI receptionist on your website, on video, plus chat,"],
   caption: [
     '<span class="hv-title">Belle on your website</span> <span class="state state-available">Available</span>',
@@ -297,6 +322,9 @@ const VIDEO_EN = {
 };
 
 const VIDEO_DE: typeof VIDEO_EN = {
+  /** Dieselbe Markierung wie auf der englischen Seite; siehe dort. */
+  pending: ["<body>", '<body class="video-pending">'],
+  heroDemo: ['<div class="wrap hero-in hero-demo">', '<div class="wrap hero-in hero-demo has-video-hero">'],
   lead: ["Belline setzt einen KI-Empfang auf Ihren Website-Chat und Sprach-Button,", "Belline setzt einen KI-Empfang auf Ihre Website, per Video, dazu Chat,"],
   caption: [
     '<span class="hv-title">Belle auf Ihrer Website</span> <span class="state state-available">In den VAE verfügbar</span>',
@@ -336,6 +364,8 @@ const VIDEO_PLANS: [voice: number, video: number][] = [
 function videoSwaps(file: string, w: typeof VIDEO_EN): SiteSwap[] {
   const pair = ([off, on]: string[]): SiteSwap => ({ file, off, on });
   return [
+    pair(w.pending),
+    pair(w.heroDemo),
     pair(w.lead),
     pair(w.caption),
     pair(w.ratio),

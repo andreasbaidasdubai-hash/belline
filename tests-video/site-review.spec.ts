@@ -13,7 +13,13 @@ import { applySiteFlags } from "../src/lib/site-flags";
  *   screen, at 390x844 and 375x667); × makes her a small face bottom right for
  *   the session; the small face never floats over the big one, nor over the
  *   pricing;
- * - WhatsApp is offered only when the widget config names a number.
+ * - WhatsApp is offered only when the widget config names a number;
+ * - the first painted frame is the layout the page ends in — no flash of the
+ *   hero's static card or the three floating buttons before Belle arrives,
+ *   however long app.belline.ai's config takes, and the hero's own
+ *   demonstration back if it never comes;
+ * - `prefers-reduced-motion` keeps her in the hero and steps her to the
+ *   corner rather than flying her there.
  *
  * The pages are served as the app's server serves them with video.avatar on
  * (src/lib/site-flags.ts). Screenshots (desktop hero, phone hero, phone after
@@ -345,8 +351,19 @@ test("Belle travels from the hero to the corner and back, and is never duplicate
   }
 });
 
-/** No flight under reduced motion: she is simply in the corner, from the first paint. */
-test("prefers-reduced-motion: Belle does not fly, she is in the corner", async ({ page, baseURL }) => {
+/**
+ * Reduced motion: she steps, she does not fly — and she is still in the hero.
+ *
+ * She used to be cornered from the first paint here: a 64px face bottom right
+ * and a still portrait where the demonstration should be. Windows 11 reports
+ * `prefers-reduced-motion` whenever "Animation effects" is off, so that was
+ * every desktop visitor with that setting — including the founder, in Edge,
+ * who reported that Belle "didn't move with the scroll on desktop" while she
+ * worked perfectly on his phone (2026-09-19). She never moved because she was
+ * never in the hero to move from. Reduced motion means less animation, not
+ * less product: she rests in the hero, and the trip becomes one step.
+ */
+test("prefers-reduced-motion: Belle rests in the hero and steps to the corner, without a frame in between", async ({ page, baseURL }, info) => {
   const server = await landingSite(baseURL!);
   test.skip(!server, "localhost:4321 is taken on this machine");
   try {
@@ -354,20 +371,176 @@ test("prefers-reduced-motion: Belle does not fly, she is in the corner", async (
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(`${SITE}/`);
     const bubble = page.locator(".video-bubble");
-    await expect(bubble).toHaveAttribute("data-vb", "corner");
+    const wide = info.project.name !== "iphone-390";
+
+    // At the top: in the hero's column, in the page's flow, at the call's own
+    // size — exactly where every other visitor meets her.
+    await expect(bubble).toHaveAttribute("data-vb", "hero");
     await expect(page.locator(".video-launcher")).toHaveCount(0);
-    // In the corner from the start, and unmoved by the page scrolling.
-    const before = await box(bubble.locator(".bvb-circle"));
-    expect(Math.round(before.width)).toBe(64);
-    await page.evaluate(() => window.scrollTo(0, 600));
-    await page.waitForTimeout(300);
-    const after = await box(bubble.locator(".bvb-circle"));
-    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
-    expect(await bubble.evaluate((b) => b.closest(".hero-video") === null)).toBe(true);
-    // The hero keeps its own still face and its button, so the column is not empty.
-    await expect(page.locator(".hero-video .hv-face")).toBeVisible();
-    await expect(page.locator(".hero-video .hv-cta")).toBeVisible();
+    expect(await bubble.evaluate((b) => Boolean(b.closest(".hero-video")) && getComputedStyle(b).position !== "fixed")).toBe(true);
+    const resting = (await box(bubble.locator(".bvb-circle"))).width;
+    expect(resting, "she is not at the call's size in the hero").toBeGreaterThanOrEqual(wide ? 296 : 210);
+    await expect(page.locator(".hero-video")).toBeVisible();
+    await shot(page, "reduced-motion-hero");
+
+    // Every size she is painted at while the page scrolls the whole trip, a
+    // small step at a time. With the flight on this is a smooth ramp; stepped,
+    // there are exactly two: the hero's size, and the landed 64.
+    const heroBottom = await page.evaluate(() => {
+      const slot = document.querySelector(".hv-slot")!.getBoundingClientRect();
+      return slot.top + window.scrollY + slot.height;
+    });
+    const widths = new Set<number>();
+    for (let y = 0; y <= Math.round(heroBottom * 1.4); y += 20) {
+      await page.evaluate((to) => window.scrollTo(0, to), y);
+      await page.waitForTimeout(40);
+      widths.add(Math.round((await bubble.locator(".bvb-circle").boundingBox())!.width));
+    }
+    expect([...widths].sort((a, b) => a - b), "she was painted at a size between the two: that is a flight, not a step").toEqual(
+      [64, Math.round(resting)].sort((a, b) => a - b),
+    );
+    await expect(bubble).toHaveAttribute("data-vb", "corner");
+    await expect(bubble).toHaveCSS("position", "fixed");
+    // Nothing animates the step: the landing transition is off under the query.
+    expect(await bubble.evaluate((b) => getComputedStyle(b).transitionDuration)).toMatch(/^0s(?:, 0s)*$/);
     await shot(page, "reduced-motion-corner");
+
+    // And back: the same two sizes the other way, ending in the hero.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(300);
+    await expect(bubble).toHaveAttribute("data-vb", "hero");
+    expect(Math.round((await box(bubble.locator(".bvb-circle"))).width)).toBe(Math.round(resting));
+  } finally {
+    server?.close();
+  }
+});
+
+/**
+ * The page is finished from the first painted frame.
+ *
+ * The hero's static card ("Belle on video", its paragraph and "Talk to
+ * Belle") and the three floating buttons used to be painted first and taken
+ * away when the widget arrived: measured at 97 ms with a fast config and
+ * 1.6 s with a slow one, with the hero's slot jumping 356→438 on a desktop
+ * and 296→340 on a phone. The founder reported seeing it on both
+ * (2026-09-19).
+ *
+ * A requestAnimationFrame loop installed before the document runs records the
+ * layout of every frame the browser paints, so what it collects is what a
+ * visitor sees rather than what the DOM happened to hold when a test asked.
+ * There must be exactly two layouts: the page before Belle is in it, and the
+ * page with her — identical but for her. Same reserved height, same circle,
+ * and nothing she replaces ever on screen.
+ */
+const FRAME_RECORDER = `
+  window.__frames = [];
+  (function tick() {
+    requestAnimationFrame(function () {
+      try {
+        var on = function (sel) {
+          var el = document.querySelector(sel);
+          if (!el) return 0;
+          for (var n = el; n; n = n.parentElement) {
+            var css = getComputedStyle(n);
+            if (css.opacity === "0" || css.visibility === "hidden" || css.display === "none") return 0;
+          }
+          return el.getClientRects().length ? 1 : 0;
+        };
+        var slot = document.querySelector(".hv-slot");
+        var big = document.querySelector(".video-bubble .bvb-circle") || document.querySelector(".hv-face");
+        window.__frames.push({
+          t: Math.round(performance.now()),
+          bubble: document.querySelector(".video-bubble") ? 1 : 0,
+          replaced: [on(".hero-video .hv-title"), on(".hero-video .hv-text"), on(".hero-video .hv-cta"), on(".bell-fab"), on(".chat-fab"), on(".wa-fab")].join(""),
+          slot: slot ? Math.round(slot.getBoundingClientRect().height) : -1,
+          circle: big ? Math.round(big.getBoundingClientRect().width) : -1,
+        });
+      } catch (e) {}
+      tick();
+    });
+  })();
+`;
+
+interface Frame {
+  t: number;
+  bubble: number;
+  replaced: string;
+  slot: number;
+  circle: number;
+}
+
+for (const configMs of [0, 900]) {
+  test(`no flash of the old layout on first paint, with the widget config ${configMs ? "slow" : "fast"}`, async ({ page, baseURL }, info) => {
+    const server = await landingSite(baseURL!);
+    test.skip(!server, "localhost:4321 is taken on this machine");
+    try {
+      // The config comes from app.belline.ai, so it can take a moment, and the
+      // page has to look finished for the whole of it. `mock: false` is not
+      // cosmetic here: the mock provider's "MOCK — not a live avatar" badge
+      // sits between the circle and her icons and pushes the row 6px further
+      // down, which no customer's page and no production build ever paints.
+      await page.route(`**/api/embed/${KEY}/config`, async (route) => {
+        const response = await route.fetch();
+        const json = (await response.json()) as Record<string, unknown>;
+        if (configMs) await new Promise((r) => setTimeout(r, configMs));
+        await route.fulfill({
+          response,
+          json: { ...json, whatsappLink: "https://wa.me/971501234567", videoBubble: { ...((json.videoBubble as object) ?? {}), mock: false } },
+        });
+      });
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      await page.addInitScript(FRAME_RECORDER);
+      await page.goto(`${SITE}/`);
+      await expect(page.locator(".video-bubble")).toBeVisible({ timeout: 30_000 });
+      await page.waitForTimeout(800);
+
+      const frames = (await page.evaluate(() => (window as unknown as { __frames: Frame[] }).__frames)) as Frame[];
+      expect(frames.length, "nothing was painted").toBeGreaterThan(10);
+      const key = (f: Frame) => `${f.bubble}|${f.replaced}|${f.slot}|${f.circle}`;
+      const layouts: Frame[] = [];
+      for (const f of frames) if (!layouts.length || key(layouts[layouts.length - 1]) !== key(f)) layouts.push(f);
+      const shown = layouts.map((l) => `+${l.t}ms bubble=${l.bubble} replaced=${l.replaced} slot=${l.slot} circle=${l.circle}`).join("\n");
+
+      // Nothing the bubble replaces is ever painted: not the hero's heading,
+      // its paragraph or its button, and not one of the three floating buttons.
+      for (const f of frames) expect(f.replaced, `an old-layout frame was painted at +${f.t}ms\n${shown}`).toBe("000000");
+      // Two layouts, and the second differs only by Belle being in it.
+      expect(layouts.length, `the layout changed more than once\n${shown}`).toBe(2);
+      expect(layouts[0].bubble).toBe(0);
+      expect(layouts[1].bubble).toBe(1);
+      expect(layouts[1].slot, `the hero's slot moved as Belle landed\n${shown}`).toBe(layouts[0].slot);
+      expect(layouts[1].circle, `Belle changed size as she landed\n${shown}`).toBe(layouts[0].circle);
+      await shot(page, `${info.project.name === "iphone-390" ? "mobile" : "desktop"}-first-paint-${configMs}ms`);
+    } finally {
+      server?.close();
+    }
+  });
+}
+
+/**
+ * And when the config never comes at all.
+ *
+ * Belle's place is held by the markup, so a page that never hears from
+ * app.belline.ai has to give it back rather than sit on a promise nothing
+ * will keep: the hero's own heading, paragraph and "Talk to Belle" return,
+ * and so do the floating buttons, which are then the only way in. WhatsApp is
+ * not among them — no config, no number.
+ */
+test("the widget config never answers: the hero's own demonstration and the floating buttons come back", async ({ page, baseURL }) => {
+  const server = await landingSite(baseURL!);
+  test.skip(!server, "localhost:4321 is taken on this machine");
+  try {
+    await page.route(`**/api/embed/${KEY}/config`, (route) => route.abort("failed"));
+    await page.goto(`${SITE}/`);
+    await expect(page.locator(".hero-video .hv-cta")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator(".hero-video .hv-title")).toBeVisible();
+    await expect(page.locator(".hero-video .hv-face")).toBeVisible();
+    await expect(page.locator(".bell-fab")).toBeVisible();
+    await expect(page.locator(".chat-fab")).toBeVisible();
+    await expect(page.locator(".wa-fab")).toBeHidden();
+    await expect(page.locator(".video-bubble")).toHaveCount(0);
+    expect(await page.evaluate(() => document.body.classList.contains("video-pending"))).toBe(false);
+    await shot(page, "no-config-hero");
   } finally {
     server?.close();
   }

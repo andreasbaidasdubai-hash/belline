@@ -427,6 +427,103 @@ await test("the floating buttons are visible from the first paint, and the hero 
   assert.match(css, /@media \(max-width: 1100px\) \{ footer \{ padding-bottom/, "the footer no longer leaves room for the buttons");
 });
 
+/**
+ * The first painted frame is the layout the page ends in.
+ *
+ * On a build with video live the bubble takes the corner the three floating
+ * buttons had, and the hero's heading, paragraph and "Talk to Belle" button
+ * go — but only once app.belline.ai's widget config has answered and
+ * embed-video.js has mounted her. Until this, the page painted the other
+ * layout first and took it away again: measured at 97 ms on a fast config and
+ * 1.6 s on a slow one, at 1280 and at 390, with the hero's slot jumping
+ * 356→438 (desktop) and 296→340 (phone) as she landed. The founder saw it on
+ * both (2026-09-19).
+ *
+ * So the build paints the video layout, and site.js gives it up only when it
+ * knows: `body.video-pending` holds Belle's slot at the live bubble's own size
+ * with everything she replaces unpainted, and it comes off either as she is
+ * placed or once it is certain there will be no bubble at all. None of this is
+ * words, so it is markup and CSS the flag switches rather than copy.
+ */
+await test("with video live the page paints Belle's place from the first frame, and gives it up only once it knows", async () => {
+  const { applySiteFlags } = await import("../src/lib/site-flags");
+  const VIDEO = { FLAG_VIDEO_AVATAR: "on", TAVUS_API_KEY: "x", TAVUS_FACE_ID: "x", VIDEO_LLM_SECRET: "x".repeat(40) };
+  for (const page of ["landing.html", "landing.de.html"]) {
+    const source = fs.readFileSync(path.join(process.cwd(), "public", page), "utf8");
+    const off = applySiteFlags(page, source, {});
+    assert.doesNotMatch(off, /video-pending/, `${page} holds Belle's place with video off`);
+    assert.doesNotMatch(off, /hero-demo has-video-hero/, `${page} makes room for a bubble with video off`);
+    const on = applySiteFlags(page, source, VIDEO);
+    assert.match(on, /<body class="video-pending">/, `${page} paints the old layout first with video on`);
+    assert.match(on, /<div class="wrap hero-in hero-demo has-video-hero">/, `${page} does not paint Belle's column with video on`);
+  }
+
+  const css = fs.readFileSync(path.join(process.cwd(), "public", "site.css"), "utf8");
+  // Everything the bubble replaces stays unpainted while her place is held.
+  assert.match(
+    css,
+    /body\.video-pending \.wa-fab,\s*body\.video-pending \.chat-fab,\s*body\.video-pending \.bell-fab \{ display: none; \}/,
+    "the floating buttons are painted before Belle takes the corner",
+  );
+  assert.match(
+    css,
+    /body\.video-pending \.hero-video \.hv-head,\s*body\.video-pending \.hero-video \.hv-text,\s*body\.video-pending \.hero-video \.hv-cta \{ display: none; \}/,
+    "the hero's heading, paragraph and button are painted before the bubble takes them away",
+  );
+  assert.match(css, /body\.video-pending \.hero-video \.hv-face \{ width: var\(--hv-call\); \}/, "the still face is not the bubble's size");
+  assert.match(css, /body\.video-pending \.hero-video \.hv-slot::after \{/, "no room is held for her row of icons");
+
+  // The waiting circle is the resting bubble's circle, to the pixel: the same
+  // expression in both files, or she changes size as she lands.
+  const embed = fs.readFileSync(path.join(process.cwd(), "public", "embed-video.js"), "utf8");
+  const sizes = (text: string, name: string) =>
+    [...text.matchAll(new RegExp(`--${name}:\\s*(min\\([^;}"]*?\\))`, "g"))].map((m) => m[1].replace(/\s+/g, ""));
+  const held = sizes(css, "hv-call");
+  const real = [...sizes(embed, "bvb-call"), ...sizes(css, "bvb-call")];
+  assert.ok(held.length >= 3, "the held slot has lost a breakpoint");
+  assert.deepEqual([...held].sort(), [...real].sort(), "--hv-call and --bvb-call have drifted apart: Belle changes size as she lands");
+
+  // One giving-up, both ways, and a backstop for a config that never answers.
+  const js = fs.readFileSync(path.join(process.cwd(), "public", "site.js"), "utf8");
+  assert.equal((js.match(/classList\.remove\("video-pending"\)/g) ?? []).length, 1, "site.js gives Belle's place up in more than one place");
+  assert.match(js, /function noBubble\(\)/, "site.js has no path back to the page without a bubble");
+  assert.match(js, /deadline = window\.setTimeout\(noBubble, DECIDE_MS\)/, "a config that never answers leaves the hero without its heading for good");
+  assert.match(js, /\.catch\(function \(\) \{[\s\S]{0,200}?noBubble\(\);/, "a failed config leaves the page holding Belle's place");
+  assert.match(js, /s\.onerror = noBubble/, "embed-video.js failing to load leaves the page holding Belle's place");
+  assert.match(js, /keptFor\("bubble"\);/, "placing Belle does not give her reserved place up");
+});
+
+/**
+ * Reduced motion takes the animation away, not the product.
+ *
+ * She used to be cornered from the first paint under
+ * `prefers-reduced-motion` — a 64px face bottom right, the hero's
+ * demonstration replaced by a still portrait. Windows 11 reports that query
+ * whenever "Animation effects" is off, so every desktop visitor with that
+ * setting (the founder among them, in Edge, 2026-09-19) met the corner and
+ * never the hero, and nothing on their screen ever moved with the scroll.
+ * She rests in the hero there like everybody else now, and the trip is a
+ * single step between the two places rather than a flight.
+ */
+await test("prefers-reduced-motion steps Belle between the hero and the corner, it does not take the hero away", () => {
+  const js = fs.readFileSync(path.join(process.cwd(), "public", "site.js"), "utf8");
+  const css = fs.readFileSync(path.join(process.cwd(), "public", "site.css"), "utf8");
+  const cornerOnly = js.slice(js.indexOf("function cornerOnly()"), js.indexOf("}", js.indexOf("function cornerOnly()")) + 1);
+  assert.ok(cornerOnly.length > 0, "site.js no longer decides whether she travels");
+  assert.doesNotMatch(cornerOnly, /prefers-reduced-motion/, "reduced motion corners Belle from the first paint again");
+  assert.match(js, /function stepped\(\)[\s\S]{0,200}?prefers-reduced-motion/, "reduced motion no longer steps her");
+  assert.match(js, /function maybeStep\(p\)/, "the step is gone");
+  // A dead band, or a scroll resting on the switching point flickers her.
+  assert.match(js, /if \(p >= 0\.6\) return 1;\s*if \(p <= 0\.4\) return 0;/, "the step has no dead band");
+  assert.match(js, /carry\(cornerOnly\(\) \|\| small\(\) \|\| !inHero\(\) \? 1 : maybeStep\(progressNow\(\)\)\)/, "the frame is not stepped");
+  // And the step is one frame: the landing transition is off under the query.
+  assert.match(
+    css,
+    /@media \(prefers-reduced-motion: reduce\) \{\s*\.video-bubble\[data-vb="corner"\],\s*\.video-bubble\[data-vb="corner"\] \.bvb-row \{ transition: none; \}/,
+    "the corner still animates under reduced motion",
+  );
+});
+
 await test("the landing page's button is inert without JavaScript", () => {
   const html = fs.readFileSync(path.join(process.cwd(), "public", "landing.html"), "utf8");
   assert.ok(html.includes("data-chat="), "no chat button on the front page");
