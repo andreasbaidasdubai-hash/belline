@@ -2131,7 +2131,9 @@ await test("the bubble opens on load, greeting, when video is on and it has not 
   assert.equal(video.attrs.src, "https://app.example/video/greeting.mp4");
   // The widget only loads the bubble when the config says so (and the route only says so when video is offered).
   assert.match(read("public/embed.js"), /if \(cfg\.video === true && !fabs\.video\) \{[\s\S]{0,200}mountVideo\(/);
-  assert.match(read("public/site.js"), /if \(!cfg\) return;[\s\S]{0,300}if \(cfg\.video !== true\) return;/);
+  // Either way the page gives Belle's held place back (`noBubble`): the config
+  // that refuses is also what tells the hero to show its own demonstration.
+  assert.match(read("public/site.js"), /if \(!cfg\) return noBubble\(\);[\s\S]{0,400}if \(cfg\.video !== true\) \{[\s\S]{0,300}noBubble\(\);/);
   // The greeting line never covers the page on a narrow screen.
   assert.match(read("public/embed-video.js"), /@media \(max-width:900px\)\{\.bvb-caption\{display:none\}\}/);
 });

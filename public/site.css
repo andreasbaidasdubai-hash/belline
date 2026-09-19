@@ -3610,6 +3610,57 @@ footer a { color: var(--bl-ink-900); }
   .video-bubble.bvb:not(.is-call) { --bvb-call: min(214px, calc(100vw - 40px)); }
 }
 
+/* --- Belle's place, before the widget has answered --------------------------
+   `body.video-pending` is in the markup of a build with video live
+   (src/lib/site-flags.ts). It is the first painted frame's promise that a live
+   bubble is coming: the still face is already the bubble's size, in the
+   bubble's place, with the bubble's room under it for her icons, and the
+   heading, the paragraph, the "Talk to Belle" button and the three floating
+   buttons — everything the bubble replaces — are not painted at all. The page
+   is finished from the first frame and nothing moves when she lands.
+
+   site.js takes the class off once it knows (`decided`): the bubble is in the
+   hero, so `has-bubble` and `has-video-bubble` hold the same things back and
+   the real icons take the room this reserved; or there will be no bubble, and
+   the hero's own heading, button and floating buttons appear. Nothing here is
+   ever on screen at the same time as the live bubble.
+
+   `--hv-call` is `--bvb-call` from public/embed-video.js, which is what the
+   resting bubble's circle measures, plus the short-phone override above.
+   check:webchat holds the two to each other — they are the same number in two
+   files and drifting apart is a visible jump. */
+body.video-pending { --hv-call: min(320px, calc(100vw - 48px), calc(100dvh - 250px)); }
+@media (max-width: 520px) {
+  body.video-pending { --hv-call: min(240px, calc(100vw - 40px), calc(100dvh - 230px)); }
+}
+@media (max-width: 520px) and (max-height: 720px) {
+  body.video-pending { --hv-call: min(214px, calc(100vw - 40px)); }
+}
+body.video-pending .wa-fab,
+body.video-pending .chat-fab,
+body.video-pending .bell-fab { display: none; }
+body.video-pending .hero-video .hv-head,
+body.video-pending .hero-video .hv-text,
+body.video-pending .hero-video .hv-cta { display: none; }
+body.video-pending .hero-video .hv-face { width: var(--hv-call); }
+/* The room her row of icons takes, held open: `.bvb-row` is one 48px button
+   (46px on a phone) 14px under the circle (12px on a phone, above). */
+body.video-pending .hero-video .hv-slot::after {
+  content: "";
+  display: block;
+  width: 1px;
+  height: 48px;
+  margin-top: 14px;
+}
+@media (max-width: 900px) {
+  body.video-pending .hero-video .hv-slot { padding-top: 42px; }
+  body.video-pending .hero-video .hv-slot::after { margin-top: 12px; }
+  body.video-pending .hero-video .hv-early { font-size: 0.78rem; }
+}
+@media (max-width: 520px) {
+  body.video-pending .hero-video .hv-slot::after { height: 46px; }
+}
+
 /* --- What Belline does: four entries, video first ------------------------- */
 #channels .channels-4:not(.channels-3) > li:first-child { border-color: var(--bl-blue); box-shadow: inset 0 0 0 1px var(--bl-blue); }
 
@@ -3837,8 +3888,11 @@ footer a { color: var(--bl-ink-900); }
    `data-vb` says where she is: "hero" (in the page's flow), "flight" (carried
    by the scroll) or "corner" (landed, 64 px, with her icons beside her).
 
-   Reduced motion: site.js never starts the flight, so she is simply in the
-   corner from the first paint, and the hero keeps its still face and button. */
+   Reduced motion: she rests in the hero like everybody else, and site.js
+   steps her between the two places rather than flying her — so the landing
+   transition below is turned off under that query and the step is one frame.
+   She used to be cornered from the first paint there, which took the hero's
+   demonstration away from every visitor who has Windows' animations off. */
 .video-bubble.vb-travel {
   position: fixed;
   left: 0;

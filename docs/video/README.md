@@ -48,8 +48,19 @@ shrinking as she goes, landing as the 64px face with her icons beside her —
 and scrolling back up carries her home. There is no separate floating launcher
 any more, so there is never a second Belle on the page. The flight is scroll
 position, two transforms and nothing else (no width, no inset, no reflow);
-`prefers-reduced-motion` skips it and she is simply in the corner; and it is
-off for the whole of a call, which leaves the carrying above.
+`prefers-reduced-motion` makes it a step rather than a flight (she rests in
+the hero all the same, and is simply in the corner once the scroll has taken
+her most of the way, with nothing in between); and it is off for the whole of
+a call, which leaves the carrying above.
+
+The page paints that layout rather than the one it replaces. A build with
+video live carries `body.video-pending` and `.hero-demo.has-video-hero`
+(`src/lib/site-flags.ts`), so the first painted frame already holds Belle's
+slot at the bubble's own size, with the hero's heading, paragraph, "Talk to
+Belle" and the three floating buttons unpainted. `site.js` gives the class up
+exactly once — when the bubble is placed, or when it knows there will not be
+one (video off, the config refused, no answer within 4 s, or embed-video.js
+did not load), and only then does the no-video hero appear.
 
 ```
 visitor ─ embed.js / site.js ─ embed-video.js bubble (muted clip, no session)
