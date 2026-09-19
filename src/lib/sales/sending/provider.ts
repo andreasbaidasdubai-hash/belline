@@ -36,6 +36,15 @@ export interface OutboundEmail {
   html?: string;
   replyTo?: string;
   /**
+   * The `Message-ID` to send under, without angle brackets.
+   *
+   * Supplied by the dispatcher rather than invented by the adapter, because it
+   * is stored against the send item first: a reply quoting it has to find a row
+   * that already exists. An adapter that minted its own would mean every reply
+   * arriving in the seconds after a send was unattributable.
+   */
+  messageId?: string;
+  /**
    * Headers the engine insists on: `List-Unsubscribe`,
    * `List-Unsubscribe-Post`. The adapter must send them verbatim or fail.
    */

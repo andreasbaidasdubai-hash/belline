@@ -37,7 +37,28 @@ export interface SendingDomain {
   pausedReason?: string | null;
   pausedAt?: string | null;
   dailyCap: number;
-  dns: { spf?: boolean; dkim?: boolean; dmarc?: boolean; mx?: boolean; verifiedAt?: string };
+  /**
+   * What is published, and the choices the DNS records were generated from.
+   *
+   * The second half matters as much as the first: `domain:verify` has to
+   * rebuild the exact records `domain:setup` printed, and a DMARC line
+   * regenerated with a different report address reads as "wrong" against a
+   * record that is perfectly correct. Remembering the choices is what stops
+   * the verifier from disagreeing with the setup command.
+   */
+  dns: {
+    spf?: boolean;
+    dkim?: boolean;
+    dmarc?: boolean;
+    mx?: boolean;
+    verifiedAt?: string;
+    region?: string;
+    mailFromLabel?: string;
+    dmarcReports?: string | null;
+    dmarcPolicy?: string;
+    configurationSet?: string;
+    receivesReplies?: boolean;
+  };
   notes?: string | null;
   createdAt: string;
 }
@@ -111,6 +132,15 @@ export interface SendItem {
   identityFingerprint: string | null;
   identitySnapshot: Record<string, string> | null;
   unsubscribeToken: string | null;
+  /**
+   * The `Message-ID` header this message went out with, minus the angle
+   * brackets. It is how a reply finds its way back: the recipient's client
+   * quotes it in `In-Reply-To`, and that is the only identifier in the whole
+   * exchange that both sides agree on.
+   */
+  rfcMessageId: string | null;
+  /** The plus-address suffix on the Reply-To, for when threading headers are lost. */
+  replyToken: string | null;
   provider: string | null;
   providerMsgId: string | null;
   blockedReason: string | null;
@@ -140,6 +170,16 @@ export interface SequenceState {
   nextDueAt: string | null;
   lastSentAt: string | null;
   countryCode: string | null;
+  /**
+   * Standing still, not stopped.
+   *
+   * An out-of-office means the person is not there, not that they answered.
+   * Stopping on one is how a lead disappears for good because somebody was in
+   * Greece; so the sequence keeps its status and its step and simply becomes
+   * undue until this moment passes.
+   */
+  pausedUntil: string | null;
+  pauseReason: string | null;
 }
 
 export type EventKind =
@@ -163,19 +203,80 @@ export interface SendEvent {
   at: string;
 }
 
+/** What an inbound message turned out to be. */
+export type InboundKind = "reply" | "auto_reply" | "bounce" | "complaint" | "unknown";
+
+/** How we worked out which send it answers. In descending order of certainty. */
+export type MatchedBy = "thread" | "plus_address" | "address" | "none";
+
+/**
+ * How sure we are that somebody asked to be left alone.
+ *
+ * Three values rather than two because the middle one is the whole point: a
+ * phrase that probably means "stop" is neither something to act on silently
+ * nor something to ignore. It goes to a person.
+ */
+export type OptOutConfidence = "none" | "likely" | "certain";
+
 export interface InboundReply {
   id: number;
   leadId: number | null;
   itemId: number | null;
   mailboxId: number | null;
   fromAddress: string;
+  toAddress: string | null;
   subject: string | null;
   body: string;
+  kind: InboundKind;
   isOptOut: boolean;
+  optOutConfidence: OptOutConfidence;
+  needsReview: boolean;
+  matchedBy: MatchedBy;
+  provider: string | null;
+  providerMessageId: string | null;
+  rfcMessageId: string | null;
+  inReplyTo: string | null;
+  /** Set when this message paused a sequence, so the screen can say until when. */
+  pausedUntil: string | null;
   receivedAt: string;
   handledAt: string | null;
   handledBy: string | null;
 }
+
+/** Everything `addReply` may be given; the rest is filled in with defaults. */
+export type NewInboundReply = Omit<
+  InboundReply,
+  | "id"
+  | "receivedAt"
+  | "handledAt"
+  | "handledBy"
+  | "toAddress"
+  | "kind"
+  | "optOutConfidence"
+  | "needsReview"
+  | "matchedBy"
+  | "provider"
+  | "providerMessageId"
+  | "rfcMessageId"
+  | "inReplyTo"
+  | "pausedUntil"
+> &
+  Partial<
+    Pick<
+      InboundReply,
+      | "receivedAt"
+      | "toAddress"
+      | "kind"
+      | "optOutConfidence"
+      | "needsReview"
+      | "matchedBy"
+      | "provider"
+      | "providerMessageId"
+      | "rfcMessageId"
+      | "inReplyTo"
+      | "pausedUntil"
+    >
+  >;
 
 export interface SendingStore {
   readonly kind: "postgres" | "memory";
@@ -196,6 +297,17 @@ export interface SendingStore {
 
   addItems(items: Omit<SendItem, "id" | "createdAt">[]): Promise<SendItem[]>;
   listItems(filter?: { batchId?: number; leadId?: number; status?: ItemStatus[]; step?: number; limit?: number }): Promise<SendItem[]>;
+  getItem(id: number): Promise<SendItem | null>;
+  /**
+   * The send a `Message-ID` belongs to.
+   *
+   * Given the bare id, without angle brackets. Inbound mail asks this of every
+   * `In-Reply-To` and every entry in `References`, so it is a keyed lookup
+   * rather than a scan of the items table.
+   */
+  itemByMessageId(rfcMessageId: string): Promise<SendItem | null>;
+  /** The send a plus-address suffix belongs to, when threading headers are gone. */
+  itemByReplyToken(token: string): Promise<SendItem | null>;
   updateItem(id: number, patch: Partial<SendItem>): Promise<SendItem | null>;
   /** Items whose scheduled minute has arrived. */
   dueItems(nowIso: string, limit: number): Promise<SendItem[]>;
@@ -209,9 +321,27 @@ export interface SendingStore {
   addEvent(event: Omit<SendEvent, "id" | "at"> & { at?: string }): Promise<SendEvent>;
   listEvents(filter?: { since?: string; mailboxId?: number; domainId?: number; limit?: number }): Promise<SendEvent[]>;
 
-  addReply(reply: Omit<InboundReply, "id" | "receivedAt" | "handledAt" | "handledBy"> & { receivedAt?: string }): Promise<InboundReply>;
-  listReplies(filter?: { handled?: boolean; leadId?: number; limit?: number }): Promise<InboundReply[]>;
+  addReply(reply: NewInboundReply): Promise<InboundReply>;
+  listReplies(filter?: {
+    handled?: boolean;
+    leadId?: number;
+    kind?: InboundKind[];
+    needsReview?: boolean;
+    limit?: number;
+  }): Promise<InboundReply[]>;
   markReplyHandled(id: number, by: string): Promise<InboundReply | null>;
+  /**
+   * Has this provider message already been taken in?
+   *
+   * The idempotency question, asked before anything is written. A webhook that
+   * is redelivered — and SNS promises redelivery — must not produce a second
+   * row, a second stop, or a second line on the lead's timeline.
+   */
+  findInbound(provider: string, providerMessageId: string): Promise<InboundReply | null>;
+  /** Note on the recorded message that it paused a sequence, and until when. */
+  markReplyPaused(id: number, until: string | null): Promise<void>;
+  /** Record a staff decision on a message the classifier was unsure about. */
+  resolveReview(id: number, patch: { isOptOut: boolean; needsReview: false; handledBy: string }): Promise<InboundReply | null>;
 
   listCountryOverrides(): Promise<CountryOverride[]>;
   setCountryOverride(override: CountryOverride): Promise<void>;
@@ -383,6 +513,18 @@ function memoryStore(): SendingStore {
       if (filter.status) rows = rows.filter((i) => filter.status!.includes(i.status));
       return rows.slice(0, filter.limit ?? 500).map((i) => ({ ...i }));
     },
+    async getItem(id) {
+      const row = memory.items.find((i) => i.id === id);
+      return row ? { ...row } : null;
+    },
+    async itemByMessageId(rfcMessageId) {
+      const row = memory.items.find((i) => i.rfcMessageId === rfcMessageId);
+      return row ? { ...row } : null;
+    },
+    async itemByReplyToken(token) {
+      const row = memory.items.find((i) => i.replyToken === token);
+      return row ? { ...row } : null;
+    },
     async updateItem(id, patch) {
       const row = memory.items.find((i) => i.id === id);
       if (!row) return null;
@@ -435,8 +577,31 @@ function memoryStore(): SendingStore {
     },
 
     async addReply(reply) {
+      // Mirrors inbound_reply_provider_msg_uq: a redelivered webhook is one row.
+      if (reply.provider && reply.providerMessageId) {
+        const seen = memory.replies.find(
+          (r) => r.provider === reply.provider && r.providerMessageId === reply.providerMessageId,
+        );
+        if (seen) return { ...seen };
+      }
       const row: InboundReply = {
-        ...reply,
+        leadId: reply.leadId,
+        itemId: reply.itemId,
+        mailboxId: reply.mailboxId,
+        fromAddress: reply.fromAddress,
+        toAddress: reply.toAddress ?? null,
+        subject: reply.subject,
+        body: reply.body,
+        kind: reply.kind ?? "reply",
+        isOptOut: reply.isOptOut,
+        optOutConfidence: reply.optOutConfidence ?? (reply.isOptOut ? "certain" : "none"),
+        needsReview: reply.needsReview ?? false,
+        matchedBy: reply.matchedBy ?? "none",
+        provider: reply.provider ?? null,
+        providerMessageId: reply.providerMessageId ?? null,
+        rfcMessageId: reply.rfcMessageId ?? null,
+        inReplyTo: reply.inReplyTo ?? null,
+        pausedUntil: reply.pausedUntil ?? null,
         id: nextId(),
         receivedAt: reply.receivedAt ?? nowIso(),
         handledAt: null,
@@ -450,6 +615,8 @@ function memoryStore(): SendingStore {
       if (filter.handled === true) rows = rows.filter((r) => r.handledAt !== null);
       if (filter.handled === false) rows = rows.filter((r) => r.handledAt === null);
       if (filter.leadId !== undefined) rows = rows.filter((r) => r.leadId === filter.leadId);
+      if (filter.kind) rows = rows.filter((r) => filter.kind!.includes(r.kind));
+      if (filter.needsReview !== undefined) rows = rows.filter((r) => r.needsReview === filter.needsReview);
       return rows.slice(-(filter.limit ?? 200)).reverse().map((r) => ({ ...r }));
     },
     async markReplyHandled(id, by) {
@@ -457,6 +624,26 @@ function memoryStore(): SendingStore {
       if (!row) return null;
       row.handledAt = nowIso();
       row.handledBy = by;
+      return { ...row };
+    },
+    async findInbound(provider, providerMessageId) {
+      const row = memory.replies.find(
+        (r) => r.provider === provider && r.providerMessageId === providerMessageId,
+      );
+      return row ? { ...row } : null;
+    },
+    async markReplyPaused(id, until) {
+      const row = memory.replies.find((r) => r.id === id);
+      if (row) row.pausedUntil = until;
+    },
+    async resolveReview(id, patch) {
+      const row = memory.replies.find((r) => r.id === id);
+      if (!row) return null;
+      row.isOptOut = patch.isOptOut;
+      row.optOutConfidence = patch.isOptOut ? "certain" : "none";
+      row.needsReview = false;
+      row.handledAt = nowIso();
+      row.handledBy = patch.handledBy;
       return { ...row };
     },
 
@@ -569,6 +756,8 @@ function toItem(r: any): SendItem {
     identityFingerprint: r.identity_fingerprint,
     identitySnapshot: r.identity_snapshot,
     unsubscribeToken: r.unsubscribe_token,
+    rfcMessageId: r.rfc_message_id ?? null,
+    replyToken: r.reply_token ?? null,
     provider: r.provider,
     providerMsgId: r.provider_msg_id,
     blockedReason: r.blocked_reason,
@@ -589,6 +778,35 @@ function toSequence(r: any): SequenceState {
     nextDueAt: iso(r.next_due_at),
     lastSentAt: iso(r.last_sent_at),
     countryCode: r.country_code,
+    pausedUntil: iso(r.paused_until),
+    pauseReason: r.pause_reason ?? null,
+  };
+}
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+function toReply(r: any): InboundReply {
+  return {
+    id: Number(r.id),
+    leadId: r.lead_id === null ? null : Number(r.lead_id),
+    itemId: r.item_id === null ? null : Number(r.item_id),
+    mailboxId: r.mailbox_id === null ? null : Number(r.mailbox_id),
+    fromAddress: r.from_address,
+    toAddress: r.to_address ?? null,
+    subject: r.subject,
+    body: r.body,
+    kind: (r.kind ?? "reply") as InboundKind,
+    isOptOut: r.is_opt_out,
+    optOutConfidence: (r.opt_out_confidence ?? "none") as OptOutConfidence,
+    needsReview: r.needs_review === true,
+    matchedBy: (r.matched_by ?? "none") as MatchedBy,
+    provider: r.provider ?? null,
+    providerMessageId: r.provider_message_id ?? null,
+    rfcMessageId: r.rfc_message_id ?? null,
+    inReplyTo: r.in_reply_to ?? null,
+    pausedUntil: iso(r.paused_until),
+    receivedAt: iso(r.received_at)!,
+    handledAt: iso(r.handled_at),
+    handledBy: r.handled_by,
   };
 }
 
@@ -613,6 +831,8 @@ const ITEM_COLUMNS: Record<keyof SendItem, string> = {
   identityFingerprint: "identity_fingerprint",
   identitySnapshot: "identity_snapshot",
   unsubscribeToken: "unsubscribe_token",
+  rfcMessageId: "rfc_message_id",
+  replyToken: "reply_token",
   provider: "provider",
   providerMsgId: "provider_msg_id",
   blockedReason: "blocked_reason",
@@ -750,15 +970,16 @@ function postgresStore(): SendingStore {
           `insert into sales.send_item
              (batch_id, lead_id, company_id, message_id, video_demo_id, step, mailbox_id,
               to_address, subject, body, language, scheduled_for, status, country_code,
-              country_rule, identity_fingerprint, identity_snapshot, unsubscribe_token, blocked_reason)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+              country_rule, identity_fingerprint, identity_snapshot, unsubscribe_token, blocked_reason,
+              rfc_message_id, reply_token)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
            on conflict do nothing
            returning *`,
           [
             i.batchId, i.leadId, i.companyId, i.messageId, i.videoDemoId, i.step, i.mailboxId,
             i.toAddress, i.subject, i.body, i.language, i.scheduledFor, i.status, i.countryCode,
             i.countryRule, i.identityFingerprint, i.identitySnapshot ? JSON.stringify(i.identitySnapshot) : null,
-            i.unsubscribeToken, i.blockedReason,
+            i.unsubscribeToken, i.blockedReason, i.rfcMessageId ?? null, i.replyToken ?? null,
           ],
         );
         if (rows[0]) out.push(toItem(rows[0]));
@@ -779,6 +1000,18 @@ function postgresStore(): SendingStore {
           params,
         )
       ).map(toItem);
+    },
+    async getItem(id) {
+      const rows = await query(`select * from sales.send_item where id = $1`, [id]);
+      return rows[0] ? toItem(rows[0]) : null;
+    },
+    async itemByMessageId(rfcMessageId) {
+      const rows = await query(`select * from sales.send_item where rfc_message_id = $1`, [rfcMessageId]);
+      return rows[0] ? toItem(rows[0]) : null;
+    },
+    async itemByReplyToken(token) {
+      const rows = await query(`select * from sales.send_item where reply_token = $1`, [token]);
+      return rows[0] ? toItem(rows[0]) : null;
     },
     async updateItem(id, patch) {
       const sets: string[] = [];
@@ -841,15 +1074,17 @@ function postgresStore(): SendingStore {
     async upsertSequence(state) {
       const rows = await query(
         `insert into sales.sequence_state
-           (lead_id, company_id, step, status, stop_reason, stopped_at, next_due_at, last_sent_at, country_code)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           (lead_id, company_id, step, status, stop_reason, stopped_at, next_due_at, last_sent_at, country_code,
+            paused_until, pause_reason)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          on conflict (lead_id) do update set
            company_id = excluded.company_id, step = excluded.step, status = excluded.status,
            stop_reason = excluded.stop_reason, stopped_at = excluded.stopped_at,
            next_due_at = excluded.next_due_at, last_sent_at = excluded.last_sent_at,
-           country_code = excluded.country_code, updated_at = now()
+           country_code = excluded.country_code, paused_until = excluded.paused_until,
+           pause_reason = excluded.pause_reason, updated_at = now()
          returning *`,
-        [state.leadId, state.companyId, state.step, state.status, state.stopReason, state.stoppedAt, state.nextDueAt, state.lastSentAt, state.countryCode],
+        [state.leadId, state.companyId, state.step, state.status, state.stopReason, state.stoppedAt, state.nextDueAt, state.lastSentAt, state.countryCode, state.pausedUntil, state.pauseReason],
       );
       return toSequence(rows[0]);
     },
@@ -878,13 +1113,33 @@ function postgresStore(): SendingStore {
     },
 
     async addReply(reply) {
+      // `on conflict do nothing` plus a read-back, so two deliveries of one
+      // provider message are one row even when they race. The unique index is
+      // partial, so the conflict target has to be named with its predicate.
       const rows = await query<any>(
-        `insert into sales.inbound_reply (lead_id, item_id, mailbox_id, from_address, subject, body, is_opt_out, received_at)
-         values ($1,$2,$3,$4,$5,$6,$7, coalesce($8::timestamptz, now())) returning *`,
-        [reply.leadId, reply.itemId, reply.mailboxId, reply.fromAddress, reply.subject, reply.body, reply.isOptOut, reply.receivedAt ?? null],
+        `insert into sales.inbound_reply
+           (lead_id, item_id, mailbox_id, from_address, to_address, subject, body, kind,
+            is_opt_out, opt_out_confidence, needs_review, matched_by, provider,
+            provider_message_id, rfc_message_id, in_reply_to, paused_until, received_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, coalesce($18::timestamptz, now()))
+         on conflict (provider, provider_message_id) where provider_message_id is not null
+           do nothing
+         returning *`,
+        [
+          reply.leadId, reply.itemId, reply.mailboxId, reply.fromAddress, reply.toAddress ?? null,
+          reply.subject, reply.body, reply.kind ?? "reply", reply.isOptOut,
+          reply.optOutConfidence ?? (reply.isOptOut ? "certain" : "none"),
+          reply.needsReview ?? false, reply.matchedBy ?? "none", reply.provider ?? null,
+          reply.providerMessageId ?? null, reply.rfcMessageId ?? null, reply.inReplyTo ?? null,
+          reply.pausedUntil ?? null, reply.receivedAt ?? null,
+        ],
       );
-      const r = rows[0];
-      return { id: Number(r.id), leadId: r.lead_id === null ? null : Number(r.lead_id), itemId: r.item_id === null ? null : Number(r.item_id), mailboxId: r.mailbox_id === null ? null : Number(r.mailbox_id), fromAddress: r.from_address, subject: r.subject, body: r.body, isOptOut: r.is_opt_out, receivedAt: iso(r.received_at)!, handledAt: iso(r.handled_at), handledBy: r.handled_by };
+      if (rows[0]) return toReply(rows[0]);
+      const existing = await query<any>(
+        `select * from sales.inbound_reply where provider = $1 and provider_message_id = $2`,
+        [reply.provider ?? null, reply.providerMessageId ?? null],
+      );
+      return toReply(existing[0]);
     },
     async listReplies(filter = {}) {
       const clauses: string[] = ["true"];
@@ -892,21 +1147,41 @@ function postgresStore(): SendingStore {
       if (filter.handled === true) clauses.push("handled_at is not null");
       if (filter.handled === false) clauses.push("handled_at is null");
       if (filter.leadId !== undefined) { params.push(filter.leadId); clauses.push(`lead_id = $${params.length}`); }
+      if (filter.kind) { params.push(filter.kind); clauses.push(`kind = any($${params.length})`); }
+      if (filter.needsReview !== undefined) { params.push(filter.needsReview); clauses.push(`needs_review = $${params.length}`); }
       params.push(filter.limit ?? 200);
       const rows = await query<any>(
         `select * from sales.inbound_reply where ${clauses.join(" and ")} order by received_at desc limit $${params.length}`,
         params,
       );
-      return rows.map((r) => ({ id: Number(r.id), leadId: r.lead_id === null ? null : Number(r.lead_id), itemId: r.item_id === null ? null : Number(r.item_id), mailboxId: r.mailbox_id === null ? null : Number(r.mailbox_id), fromAddress: r.from_address, subject: r.subject, body: r.body, isOptOut: r.is_opt_out, receivedAt: iso(r.received_at)!, handledAt: iso(r.handled_at), handledBy: r.handled_by }));
+      return rows.map(toReply);
     },
     async markReplyHandled(id, by) {
       const rows = await query<any>(
         `update sales.inbound_reply set handled_at = now(), handled_by = $2 where id = $1 returning *`,
         [id, by],
       );
-      const r = rows[0];
-      if (!r) return null;
-      return { id: Number(r.id), leadId: r.lead_id === null ? null : Number(r.lead_id), itemId: r.item_id === null ? null : Number(r.item_id), mailboxId: r.mailbox_id === null ? null : Number(r.mailbox_id), fromAddress: r.from_address, subject: r.subject, body: r.body, isOptOut: r.is_opt_out, receivedAt: iso(r.received_at)!, handledAt: iso(r.handled_at), handledBy: r.handled_by };
+      return rows[0] ? toReply(rows[0]) : null;
+    },
+    async findInbound(provider, providerMessageId) {
+      const rows = await query<any>(
+        `select * from sales.inbound_reply where provider = $1 and provider_message_id = $2`,
+        [provider, providerMessageId],
+      );
+      return rows[0] ? toReply(rows[0]) : null;
+    },
+    async markReplyPaused(id, until) {
+      await query(`update sales.inbound_reply set paused_until = $2 where id = $1`, [id, until]);
+    },
+    async resolveReview(id, patch) {
+      const rows = await query<any>(
+        `update sales.inbound_reply
+            set is_opt_out = $2, opt_out_confidence = $3, needs_review = false,
+                handled_at = now(), handled_by = $4
+          where id = $1 returning *`,
+        [id, patch.isOptOut, patch.isOptOut ? "certain" : "none", patch.handledBy],
+      );
+      return rows[0] ? toReply(rows[0]) : null;
     },
 
     async listCountryOverrides() {

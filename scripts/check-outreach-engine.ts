@@ -1003,6 +1003,7 @@ await test("a click into the demo stops the follow-ups", async () => {
   await store.upsertSequence({
     leadId: 501, companyId: 9001, step: 1, status: "active", stopReason: null, stoppedAt: null,
     nextDueAt: new Date(Date.now() + 86_400_000).toISOString(), lastSentAt: new Date().toISOString(), countryCode: "AE",
+    pausedUntil: null, pauseReason: null,
   });
   await repliesMod.demoOpened(501, store);
   const state = await store.getSequence(501);
