@@ -3977,3 +3977,107 @@ body.video-pending .hero-video .hv-slot::after {
   #price .plan .plan-tag { margin-bottom: 10px; }
   #price .plan .plan-price { margin: 20px 0 18px; }
 }
+
+/* ===========================================================================
+   Absenderseiten (scripts/site-sender.ts)
+   ---------------------------------------------------------------------------
+   Vier Domains verschicken unsere Kaltakquise, und wer eine davon in den
+   Browser tippt, prüft gerade eine E-Mail. Zwei Dinge gehören deshalb nach
+   ganz oben und nebeneinander: die Zusicherung, dass die Nachricht echt ist,
+   und Belles Gesicht — dasselbe, das in der E-Mail stand. Das Bild ist der
+   einzige Weg zum Produkt auf dieser Seite; verkauft wird hier nichts.
+   =========================================================================== */
+
+.sender-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 248px;
+  gap: 44px;
+  align-items: start;
+  /* Der Textspalte bleibt das Lesemaß der Rechtsseiten (~665 px), und Belle
+     steht daneben statt allein am rechten Rand von 1200 px. */
+  max-width: 920px;
+  margin: 24px 0 4px;
+}
+
+/* Der Grund, warum es die Seite gibt: größer als der Fließtext, in Tinte
+   statt im Grau des Kleingedruckten, und vor allem anderen. */
+.legal .sender-yes {
+  margin: 0 0 20px;
+  padding: 16px 20px;
+  border: 1px solid var(--card-line);
+  border-radius: var(--bl-radius-panel);
+  background: var(--bl-blue-tint);
+  font-size: 1.08rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.legal .sender-yes strong { color: var(--ink); }
+.legal .sender-what { margin: 0; }
+
+.sender-belle {
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 14px;
+}
+
+/* Derselbe Kreis mit blauem Ring wie im Hero der Startseite (.hv-face). Der
+   Ring sagt, dass der Kreis zum Drücken da ist; ein grauer Haarstrich hatte
+   dort wie ein Stockfoto ausgesehen. Ein Standbild, nie ein Videoanruf —
+   diese Besucher haben um keine Vorführung gebeten. */
+.sender-face {
+  display: block;
+  width: 152px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bl-navy);
+  box-shadow: 0 0 0 3px var(--paper), 0 0 0 5px var(--bl-blue), 0 24px 48px -28px rgba(29, 29, 31, 0.45);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.sender-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sender-face:hover,
+.sender-face:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 3px var(--paper), 0 0 0 6px var(--bl-blue), 0 26px 52px -26px rgba(29, 29, 31, 0.5);
+}
+
+.legal .sender-belle figcaption {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 34ch;
+}
+.legal .sender-belle figcaption strong { color: var(--ink); font-weight: 600; }
+
+/* Das Bild allein verrät nicht, dass es ein Link ist. Diese Zeile schon. */
+.legal a.sender-meet {
+  display: inline-block;
+  margin-top: 10px;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--bl-blue);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.legal a.sender-meet:hover { color: var(--bl-blue); }
+
+/* Auf dieser Seite schweben keine Knöpfe — keine Glocke, kein Chat, kein
+   WhatsApp, weil hier nichts verkauft wird. Der Platz, den der Fuß sonst
+   unter 1100 px für sie freihält, ist deshalb nur noch leeres Scrollen. */
+@media (max-width: 1100px) {
+  .sender-doc footer { padding-bottom: 60px; }
+}
+
+@media (max-width: 760px) {
+  /* Das Gesicht zuerst, dann die Zusicherung: auf einem Telefon ist
+     "nebeneinander" untereinander, und oben steht das Erkennbare. */
+  .sender-top { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+  .sender-belle { order: -1; justify-self: center; gap: 10px; }
+  .sender-face { width: 140px; }
+  .legal .sender-belle figcaption { max-width: 34ch; }
+  .legal a.sender-meet { margin-top: 6px; }
+  .legal .sender-yes { font-size: 1.02rem; padding: 14px 16px; }
+}

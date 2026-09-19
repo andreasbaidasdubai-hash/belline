@@ -26,9 +26,32 @@
  * `noindex, nofollow`: four near-identical pages naming Belline are four
  * competitors to belline.ai in a search for Belline, and none of them is the
  * page we want found.
+ *
+ * Two things sit above everything else, side by side, because of who reads
+ * this page and why:
+ *
+ *  - the sentence that says the message was genuine. It used to be a third of
+ *    the way down, under a paragraph of product description, which is past
+ *    the fold on a phone — the one line the visitor came for, below the one
+ *    thing they did not;
+ *  - Belle's face, round, linking to belline.ai. The page was a wall of grey
+ *    text with nobody in it and no route to the product, and a recipient who
+ *    recognises the face from the email has their answer before reading a
+ *    word. It is the greeting clip's poster frame (`GREETING_POSTER_PATH`),
+ *    the same still the website's hero and the demo mail use, and it is a
+ *    still: a live session here would spend Tavus minutes on strangers who
+ *    came to check an email, not to be sold to. The circle carries the same
+ *    blue ring as the hero's (`.hv-face` in site.css), and an underlined
+ *    "Meet Belle at belline.ai" sits under it, because a picture does not
+ *    look like a link.
+ *
+ * That face is the only route to the product here, and deliberately the only
+ * one: no price, no "Get started", no feature list. Anyone curious can follow
+ * her; anyone suspicious gets their answer and the exit.
  */
 
 import { senderIdentityLine } from "../src/lib/sales/sending/unsubscribe";
+import { GREETING_POSTER_PATH } from "../src/lib/video/config";
 import type { SendingDomainInfo } from "../src/lib/sales/sending/domains";
 import type { LegalIdentity } from "../src/lib/legal/identity";
 
@@ -79,25 +102,45 @@ function identityBlock(legal: LegalIdentity): string {
 
   if (!legal.entity) {
     rows.push(
-      `<p class="fine">Belline is not yet a registered company, so there is no entity name or ` +
-        `registration number to give you. That is the honest position and it is the same one ` +
-        `stated in the footer of any email we sent you. The address above is read by a person.</p>`,
+      `<p class="fine">Belline is not yet a registered company: no entity name, no registration ` +
+        `number, as our email footers also say. A person reads the address above.</p>`,
     );
   }
   return rows.join("");
+}
+
+/**
+ * Belle, round, at the top, linking to belline.ai.
+ *
+ * `GREETING_POSTER_PATH` and not a copy of the filename: the still is
+ * content-addressed against the face it was generated from, and a page that
+ * hard-coded today's name would show a broken image the day the face changes.
+ * `scripts/build-site.ts` rewrites it to the hashed asset name on its way out,
+ * the same rewrite every other page's imagery gets, and the file is served
+ * from the site root — so it resolves on all four sending hostnames without
+ * any of them needing an absolute URL to belline.ai.
+ */
+function belleBlock(site: string): string {
+  return `<figure class="sender-belle">
+      <a class="sender-face" href="${esc(site)}">
+        <img src="${esc(GREETING_POSTER_PATH)}" width="152" height="152" decoding="async"
+        alt="Belle, the receptionist who answers for Belline's customers">
+      </a>
+      <figcaption><strong>This is Belle.</strong> She answers the calls for Belline's customers, and
+      she is the face in the email we sent you.
+      <a class="sender-meet" href="${esc(site)}">Meet Belle at belline.ai</a></figcaption>
+    </figure>`;
 }
 
 /** The privacy paragraph, which differs by whether the notice is published. */
 function privacyBlock(input: SenderPageInput): string {
   if (input.privacyUrl) {
     return `<p>If we wrote to you, <a href="${esc(input.privacyUrl)}">this notice</a> tells you what we ` +
-      `hold about you, where we found it, why we believe we may use it, how long we keep it, and your ` +
-      `right to object.</p>`;
+      `hold, where we found it, why we may use it, how long we keep it, and how to object.</p>`;
   }
-  return `<p>The full notice for people we contacted uninvited is published together with the company ` +
-    `details above, and neither exists yet — so nothing is being cold-emailed from this domain in the ` +
-    `meantime. Our general <a href="${esc(input.policyUrl)}">privacy policy</a> is up, and the address ` +
-    `above answers the same questions from a person.</p>`;
+  return `<p>The notice for people we contact uninvited goes up with those company details, and ` +
+    `neither exists yet — so nothing is cold-emailed from here meanwhile. Our ` +
+    `<a href="${esc(input.policyUrl)}">privacy policy</a> is up.</p>`;
 }
 
 /**
@@ -130,7 +173,7 @@ export function senderPage(input: SenderPageInput): string {
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/site.css">
 </head>
-<body>
+<body class="sender-doc">
 
 <header class="top">
   <div class="wrap top-in">
@@ -146,15 +189,19 @@ export function senderPage(input: SenderPageInput): string {
     <p class="eyebrow">Sending domain</p>
     <h1 class="display">${esc(domain.domain)}</h1>
 
-    <p class="lead">Belline is an AI receptionist: it answers the phone, the chat and WhatsApp for
-    businesses that lose bookings when nobody picks up. <strong>${esc(domain.domain)} is not the
-    product.</strong> It is one of the domains Belline sends its own business email from, and that is
-    all it is used for. The product, and everything worth reading, is at
-    <a href="${esc(domain.site)}">belline.ai</a>.</p>
+    <div class="sender-top">
+      <div class="sender-say">
+        <p class="sender-yes"><strong>This is genuine.</strong> An email from
+        ${esc(domain.domain)} brought you here to check — that is the answer, and nobody else sends
+        from this domain.</p>
 
-    <p class="legal-lang">If you received a message from this domain and are checking whether it is
-    genuine: it is, and this page is here so that you can tell. Nobody else sends from
-    ${esc(domain.domain)}.</p>
+        <p class="sender-what">Belline is an AI receptionist: the phone, the chat and WhatsApp
+        answered for businesses that lose bookings when nobody picks up.
+        <strong>${esc(domain.domain)} is not the product</strong> — just one of the domains
+        Belline sends its own business email from.</p>
+      </div>
+      ${belleBlock(domain.site)}
+    </div>
 
     <h2>Who is writing</h2>
     ${identityBlock(legal)}
