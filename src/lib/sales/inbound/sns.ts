@@ -105,6 +105,20 @@ export function certUrlIsAws(url: string): boolean {
   return /^sns\.[a-z0-9-]+\.amazonaws\.com(?:\.cn)?$/.test(parsed.hostname);
 }
 
+/**
+ * The public key out of whatever the certificate URL served.
+ *
+ * SNS serves an X.509 certificate. A bare public key is accepted as well —
+ * not because AWS sends one, but because the alternative is a check script
+ * that has to shell out to `openssl` to build a certificate, and a security
+ * check nobody can run on their own machine is one that rots.
+ */
+export function publicKeyFrom(pem: string): crypto.KeyObject {
+  const trimmed = pem.trim();
+  if (trimmed.includes("BEGIN CERTIFICATE")) return new crypto.X509Certificate(trimmed).publicKey;
+  return crypto.createPublicKey(trimmed);
+}
+
 export async function verifySns(input: VerifyInput): Promise<VerifyResult> {
   const { envelope } = input;
   const now = input.now ?? new Date();
@@ -150,7 +164,7 @@ export async function verifySns(input: VerifyInput): Promise<VerifyResult> {
   try {
     const verifier = crypto.createVerify(algorithm);
     verifier.update(canonicalString(envelope), "utf8");
-    if (!verifier.verify(new crypto.X509Certificate(pem).publicKey, envelope.Signature, "base64")) {
+    if (!verifier.verify(publicKeyFrom(pem), envelope.Signature, "base64")) {
       return { ok: false, reason: "signature does not verify" };
     }
   } catch (err) {

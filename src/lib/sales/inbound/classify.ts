@@ -81,8 +81,11 @@ const AUTO_SUBJECTS: RegExp[] = [
   /\bnicht im b(?:ü|ue)ro\b/i,
   /\br(?:é|e)ponse automatique\b/i,
   /\babsence du bureau\b/i,
-  /\bرد\s*تلقائي\b/,
-  /\bخارج\s*المكتب\b/,
+  // No `\b` on these: a word boundary in JavaScript is defined against
+  // `[A-Za-z0-9_]`, so it never fires beside an Arabic letter and an anchored
+  // pattern here would simply never match.
+  /رد\s*تلقائي/,
+  /خارج\s*المكتب/,
 ];
 
 /** Wording, used only when the headers said nothing. Weaker, so it needs more. */
@@ -97,7 +100,7 @@ const AUTO_BODY: RegExp[] = [
   /\bbin (?:bis|ab) .{0,30} (?:zur(?:ü|ue)ck|wieder erreichbar)\b/i,
   /\bje suis (?:actuellement )?absent/i,
   /\bde retour le\b/i,
-  /\bأنا\s+خارج\s+المكتب\b/,
+  /أنا\s+خارج\s+المكتب/,
 ];
 
 // ---------------------------------------------------------------------------
@@ -175,40 +178,42 @@ const MONTHS: Record<string, number> = {
  */
 export function returnDate(text: string, now: Date): Date | null {
   const window = text.slice(0, 4000);
-  const candidates: Date[] = [];
-  const push = (y: number, m: number, d: number) => {
+  /** `hadYear` matters: only a date with no year written may be rolled forward. */
+  const candidates: { at: Date; hadYear: boolean }[] = [];
+  const push = (y: number, m: number, d: number, hadYear: boolean) => {
     const at = new Date(Date.UTC(y, m, d, 9, 0, 0));
-    if (Number.isFinite(at.getTime())) candidates.push(at);
+    if (Number.isFinite(at.getTime())) candidates.push({ at, hadYear });
   };
 
   // 2026-10-05
   for (const m of window.matchAll(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/g)) {
-    push(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    push(Number(m[1]), Number(m[2]) - 1, Number(m[3]), true);
   }
   // 05.10.2026 and 05/10/2026 — day first, which is the European convention
   // these three languages share. An American mm/dd would be read as a later
   // date in the same month, which errs towards waiting, not towards writing.
   for (const m of window.matchAll(/\b(\d{1,2})[./](\d{1,2})[./](20\d{2}|\d{2})\b/g)) {
     const year = Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3]);
-    push(year, Number(m[2]) - 1, Number(m[1]));
+    push(year, Number(m[2]) - 1, Number(m[1]), true);
   }
-  // 5 October / 5. Oktober / October 5
+  // 5 October / 5. Oktober / October 5 — no year written.
   const names = Object.keys(MONTHS).join("|");
-  for (const m of window.matchAll(new RegExp(`\\b(\\d{1,2})\\.?\\s+(${names})\\b`, "gi"))) {
-    push(now.getUTCFullYear(), MONTHS[m[2].toLowerCase()], Number(m[1]));
+  for (const m of window.matchAll(new RegExp(`(\\d{1,2})\\.?\\s+(${names})\\b`, "gi"))) {
+    push(now.getUTCFullYear(), MONTHS[m[2].toLowerCase()], Number(m[1]), false);
   }
   for (const m of window.matchAll(new RegExp(`\\b(${names})\\s+(\\d{1,2})\\b`, "gi"))) {
-    push(now.getUTCFullYear(), MONTHS[m[1].toLowerCase()], Number(m[2]));
+    push(now.getUTCFullYear(), MONTHS[m[1].toLowerCase()], Number(m[2]), false);
   }
 
   const soonest = candidates
-    .map((d) => {
-      // A bare "5 October" written in December means next year.
-      if (d.getTime() < now.getTime() - 30 * 86_400_000) {
-        return new Date(Date.UTC(d.getUTCFullYear() + 1, d.getUTCMonth(), d.getUTCDate(), 9));
-      }
-      return d;
-    })
+    .map(({ at, hadYear }) =>
+      // A bare "5 January" written in December means next January. A date that
+      // spelled its year out did not, and rolling that one forward is how "we
+      // wrote to you on 2026-01-02" becomes a pause until 2027.
+      !hadYear && at.getTime() < now.getTime()
+        ? new Date(Date.UTC(at.getUTCFullYear() + 1, at.getUTCMonth(), at.getUTCDate(), 9))
+        : at,
+    )
     .filter((d) => d.getTime() > now.getTime() && d.getTime() < now.getTime() + 120 * 86_400_000)
     .sort((a, b) => a.getTime() - b.getTime())[0];
 
@@ -279,31 +284,40 @@ export function classify(input: ClassifyInput): Classification {
     autoWhy = "an empty Return-Path";
   }
 
+  // --- does it ask to be left alone -----------------------------------------
+  //
+  // Read against the stripped text, never the quoted history: our own footer
+  // carries the word "unsubscribe", and a friendly reply with our message
+  // quoted underneath would otherwise suppress the company for good.
+  //
+  // Asked of auto-replies too, because the commonest one that matters is "she
+  // no longer works here" — which arrives from an Exchange rule and is a real
+  // signal. What the caller does with it differs: a machine's words never
+  // suppress a company on their own.
+  const optOut: Pick<Classification, "optOut" | "optOutPhrase"> = looksLikeOptOut(text)
+    ? { optOut: "certain", optOutPhrase: firstMatch(text, null) }
+    : (() => {
+        const maybe = MAYBE_OPT_OUT.find((p) => p.test(text));
+        return maybe
+          ? { optOut: "likely" as const, optOutPhrase: firstMatch(text, maybe) }
+          : { optOut: "none" as const, optOutPhrase: null };
+      })();
+
   if (autoWhy) {
     return {
       ...base,
+      ...optOut,
       kind: "auto_reply",
       why: `an automatic reply — ${autoWhy}`,
       backAt: returnDate(text, now),
     };
   }
 
-  // --- a person, and possibly one asking to be left alone -------------------
-  //
-  // Read against the stripped text, never the quoted history: our own footer
-  // carries the word "unsubscribe", and a friendly reply with our message
-  // quoted underneath would otherwise suppress the company for good.
-  if (looksLikeOptOut(text)) {
-    return { ...base, optOut: "certain", optOutPhrase: firstMatch(text, null), why: "they asked to be taken off" };
+  if (optOut.optOut === "certain") {
+    return { ...base, ...optOut, why: "they asked to be taken off" };
   }
-  const maybe = MAYBE_OPT_OUT.find((p) => p.test(text));
-  if (maybe) {
-    return {
-      ...base,
-      optOut: "likely",
-      optOutPhrase: firstMatch(text, maybe),
-      why: "they may be asking to be taken off — a person should read this one",
-    };
+  if (optOut.optOut === "likely") {
+    return { ...base, ...optOut, why: "they may be asking to be taken off — a person should read this one" };
   }
 
   return base;

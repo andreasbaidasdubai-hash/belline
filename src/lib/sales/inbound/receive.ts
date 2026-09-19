@@ -432,9 +432,13 @@ export async function receiveInbound(input: ReceiveInput): Promise<InboundOutcom
     };
   }
 
+  // The body goes on the timeline, not only the subject. A line saying "they
+  // replied" sends whoever reads it hunting for the words; the words are the
+  // reason anybody opened the lead.
+  const said = message.text.replace(/\s+/g, " ").trim().slice(0, 300);
   await note(match, {
     type: "replied",
-    summary: `Replied: ${message.subject ?? "(no subject)"}`,
+    summary: said ? `Replied: ${said}` : `Replied: ${message.subject ?? "(no subject)"}`,
   });
   return {
     action: needsReview ? "flagged" : "stopped",

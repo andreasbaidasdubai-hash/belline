@@ -257,6 +257,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, stopped: result.stopped, optOut: result.optOut });
     }
 
+    /**
+     * A person deciding what an ambiguous message meant.
+     *
+     * The classifier refuses to guess between "not interested" and "not
+     * interested right now", so it flags and stops there. This is where the
+     * guess becomes a decision, with a name against it: yes suppresses the
+     * company for good, no clears the flag and leaves the sequence stopped —
+     * because whatever they meant, they did reply.
+     */
+    case "reply.optout": {
+      const id = Number(body.replyId);
+      if (!Number.isInteger(id)) return bad("Which message?");
+      const optOut = body.optOut === true || body.optOut === "true";
+      const replies = await store.listReplies({ limit: 500 });
+      const reply = replies.find((r) => r.id === id);
+      if (!reply) return bad("That message no longer exists.", 404);
+      await store.resolveReview(id, { isOptOut: optOut, needsReview: false, handledBy: who });
+      if (optOut) {
+        await suppressCompany(
+          { email: reply.fromAddress, companyId: null, reason: "opt_out", by: who },
+          store,
+        );
+        if (reply.leadId !== null) {
+          const state = (await store.getSequence(reply.leadId)) ?? blankState(reply.leadId, null, null);
+          await store.upsertSequence(halt(state, "unsubscribed", new Date()));
+          for (const item of await store.listItems({ leadId: reply.leadId, status: ["planned", "queued"] })) {
+            await store.updateItem(item.id, { status: "cancelled", blockedReason: "stopped: they asked to stop" });
+          }
+        }
+      }
+      await staffAudit({
+        actor,
+        action: "outreach.reply.optout",
+        entity: "inbound_reply",
+        entityId: String(id),
+        after: { optOut, from: reply.fromAddress },
+      });
+      return NextResponse.json({ ok: true });
+    }
+
     case "reply.handled": {
       const id = Number(body.replyId);
       if (!Number.isInteger(id)) return bad("Which reply?");

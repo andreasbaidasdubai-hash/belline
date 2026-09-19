@@ -176,7 +176,11 @@ function decodeBody(body: string, encoding: string | null, charset: string | nul
   const how = (encoding ?? "7bit").trim().toLowerCase();
   if (how === "base64") return decodeBytes(Buffer.from(body.replace(/\s+/g, ""), "base64"), charset);
   if (how === "quoted-printable") return decodeBytes(decodeQuotedPrintable(body), charset);
-  return decodeBytes(Buffer.from(body, "binary"), charset);
+  // 7bit, 8bit, binary: nothing to decode. The raw message reached us as a
+  // string that was already read as UTF-8, so re-interpreting it byte by byte
+  // here would destroy every character above U+00FF — which is most of an
+  // Arabic reply and every umlaut in a German one.
+  return body;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +208,10 @@ function leaves(head: string, body: string, depth = 0): Part[] {
 
   const out: Part[] = [];
   const marker = `--${boundary}`;
-  const pieces = body.split(new RegExp(`^${marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(--)?\\s*$`, "m"));
+  // Non-capturing, deliberately: `String.prototype.split` with a capture group
+  // interleaves the captures into the result, and the undefined entries that
+  // produces are a crash three lines later.
+  const pieces = body.split(new RegExp(`^${marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:--)?[ \\t]*$`, "m"));
   for (const piece of pieces.slice(1)) {
     const trimmed = piece.replace(/^\n/, "");
     if (!trimmed.trim()) continue;
