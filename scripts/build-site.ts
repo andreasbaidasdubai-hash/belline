@@ -40,6 +40,9 @@ import {
 import { SENDING_DOMAINS, senderPageFile } from "../src/lib/sales/sending/domains";
 import { UNSUBSCRIBE_PATH } from "../src/lib/sales/sending/unsubscribe";
 import { senderPage } from "./site-sender";
+import { BADGE, BELL_FAB, CALL_PANEL, MARK, esc } from "./site-chrome";
+import { marketLive, missingPairCopy, seoPages, seoSitemapEntries } from "./seo/matrix";
+import { renderSeoPage } from "./seo/render";
 
 /**
  * Are the German pages part of this build? `SITE_GERMAN=off` leaves them out.
@@ -468,18 +471,6 @@ for (const asset of assets) {
 // --- vertical pages ---------------------------------------------------------
 
 /**
- * Escape text that lands in HTML. Every string here is ours rather than a
- * visitor's, but a page that only escapes when it remembers to is a page that
- * eventually forgets.
- */
-function esc(value: string): string {
-  return value.replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
-  );
-}
-
-/**
  * The header's links.
  *
  * The other three trades first — someone who landed on /salons from a search
@@ -498,104 +489,6 @@ function navFor(active: string): string {
       <a class="nav-cta" href="https://app.belline.ai/checkout">Get started</a>
       <a class="nav-quiet" href="https://app.belline.ai/login" rel="nofollow">Sign in</a>`;
 }
-
-/**
- * The call panel, for the generated pages.
- *
- * The same markup and the same site.js as the home page's hero — the scenes
- * differ, the machinery does not. Two tabs here rather than four: the call
- * this trade's line takes, and the one it refuses. An operator deciding
- * whether to trust this is buying the second one.
- */
-const CALL_PANEL = `      <div class="call rise rise-2" id="call" data-speaking="false">
-        <div class="call-tabs" role="tablist" aria-label="Choose a call"></div>
-        <div class="call-head">
-          <span class="call-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-          <span class="call-status">Ringing</span>
-          <span class="call-line"></span>
-          <button class="call-listen" type="button" aria-pressed="false">
-            <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3Z"/>
-              <path d="M5 11a1 1 0 1 1 2 0 5 5 0 0 0 10 0 1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V21a1 1 0 1 1-2 0v-3.07A7 7 0 0 1 5 11Z"/>
-            </svg>
-            <span class="call-listen-label">Listen</span>
-          </button>
-          <audio class="call-audio" preload="none"></audio>
-        </div>
-        <div class="call-body" id="call-body" role="tabpanel" aria-live="polite"></div>
-      </div>`;
-
-/**
- * The floating bell, for the generated pages.
- *
- * Same markup as the landing page's, with one difference: the href is
- * `/#book` rather than `#book`, because a vertical page has no booking form
- * of its own and `#book` on /dental would scroll to nothing.
- */
-const MARK = `<svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
-    <circle cx="24" cy="9.5" r="3.5" fill="currentColor"/>
-    <path d="M9 31.5a15 15 0 0 1 30 0Z" fill="currentColor"/>
-    <rect x="5" y="35" width="38" height="5.5" rx="2.75" fill="currentColor"/>
-  </svg>`;
-
-/**
- * The bell button, for the header and footer lockups: a white bell on a
- * blue (#0071E3) badge (Apple look). Logo colours are fixed, so hex
- * rather than currentColor. The geometry is public/brand/belline-mark.svg.
- */
-const BADGE = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" fill="#0071E3"/><g fill="#FFFFFF" transform="matrix(0.6 0 0 0.6 9.6 9.81)"><circle cx="24" cy="10" r="4.2"/><path d="M8.5 32a15.5 15.5 0 0 1 31 0Z"/><rect x="5" y="34.5" width="38" height="7" rx="3.5"/></g></svg>`;
-
-/** Die Glocke im Sprechblasen-Umriss. Dasselbe Zeichen, getippt statt gesprochen. */
-const BUBBLE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M3 11.2C3 6.9 7.03 3.5 12 3.5s9 3.4 9 7.7c0 4.3-4.03 7.7-9 7.7a11 11 0 0 1-2.4-.26L5.4 20.5l.5-3.2A7.7 7.7 0 0 1 3 11.2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-    <circle cx="12" cy="7.4" r="1.05" fill="currentColor"/>
-    <path d="M8.7 13.1a3.3 3.3 0 0 1 6.6 0Z" fill="currentColor"/>
-    <rect x="7.8" y="13.8" width="8.4" height="1.35" rx=".68" fill="currentColor"/>
-  </svg>`;
-
-/**
- * Beide Wege herein, auf jeder Unterseite.
- *
- * Der Chat steht über der Glocke und ist der leisere von beiden: wer auf
- * /salons landet, soll dieselben zwei Möglichkeiten haben wie auf der
- * Startseite — sonst hängt es davon ab, über welche Anzeige jemand kam.
- *
- * Der Knopf ist versteckt und wird von site.js eingeblendet: ohne JavaScript
- * gibt es nichts zu öffnen, und ein toter Knopf ist schlimmer als keiner.
- */
-/**
- * Der eine schwebende Knopf.
- *
- * Vorher standen hier zwei — die Glocke und die Sprechblase. Zwei Knöpfe in
- * derselben Ecke sind zwei Entscheidungen an der Stelle, an der die Seite
- * genau eine will, und die Glocke hat mit "Get Belline" um dieselbe Absicht
- * konkurriert. Wer sprechen will, sagt das im Chat; der Chat bietet es an.
- *
- * Versteckt im Markup und von site.js eingeblendet: ohne JavaScript gibt es
- * nichts zu öffnen, und ein toter Knopf ist schlimmer als keiner.
- */
-/** WhatsApp, drawn in the same hand as the bell and the bubble. */
-const WA = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M12 3.5a8.5 8.5 0 0 0-7.3 12.9L3.6 20.4l4.1-1.1A8.5 8.5 0 1 0 12 3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-    <path d="M9.2 8.6c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.6c.1.2 0 .4-.1.5l-.5.6c-.1.1-.1.3 0 .4a6 6 0 0 0 2.6 2.5c.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.6.7c.2.1.4.2.4.4 0 .3 0 1-.4 1.4-.5.5-1.2.7-1.8.6a7.9 7.9 0 0 1-5.7-5.6c-.1-.6 0-1.3.6-1.8Z" fill="currentColor"/>
-  </svg>`;
-
-const BELL_FAB = `<a class="wa-fab" href="https://app.belline.ai/whatsapp" aria-label="WhatsApp Belle">
-  ${WA}
-  <span class="wa-fab-say">WhatsApp Belle</span>
-</a>
-
-<button class="chat-fab" type="button" hidden
-        data-chat="https://app.belline.ai/embed/be_belline_site/chat"
-        aria-label="Write with Belle">
-  ${BUBBLE}
-  <span class="chat-fab-say">Write with Belle</span>
-</button>
-
-<a class="bell-fab" href="https://app.belline.ai/call?start=1" data-call aria-label="Speak to Belline now">
-  ${MARK}
-  <span class="bell-fab-say">Speak to Belline</span>
-</a>`;
 
 /**
  * One trade's page.
@@ -820,6 +713,73 @@ for (const v of VERTICALS) {
   console.log(`  ${v.slug.padEnd(22)} →  ${OUT}/${v.slug}/index.html`);
 }
 
+// --- location landing pages ---------------------------------------------------
+//
+// `/ai-receptionist/<trade>/<city>`, plus a hub per trade, a hub per city and
+// an index over the lot (scripts/seo/). The data is three files — the trade,
+// the city, and the copy that is only true where the two meet — so a new
+// combination is a data edit and nothing here changes. docs/seo-pages.md is
+// the how-to.
+//
+// The first pass publishes three of them on purpose, so the quality can be
+// judged before thirty pages go out under one domain. `SEO_PAGES=all` builds
+// every combination that has pair copy written for it.
+const MISSING_PAIRS = missingPairCopy();
+if (MISSING_PAIRS.length > 0) {
+  console.error(
+    `\n  A location landing page was listed for publication with no copy written for it: ${MISSING_PAIRS.join(", ")}.\n` +
+      "  Write it in scripts/seo/pairs.ts, or take it out of FIRST_PASS in scripts/seo/matrix.ts.\n" +
+      "  There is no generic fallback here deliberately: a page with the city's name dropped into\n" +
+      "  the trade's paragraph is the scaled-content abuse this whole arrangement exists to avoid.\n",
+  );
+  process.exit(1);
+}
+
+const SEO_PAGES = seoPages();
+const SEO_CONTEXT = { pages: SEO_PAGES, withAudio };
+for (const page of SEO_PAGES) {
+  // Every path is `/a/b/c`, so the file is `a/b/c/index.html` and the URL has
+  // no extension — the same directory-with-an-index shape as /dental.
+  const dir = path.join(OUT, page.path.replace(/^\//, ""));
+  fs.mkdirSync(dir, { recursive: true });
+  // `repoint` for the same reason the trade pages need it: these carry
+  // /img/… out of scripts/seo/verticals.ts, and the build renames every image.
+  const html = repoint(renderSeoPage(page, SEO_CONTEXT));
+  fs.writeFileSync(path.join(dir, "index.html"), html, "utf8");
+  bytes += Buffer.byteLength(html);
+  console.log(`  ${page.path.padEnd(22)} →  ${OUT}${page.path}/index.html`);
+}
+const NOT_OPEN_PAGES = SEO_PAGES.filter((p) => ("city" in p && p.city ? !marketLive(p.city) : false)).length;
+if (NOT_OPEN_PAGES > 0) {
+  console.log(
+    `  (${NOT_OPEN_PAGES} of them are for markets we are not open in: waitlist, no prices, no checkout — src/lib/markets.ts decides, not the copy.)`,
+  );
+}
+
+/**
+ * The sitemap, with the location pages added to it.
+ *
+ * public/sitemap.xml is hand-kept for the pages that are hand-written, and
+ * that is fine while there are sixteen of them. These are generated, and a
+ * generated page whose sitemap entry is typed by hand is a page that silently
+ * stops being listed the first time somebody adds a city — so the entries are
+ * written here, from the same `seoPages()` the build just rendered. Rewritten
+ * in `site/` rather than in `public/`, because the source file is a source.
+ */
+{
+  const file = path.join(OUT, "sitemap.xml");
+  const xml = fs.readFileSync(file, "utf8");
+  const close = "</urlset>";
+  if (!xml.includes(close)) {
+    console.error(`\n  ${OUT}/sitemap.xml has no </urlset> to add the location pages before.\n`);
+    process.exit(1);
+  }
+  const entries = seoSitemapEntries();
+  const out = xml.replace(close, `${entries.join("\n")}\n${close}`);
+  fs.writeFileSync(file, out, "utf8");
+  console.log(`  sitemap.xml            →  ${entries.length} location pages listed`);
+}
+
 // --- sending-domain pages -----------------------------------------------------
 //
 // One per cold-sending domain (src/lib/sales/sending/domains.ts), into
@@ -865,6 +825,6 @@ for (const domain of SENDING_DOMAINS) {
 }
 
 console.log(
-  `\n  ${pages.length + VERTICALS.length + SENDING_DOMAINS.length} pages, ${assets.length} assets, ${(bytes / 1024).toFixed(0)} KB. No build step, no dependencies.\n` +
+  `\n  ${pages.length + VERTICALS.length + SEO_PAGES.length + SENDING_DOMAINS.length} pages, ${assets.length} assets, ${(bytes / 1024).toFixed(0)} KB. No build step, no dependencies.\n` +
     `  Deploy: drag the ${OUT}/ folder onto Netlify Drop, or run 'npx vercel deploy --prod ${OUT}'.\n`,
 );

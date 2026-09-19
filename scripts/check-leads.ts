@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "belline-leads-"));
 
 const { checkShape, suggest, verify } = await import("../src/lib/leads/email");
+const { MARKETS } = await import("../src/lib/markets");
 const { buildLead, normalisePhone, findRecentDuplicate } = await import("../src/lib/leads");
 
 let passed = 0;
@@ -370,23 +371,85 @@ test("it is stored durably: the JSON store on disk has it after a reload", async
   assert.ok(onDisk.includes(entry.email), `not written to ${process.env.DATA_DIR} (${file ?? "no leads file"})`);
 });
 
-test("each required field is named in German when it is missing, and the country must be DE, AT or CH", async () => {
+test("each required field is named in German when it is missing, and the country must be one we are not open in", async () => {
   for (const field of ["name", "email", "company", "country"]) {
-    const result = await waitlist.buildWaitlistEntry({ ...entry, [field]: "" }, offline);
+    // The country stays DE: it is what chooses the language, so a German
+    // page's form gets German errors even while the field being tested is the
+    // country itself (an empty country is still a German page's empty field).
+    const result = await waitlist.buildWaitlistEntry({ ...entry, [field]: "", ...(field === "country" ? { country: "" } : {}) }, offline);
     assert.equal(result.ok, false, `${field} was allowed to be empty`);
     if (!result.ok) {
       assert.equal(result.field, field);
-      assert.match(result.error, /Bitte/, `${field}: "${result.error}" is not a German instruction`);
+      if (field !== "country") assert.match(result.error, /Bitte/, `${field}: "${result.error}" is not a German instruction`);
     }
   }
-  for (const country of ["AE", "GB", "XX"]) {
+  // A market that is live has a checkout, so it is never a waitlist country.
+  for (const country of ["AE", "XX"]) {
     const result = await waitlist.buildWaitlistEntry({ ...entry, country }, offline);
     assert.equal(result.ok, false, `${country} was accepted`);
   }
-  for (const country of ["DE", "AT", "CH", "ch"]) assert.equal((await waitlist.buildWaitlistEntry({ ...entry, country }, offline)).ok, true, country);
+  for (const country of ["DE", "AT", "CH", "ch", "GB", "IE"]) assert.equal((await waitlist.buildWaitlistEntry({ ...entry, country }, offline)).ok, true, country);
+  // Every waitlist country is a market we cannot sell in. The two lists could
+  // drift apart in one edit, and the drift would be a form that takes entries
+  // for a country the checkout would happily have taken money in.
+  for (const country of waitlist.WAITLIST_MARKETS) {
+    assert.equal(MARKETS[country].status, "not-yet", `${country} is on the waitlist and on sale at the same time`);
+  }
   const odd = await waitlist.buildWaitlistEntry({ ...entry, businessType: "casino" }, offline);
   assert.equal(odd.ok, false, "a business type outside the list was stored");
   assert.equal((await waitlist.buildWaitlistEntry({ ...entry, businessType: "" }, offline)).ok, true, "the business type is optional");
+});
+
+/**
+ * The location landing pages (scripts/seo/) publish pages for London,
+ * Manchester and Dublin, where Belline is not open. They carry this same form
+ * with country=GB or IE, and a reader in London must not be answered in
+ * German — which is what happened the first time these markets were added,
+ * because every sentence in the handler was a German string literal.
+ */
+test("a London or Dublin entry is taken, answered in English, and filed under its own market and page", async () => {
+  const london = { ...entry, email: "sam@londondental.example.com", country: "GB", page: "/ai-receptionist/dental-clinics/london" };
+  const bad = await waitlist.buildWaitlistEntry({ ...london, name: "" }, offline);
+  assert.ok(!bad.ok && /Please/.test(bad.error), `a GB entry was refused in German: ${bad.ok ? "" : bad.error}`);
+  assert.equal((await waitlist.buildWaitlistEntry({ ...london, country: "XX" }, offline)).ok, false);
+
+  const res = await waitlist.handleWaitlist(post(london), route());
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.doesNotMatch(body.message, /Wir melden uns/, "a London entry was answered in German");
+  assert.match(body.message, /We will write to you/);
+  const saved = store.listLeads().find((l) => l.email === london.email);
+  assert.ok(saved, "the London entry was not stored");
+  assert.equal(saved!.market, "GB");
+  // The page is longer than the German pages' twenty characters, and it has to
+  // survive: it is the only record of which of thirty landing pages produced
+  // the lead.
+  assert.equal(saved!.source, `dach-waitlist ${london.page}`);
+  assert.ok(waitlist.isWaitlistLead(saved!), "it is not shown on the Enquiries screen as a waitlist entry");
+});
+
+test("without JavaScript a London entry gets an English page back, linking only to a page of ours", async () => {
+  const res = await waitlist.handleWaitlist(
+    post("name=Sam&email=sam2%40londondental.example.com&company=London+Dental&country=GB&page=%2Fai-receptionist%2Fdental-clinics%2Flondon", {
+      "content-type": "application/x-www-form-urlencoded",
+    }),
+    route(),
+  );
+  const html = await res.text();
+  assert.match(html, /<html lang="en">/);
+  assert.match(html, /Back to Belline/);
+  assert.match(html, /href="https:\/\/belline\.ai\/ai-receptionist\/dental-clinics\/london#waitlist"/);
+  // A path we did not write goes to the landing page, never to wherever the
+  // request asked to be sent.
+  const away = await waitlist.handleWaitlist(
+    post("name=Sam&email=sam3%40londondental.example.com&company=X&country=GB&page=https%3A%2F%2Fevil.example", {
+      "content-type": "application/x-www-form-urlencoded",
+    }),
+    route(),
+  );
+  const awayHtml = await away.text();
+  assert.doesNotMatch(awayHtml, /evil\.example/, "the form sent the reader to a page the request chose");
 });
 
 test("a bad address says what to fix; a likely typo is asked about once, then accepted", async () => {
