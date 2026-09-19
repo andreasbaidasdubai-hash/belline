@@ -124,6 +124,14 @@ const OPT_OUT_PHRASES = [
   /^\s*stop\s*$/i,
   /\bdo not (?:contact|email|write)\b/i,
   /\bno longer wish\b/i,
+  // "No thanks" is the ordinary way a busy person declines, and the sender
+  // domains' pages promise in as many words that replying it stops everything
+  // permanently. It has to be here for that promise to be true: a page that
+  // says "reply no thanks" over a matcher that only understands "unsubscribe"
+  // makes a liar of the system behind it. Over-matching is the safe direction
+  // — the cost is not writing again to somebody who said no in a sentence we
+  // read too broadly, which is no cost at all.
+  /\bno,?\s*thank(?:s|\syou)\b/i,
   // Arabic
   /ألغ(?:ِ|ي)? الاشتراك/,
   /توقف عن (?:المراسلة|الإرسال)/,
@@ -132,9 +140,11 @@ const OPT_OUT_PHRASES = [
   /\babmelden\b/i,
   /\bkeine weiteren\b/i,
   /\bbitte keine\b/i,
+  /\bnein,?\s*danke\b/i,
   // French
   /\bdésinscri/i,
   /\bne plus (?:me )?contacter\b/i,
+  /\bnon,?\s*merci\b/i,
 ];
 
 /** True when a reply is an opt-out. Deterministic by design. */

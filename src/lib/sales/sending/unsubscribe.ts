@@ -92,8 +92,16 @@ export function verifyUnsubscribeToken(token: unknown, env: Env = process.env): 
   return { itemId: id, companyId: companyId === "-" ? null : Number(companyId), emailHash };
 }
 
+/**
+ * The route family. `/u/<token>` is the one-click link in a footer; `/u` on
+ * its own is the page for somebody who no longer has the email — the sender
+ * domains' pages link to it, and it is the only stop-us route that can be
+ * reached by typing a domain into a browser.
+ */
+export const UNSUBSCRIBE_PATH = "/u";
+
 export function unsubscribeUrl(origin: string, token: string): string {
-  return `${origin.replace(/\/+$/, "")}/u/${token}`;
+  return `${origin.replace(/\/+$/, "")}${UNSUBSCRIBE_PATH}/${token}`;
 }
 
 /**
@@ -150,6 +158,20 @@ export interface FooterInput {
  * the URL itself differs by language: a German reader is sent to the German
  * notice, not to an English page about their own data.
  */
+/**
+ * The letterhead line: who is writing, and from where.
+ *
+ * Extracted because the sending domains' public pages carry the same line
+ * (scripts/site-sender.ts). A recipient who checks whether the mail is genuine
+ * is comparing the two by eye, and two expressions that agree today would not
+ * agree the day one of them learns about the VAT number. `"Belline"` on its
+ * own is the honest state before the company exists — it is the name of the
+ * thing writing to you, and it claims nothing further.
+ */
+export function senderIdentityLine(input: { entity: string; address: string }): string {
+  return [input.entity, input.address].filter(Boolean).join(" · ") || "Belline";
+}
+
 export function footerFor(input: FooterInput): string {
   const lines: string[] = ["—"];
   const german = input.language.toLowerCase().startsWith("de");
@@ -172,7 +194,7 @@ export function footerFor(input: FooterInput): string {
     return lines.join("\n");
   }
 
-  lines.push([input.entity, input.address].filter(Boolean).join(" · ") || "Belline");
+  lines.push(senderIdentityLine(input));
   if (input.email) lines.push(input.email);
   lines.push("");
   lines.push(`Not for you? Unsubscribe — one click, and I will not write again: ${input.url}`);

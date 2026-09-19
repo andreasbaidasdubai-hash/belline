@@ -35,7 +35,11 @@ import {
   OUTREACH_PRIVACY_SOURCE_DE,
   describePlaceholders,
   noticeReadiness,
+  outreachPrivacyUrl,
 } from "../src/lib/legal/outreach-privacy";
+import { SENDING_DOMAINS, senderPageFile } from "../src/lib/sales/sending/domains";
+import { UNSUBSCRIBE_PATH } from "../src/lib/sales/sending/unsubscribe";
+import { senderPage } from "./site-sender";
 
 /**
  * Are the German pages part of this build? `SITE_GERMAN=off` leaves them out.
@@ -816,7 +820,51 @@ for (const v of VERTICALS) {
   console.log(`  ${v.slug.padEnd(22)} →  ${OUT}/${v.slug}/index.html`);
 }
 
+// --- sending-domain pages -----------------------------------------------------
+//
+// One per cold-sending domain (src/lib/sales/sending/domains.ts), into
+// site/sender/<domain>/index.html. `src/lib/marketing.ts` serves the matching
+// one at `/` when a request arrives addressed to that domain, so there is a
+// single build and a single deployment rather than four — the pages differ
+// only by hostname, and four build outputs would be four things to forget.
+//
+// Unlike the outreach privacy notice, these are published while the company
+// details are empty, for the same reason privacy.html is: the notice's job is
+// to name a controller and it cannot do that job half-done, whereas this
+// page's job is to tell a suspicious recipient that the domain is ours and how
+// to make us stop, and all of that is true today. What it must never do is
+// invent the missing half, so it prints the same "Belline" the email footer
+// prints and says in words that there is no company yet.
+const SENDER_LEGAL_GAPS = describeIdentityGaps(NOTICE.missing);
+if (SENDER_LEGAL_GAPS) {
+  console.warn(
+    `\n  ⚠  the ${SENDING_DOMAINS.length} sending-domain pages are published naming only "Belline": ` +
+      `we are missing ${SENDER_LEGAL_GAPS}.\n` +
+      "     They say so on their face rather than inventing a company. Fill src/lib/legal/identity.ts\n" +
+      "     and rebuild, and they will carry the same letterhead as the email footers.\n",
+  );
+}
+for (const domain of SENDING_DOMAINS) {
+  const file = senderPageFile(domain.domain);
+  const html = repoint(
+    senderPage({
+      domain,
+      legal: LEGAL,
+      // Only when the build actually published it. A link to a page this same
+      // build decided not to write is a 404 on the one page whose entire
+      // purpose is being checkable by a stranger.
+      privacyUrl: NOTICE.ready ? outreachPrivacyUrl({ language: "en" }) : null,
+      policyUrl: `${domain.site}/privacy`,
+      unsubscribePath: UNSUBSCRIBE_PATH,
+    }),
+  );
+  fs.mkdirSync(path.join(OUT, path.dirname(file)), { recursive: true });
+  fs.writeFileSync(path.join(OUT, file), html, "utf8");
+  bytes += Buffer.byteLength(html);
+  console.log(`  ${domain.domain.padEnd(22)} →  ${OUT}/${file}`);
+}
+
 console.log(
-  `\n  ${pages.length + VERTICALS.length} pages, ${assets.length} assets, ${(bytes / 1024).toFixed(0)} KB. No build step, no dependencies.\n` +
+  `\n  ${pages.length + VERTICALS.length + SENDING_DOMAINS.length} pages, ${assets.length} assets, ${(bytes / 1024).toFixed(0)} KB. No build step, no dependencies.\n` +
     `  Deploy: drag the ${OUT}/ folder onto Netlify Drop, or run 'npx vercel deploy --prod ${OUT}'.\n`,
 );
