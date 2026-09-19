@@ -116,6 +116,18 @@ export function unsubscribeHeaders(input: { url: string; mailto?: string }): Rec
 export interface FooterInput {
   language: string;
   url: string;
+  /**
+   * The privacy notice written for people we contacted uninvited
+   * (`src/lib/legal/outreach-privacy.ts`).
+   *
+   * Beside the unsubscribe link, never instead of it. They answer different
+   * questions and only one of them was here before: the link stops the next
+   * message, the notice is the Art. 13/14 information about the processing
+   * that has already happened — who we are, what we hold about this person,
+   * where we got it, and their Art. 21 right to object. An opt-out alone is
+   * not that information, and this footer used to offer only the opt-out.
+   */
+  privacyUrl: string;
   entity: string;
   address: string;
   managingDirector?: string;
@@ -133,6 +145,10 @@ export interface FooterInput {
  * entry — and an English "Belline · Dubai" line under a German email is worse
  * than useless: it reads as a foreign sender who has not bothered, which is
  * exactly the impression that turns an annoyed recipient into a complaint.
+ *
+ * The privacy notice is named in the same way and for the same reason, and
+ * the URL itself differs by language: a German reader is sent to the German
+ * notice, not to an English page about their own data.
  */
 export function footerFor(input: FooterInput): string {
   const lines: string[] = ["—"];
@@ -151,6 +167,8 @@ export function footerFor(input: FooterInput): string {
         "Nachrichten wünschen, genügt ein Klick — Sie werden dauerhaft gelöscht:",
     );
     lines.push(input.url);
+    lines.push("");
+    lines.push(privacySentence("de", input.privacyUrl));
     return lines.join("\n");
   }
 
@@ -158,7 +176,24 @@ export function footerFor(input: FooterInput): string {
   if (input.email) lines.push(input.email);
   lines.push("");
   lines.push(`Not for you? Unsubscribe — one click, and I will not write again: ${input.url}`);
+  lines.push("");
+  lines.push(privacySentence("en", input.privacyUrl));
   return lines.join("\n");
+}
+
+/**
+ * The line that points at the privacy notice, in the recipient's language.
+ *
+ * It says where the address came from, because that is the first thing
+ * somebody wants to know when a stranger emails them at work, and because
+ * Art. 14(2)(f) requires it to be said. The rest is on the page.
+ */
+export function privacySentence(language: string, url: string): string {
+  return language.toLowerCase().startsWith("de")
+    ? "Ihre Kontaktdaten stammen aus einem öffentlichen Unternehmensverzeichnis bzw. Ihrer Website. " +
+        `Wie wir sie verarbeiten und wie Sie nach Art. 21 DSGVO widersprechen: ${url}`
+    : "We found your address in a public business listing or on your website. " +
+        `What we hold, why, and how to object: ${url}`;
 }
 
 /**

@@ -25,6 +25,11 @@ import { GERMAN_PAGES, applyPricingDe, type DachMarket } from "./site-pricing-de
 import { applySiteFlags, swissSpelling } from "../src/lib/site-flags";
 import { trialSentenceDe } from "../src/lib/billing/speak-de";
 import { flag } from "../src/lib/flags";
+import {
+  OUTREACH_PRIVACY_PATH,
+  OUTREACH_PRIVACY_SLUG_DE,
+  OUTREACH_PRIVACY_SOURCE_DE,
+} from "../src/lib/legal/outreach-privacy";
 
 type Env = Record<string, string | undefined>;
 
@@ -70,10 +75,25 @@ export function publishedCountries(env: Env = process.env): readonly CountryPage
   return (env.SITE_GERMAN ?? "on").toLowerCase() === "off" ? COUNTRY_PAGES.filter((p) => p.code === "AE") : COUNTRY_PAGES;
 }
 
-/** The legal pages, by English source: the English path and the German slug under each country. */
+/**
+ * The legal pages, by English source: the English path and the German slug
+ * under each country.
+ *
+ * `outreach-privacy.html` is the odd one, deliberately. The other two German
+ * pages are convenience translations and say the English governs; the German
+ * outreach notice is a German notice in its own right, because the reader it
+ * is written for is the one whose law applies to it. It travels through the
+ * same rendering because the paths, the alternates and the Swiss spelling are
+ * the same problem — not because it is a translation of anything.
+ */
 export const LEGAL_PAGES = {
   "privacy.html": { english: "/privacy", german: "datenschutz", source: "privacy.de.html" },
   "terms.html": { english: "/terms", german: "nutzungsbedingungen", source: "terms.de.html" },
+  "outreach-privacy.html": {
+    english: OUTREACH_PRIVACY_PATH,
+    german: OUTREACH_PRIVACY_SLUG_DE,
+    source: OUTREACH_PRIVACY_SOURCE_DE,
+  },
 } as const;
 
 export type LegalPage = keyof typeof LEGAL_PAGES;

@@ -255,6 +255,7 @@ const EMAIL = assemble({
   demoUrl: "https://belline.ai/demo/dr-joy-9",
   tryThis: "Call and ask for an implant consultation.",
   unsubscribeUrl: "https://belline.ai/u/abc",
+  privacyUrl: "https://belline.ai/outreach-privacy",
   senderAddress: "Belline · Dubai, UAE",
 });
 
@@ -264,6 +265,7 @@ test("the finished email carries everything compliance requires", () => {
   assert.match(EMAIL.body, /reply STOP/i, "must offer a way out");
   assert.match(EMAIL.body, /belline\.ai\/u\/abc/, "must carry an unsubscribe link");
   assert.match(EMAIL.body, /Belline · Dubai, UAE/, "must carry a postal address");
+  assert.match(EMAIL.body, /belline\.ai\/outreach-privacy/, "must link to the privacy notice");
 });
 
 test("no name means no invented one", () => {
@@ -273,6 +275,7 @@ test("no name means no invented one", () => {
     ...GOOD,
     demoUrl: "https://belline.ai/demo/x",
     unsubscribeUrl: "https://belline.ai/u/x",
+    privacyUrl: "https://belline.ai/outreach-privacy",
     senderAddress: "Belline · Dubai, UAE",
   });
   assert.match(anon.body, /Good morning,/);
@@ -524,12 +527,17 @@ test("with no sender there is no link, and no fake one either", () => {
     ...GOOD,
     demoUrl: "https://app.belline.ai/demo/dr-joy-9",
     unsubscribeUrl: null,
+    privacyUrl: null,
     senderAddress: "Belline · Dubai, UAE",
   });
   assert.match(draft.body, /reply STOP/i, "the opt-out sentence must survive");
   assert.match(draft.body, /\[no unsubscribe link/, "it must say why there is no link");
   assert.ok(!/\{token\}/.test(draft.body), "the placeholder must never reach a stored body");
   assert.ok(!/\/u\//.test(draft.body), "a dead unsubscribe URL must not be written");
+  // Same rule for the notice: no company means no page, and a draft must not
+  // contain a plausible belline.ai URL that answers 404.
+  assert.match(draft.body, /\[no privacy notice yet/, "it must say why there is no notice");
+  assert.ok(!/outreach-privacy/.test(draft.body), "a dead privacy URL must not be written");
 });
 
 console.log("\n  Where a demo link points\n");

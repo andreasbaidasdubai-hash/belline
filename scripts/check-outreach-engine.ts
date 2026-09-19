@@ -111,6 +111,11 @@ const dispatchMod = await import("../src/lib/sales/sending/dispatch");
 const repliesMod = await import("../src/lib/sales/sending/replies");
 const engineMod = await import("../src/lib/sales/sending/engine");
 const identityMod = await import("../src/lib/legal/identity");
+const noticeMod = await import("../src/lib/legal/outreach-privacy");
+
+/** The privacy notice every outreach message has to link to, per language. */
+const PRIVACY_URL = noticeMod.outreachPrivacyUrl({ language: "en", env: {} });
+const PRIVACY_URL_DE = noticeMod.outreachPrivacyUrl({ language: "de", countryCode: "DE", env: {} });
 
 const SES_ENV = {
   OUTREACH_SES_TRY_BELLINE_COM_ACCESS_KEY_ID: "AKIAEXAMPLE",
@@ -122,7 +127,10 @@ const FULL_IDENTITY = {
   LEGAL_ENTITY: "Belline FZ-LLC",
   LEGAL_ADDRESS: "Office 1, Dubai, United Arab Emirates",
   LEGAL_MANAGING_DIRECTOR: "Andreas Baidas",
-  LEGAL_REGISTRATION: "DED-000000",
+  // Not "DED-000000": a run of identical digits is what the privacy notice's
+  // placeholder check refuses to publish, and a fixture that trips it would
+  // make these tests fail for a reason that has nothing to do with sending.
+  LEGAL_REGISTRATION: "DED-1184713",
   LEGAL_EMAIL: "hello@belline.ai",
 };
 
@@ -252,6 +260,7 @@ await test("a message without those headers cannot be handed to a provider", () 
       provider.assertSendable(
         { from: "a@b.test", fromName: "A", to: "c@d.test", subject: "s", text: "Belline · Dubai", headers: {} },
         identity,
+        PRIVACY_URL,
       ),
     /List-Unsubscribe/,
   );
@@ -267,15 +276,34 @@ await test("a message whose body does not carry the postal identity cannot be se
           headers: unsub.unsubscribeHeaders({ url: "https://x.test/u/t" }),
         },
         identity,
+        PRIVACY_URL,
       ),
     /postal sender identity/,
   );
+});
+
+await test("a message that does not link to the privacy notice cannot be sent", () => {
+  const identity = identityMod.legalIdentity({ SENDER_POSTAL_ADDRESS: "Belline · Dubai" });
+  const message = {
+    from: "a@b.test", fromName: "A", to: "c@d.test", subject: "s",
+    text: "Belline · Dubai\nunsubscribe: https://x.test/u/t",
+    headers: unsub.unsubscribeHeaders({ url: "https://x.test/u/t" }),
+  };
+  // The postal identity is there and the opt-out is there: exactly the message
+  // the engine used to be happy to send, and exactly the gap being closed.
+  assert.throws(() => provider.assertSendable(message, identity, PRIVACY_URL), /privacy notice/);
+  assert.throws(
+    () => provider.assertSendable({ ...message, text: `${message.text}\n${PRIVACY_URL}` }, identity, "   "),
+    /no privacy notice/,
+  );
+  provider.assertSendable({ ...message, text: `${message.text}\n${PRIVACY_URL}` }, identity, PRIVACY_URL);
 });
 
 await test("a German recipient gets a German footer, not a translated English one", () => {
   const footer = unsub.footerFor({
     language: "de",
     url: "https://app.belline.test/u/abc",
+    privacyUrl: PRIVACY_URL_DE,
     entity: "Belline FZ-LLC",
     address: "Dubai",
     managingDirector: "Andreas Baidas",
@@ -286,12 +314,37 @@ await test("a German recipient gets a German footer, not a translated English on
   assert.match(footer, /Registereintrag: DED-1/);
   assert.match(footer, /Keine weiteren|keine weiteren/);
   assert.equal(/Unsubscribe|Not for you/.test(footer), false);
+  // The notice is named in German too, and it is the German page.
+  assert.match(footer, /Art\. 21 DSGVO/);
+  assert.ok(footer.includes(PRIVACY_URL_DE));
 });
 
 await test("an English recipient gets the English footer", () => {
-  const footer = unsub.footerFor({ language: "en", url: "https://x.test/u/t", entity: "Belline", address: "Dubai" });
+  const footer = unsub.footerFor({
+    language: "en",
+    url: "https://x.test/u/t",
+    privacyUrl: PRIVACY_URL,
+    entity: "Belline",
+    address: "Dubai",
+  });
   assert.match(footer, /Unsubscribe/);
   assert.equal(/Vertretungsberechtigt/.test(footer), false);
+  assert.ok(footer.includes(PRIVACY_URL));
+});
+
+await test("every footer carries the privacy notice beside the unsubscribe link, never instead of it", () => {
+  for (const language of ["en", "de"]) {
+    const url = language === "de" ? PRIVACY_URL_DE : PRIVACY_URL;
+    const footer = unsub.footerFor({
+      language,
+      url: "https://x.test/u/t",
+      privacyUrl: url,
+      entity: "Belline FZ-LLC",
+      address: "Dubai",
+    });
+    assert.ok(footer.includes("https://x.test/u/t"), `${language}: no unsubscribe link`);
+    assert.ok(footer.includes(url), `${language}: no privacy notice`);
+  }
 });
 
 await test("a header value with a newline in it is refused, not escaped", () => {
@@ -373,6 +426,7 @@ const baseScreen = {
   sequenceStopped: null,
   guardProblems: [] as string[],
   canSignUnsubscribe: true,
+  hasPrivacyNotice: true,
   engineReady: true,
 };
 
@@ -424,6 +478,22 @@ await test("DACH is refused while the sender identity is empty, even switched on
     assert.match(block!.reason, /managing director|LEGAL_MANAGING_DIRECTOR/i);
     assert.match(block!.reason, /register|LEGAL_REGISTRATION/i);
   }
+});
+
+await test("nothing sends while the privacy notice cannot be published", () => {
+  const result = compliance.screen({
+    ...baseScreen,
+    identity: identityMod.legalIdentity(FULL_IDENTITY),
+    country: countries.effectiveRule("AE"),
+    countryCode: "AE",
+    hasPrivacyNotice: false,
+  });
+  assert.equal(result.ok, false, "a country that is on is not a reason to skip the notice");
+  assert.ok(
+    result.blocks.some((b) => b.code === "no_privacy_notice"),
+    "no block naming the missing privacy notice",
+  );
+  assert.equal(compliance.isActionable("no_privacy_notice"), true, "staff can fix this one");
 });
 
 await test("with a complete identity and the country on, DACH passes", () => {
@@ -820,6 +890,10 @@ await test("once approved, the message goes — with both headers and the footer
   assert.match(stub.sent[0].headers["List-Unsubscribe"], /\/u\//);
   assert.equal(stub.sent[0].headers["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click");
   assert.match(stub.sent[0].text, /Belline FZ-LLC/);
+  // The other half of what a stranger is owed: not only who wrote, but what
+  // we hold about them and how to object. `assertSendable` would have refused
+  // the send without it; this says so out loud.
+  assert.ok(stub.sent[0].text.includes(PRIVACY_URL), "the sent body must link to the privacy notice");
   const state = await store.getSequence(501);
   assert.equal(state?.step, 1);
   assert.ok(state?.nextDueAt, "a follow-up should now be due");

@@ -12,6 +12,7 @@
  */
 
 import { legalIdentity, identityFingerprint, type LegalIdentity } from "../../legal/identity";
+import { noticeReadiness, outreachPrivacyUrl } from "../../legal/outreach-privacy";
 import { effectiveRule, type CountryOverride, type EffectiveCountry } from "./countries";
 import { screen, isActionable, type Block } from "./compliance";
 import { signUnsubscribeToken, unsubscribeUrl, footerFor, unsubscribeSecretPresent } from "./unsubscribe";
@@ -138,6 +139,11 @@ export async function buildBatch(input: BuildInput): Promise<BuiltBatch> {
   const env = input.env ?? process.env;
   const identity = legalIdentity(env);
   const canSign = unsubscribeSecretPresent(env);
+  // The notice is published from the same identity block the footer is built
+  // from, so "can we name a controller" is answered once per plan rather than
+  // once per item — and the answer shows up on the approval screen as a
+  // blocked row with a reason, not as a surprise at send time.
+  const noticePublished = noticeReadiness(identity).ready;
   const overrides = (await store.listCountryOverrides()) as CountryOverride[];
   const caps = await capacities(store, now);
   const engineReady = caps.some((c) => c.unusable === null && c.remaining > 0);
@@ -168,6 +174,7 @@ export async function buildBatch(input: BuildInput): Promise<BuiltBatch> {
       sequenceStopped: candidate.sequenceStopped,
       guardProblems: candidate.guardProblems,
       canSignUnsubscribe: canSign,
+      hasPrivacyNotice: noticePublished,
       engineReady,
       now,
     });
@@ -348,7 +355,14 @@ export async function saveBatch(input: {
   for (const row of inserted) {
     const token = signUnsubscribeToken({ itemId: row.id, companyId: row.companyId, email: row.toAddress }, env);
     const url = unsubscribeUrl(input.origin, token);
-    const body = withFooter(row.body, row.language, url, input.built.sendable[0]?.identity ?? legalIdentity(env));
+    const body = withFooter({
+      body: row.body,
+      language: row.language,
+      countryCode: row.countryCode,
+      url,
+      identity: input.built.sendable[0]?.identity ?? legalIdentity(env),
+      privacyUrl: outreachPrivacyUrl({ language: row.language, countryCode: row.countryCode, env }),
+    });
     finished.push((await store.updateItem(row.id, { unsubscribeToken: token, body })) ?? row);
   }
 
@@ -362,12 +376,24 @@ export async function saveBatch(input: {
  * there was no link to put there. Anything from the `—` separator down is
  * ours; above it is the personalised message a person reviewed.
  */
-export function withFooter(body: string, language: string, url: string, identity: LegalIdentity): string {
+export interface FooterRewrite {
+  body: string;
+  language: string;
+  /** Picks the German notice's country page: /de-de, /de-at or /de-ch. */
+  countryCode: string | null;
+  url: string;
+  privacyUrl: string;
+  identity: LegalIdentity;
+}
+
+export function withFooter(input: FooterRewrite): string {
+  const { body, language, url, identity } = input;
   const cut = body.lastIndexOf("\n—");
   const message = (cut === -1 ? body : body.slice(0, cut)).trimEnd();
   const footer = footerFor({
     language,
     url,
+    privacyUrl: input.privacyUrl,
     entity: identity.entity,
     address: identity.address,
     managingDirector: identity.managingDirector,

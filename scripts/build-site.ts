@@ -29,7 +29,13 @@ import {
 import { GERMAN_PAGES } from "./site-pricing-de";
 import { TRIAL } from "../src/lib/billing/plans";
 import { flag } from "../src/lib/flags";
-import { legalIdentity } from "../src/lib/legal/identity";
+import { describeIdentityGaps, legalIdentity } from "../src/lib/legal/identity";
+import {
+  OUTREACH_PRIVACY_SOURCE,
+  OUTREACH_PRIVACY_SOURCE_DE,
+  describePlaceholders,
+  noticeReadiness,
+} from "../src/lib/legal/outreach-privacy";
 
 /**
  * Are the German pages part of this build? `SITE_GERMAN=off` leaves them out.
@@ -92,7 +98,17 @@ function assetsUnder(dir: string, prefix = ""): string[] {
  * to be named here to ship — a new one that is not is a build error, not a
  * leak.
  */
-const PAGES = ["landing.html", "404.html", "privacy.html", "terms.html", "landing.de.html", "privacy.de.html", "terms.de.html"];
+const PAGES = [
+  "landing.html",
+  "404.html",
+  "privacy.html",
+  "terms.html",
+  OUTREACH_PRIVACY_SOURCE,
+  "landing.de.html",
+  "privacy.de.html",
+  "terms.de.html",
+  OUTREACH_PRIVACY_SOURCE_DE,
+];
 
 /**
  * German sources: never published under their own names. Each is rendered
@@ -103,6 +119,7 @@ const GERMAN_SOURCES: Record<string, "landing" | LegalPage> = {
   "landing.de.html": "landing",
   "privacy.de.html": "privacy.html",
   "terms.de.html": "terms.html",
+  [OUTREACH_PRIVACY_SOURCE_DE]: "outreach-privacy.html",
 };
 
 /**
@@ -148,13 +165,53 @@ function fillLegal(html: string, lang: "en" | "de" = "en"): string {
   // only while it is empty; filled, it is the address itself in either language.
   html = put("address", LEGAL.address);
   html = put("law", lang === "de" ? LEGAL.lawDe : LEGAL.law);
+  // Only the outreach notice carries these two. It names the controller under
+  // Art. 13/14 to a reader who never agreed to hear from us, and "Belline,
+  // somewhere" is not a controller.
+  html = put("director", LEGAL.managingDirector);
+  html = put("registration", LEGAL.registration);
   return html;
 }
+
+/**
+ * Whether the outreach privacy notice may be published at all.
+ *
+ * Two failures, treated differently, because they are different kinds of
+ * thing (src/lib/legal/outreach-privacy.ts):
+ *
+ *  - **Invented details** — the build stops. A notice under Art. 13/14 naming
+ *    "Example Ltd, 123 Main Street" is not an unfinished page, it is a false
+ *    statement served from our own domain to somebody we wrote to uninvited.
+ *    There is no build in which shipping that is better than failing.
+ *
+ *  - **Empty details** — the page is left out, loudly, exactly as the German
+ *    pages are left out of a `SITE_GERMAN=off` build. There is no company yet,
+ *    so there is no controller to name; and the same emptiness already stops
+ *    the outreach engine from sending anything that could link here.
+ */
+const NOTICE = noticeReadiness(LEGAL);
+if (NOTICE.placeholders.length > 0) {
+  console.error(
+    `\n  ${SOURCE}/${OUTREACH_PRIVACY_SOURCE}: refusing to publish a privacy notice with invented company details — ` +
+      `${describePlaceholders(NOTICE.placeholders)}.\n  Put the real values in src/lib/legal/identity.ts, or leave them empty.\n`,
+  );
+  process.exit(1);
+}
+if (!NOTICE.ready) {
+  console.warn(
+    `\n  ⚠  ${OUTREACH_PRIVACY_SOURCE} and ${OUTREACH_PRIVACY_SOURCE_DE} are not published: the outreach privacy notice ` +
+      `has to name its controller, and we are missing ${describeIdentityGaps(NOTICE.missing)}.\n` +
+      "     Nothing can be cold-emailed until the same fields are filled, so no message will link to a page that is not there.\n",
+  );
+}
+
 const pages = PAGES.filter((f) => {
+  if (!NOTICE.ready && (f === OUTREACH_PRIVACY_SOURCE || f === OUTREACH_PRIVACY_SOURCE_DE)) return false;
   if (fs.existsSync(path.join(SOURCE, f))) return true;
   console.error(`  page missing: ${SOURCE}/${f}`);
   process.exit(1);
 });
+if (!NOTICE.ready) delete GERMAN_SOURCES[OUTREACH_PRIVACY_SOURCE_DE];
 for (const stray of fs.readdirSync(SOURCE).filter((f) => f.endsWith(".html") && !PAGES.includes(f))) {
   console.error(`\n  ${SOURCE}/${stray} is not in PAGES and will not be published. Move it or list it.\n`);
   process.exit(1);

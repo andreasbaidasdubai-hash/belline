@@ -33,6 +33,7 @@ export type BlockCode =
   | "touch_cap"
   | "too_soon"
   | "no_unsubscribe"
+  | "no_privacy_notice"
   | "guard_flags"
   | "engine_inert";
 
@@ -66,6 +67,17 @@ export interface ScreenInput {
   guardProblems: readonly string[];
   /** False when no unsubscribe secret is configured, so no link can be signed. */
   canSignUnsubscribe: boolean;
+  /**
+   * False when the privacy notice for this recipient cannot be published —
+   * the company has no name, address or representative to put on it
+   * (`src/lib/legal/outreach-privacy.ts`).
+   *
+   * Separate from `identity_incomplete`, which asks whether this country's
+   * law requires the sender to be identified. This asks whether the Art.
+   * 13/14 notice exists at all, and the answer is the same in every country
+   * whose recipients have those rights.
+   */
+  hasPrivacyNotice: boolean;
   /** False when no sending adapter resolved — the engine is inert. */
   engineReady: boolean;
   now?: Date;
@@ -157,6 +169,13 @@ export function screen(input: ScreenInput): ScreenResult {
   if (!input.canSignUnsubscribe) {
     add("no_unsubscribe", "no unsubscribe secret is configured, so no opt-out link can be signed");
   }
+  if (!input.hasPrivacyNotice) {
+    add(
+      "no_privacy_notice",
+      "the privacy notice for people we write to uninvited cannot be published yet, so there is nothing to link to — " +
+        "and Art. 13/14 want that notice at first contact, not on request",
+    );
+  }
   if (!input.engineReady) {
     add("engine_inert", "no sending credentials are configured, so the engine is inert");
   }
@@ -187,6 +206,7 @@ export function isActionable(code: BlockCode): boolean {
     code === "country_off" ||
     code === "identity_incomplete" ||
     code === "no_unsubscribe" ||
+    code === "no_privacy_notice" ||
     code === "engine_inert"
   );
 }

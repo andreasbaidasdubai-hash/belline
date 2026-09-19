@@ -6,6 +6,8 @@ import { log } from "../db/repo/activity";
 import { isSuppressed } from "../compliance/suppression";
 import { personalise } from "./personalise";
 import { assemble, resolveFrame, resolvePublicOrigin } from "./templates";
+import { legalIdentity } from "../../legal/identity";
+import { noticeReadiness, outreachPrivacyUrl } from "../../legal/outreach-privacy";
 
 /**
  * Draft first-touch outreach for qualified leads.
@@ -208,6 +210,15 @@ export async function draftOutreach(options: {
       // stays and is a real opt-out.
       const unsubscribeUrl = null;
 
+      // The notice exists as a page only once the identity block names a
+      // controller; until then the build does not publish it, so a URL here
+      // would be a 404 in the one sentence that has to be trustworthy. Null
+      // makes the draft say so in words instead.
+      const privacyUrl = noticeReadiness(legalIdentity())
+        .ready
+        ? outreachPrivacyUrl({ language: frame.language, countryCode: candidate.country_code })
+        : null;
+
       const { body } = assemble({
         frame,
         firstName: candidate.contact_name?.split(" ")[0] ?? null,
@@ -218,6 +229,7 @@ export async function draftOutreach(options: {
         demoUrl,
         tryThis: candidate.demo_hint,
         unsubscribeUrl,
+        privacyUrl,
         senderAddress,
       });
 

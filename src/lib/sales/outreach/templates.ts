@@ -26,6 +26,20 @@ export interface Frame {
   /** Offered after the recording — the live line is the conversion moment. */
   liveCta: string;
   unsubscribe: string;
+  /**
+   * The sentence carrying the privacy notice, in this frame's language.
+   *
+   * `{url}` is replaced. It sits beside the unsubscribe line and says where
+   * the address came from, because that is the first thing a stranger wants
+   * to know and what Art. 14(2)(f) requires to be said. It belongs to the
+   * frame for exactly the reason the unsubscribe line does: a model-written
+   * privacy sentence is a compliance failure waiting for a bad day.
+   *
+   * Every frame has one. A frame without it is a language we can draft in and
+   * must not send in, and check-mail-privacy fails rather than let a new
+   * frame be added quietly without one.
+   */
+  privacy: string;
   direction?: "rtl";
 }
 
@@ -40,6 +54,7 @@ const FRAMES: Frame[] = [
     liveCta:
       "No presentation and no sales call needed — you can also ring Belline yourself and test it as a customer would.",
     unsubscribe: "Not for you? Reply with STOP and I won't write again.",
+    privacy: "Where I got your address, what I hold and how to object: {url}",
   },
   {
     // The Gulf reads as more formal than UK/US outbound. Same brevity, less
@@ -53,6 +68,7 @@ const FRAMES: Frame[] = [
     liveCta:
       "No meeting and no presentation — you can also call Belline yourself and try it as one of your patients would.",
     unsubscribe: "If you would rather not hear from me, reply STOP and I will not write again.",
+    privacy: "Where I found your address, what I hold about you and how to object: {url}",
   },
   {
     key: "AE:ar",
@@ -64,6 +80,11 @@ const FRAMES: Frame[] = [
     liveCta:
       "بدون اجتماع وبدون عرض تقديمي — يمكنك أيضًا الاتصال بـ Belline بنفسك وتجربته كما يفعل مرضاك.",
     unsubscribe: "إذا كنت تفضل عدم تلقي رسائل مني، اكتب STOP ولن أراسلك مرة أخرى.",
+    // The notice itself is published in English and German only. The Arabic
+    // frame says so plainly rather than pretending, and still links: a reader
+    // who is told the page is in English can decide, which is better than a
+    // link whose language is a surprise.
+    privacy: "مصدر عنوان بريدكم والبيانات التي نحتفظ بها وكيفية الاعتراض (بالإنجليزية): {url}",
     direction: "rtl",
   },
   {
@@ -79,6 +100,9 @@ const FRAMES: Frame[] = [
       "Kein Termin und keine Präsentation — Sie können Belline auch selbst anrufen und es wie ein Patient testen.",
     unsubscribe:
       "Falls Sie keine weiteren Nachrichten wünschen, antworten Sie mit STOPP — dann schreibe ich nicht wieder.",
+    privacy:
+      "Ihre Kontaktdaten stammen aus einem öffentlichen Unternehmensverzeichnis bzw. Ihrer Website. " +
+      "Wie wir sie verarbeiten und wie Sie nach Art. 21 DSGVO widersprechen: {url}",
   },
 ];
 
@@ -108,6 +132,18 @@ export function resolveFrame(input: {
  * just stops pretending to a mechanism nobody has built.
  */
 export const NO_UNSUBSCRIBE_LINK = "[no unsubscribe link — nothing is sent from here yet]";
+
+/**
+ * What stands in for the privacy notice while it cannot be published.
+ *
+ * The same reasoning as `NO_UNSUBSCRIBE_LINK`, and the same trap avoided. The
+ * notice has to name a controller, and until there is a company there is none
+ * to name, so `scripts/build-site.ts` does not publish the page. A drafted
+ * body must therefore not contain a plausible-looking belline.ai URL that
+ * returns a 404 — least of all in the one sentence that tells somebody how to
+ * find out what we hold about them.
+ */
+export const NO_PRIVACY_NOTICE = "[no privacy notice yet — the company that would be named on it does not exist]";
 
 /**
  * Where a demo link must point.
@@ -156,6 +192,8 @@ export interface AssembleInput {
   tryThis?: string | null;
   /** Null until there is a sender that can mint a token and honour a click. */
   unsubscribeUrl: string | null;
+  /** Null until the notice can name a controller and therefore be published. */
+  privacyUrl: string | null;
   senderAddress: string;
 }
 
@@ -197,6 +235,7 @@ export function assemble(input: AssembleInput): { body: string; plain: string } 
     "—",
     input.senderAddress,
     `${input.frame.unsubscribe} ${input.unsubscribeUrl ?? NO_UNSUBSCRIBE_LINK}`,
+    input.frame.privacy.replace("{url}", input.privacyUrl ?? NO_PRIVACY_NOTICE),
   );
 
   const plain = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();

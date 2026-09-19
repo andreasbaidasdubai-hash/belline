@@ -240,8 +240,14 @@ export const REQUIRED_HEADERS = ["List-Unsubscribe", "List-Unsubscribe-Post"] as
  * Belt and braces: the compliance gate has already run, but this is the point
  * at which the bytes leave, and a message without a one-click unsubscribe is
  * one this process must not be able to emit whatever else went wrong upstream.
+ *
+ * `privacyUrl` is the notice for the recipient's own language
+ * (`src/lib/legal/outreach-privacy.ts`). It is a parameter rather than
+ * something read from the environment here, because the language and country
+ * that decide which notice applies are facts about the message, and the
+ * caller is the only one holding them.
  */
-export function assertSendable(message: OutboundEmail, identity: LegalIdentity): void {
+export function assertSendable(message: OutboundEmail, identity: LegalIdentity, privacyUrl: string): void {
   for (const header of REQUIRED_HEADERS) {
     if (!message.headers[header]?.trim()) {
       throw new Error(`refusing to send: ${header} is missing`);
@@ -253,5 +259,15 @@ export function assertSendable(message: OutboundEmail, identity: LegalIdentity):
   if (!address) throw new Error("refusing to send: no postal sender identity");
   if (!message.text.includes(address)) {
     throw new Error("refusing to send: the body does not carry the postal sender identity");
+  }
+  // The same rule, for the other half of what a stranger is owed. The postal
+  // identity says who wrote; the notice says what we hold about them, where we
+  // got it and how to make it stop. A message carrying one and not the other
+  // is the gap this check exists to close, and it closes it in the line before
+  // the bytes leave rather than trusting that a footer was assembled right.
+  const notice = privacyUrl?.trim();
+  if (!notice) throw new Error("refusing to send: no privacy notice for the recipient's language");
+  if (!message.text.includes(notice)) {
+    throw new Error("refusing to send: the body does not link to the privacy notice");
   }
 }

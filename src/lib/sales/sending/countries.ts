@@ -71,8 +71,12 @@ const EVERYWHERE: readonly (keyof LegalIdentity)[] = ["address"];
  * contact address. Switzerland's UWG Art. 3(1)(s) requires correct sender
  * details and a working opt-out. None of that is satisfiable by a company that
  * does not exist yet, which is precisely why these fields gate the send.
+ *
+ * Exported because the outreach privacy notice needs exactly the same five to
+ * name its controller under Art. 13/14, and check-mail-privacy pins the two
+ * lists together so a field added here cannot be forgotten there.
  */
-const DACH_IDENTITY: readonly (keyof LegalIdentity)[] = [
+export const DACH_IDENTITY: readonly (keyof LegalIdentity)[] = [
   "entity",
   "address",
   "managingDirector",

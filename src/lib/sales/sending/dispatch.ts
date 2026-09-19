@@ -24,6 +24,7 @@
  */
 
 import { legalIdentity } from "../../legal/identity";
+import { noticeReadiness, outreachPrivacyUrl } from "../../legal/outreach-privacy";
 import { log } from "../db/repo/activity";
 import { effectiveRule, type CountryOverride } from "./countries";
 import { screen } from "./compliance";
@@ -97,6 +98,7 @@ export async function dispatch(
     sequenceStopped: sequence && sequence.status === "stopped" ? (sequence.stopReason ?? "stopped") : null,
     guardProblems: [],
     canSignUnsubscribe: unsubscribeSecretPresent(env),
+    hasPrivacyNotice: noticeReadiness(identity).ready,
     engineReady: true,
     now,
   });
@@ -109,6 +111,11 @@ export async function dispatch(
   }
 
   const url = unsubscribeUrl(deps.origin, item.unsubscribeToken);
+  // The notice the recipient can read, in their own language. Recomputed here
+  // rather than trusted from the stored body: if the page moved between
+  // approval and send, the assertion below catches it and refuses the item
+  // instead of mailing a dead link to somebody's privacy information.
+  const privacyUrl = outreachPrivacyUrl({ language: item.language, countryCode: item.countryCode, env });
   const message: OutboundEmail = {
     from: mailbox.address,
     fromName: mailbox.displayName,
@@ -121,7 +128,7 @@ export async function dispatch(
   };
 
   try {
-    assertSendable(message, identity);
+    assertSendable(message, identity, privacyUrl);
   } catch (err) {
     return refuse(store, item, (err as Error).message, false);
   }
