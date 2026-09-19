@@ -37,7 +37,28 @@ export interface SendingDomain {
   pausedReason?: string | null;
   pausedAt?: string | null;
   dailyCap: number;
-  dns: { spf?: boolean; dkim?: boolean; dmarc?: boolean; mx?: boolean; verifiedAt?: string };
+  /**
+   * What is published, and the choices the DNS records were generated from.
+   *
+   * The second half matters as much as the first: `domain:verify` has to
+   * rebuild the exact records `domain:setup` printed, and a DMARC line
+   * regenerated with a different report address reads as "wrong" against a
+   * record that is perfectly correct. Remembering the choices is what stops
+   * the verifier from disagreeing with the setup command.
+   */
+  dns: {
+    spf?: boolean;
+    dkim?: boolean;
+    dmarc?: boolean;
+    mx?: boolean;
+    verifiedAt?: string;
+    region?: string;
+    mailFromLabel?: string;
+    dmarcReports?: string | null;
+    dmarcPolicy?: string;
+    configurationSet?: string;
+    receivesReplies?: boolean;
+  };
   notes?: string | null;
   createdAt: string;
 }
