@@ -350,6 +350,29 @@ test("the FAQ in the structured data is still the FAQ on the page, and says noth
   );
 });
 
+// --- answered where the request lands, not where the image was built --------
+//
+// Railway builds the image without the service's variables, so anything baked
+// at build time states what the build machine knew, which is nothing. For
+// hours production served an llms.txt saying "no video receptionist" while
+// video was live, and served the German pages while SITE_GERMAN=off — German
+// pages published in Germany with no Impressum and no company to name in one.
+// Both are decided at request time now (src/lib/marketing.ts); these hold it.
+
+console.log("\n\x1b[1mDecided when the request is answered\x1b[0m\n");
+
+const servedBy = fs.readFileSync(path.join(ROOT, "src", "lib", "marketing.ts"), "utf8");
+
+await test("llms.txt is written per request, from this server's own flags", () => {
+  assert.match(servedBy, /pathname === "\/llms\.txt"/, "marketing.ts does not answer /llms.txt itself");
+  assert.match(servedBy, /renderLlmsTxt\(/, "marketing.ts does not render llms.txt from the modules that own the facts");
+});
+
+await test("SITE_GERMAN=off withholds the German pages at serve time too", () => {
+  assert.match(servedBy, /germanOff\(process\.env\)/, "marketing.ts does not consult SITE_GERMAN when serving");
+  assert.match(servedBy, /de-\(de\|at\|ch\)/, "marketing.ts does not refuse the German paths");
+});
+
 console.log(
   failed === 0
     ? `\n\x1b[32m✓ ${passed} passed, 0 failed\x1b[0m\n`

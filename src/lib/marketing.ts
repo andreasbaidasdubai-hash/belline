@@ -5,6 +5,7 @@ import { applySiteFlags, swissSpelling } from "./site-flags";
 import { sendingDomainFor, senderPageFile } from "./sales/sending/domains";
 import { seoRedirectFor } from "./seo-redirects";
 import { applyIntegrations } from "../../scripts/site-integrations";
+import { renderLlmsTxt } from "../../scripts/site-llms";
 
 /**
  * Serving the marketing site from the app's own process.
@@ -25,6 +26,11 @@ import { applyIntegrations } from "../../scripts/site-integrations";
  */
 
 const ROOT = "site";
+
+/** `SITE_GERMAN=off`: the German pages are withheld, at build time and here. */
+export function germanOff(env: Record<string, string | undefined> = process.env): boolean {
+  return (env.SITE_GERMAN ?? "on").toLowerCase() === "off";
+}
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -268,6 +274,36 @@ export function serveMarketing(req: IncomingMessage, res: ServerResponse): boole
   // like it did nothing. The cookie is per-host, so belline.ai can't carry
   // one: this changes nothing there.
   if (pathname === "/" && signedIn(req.headers.cookie)) return false;
+
+  // The German pages, refused at serve time as well as at build time.
+  //
+  // `SITE_GERMAN=off` leaves them out of the build — but the image is built by
+  // Railway without the service's variables, so the build that ships to
+  // production has them in it whatever the setting says. Production served
+  // /de-de for hours because of that: German pages, published in Germany,
+  // with no Impressum and no company to name in one. The variable the operator
+  // set has to hold where the request is answered, not only where it is built.
+  if (germanOff(process.env) && /^\/de-(de|at|ch)(\/|$)/.test(pathname)) return false;
+
+  // llms.txt, written here rather than read from the build.
+  //
+  // It states the prices, the live markets, the languages and — the part that
+  // went wrong — which capabilities are switched on. Built into the image it
+  // said "no video receptionist" and "no calendar writes yet" while production
+  // had both, because the Docker build cannot see the service's variables. The
+  // HTML pages already get their flag copy re-applied on the way out
+  // (`pageWithFlags`); this is the same idea for the file an AI reads.
+  if (pathname === "/llms.txt" && (req.method === "GET" || req.method === "HEAD")) {
+    const text = renderLlmsTxt({ origin: `https://${(req.headers.host ?? "belline.ai").split(":")[0]}`, german: !germanOff(process.env) });
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "public, max-age=300",
+      "X-Content-Type-Options": "nosniff",
+      ...(indexableRequest(req.headers.host) ? {} : { "X-Robots-Tag": NOINDEX_HEADER }),
+    });
+    res.end(req.method === "HEAD" ? undefined : text);
+    return true;
+  }
 
   const root = path.resolve(ROOT);
   // `/dental` is a directory with an index; `/` is the landing page — unless
