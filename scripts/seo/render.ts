@@ -27,23 +27,31 @@ import { VERTICALS } from "../site-content";
 import { renderPricing, trialSentence } from "../site-pricing";
 import { TRIAL } from "../../src/lib/billing/plans";
 import { MARKETS, formatMoney } from "../../src/lib/markets";
+import { publicFlag } from "../../src/lib/site-flags";
 import { priceOf, sellable } from "../../src/lib/billing/plans";
 import { BADGE, BELL_FAB, CALL_PANEL, DEMO_NUMBER, DEMO_NUMBER_SPOKEN, HERO_VIDEO, MARK, MENU_TOGGLE, esc } from "../site-chrome";
-import { inCity, type SeoCity } from "./cities";
-import type { SeoFaq, SeoVertical } from "./verticals";
+import { SEO_CITIES, inCity, seoCity, seoCountry, type SeoCity } from "./cities";
+import { seoVertical, type SeoFaq, type SeoVertical } from "./verticals";
 import type { PairCopy } from "./pairs";
 import {
+  MATRIX_FRAMING,
   ORIGIN,
   cityHubPath,
   comboPath,
+  countryHubPath,
+  countrySlug,
+  framingPath,
   indexPath,
-  marketGap,
+
   marketLive,
   marketName,
   seoAlternates,
   verticalHubPath,
+  type ChannelHubPage,
+  type ChannelTradePage,
   type ComboPage,
   type HubPage,
+  type SeoLocale,
   type SeoPage,
 } from "./matrix";
 
@@ -72,8 +80,8 @@ interface HeadParts {
   title: string;
   description: string;
   path: string;
-  /** Rendered with the locale's own prefix, for hreflang. */
-  pathFor: (prefix: string) => string;
+  /** The same page in another locale, for hreflang. Never composed by hand. */
+  pathFor: (locale: SeoLocale) => string;
   jsonLd: string;
 }
 
@@ -113,9 +121,29 @@ ${jsonLd}
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/site.css">
 </head>
-<body>
+<body${VIDEO ? ' class="video-pending"' : ""}>
 `;
 }
+
+/**
+ * Is Belle's video bubble live in this build?
+ *
+ * It decides two class names and nothing else, and it has to, because the
+ * alternative is what these pages were doing: painting the no-video hero —
+ * the still face under a heading, a paragraph, a "Talk to Belle" button and
+ * three floating buttons — and then letting site.js take all of it away again
+ * when the widget config answers. Measured on a warm local cache, the hero's
+ * "Get started" was at y=426 for the first two seconds and at y=700
+ * afterwards: a 274-pixel jump, on a phone, under the reader's thumb, at the
+ * only moment the page asks them to do anything.
+ *
+ * `body.video-pending` and `.hero-demo.has-video-hero` are exactly the two
+ * classes public/landing.html carries for this (src/lib/site-flags.ts), and
+ * site.css was written to hold Belle's place with them. The landing page gets
+ * them from the flag swap machinery, which is keyed to that one file by exact
+ * strings; these pages are generated, so they read the same flag directly.
+ */
+const VIDEO = publicFlag("video.avatar");
 
 /**
  * The header.
@@ -189,11 +217,32 @@ const scripts = (scenes: unknown[]) =>
  * from a generated page and then nobody notices for a month.
  */
 const demoLine = (city: SeoCity) =>
-  `Free, in your browser, 24 hours a day. Or ring <a href="tel:${DEMO_NUMBER}">${DEMO_NUMBER_SPOKEN}</a> — that is a United States number, so it is an international call from ${esc(city.name)} and your usual charges apply. Calls last up to ten minutes, and the line takes a limited number of calls each day.`;
+  `Free, in your browser, 24 hours a day, up to ten minutes a call. There is a dial-in too, on a United States number — <a href="tel:${DEMO_NUMBER}">${DEMO_NUMBER_SPOKEN}</a> — so from ${esc(city.name)} it is an international call at your own cost. The browser is the better way.`;
+
+/**
+ * "the United Kingdom", not "United Kingdom".
+ *
+ * `MARKETS[…].name` is the country's name on a form — "United Kingdom",
+ * "United Arab Emirates" — and a sentence needs the article those names carry
+ * in prose. Without it the London page read "we will write when we open in
+ * United Kingdom", which is the sort of thing a template says.
+ */
+const theMarketName = (city: SeoCity) => {
+  const name = marketName(city);
+  return /^(United|Netherlands|Philippines|Czech)/.test(name) ? `the ${name}` : name;
+};
+
+/** The clock a reader recognises, not the IANA identifier the server uses. */
+const CLOCK_NAMES: Record<string, string> = {
+  "Asia/Dubai": "Gulf Standard Time",
+  "Europe/London": "UK time",
+  "Europe/Dublin": "Irish time",
+};
+const clockName = (city: SeoCity) => CLOCK_NAMES[city.timezone] ?? `${city.timezone.replace("_", " ")} time`;
 
 /** How it works. The home page's three steps, in the trade's own words. */
 function howItWorks(vertical: SeoVertical, live: boolean): string {
-  return `  <section id="how" class="rule">
+  return `  <section id="how" class="rule" data-shared="site">
     <div class="wrap">
       <div class="sec-head">
         <div>
@@ -227,12 +276,12 @@ ${live ? `\n      <div class="cta-row">\n        <a class="btn" href="${APP}/che
 
 /** The per-channel feature list, the same three channels as the home page. */
 function channels(city: SeoCity): string {
-  return `  <section id="channels" class="rule">
+  return `  <section id="channels" class="rule" data-shared="site">
     <div class="wrap">
       <div class="sec-head">
         <div>
           <p class="eyebrow">Every channel</p>
-          <h2 class="display">One receptionist, three ways in.</h2>
+          <h2 class="display">Call answering, website chat and WhatsApp — one receptionist.</h2>
         </div>
         <p class="sec-lead lead">Chat and voice on your website, WhatsApp and your phone, with the same information and the same rules in each.</p>
       </div>
@@ -278,26 +327,36 @@ function channels(city: SeoCity): string {
  * restaurants" and nobody can point at one of them.
  */
 function caseStudySlot(vertical: SeoVertical, city: SeoCity): string {
+  const live = marketLive(city);
+  // Not a full-width section with a photograph and display type any more.
+  // The sentence is true and worth saying; said at the same size as "Per
+  // location, per month", sixteen times across the system, an honest
+  // admission starts to read as the thing this company most wants to talk
+  // about. Same words, a tenth of the weight.
   return `  <section class="rule">
     <div class="wrap">
-      <div class="split" data-case-study="pending">
+      <div data-case-study="pending" style="max-width:62ch">
         <div>
           <p class="eyebrow">Customer stories</p>
-          <h2 class="display">There is no testimonial here yet.</h2>
-          <p style="margin-top:26px">
-            When ${esc(vertical.singular)} ${esc(inCity(city))} agrees to be named, its story goes in this space:
-            what it was losing, what it changed, and what its own team says about it.
+          <h3>There is no testimonial here yet.</h3>
+          <p class="fine" style="margin-top:12px">
+            ${
+              live
+                ? `When ${esc(vertical.singular)} ${esc(inCity(city))} agrees to be named, its story goes in this space: what it was losing, what it changed, and what its own team says about it.`
+                : `Nobody ${esc(inCity(city))} can be a customer yet, so there is nobody here to quote. When we open in ${esc(theMarketName(city))} and somebody agrees to be named, their story goes in this space.`
+            }
             Until then this space stays empty on purpose. We are not going to write
             a quotation nobody said, or count customers we do not have.
           </p>
-          <p class="fine">
+${
+  live
+    ? `          <p class="fine">
             Running ${esc(vertical.singular)} ${esc(inCity(city))} and willing to talk about it?
             <a href="mailto:hello@belline.ai">Write to us</a> and a person answers.
-          </p>
+          </p>`
+    : ""
+}
         </div>
-        <figure class="plate">
-          <img src="${esc(vertical.image)}" width="880" height="495" loading="lazy" alt="${esc(vertical.imageAlt)}">
-        </figure>
       </div>
     </div>
   </section>
@@ -338,7 +397,7 @@ ${items}
  * no market picker: a Dubai page shows dirhams and nothing else.
  */
 function pricing(city: SeoCity): string {
-  return `  <section id="price" class="rule">
+  return `  <section id="price" class="rule" data-shared="site">
     <div class="wrap">
       <div class="sec-head">
         <div>
@@ -389,7 +448,7 @@ function waitlist(city: SeoCity, vertical: SeoVertical | null, path: string): st
     .map((m) => `                <option value="${m}"${m === city.market ? " selected" : ""}>${esc(MARKETS[m as "GB"].name)}</option>`)
     .join("\n");
 
-  return `  <section id="book" class="rule closer">
+  return `  <section id="book" class="rule closer" data-shared="site">
     <div class="wrap closer-in">
       <div>
         <p class="eyebrow">Not open here yet</p>
@@ -397,8 +456,12 @@ function waitlist(city: SeoCity, vertical: SeoVertical | null, path: string): st
         <p class="lead">
           Belline is live in the United Arab Emirates and nowhere else. There is
           nothing to buy on this page and no price to quote you in ${esc(MARKETS[city.market].currency)}.
-          Leave your details and we will write when we open in ${esc(marketName(city))}.
-          ${esc(marketGap(city))}
+          Leave your details and we will write when we open in ${esc(theMarketName(city))}.
+        </p>
+        <p class="fine">
+          What "not open" means, concretely: no local numbers bought, no support
+          hours in this timezone, and a checkout that will not take a business
+          registered in ${esc(theMarketName(city))}.
         </p>
 
         <form class="book-form waitlist" id="waitlist" action="${APP}/api/leads/waitlist" method="post" novalidate>
@@ -472,7 +535,7 @@ ${options}
 
 /** The closing call to action for a market we are live in. */
 function closer(city: SeoCity, vertical: SeoVertical): string {
-  return `  <section class="rule closer">
+  return `  <section class="rule closer" data-shared="site">
     <div class="wrap">
       <p class="eyebrow">Hear it now</p>
       <h2 class="display">Be the caller.</h2>
@@ -482,11 +545,11 @@ function closer(city: SeoCity, vertical: SeoVertical): string {
       </p>
 
       <div class="cta-row" style="margin-top:34px">
-        <a class="btn" href="${APP}/call?start=1" data-call>
+        <a class="btn" href="${APP}/checkout" data-cta="closer">Get started</a>
+        <a class="btn line" href="${APP}/call?start=1" data-call>
           ${MARK}
           Speak to Belline
         </a>
-        <a class="btn line" href="${APP}/checkout" data-cta="closer">Get started</a>
       </div>
 
       <p class="fine" style="max-width:56ch">${demoLine(city)}</p>
@@ -519,11 +582,14 @@ function internalLinks(page: ComboPage, ctx: RenderContext): string {
     items.map((i) => `        <li><a href="${i.href}">${esc(i.label)}</a></li>`).join("\n");
 
   const blocks: string[] = [];
+  // The labels name the trade and the city rather than just one of them. Bare
+  // "Dubai" and bare "Dental clinics" were twelve inbound links to a page
+  // about dental clinics in Dubai, not one of which said so.
   if (sameVertical.length) {
     blocks.push(`      <div>
         <h3>${esc(page.vertical.name)} in other cities</h3>
         <ul class="kinds">
-${list(sameVertical.map((p) => ({ href: p.path, label: p.city.name })))}
+${list(sameVertical.map((p) => ({ href: p.path, label: `${p.vertical.name} ${inCity(p.city)}` })))}
         </ul>
       </div>`);
   }
@@ -531,7 +597,7 @@ ${list(sameVertical.map((p) => ({ href: p.path, label: p.city.name })))}
     blocks.push(`      <div>
         <h3>Other trades in ${esc(page.city.name)}</h3>
         <ul class="kinds">
-${list(sameCity.map((p) => ({ href: p.path, label: p.vertical.name })))}
+${list(sameCity.map((p) => ({ href: p.path, label: `${p.vertical.name} ${inCity(p.city)}` })))}
         </ul>
       </div>`);
   }
@@ -539,11 +605,33 @@ ${list(sameCity.map((p) => ({ href: p.path, label: p.vertical.name })))}
         <h3>Start somewhere wider</h3>
         <ul class="kinds">
           <li><a href="${verticalHubPath(page.vertical.slug)}">AI receptionist for ${esc(page.vertical.plural)}</a></li>
-          <li><a href="${cityHubPath(page.city.slug)}">AI receptionist ${esc(inCity(page.city))}</a></li>
+          <li><a href="${cityHubPath(page.city)}">AI receptionist ${esc(inCity(page.city))}</a></li>
           <li><a href="${indexPath()}">Every trade and city</a></li>
 ${page.vertical.tradePage ? `          <li><a href="${page.vertical.tradePage}">Belline for ${esc(page.vertical.name.toLowerCase())}</a></li>` : ""}
         </ul>
       </div>`);
+
+  // The other two framings, and only where this build actually wrote them.
+  // A WhatsApp page for this trade if there is one, the call-answering page
+  // always — they are the same product read from a different angle, and a
+  // reader who came looking for one of those phrases should not have to go
+  // back to a search engine to find it.
+  const whatsapp = ctx.pages.find(
+    (p): p is ChannelTradePage => p.kind === "channel-trade" && p.vertical.slug === page.vertical.slug,
+  );
+  const callAnswering = ctx.pages.find((p): p is ChannelHubPage => p.kind === "channel-hub" && p.framing.slug === "call-answering");
+  const otherFramings = [
+    ...(whatsapp ? [{ href: whatsapp.path, label: `WhatsApp chatbot for ${whatsapp.vertical.plural}` }] : []),
+    ...(callAnswering ? [{ href: callAnswering.path, label: "Call answering, and how it differs" }] : []),
+  ];
+  if (otherFramings.length) {
+    blocks.push(`      <div>
+        <h3>The same line, a different way in</h3>
+        <ul class="kinds">
+${list(otherFramings)}
+        </ul>
+      </div>`);
+  }
 
   return `  <section class="rule">
     <div class="wrap">
@@ -582,11 +670,16 @@ function comboJsonLd(page: ComboPage, faqs: SeoFaq[]): string {
   const graph: unknown[] = [
     {
       "@type": "Organization",
+      "@id": `${ORIGIN}/#organization`,
       name: "Belline",
       url: `${ORIGIN}/`,
       logo: `${ORIGIN}/brand/png/belline-mark-512.png`,
       email: "hello@belline.ai",
-      telephone: DEMO_NUMBER_SPOKEN.replace(/ /g, "-"),
+      // No `telephone`. The only number we publish is the demo line, and it is
+      // a United States one: the visible copy says so in the same breath, and
+      // a machine-readable field cannot carry that qualification. Presenting a
+      // demo number as the company's phone number is the kind of small lie
+      // structured data makes easy and nobody ever notices.
       areaServed: "AE",
     },
     {
@@ -595,31 +688,42 @@ function comboJsonLd(page: ComboPage, faqs: SeoFaq[]): string {
       serviceType: "AI receptionist",
       url,
       description: page.pair.description,
-      provider: { "@type": "Organization", name: "Belline", url: `${ORIGIN}/` },
-      areaServed: { "@type": "City", name: city.name, containedInPlace: { "@type": "Country", name: MARKETS[city.market].name } },
+      provider: { "@id": `${ORIGIN}/#organization` },
+      // `areaServed` is a statement that the service is available there, so on
+      // a market we are not open in it says the country we *are* open in and
+      // the page's own words carry the rest. It used to name London, on a page
+      // whose first paragraph says we are not open in London — the visible
+      // half honest and the machine-readable half not, which is the worse way
+      // round of the two.
+      areaServed: live
+        ? { "@type": "City", name: city.name, containedInPlace: { "@type": "Country", name: MARKETS[city.market].name } }
+        : { "@type": "Country", name: MARKETS.AE.name },
       audience: { "@type": "BusinessAudience", name: vertical.plural },
-      // `available` on a live market, `PreOrder`-free on one we are not open
-      // in: no availability statement at all rather than a hopeful one.
-      ...(live ? { areaServed: { "@type": "City", name: city.name }, availableChannel: { "@type": "ServiceChannel", serviceUrl: `${APP}/checkout` } } : {}),
+      ...(live ? { availableChannel: { "@type": "ServiceChannel", serviceUrl: `${APP}/checkout` } } : {}),
     },
-    {
-      "@type": "SoftwareApplication",
-      name: "Belline",
-      applicationCategory: "BusinessApplication",
-      operatingSystem: "Web",
-      url: `${ORIGIN}/`,
-      ...(live
-        ? {
+    // And no SoftwareApplication at all where there is nothing to offer. An
+    // application node with no `offers` is not eligible for the rich result it
+    // exists to earn, so on the waitlist pages it was an invalid item making a
+    // claim to a search engine that the page itself refuses to make.
+    ...(live
+      ? [
+          {
+            "@type": "SoftwareApplication",
+            name: "Belline",
+            applicationCategory: "BusinessApplication",
+            operatingSystem: "Web",
+            url: `${ORIGIN}/`,
             offers: sellable(city.market).map((p) => ({
               "@type": "Offer",
               name: `Belline ${p.name}`,
               price: String(priceOf(p.id, city.market) / 100),
               priceCurrency: MARKETS[city.market].currency,
-              billingIncrement: "P1M",
+              url: `${APP}/checkout`,
+              availability: "https://schema.org/InStock",
             })),
-          }
-        : {}),
-    },
+          },
+        ]
+      : []),
     {
       "@type": "FAQPage",
       mainEntity: faqs.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
@@ -629,14 +733,15 @@ function comboJsonLd(page: ComboPage, faqs: SeoFaq[]): string {
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "AI receptionist", item: `${ORIGIN}${indexPath()}` },
         { "@type": "ListItem", position: 2, name: vertical.name, item: `${ORIGIN}${verticalHubPath(vertical.slug)}` },
-        { "@type": "ListItem", position: 3, name: city.name, item: url },
+        { "@type": "ListItem", position: 3, name: city.name, item: `${ORIGIN}${cityHubPath(city)}` },
+        { "@type": "ListItem", position: 4, name: name, item: url },
       ],
     },
   ];
   return json({ "@context": "https://schema.org", "@graph": graph });
 }
 
-function hubJsonLd(page: HubPage, title: string, description: string): string {
+function hubJsonLd(page: HubPage, title: string, description: string, faqs: SeoFaq[] = []): string {
   return json({
     "@context": "https://schema.org",
     "@graph": [
@@ -651,6 +756,17 @@ function hubJsonLd(page: HubPage, title: string, description: string): string {
           url: `${ORIGIN}${c.path}`,
         })),
       },
+      // A trade hub renders eight visible questions and used to publish none
+      // of them. The words are identical to the ones on the page, which is the
+      // only condition under which this markup is allowed to exist.
+      ...(faqs.length
+        ? [
+            {
+              "@type": "FAQPage",
+              mainEntity: faqs.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+            },
+          ]
+        : []),
       {
         "@type": "BreadcrumbList",
         itemListElement: [
@@ -670,23 +786,122 @@ function hubJsonLd(page: HubPage, title: string, description: string): string {
  * The pair's own first, up to four of them, because they are the questions
  * only this page can answer — and because a FAQ block that is entirely
  * trade-level is a FAQ block six sister pages also carry word for word. The
- * trade's remaining questions live on the trade hub (`hubFaqs`), so no answer
- * is published twice inside this system.
+ * trade's own questions are rotated so that two sister pages do not carry the
+ * same four answers, and all of them live on the trade hub above.
  */
-export function faqsFor(vertical: SeoVertical, pair: PairCopy): SeoFaq[] {
-  return [...pair.faqs.slice(0, 4), ...vertical.faqs.slice(0, 4)].slice(0, 8);
+export function faqsFor(vertical: SeoVertical, pair: PairCopy, city?: SeoCity): SeoFaq[] {
+  const mine = pair.faqs.slice(0, 4);
+  // A trade question the pair already asked is dropped and the next one taken
+  // in its place. Without this, four pages shipped two versions of the same
+  // question six lines apart in one accordion — "Will it tell a caller a
+  // treatment will work for them?" above "Will it tell a caller whether a
+  // treatment is right for them?" — which is the most visible way a generated
+  // page announces itself. The pair's version wins, because it is the one
+  // written for this city.
+  const rotated = tradeFaqsFor(vertical, city).filter((t) => !mine.some((p) => sameQuestion(p, t)));
+  const spare = vertical.faqs.filter(
+    (t) => !rotated.includes(t) && !mine.some((p) => sameQuestion(p, t)) && !rotated.some((r) => sameQuestion(r, t)),
+  );
+  return [...mine, ...rotated, ...spare].slice(0, Math.max(6, mine.length + rotated.length));
 }
 
-/** The trade's questions that the landing pages do not take. */
-export const hubFaqs = (vertical: SeoVertical): SeoFaq[] => vertical.faqs.slice(4);
+/**
+ * Two questions that a reader would call the same question.
+ *
+ * Word overlap rather than anything clever: these are short questions in one
+ * voice, and if half the words match, the answers underneath them match too.
+ * Measured over both the question and the answer, because "How does it handle
+ * a wedding party?" and "Can it handle a bridal enquiry?" share almost no
+ * words and have, word for word, the same answer.
+ */
+export function sameQuestion(a: SeoFaq, b: SeoFaq): boolean {
+  return overlap(a.q, b.q) >= 0.5 || overlap(a.a, b.a) >= 0.45;
+}
+
+const STOP = new Set(["the", "a", "an", "it", "is", "are", "to", "of", "and", "or", "for", "in", "on", "with", "that", "this", "does", "do", "will", "can", "what", "how", "your", "our", "you", "we", "they", "them", "its", "not", "no", "yes", "at", "by", "as", "from", "be", "been", "has", "have", "if", "so", "but", "than", "then", "there", "their", "one", "any", "all", "which", "who", "when"]);
+
+function overlap(x: string, y: string): number {
+  const words = (t: string) =>
+    new Set(
+      t
+        .toLowerCase()
+        .replace(/[^a-z\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 2 && !STOP.has(w)),
+    );
+  const a = words(x);
+  const b = words(y);
+  if (a.size === 0 || b.size === 0) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  // Over the union, not the smaller set: measured against the smaller set, a
+  // three-word question matched almost anything that happened to contain one
+  // of its words.
+  return shared / (a.size + b.size - shared);
+}
+
+/**
+ * Which of the trade's own questions this city's page carries.
+ *
+ * Two, and a different two in each city, so that the three pages under a trade
+ * do not publish the same four answers word for word. The slice is taken by
+ * the city's position in the city list, modulo four, so the four cities
+ * in this system disjoint and keeps a page's questions stable when a fifth is
+ * added somewhere else.
+ *
+ * The full eight are on the trade hub, which is where somebody reading about
+ * the trade rather than about their own city arrives — so nothing is hidden,
+ * and the page that repeats them is the one page above all of them rather than
+ * three pages beside each other.
+ */
+export function tradeFaqsFor(vertical: SeoVertical, city?: SeoCity): SeoFaq[] {
+  if (!city) return vertical.faqs.slice(0, 2);
+  const slot = Math.max(0, SEO_CITIES.findIndex((c) => c.slug === city.slug)) % 4;
+  const mine = vertical.faqs.filter((_, i) => i % 4 === slot);
+  return mine.length ? mine : vertical.faqs.slice(0, 2);
+}
+
+/** The trade's questions, all of them, on the hub above the city pages. */
+export const hubFaqs = (vertical: SeoVertical): SeoFaq[] => vertical.faqs;
 
 export function comboPage(page: ComboPage, ctx: RenderContext): string {
   const { vertical, city, pair } = page;
   const live = marketLive(city);
-  const title = `AI receptionist for ${vertical.plural} ${inCity(city)} | Belline`;
+  const title = `AI receptionist for ${vertical.titlePlural ?? vertical.plural} ${inCity(city)} | Belline`;
   const h1 = `AI receptionist for ${vertical.plural} ${inCity(city)}`;
-  const faqs = faqsFor(vertical, pair);
+  const faqs = faqsFor(vertical, pair, city);
   const scenes = scenesFor(vertical, ctx);
+
+  /**
+   * The demo call, only where there is a recorded one.
+   *
+   * The scenes come from the trade page under /salons, /dental, /clinics or
+   * /restaurants, keyed to audio clips by their exact text. Real estate has no
+   * such page, so its landing pages carry no call panel rather than playing a
+   * dental practice's conversation under a property heading — which is what an
+   * empty panel would have done, because site.js falls back to the site-wide
+   * scenes when the page gives it none.
+   */
+  const hearTheLine = scenes.length
+    ? `
+  <section class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Hear the line</p>
+          <h2 class="display">Two calls ${esc(vertical.singular)} actually takes.</h2>
+        </div>
+        <p class="sec-lead lead">
+          The first is the request taken for your team to confirm. The second is
+          the call Belline refuses or hands over — which is the one you are
+          really deciding about.
+        </p>
+      </div>
+${CALL_PANEL}
+    </div>
+  </section>
+`
+    : "";
 
   const heroCta = live
     ? `        <div class="cta-row rise rise-3">
@@ -705,7 +920,7 @@ export function comboPage(page: ComboPage, ctx: RenderContext): string {
         </div>
 
         <p class="hero-note rise rise-4">
-          Belline is live in the United Arab Emirates and is <strong>not open in ${esc(marketName(city))}</strong> yet.
+          Belline is live in the United Arab Emirates and is <strong>not open in ${esc(theMarketName(city))}</strong> yet.
           Nothing on this page can be bought.
           <span class="hero-note-more"><span class="hero-langs" data-langs>Answers in English.</span></span>
         </p>`;
@@ -715,12 +930,12 @@ export function comboPage(page: ComboPage, ctx: RenderContext): string {
       title,
       description: pair.description,
       path: page.path,
-      pathFor: (prefix) => `${prefix}/${vertical.slug}/${city.slug}`,
+      pathFor: (locale) => comboPath(vertical.slug, city, locale.lang),
       jsonLd: comboJsonLd(page, faqs),
     }) +
     header(live, [
       { href: verticalHubPath(vertical.slug), label: vertical.name },
-      { href: cityHubPath(city.slug), label: city.name },
+      { href: cityHubPath(city), label: city.name },
       { href: "#how", label: "How it works" },
       { href: live ? "#price" : "#waitlist", label: live ? "Pricing" : "Waitlist" },
     ]) +
@@ -728,7 +943,7 @@ export function comboPage(page: ComboPage, ctx: RenderContext): string {
 <main>
 
   <section class="hero">
-    <div class="wrap hero-in hero-demo">
+    <div class="wrap hero-in hero-demo${VIDEO ? " has-video-hero" : ""}">
       <div class="hero-copy">
         <p class="eyebrow rise">Belline ${esc(inCity(city))}</p>
         <h1 class="display rise rise-1">${esc(h1)}</h1>
@@ -747,23 +962,7 @@ ${HERO_VIDEO}
     </div>
   </section>
 
-  <section class="rule">
-    <div class="wrap">
-      <div class="sec-head">
-        <div>
-          <p class="eyebrow">Hear the line</p>
-          <h2 class="display">Two calls ${esc(vertical.singular)} actually takes.</h2>
-        </div>
-        <p class="sec-lead lead">
-          The first is the request taken for your team to confirm. The second is
-          the call Belline refuses or hands over — which is the one you are
-          really deciding about.
-        </p>
-      </div>
-${CALL_PANEL}
-    </div>
-  </section>
-
+${hearTheLine}
   <section class="rule">
     <div class="wrap">
       <div class="sec-head">
@@ -833,7 +1032,7 @@ ${vertical.callTypes.map((p) => `        <div>\n          <h3>${esc(p.head)}</h3
     </div>
   </section>
 
-${channels(city)}${howItWorks(vertical, live)}${live ? pricing(city) : ""}${caseStudySlot(vertical, city)}${faqSection(faqs)}${internalLinks(page, ctx)}${live ? closer(city, vertical) : waitlist(city, vertical, page.path)}
+${channels(city)}${howItWorks(vertical, live)}${live ? pricing(city) : ""}${caseStudySlot(vertical, city)}${faqSection(faqs)}${live ? closer(city, vertical) : waitlist(city, vertical, page.path)}${internalLinks(page, ctx)}
 </main>
 
 ` +
@@ -862,20 +1061,30 @@ function comboCards(page: HubPage, by: "city" | "vertical"): string {
 
 export function verticalHubPage(page: HubPage, ctx: RenderContext): string {
   const v = page.vertical!;
-  // A hub is buyable when any city on it is. Every hub in the first pass is
-  // either all-live or all-not, and where a hub mixes the two the cards say
-  // which is which and the hub itself sells nothing.
-  const allLive = page.combos.every((c) => marketLive(c.city));
+  /**
+   * A hub is buyable when **any** city under it is.
+   *
+   * It used to be `every`, which went wrong the moment one trade had cities in
+   * two markets. The dental hub lists Dubai, Abu Dhabi, Sharjah and London;
+   * because of London it rendered in waitlist mode, and a waitlist hub's
+   * header button points at `#waitlist` — an anchor no hub has — while its
+   * hero button pointed at the Dubai page's `#waitlist`, which does not exist
+   * either, because Dubai is live and sells. So the one page a Dubai dentist
+   * might land on first had a single button on it and that button did nothing.
+   * The city cards say which places are open; the hub sells, because somebody
+   * reading it can buy.
+   */
+  const sells = page.combos.some((c) => marketLive(c.city));
   const scenes = scenesFor(v, ctx);
   return (
     head({
       title: v.hub.title,
       description: v.hub.description,
       path: page.path,
-      pathFor: (prefix) => `${prefix}/${v.slug}`,
-      jsonLd: hubJsonLd(page, v.hub.title, v.hub.description),
+      pathFor: (locale) => verticalHubPath(v.slug, MATRIX_FRAMING, locale.lang),
+      jsonLd: hubJsonLd(page, v.hub.title, v.hub.description, hubFaqs(v)),
     }) +
-    header(allLive, [
+    header(sells, [
       { href: indexPath(), label: "All locations" },
       { href: "#cities", label: "Cities" },
       { href: "#how", label: "How it works" },
@@ -890,7 +1099,7 @@ export function verticalHubPage(page: HubPage, ctx: RenderContext): string {
         <h1 class="display rise rise-1">${esc(v.hub.headline)}</h1>
         <p class="lead rise rise-2">${esc(v.hub.lead)}</p>
         <div class="cta-row rise rise-3">
-          ${allLive ? `<a class="btn" href="${APP}/checkout" data-cta="hero">Get started</a>` : `<a class="btn" href="${page.combos[0].path}#waitlist" data-cta="hero">Join the waitlist</a>`}
+          ${sells ? `<a class="btn" href="${APP}/checkout" data-cta="hero">Get started</a>` : `<a class="btn" href="${page.combos[0].path}#waitlist" data-cta="hero">Join the waitlist</a>`}
         </div>
         <p class="hero-note rise rise-4"><span class="hero-langs" data-langs>Answers in English.</span></p>
       </div>
@@ -954,11 +1163,11 @@ ${v.tradePage ? `          <p class="fine"><a href="${v.tradePage}">More about B
     </div>
   </section>
 
-${howItWorks(v, allLive)}${faqSection(hubFaqs(v))}
+${howItWorks(v, sells)}${faqSection(hubFaqs(v))}
 </main>
 
 ` +
-    footer(allLive) +
+    footer(sells) +
     scripts(scenes)
   );
 }
@@ -972,13 +1181,19 @@ export function cityHubPage(page: HubPage, ctx: RenderContext): string {
       title: c.hub.title,
       description: c.hub.description,
       path: page.path,
-      pathFor: (prefix) => `${prefix}/in/${c.slug}`,
+      pathFor: (locale) => cityHubPath(c, locale.lang),
       jsonLd: hubJsonLd(page, c.hub.title, c.hub.description),
     }) +
     header(live, [
       { href: indexPath(), label: "All locations" },
+      ...(ctx.pages.some((p) => p.kind === "country-hub" && p.market === c.market)
+        ? [{ href: countryHubPath(c.market), label: MARKETS[c.market].name }]
+        : []),
       { href: "#trades", label: "Trades" },
-      { href: live ? "#how" : "#waitlist", label: live ? "How it works" : "Waitlist" },
+      // Not "#how": a city hub has no three-steps block. It pointed at an
+      // anchor the page does not contain, which on a phone is a nav item that
+      // closes the menu and does nothing.
+      { href: live ? "#price" : "#waitlist", label: live ? "Pricing" : "Waitlist" },
     ]) +
     `
 <main>
@@ -1064,16 +1279,16 @@ ${comboCards(page, "vertical")}
           <p style="margin-top:26px">
             Keep the ${esc(c.name)} number you already have — on your door, your
             listings and your receipts — and forward to Belline only the calls
-            nobody picks up. New accounts here start on ${esc(c.timezone.replace("_", " "))} time${
+            nobody picks up. New accounts here start on ${esc(clockName(c))}${
               c.clocksChange
                 ? ", and the clocks move twice a year, so a forwarding rule set on the clock keeps doing the right thing through both halves of the year"
                 : ", which does not change with the seasons, so an evening cut-off is the same hour all year"
             }.
           </p>
           <p class="fine">
-            Common enough here to be worth saying: we hear from businesses in
-            ${esc(c.districts.slice(0, -1).join(", "))} and ${esc(c.districts[c.districts.length - 1])} alike, and none of that
-            changes the setup — it is one setting on the line you already have.
+            Wherever in ${esc(c.name)} you are, the setup is the same: one
+            setting on the line you already have, and nothing printed on your
+            door changes.
           </p>
         </div>
       </div>
@@ -1090,12 +1305,14 @@ ${live ? pricing(c) : waitlist(c, null, page.path)}
 }
 
 export function indexPage(page: HubPage, ctx: RenderContext): string {
-  const title = "AI receptionist by trade and city — Belline";
+  const title = "AI receptionist by trade and city | Belline";
   const description =
     "Belline's AI receptionist, written up trade by trade and city by city: what each line actually answers, what it refuses, and where we are open.";
   const verticals = [...new Map(page.combos.map((c) => [c.vertical.slug, c.vertical])).values()];
   const cities = [...new Map(page.combos.map((c) => [c.city.slug, c.city])).values()];
   const live = page.combos.some((c) => marketLive(c.city));
+  const countryHubs = ctx.pages.filter((p): p is HubPage => p.kind === "country-hub");
+  const channels = ctx.pages.filter((p): p is ChannelHubPage => p.kind === "channel-hub");
 
   const rows = verticals
     .map(
@@ -1114,7 +1331,7 @@ export function indexPage(page: HubPage, ctx: RenderContext): string {
       title,
       description,
       path: page.path,
-      pathFor: (prefix) => prefix,
+      pathFor: (locale) => indexPath(locale.lang),
       jsonLd: hubJsonLd(page, title, description),
     }) +
     header(live, [
@@ -1164,7 +1381,27 @@ ${rows}
         </div>
       </div>
       <ul class="kinds">
-${cities.map((c) => `        <li><a href="${cityHubPath(c.slug)}">${esc(c.name)}${marketLive(c) ? "" : " — not open yet"}</a></li>`).join("\n")}
+${countryHubs.map((p) => `        <li><a href="${p.path}">${esc(MARKETS[p.market!].name)} — everywhere we are open</a></li>`).join("\n")}
+${cities.map((c) => `        <li><a href="${cityHubPath(c)}">${esc(c.name)}${marketLive(c) ? "" : " — not open yet"}</a></li>`).join("\n")}
+      </ul>
+    </div>
+  </section>
+
+  <section class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">The same receptionist, a different way in</p>
+          <h2 class="display">Not everybody calls it an AI receptionist.</h2>
+        </div>
+        <p class="sec-lead lead">
+          Some businesses come looking for call answering, and a great many in
+          the UAE come looking for WhatsApp. It is one product either way, and
+          these pages are about the channel rather than the trade.
+        </p>
+      </div>
+      <ul class="kinds">
+${channels.map((p) => `        <li><a href="${p.path}">${esc(p.copy.headline)}</a></li>`).join("\n")}
       </ul>
     </div>
   </section>
@@ -1177,10 +1414,491 @@ ${cities.map((c) => `        <li><a href="${cityHubPath(c.slug)}">${esc(c.name)}
   );
 }
 
+/**
+ * The country hub: `/ai-receptionist/in/ae`.
+ *
+ * Built only where a country has more than one published city and somebody has
+ * written country copy for it (scripts/seo/cities.ts). Its job is the thing
+ * neither a city page nor a trade page can do: say what is true across the
+ * whole market — the week, the messaging habit, the language limit, the
+ * currency — and then get out of the way and send the reader one level down.
+ */
+export function countryHubPage(page: HubPage, ctx: RenderContext): string {
+  const market = page.market!;
+  const country = seoCountry(market)!;
+  const live = MARKETS[market].status === "live";
+  const cities = [...new Map(page.combos.map((c) => [c.city.slug, c.city])).values()];
+  const verticals = [...new Map(page.combos.map((c) => [c.vertical.slug, c.vertical])).values()];
+  const scenes = page.combos[0] ? scenesFor(page.combos[0].vertical, ctx) : [];
+
+  return (
+    head({
+      title: country.title,
+      description: country.description,
+      path: page.path,
+      pathFor: (locale) => countryHubPath(market, locale.lang),
+      jsonLd: hubJsonLd(page, country.title, country.description),
+    }) +
+    header(live, [
+      { href: indexPath(), label: "All locations" },
+      { href: "#cities", label: "Emirates" },
+      { href: "#trades", label: "Trades" },
+      { href: live ? "#price" : "#waitlist", label: live ? "Pricing" : "Waitlist" },
+    ]) +
+    `
+<main>
+
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <p class="eyebrow rise">AI receptionist in ${esc(MARKETS[market].name)}</p>
+        <h1 class="display rise rise-1">${esc(country.headline)}</h1>
+        <p class="lead rise rise-2">${esc(country.lead)}</p>
+        <div class="cta-row rise rise-3">
+          ${live ? `<a class="btn" href="${APP}/checkout" data-cta="hero">Get started</a>` : `<a class="btn" href="#waitlist" data-cta="hero">Join the waitlist</a>`}
+        </div>
+        <p class="hero-note rise rise-4"><span class="hero-langs" data-langs>Answers in English.</span></p>
+      </div>
+
+${CALL_PANEL}
+    </div>
+  </section>
+
+  <section class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">${esc(MARKETS[market].name)}</p>
+          <h2 class="display">What a business line here has to cope with.</h2>
+        </div>
+        <p class="sec-lead lead">${esc(country.intro)}</p>
+      </div>
+
+      <div class="terms terms-4">
+${country.facts.map((f) => `        <div>\n          <h4>${esc(f.head)}</h4>\n          <p>${esc(f.body)}</p>\n        </div>`).join("\n")}
+      </div>
+    </div>
+  </section>
+
+  <section id="cities" class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">By emirate</p>
+          <h2 class="display">Two working weeks, three sets of habits.</h2>
+        </div>
+      </div>
+      <div class="knows">
+${cities
+  .map(
+    (c) => `        <div>
+          <h3><a href="${cityHubPath(c)}">${esc(c.name)}</a></h3>
+          <p>${esc(`${c.week.split(".")[0]}.`)}</p>
+        </div>`,
+  )
+  .join("\n")}
+      </div>
+    </div>
+  </section>
+
+  <section id="trades" class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">By trade</p>
+          <h2 class="display">And what your own line is asked.</h2>
+        </div>
+      </div>
+      <div class="knows">
+${verticals
+  .map(
+    (v) => `        <div>
+          <h3><a href="${verticalHubPath(v.slug)}">${esc(v.name)}</a></h3>
+          <p>${page.combos
+            .filter((c) => c.vertical.slug === v.slug)
+            .map((c) => `<a href="${c.path}">${esc(c.city.name)}</a>`)
+            .join(" · ")}</p>
+        </div>`,
+  )
+  .join("\n")}
+      </div>
+    </div>
+  </section>
+
+${live ? pricing(cities[0]) : ""}
+</main>
+
+` +
+    footer(live) +
+    scripts(scenes)
+  );
+}
+
+// --- the framing pages ---------------------------------------------------------
+
+/**
+ * `/whatsapp-chatbot` and `/call-answering`.
+ *
+ * The two framings that are not the matrix, each a single page with its own
+ * substance rather than a rewrite of the home page with a word swapped. Both
+ * are UAE pages: `marketLive` has nothing to read here because there is no
+ * city, so they sell on the same basis the home page does, which is that the
+ * UAE is open and the checkout refuses everywhere else.
+ */
+export function channelHubPage(page: ChannelHubPage, ctx: RenderContext): string {
+  const { copy } = page;
+  const uae = seoCity("dubai");
+  const scenes = scenesFor(seoVerticalWithScenes(ctx), ctx);
+  const links = page.trades.length
+    ? `  <section id="trades" class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">By trade</p>
+          <h2 class="display">Written up for the line you run.</h2>
+        </div>
+        <p class="sec-lead lead">What a ${esc(page.framing.name.toLowerCase())} is actually asked differs by trade more than it differs by city, so these pages are written by trade.</p>
+      </div>
+      <ul class="kinds">
+${page.trades.map((t) => `        <li><a href="${t.path}">${esc(page.framing.name)} for ${esc(t.vertical.plural)}</a></li>`).join("\n")}
+      </ul>
+    </div>
+  </section>
+`
+    : // A framing with no trade pages of its own still has to lead somewhere.
+      // /call-answering used to take seventeen inbound links and pass on one,
+      // which makes it the end of the crawl and a dead end for a reader who
+      // has just decided they want this.
+      `  <section id="trades" class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">By trade</p>
+          <h2 class="display">What it answers depends on what you do.</h2>
+        </div>
+        <p class="sec-lead lead">The rules, the questions and the calls that have to reach a person are different in every trade, so the substance is written up trade by trade.</p>
+      </div>
+      <ul class="kinds">
+${ctx.pages
+  .filter((p): p is HubPage => p.kind === "vertical-hub")
+  .map((p) => `        <li><a href="${p.path}">AI receptionist for ${esc(p.vertical!.plural)}</a></li>`)
+  .join("\n")}
+      </ul>
+    </div>
+  </section>
+`;
+
+  return (
+    head({
+      title: copy.title,
+      description: copy.description,
+      path: page.path,
+      pathFor: (locale) => framingPath(page.framing.slug, locale.lang),
+      jsonLd: channelJsonLd(page.path, copy.title, copy.description, copy.faqs),
+    }) +
+    header(true, [
+      { href: indexPath(), label: "By trade and city" },
+      ...(page.trades.length ? [{ href: "#trades", label: "Trades" }] : []),
+      { href: "#faq", label: "Questions" },
+      { href: "#price", label: "Pricing" },
+    ]) +
+    `
+<main>
+
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div class="hero-copy">
+        <p class="eyebrow rise">${esc(page.framing.name)}</p>
+        <h1 class="display rise rise-1">${esc(copy.headline)}</h1>
+        <p class="lead rise rise-2">${esc(copy.lead)}</p>
+        <div class="cta-row rise rise-3">
+          <a class="btn" href="${APP}/checkout" data-cta="hero">Get started</a>
+        </div>
+        <p class="hero-note rise rise-4">
+          <span class="gen" data-gen="hero-reassure">${TRIAL.days} days free · No card required · Plans from ${formatMoney(
+            Math.min(...sellable("AE").map((p) => priceOf(p.id, "AE"))),
+            "AE",
+          )}/month</span>
+          <span class="hero-note-more"><span class="hero-langs" data-langs>Answers in English.</span></span>
+        </p>
+      </div>
+
+${CALL_PANEL}
+    </div>
+  </section>
+
+  <section class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">What this actually is</p>
+          <h2 class="display">${esc(page.framing.name)}, and what it is not.</h2>
+        </div>
+        <p class="sec-lead lead">${esc(copy.intro)}</p>
+      </div>
+
+      <div class="knows">
+${copy.sections.map((s) => `        <div>\n          <h3>${esc(s.head)}</h3>\n          <p>${esc(s.body)}</p>\n        </div>`).join("\n")}
+      </div>
+    </div>
+  </section>
+
+  <section class="rule">
+    <div class="wrap">
+      <div class="split">
+        <div>
+          <p class="eyebrow">Where it stops</p>
+          <h2 class="display">The line it does not cross.</h2>
+          <p style="margin-top:26px">${esc(copy.boundary)}</p>
+        </div>
+        <figure class="plate">
+          <img src="/img/bell.jpg" width="880" height="495" loading="lazy" alt="A brass bell on a long reception counter in an empty lobby.">
+        </figure>
+      </div>
+    </div>
+  </section>
+
+${links}${faqSection(copy.faqs)}${pricing(uae)}
+</main>
+
+` +
+    footer(true) +
+    scripts(scenes)
+  );
+}
+
+/** `/whatsapp-chatbot/<trade>`. */
+export function channelTradePage(page: ChannelTradePage, ctx: RenderContext): string {
+  const { copy, vertical } = page;
+  const uae = seoCity("dubai");
+  const scenes = scenesFor(vertical, ctx);
+  const hub = ctx.pages.find((p): p is ChannelHubPage => p.kind === "channel-hub" && p.framing.slug === page.framing.slug);
+  const siblings = ctx.pages.filter(
+    (p): p is ChannelTradePage => p.kind === "channel-trade" && p.framing.slug === page.framing.slug && p.vertical.slug !== vertical.slug,
+  );
+  const cities = ctx.pages.filter((p): p is ComboPage => p.kind === "combo" && p.vertical.slug === vertical.slug && marketLive(p.city));
+
+  return (
+    head({
+      title: copy.title,
+      description: copy.description,
+      path: page.path,
+      pathFor: (locale) => verticalHubPath(vertical.slug, page.framing.slug, locale.lang),
+      jsonLd: channelJsonLd(
+        page.path,
+        copy.title,
+        copy.description,
+        copy.faqs,
+        vertical.plural,
+        hub ? { path: hub.path, name: hub.copy.title.split(" | ")[0].split(" — ")[0] } : undefined,
+      ),
+    }) +
+    header(true, [
+      ...(hub ? [{ href: hub.path, label: page.framing.name }] : []),
+      { href: verticalHubPath(vertical.slug), label: vertical.name },
+      { href: "#faq", label: "Questions" },
+      { href: "#price", label: "Pricing" },
+    ]) +
+    `
+<main>
+
+  <section class="hero">
+    <div class="wrap hero-in hero-demo${VIDEO ? " has-video-hero" : ""}">
+      <div class="hero-copy">
+        <p class="eyebrow rise">${esc(page.framing.name)} · ${esc(vertical.name)}</p>
+        <h1 class="display rise rise-1">${esc(copy.headline)}</h1>
+        <p class="lead rise rise-2">${esc(copy.lead)}</p>
+
+        <ul class="hero-can rise rise-2" aria-label="What Belline does for you">
+          <li>Answers questions</li>
+          <li>Captures enquiries</li>
+          <li>Takes booking requests</li>
+        </ul>
+
+        <div class="cta-row rise rise-3">
+          <a class="btn" href="${APP}/checkout" data-cta="hero">Get started</a>
+        </div>
+
+        <p class="hero-note rise rise-4">
+          <span class="gen" data-gen="hero-reassure">${TRIAL.days} days free · No card required · Plans from ${formatMoney(
+            Math.min(...sellable("AE").map((p) => priceOf(p.id, "AE"))),
+            "AE",
+          )}/month</span>
+          <span class="hero-note-more"><span class="hero-langs" data-langs>Answers in English.</span></span>
+        </p>
+      </div>
+
+${HERO_VIDEO}
+    </div>
+  </section>
+
+  <section class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">On WhatsApp, specifically</p>
+          <h2 class="display">What ${esc(vertical.singular)} is asked in writing.</h2>
+        </div>
+        <p class="sec-lead lead">A message is not a quieter phone call. It is answered differently, it is kept, and it can be screenshotted — which changes what is safe to say.</p>
+      </div>
+
+      <div class="knows">
+${copy.local.map((l) => `        <div>\n          <h3>${esc(l.head)}</h3>\n          <p>${esc(l.body)}</p>\n        </div>`).join("\n")}
+      </div>
+    </div>
+  </section>
+
+  <section class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">What comes down the line</p>
+          <h2 class="display">Every enquiry ${esc(vertical.singular)} gets, and what happens to it.</h2>
+        </div>
+        <p class="sec-lead lead">Belline takes requests. Your team confirms them. Nothing enters your diary without a person putting it there.</p>
+      </div>
+
+      <div class="knows">
+${vertical.callTypes.map((p) => `        <div>\n          <h3>${esc(p.head)}</h3>\n          <p>${esc(p.body)}</p>\n        </div>`).join("\n")}
+      </div>
+    </div>
+  </section>
+
+  <section class="rule">
+    <div class="wrap">
+      <div class="split">
+        <div>
+          <p class="eyebrow">Where it stops</p>
+          <h2 class="display">The most important thing it does is know what it must not answer.</h2>
+          <p style="margin-top:26px">${esc(vertical.boundary)}</p>
+        </div>
+        <figure class="plate">
+          <img src="${esc(vertical.image)}" width="880" height="495" loading="lazy" alt="${esc(vertical.imageAlt)}">
+        </figure>
+      </div>
+    </div>
+  </section>
+
+${faqSection(copy.faqs)}${pricing(uae)}  <section class="rule">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Nearby</p>
+          <h2 class="display">Somewhere else, or something else.</h2>
+        </div>
+      </div>
+      <div class="knows">
+        <div>
+          <h3>The phone, city by city</h3>
+          <ul class="kinds">
+${cities.map((c) => `            <li><a href="${c.path}">${esc(vertical.name)} ${esc(inCity(c.city))}</a></li>`).join("\n")}
+          </ul>
+        </div>
+${
+  siblings.length
+    ? `        <div>
+          <h3>WhatsApp for other trades</h3>
+          <ul class="kinds">
+${siblings.map((s) => `            <li><a href="${s.path}">${esc(s.vertical.name)}</a></li>`).join("\n")}
+          </ul>
+        </div>`
+    : ""
+}
+        <div>
+          <h3>Start somewhere wider</h3>
+          <ul class="kinds">
+${hub ? `            <li><a href="${hub.path}">${esc(page.framing.name)} for UAE businesses</a></li>` : ""}
+            <li><a href="${verticalHubPath(vertical.slug)}">AI receptionist for ${esc(vertical.plural)}</a></li>
+            <li><a href="${indexPath()}">Every trade and city</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+` +
+    footer(true) +
+    scripts(scenes)
+  );
+}
+
+/**
+ * A framing page's structured data: what it is, and the FAQ that is on it.
+ *
+ * `parent` is the framing's own hub, so a trade page's breadcrumb is the path
+ * a reader would actually have walked. Without it the three page types in this
+ * system had three different breadcrumb conventions, which is the sort of
+ * thing nobody notices until a rich result shows the wrong trail.
+ */
+function channelJsonLd(
+  path: string,
+  title: string,
+  description: string,
+  faqs: SeoFaq[],
+  audience?: string,
+  parent?: { path: string; name: string },
+): string {
+  const url = `${ORIGIN}${path}`;
+  return json({
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Service",
+        name: title.split(" | ")[0],
+        serviceType: "AI receptionist",
+        url,
+        description,
+        provider: { "@type": "Organization", name: "Belline", url: `${ORIGIN}/` },
+        areaServed: { "@type": "Country", name: MARKETS.AE.name },
+        ...(audience ? { audience: { "@type": "BusinessAudience", name: audience } } : {}),
+        availableChannel: { "@type": "ServiceChannel", serviceUrl: `${APP}/checkout` },
+      },
+      {
+        "@type": "SoftwareApplication",
+        name: "Belline",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        url: `${ORIGIN}/`,
+        offers: sellable("AE").map((p) => ({
+          "@type": "Offer",
+          name: `Belline ${p.name}`,
+          price: String(priceOf(p.id, "AE") / 100),
+          priceCurrency: MARKETS.AE.currency,
+          url: `${APP}/checkout`,
+          availability: "https://schema.org/InStock",
+        })),
+      },
+      {
+        "@type": "FAQPage",
+        mainEntity: faqs.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Belline", item: `${ORIGIN}/` },
+          ...(parent ? [{ "@type": "ListItem", position: 2, name: parent.name, item: `${ORIGIN}${parent.path}` }] : []),
+          { "@type": "ListItem", position: parent ? 3 : 2, name: title.split(" | ")[0], item: url },
+        ],
+      },
+    ],
+  });
+}
+
+/** Any published trade that has a recorded demo call, for a page with no trade of its own. */
+function seoVerticalWithScenes(ctx: RenderContext): SeoVertical {
+  const combo = ctx.pages.find((p): p is ComboPage => p.kind === "combo" && Boolean(p.vertical.tradePage));
+  return combo ? combo.vertical : seoVertical("restaurants");
+}
+
 /** One page, whichever shape it is. */
 export function renderSeoPage(page: SeoPage, ctx: RenderContext): string {
   if (page.kind === "combo") return comboPage(page, ctx);
+  if (page.kind === "channel-hub") return channelHubPage(page, ctx);
+  if (page.kind === "channel-trade") return channelTradePage(page, ctx);
   if (page.kind === "vertical-hub") return verticalHubPage(page, ctx);
+  if (page.kind === "country-hub") return countryHubPage(page, ctx);
   if (page.kind === "city-hub") return cityHubPage(page, ctx);
   return indexPage(page, ctx);
 }

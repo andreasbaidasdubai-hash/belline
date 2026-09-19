@@ -42,6 +42,15 @@ export interface SeoVertical {
   slug: string;
   /** "restaurants" — as it reads in "AI receptionist for restaurants in Dubai". */
   plural: string;
+  /**
+   * The plural a <title> uses, where the full one is too long.
+   *
+   * "AI receptionist for aesthetic and medical clinics in Abu Dhabi | Belline"
+   * is 72 characters: the trade eats 48 of them and the city — the thing that
+   * differentiates this result from the four beside it — falls past the point
+   * a search result is cut. The page's H1 and its prose keep the full name.
+   */
+  titlePlural?: string;
   /** "a restaurant" — as it reads mid-sentence. */
   singular: string;
   /** Nav and hub label. */
@@ -72,7 +81,7 @@ const RESTAURANTS: SeoVertical = {
   image: "/img/restaurants.jpg",
   imageAlt: "A restaurant counter being laid before service, the room still dark.",
   hub: {
-    title: "AI receptionist for restaurants — Belline",
+    title: "AI receptionist for restaurants | Belline",
     description:
       "Belline answers a restaurant's phone through service: hours, menu and allergen answers from your own notes, table requests for your team to confirm, events to a person.",
     headline: "The phone rings hardest at the moment nobody can reach it.",
@@ -182,13 +191,14 @@ const RESTAURANTS: SeoVertical = {
 const HAIR_SALONS: SeoVertical = {
   slug: "hair-salons",
   plural: "hair and beauty salons",
+  titlePlural: "hair salons",
   singular: "a salon",
   name: "Hair & beauty salons",
   tradePage: "/salons",
   image: "/img/salons.jpg",
   imageAlt: "A brass service bell on a wooden reception counter.",
   hub: {
-    title: "AI receptionist for hair and beauty salons — Belline",
+    title: "AI receptionist for hair and beauty salons | Belline",
     description:
       "Belline answers a salon's phone mid-service: prices and treatment lengths from your own list, booking requests for your team to confirm, and your patch-test rules held.",
     headline: "Both hands are in someone's hair. The phone rings anyway.",
@@ -202,7 +212,7 @@ const HAIR_SALONS: SeoVertical = {
         "Colour is on, a client is at the basin, the front desk is also the person doing the blow-dry. The phone is not ignored out of rudeness; there is genuinely nobody to answer it.",
     },
     {
-      head: "Half the calls are the price list",
+      head: "So much of it is the price list",
       body:
         "How much is balayage, how long does it take, do you do keratin. The answer is already written down and it still costs a stylist five minutes and a client their attention.",
     },
@@ -304,7 +314,7 @@ const DENTAL_CLINICS: SeoVertical = {
   image: "/img/dental.jpg",
   imageAlt: "A dental treatment room between patients — the chair empty, the light off.",
   hub: {
-    title: "AI receptionist for dental clinics — Belline",
+    title: "AI receptionist for dental clinics | Belline",
     description:
       "Belline answers a dental practice's phone while the chair is busy and after you close: appointment requests for your team to confirm, anything clinical to a person.",
     headline: "The practice is with a patient. The phone still rings.",
@@ -347,7 +357,7 @@ const DENTAL_CLINICS: SeoVertical = {
     {
       head: "Pain and urgent calls",
       body:
-        "Belline does not interpret the symptom. It takes the number and exactly what the patient said, marks it urgent for the clinical team, and — where you have given it a team number — puts the call through live.",
+        "Belline does not interpret the symptom. It takes the number and exactly what the patient said and marks it urgent for the clinical team. Where your plan includes live transfer and you have given it a team number, it puts the call through to a person instead.",
     },
     {
       head: "Practical questions",
@@ -366,7 +376,7 @@ const DENTAL_CLINICS: SeoVertical = {
     },
   ],
   boundary:
-    "Belline will not discuss a diagnosis, interpret a symptom, or advise on pain or medication. It is reception, not a clinician. Please do not use it for medical details: anything clinical, urgent or unclear goes to your team as an urgent message with the patient's number and what they said, or straight through to a person where you have given it a number.",
+    "Belline will not discuss a diagnosis, interpret a symptom, or advise on pain or medication. It is reception, not a clinician. Please do not use it for medical details: anything clinical, urgent or unclear goes to your team as an urgent message with the patient's number and what they said, or straight through to a person where your plan includes live transfer and you have given it a number.",
   faqs: [
     {
       q: "Will it give clinical advice?",
@@ -376,7 +386,7 @@ const DENTAL_CLINICS: SeoVertical = {
     {
       q: "What does it do with a patient in pain at night?",
       a:
-        "It takes the call rather than letting it ring out. It does not diagnose and it does not offer a slot. It captures the patient's number and their own words, marks the message urgent, and where you have given it a team number it puts the call through live.",
+        "It takes the call rather than letting it ring out. It does not diagnose and it does not offer a slot. It captures the patient's number and their own words and marks the message urgent. Where your plan includes live transfer and you have given it a team number, it puts the call through to a person instead — that is the line on the Growth card, not on every plan.",
     },
     {
       q: "Can it book a treatment for a new patient?",
@@ -386,7 +396,7 @@ const DENTAL_CLINICS: SeoVertical = {
     {
       q: "Is it safe for patient information?",
       a:
-        "Treat it as reception, not as a clinical record. It should be used to take an appointment request — a name, a number and when somebody would like to come — and not for medical details. Transcripts are stored so you can see what was said; call audio is not recorded.",
+        "Treat it as reception, not as a clinical record. It should be used to take an appointment request — a name, a number and when somebody would like to come — and not for medical details. Transcripts are stored so you can see what was said, and Belline does not record the audio of the calls it answers. The one recording anywhere in the product is a voicemail a caller chooses to leave before you have switched Belline on, which the privacy policy describes.",
     },
     {
       q: "Does it confirm the appointment time?",
@@ -414,15 +424,16 @@ const DENTAL_CLINICS: SeoVertical = {
 const AESTHETIC_CLINICS: SeoVertical = {
   slug: "aesthetic-clinics",
   plural: "aesthetic and medical clinics",
+  titlePlural: "aesthetic clinics",
   singular: "a clinic",
   name: "Aesthetic & medical clinics",
   tradePage: "/clinics",
   image: "/img/clinics.jpg",
   imageAlt: "A reception sign and a service bell on a counter, nobody behind it.",
   hub: {
-    title: "AI receptionist for aesthetic and medical clinics — Belline",
+    title: "AI receptionist for aesthetic and medical clinics | Belline",
     description:
-      "Belline answers a clinic's phone out of hours and while your team is with patients: consultation requests for your team to confirm, and urgent calls sent to emergency care.",
+      "Belline answers a clinic's phone out of hours and while your team is with patients: consultation requests for you to confirm, urgent calls sent to emergency care.",
     headline: "Patients ring at eight in the evening. Reception closed at five.",
     lead:
       "Belline answers after your desk goes home and while your team is with patients. It takes consultation requests only, knows an enquiry from an emergency, and is not for medical details.",
@@ -512,7 +523,7 @@ const AESTHETIC_CLINICS: SeoVertical = {
     {
       q: "Who sees what was said on the call?",
       a:
-        "Your team. Every conversation arrives as a summary and a full transcript, so you can read exactly what Belline said and what the caller said. Call audio is not recorded.",
+        "Your team. Every conversation arrives as a summary and a full transcript, so you can read exactly what Belline said and what the caller said. Belline does not record the audio of the calls it answers.",
     },
     {
       q: "Does it confirm the consultation time?",
@@ -527,118 +538,133 @@ const AESTHETIC_CLINICS: SeoVertical = {
   ],
 };
 
-const SPAS: SeoVertical = {
-  slug: "spas",
-  plural: "spas",
-  singular: "a spa",
-  name: "Spas",
-  tradePage: "/salons",
-  image: "/img/salons.jpg",
-  imageAlt: "A brass service bell on a wooden reception counter.",
+/**
+ * Real estate.
+ *
+ * Added after the September 2026 keyword research
+ * (docs/seo/uae-keywords.md): `ai receptionist for real estate agents` and
+ * `ai agent dubai real estate` are both confirmed UAE queries, and there is a
+ * live sub-market of UAE competitors selling into it. It replaced spas in the
+ * matrix, where `ai receptionist for spa dubai` returned no topical result at
+ * all.
+ *
+ * It is the one trade here with no existing page under /salons, /dental,
+ * /clinics or /restaurants, so it has no recorded demo call. The renderer
+ * leaves the call panel off a page whose trade has no scene rather than
+ * playing somebody else's conversation under a real estate heading.
+ */
+const REAL_ESTATE: SeoVertical = {
+  slug: "real-estate",
+  plural: "real estate agencies",
+  titlePlural: "real estate",
+  singular: "an agency",
+  name: "Real estate",
+  image: "/img/bell.jpg",
+  imageAlt: "A brass bell on a long reception counter in an empty lobby.",
   hub: {
-    title: "AI receptionist for spas — Belline",
+    title: "AI receptionist for real estate agencies | Belline",
     description:
-      "Belline answers a spa's phone away from the floor: treatment lengths and prices from your own list, booking requests for your team to confirm, packages and groups to a person.",
-    headline: "The floor is quiet on purpose. The phone is not.",
+      "Belline answers an agency's phone while agents are at viewings: portal enquiries captured, viewing requests taken for an agent to confirm, tenants routed to management.",
+    headline: "The enquiry goes to whoever picks up first.",
     lead:
-      "A spa sells calm, and a ringing phone in a treatment corridor is the opposite of it. Belline answers away from the floor, takes the request from your own price list, and hands packages and groups to a person.",
+      "A portal enquiry rings three agencies. Belline answers yours while your agents are driving or at a viewing, takes the enquiry against the listing it is about, and never negotiates a price.",
   },
   pains: [
     {
-      head: "A ringing phone undoes the room",
+      head: "Your agents are, by definition, not at a desk",
       body:
-        "The product is quiet. A handset going off outside a treatment room is heard by every guest who paid not to hear it, and a therapist who answers it has left somebody on a table.",
+        "The job happens in a car, at a viewing, in a handover. The one time an agent cannot pick up is the time they are doing the work, and that is most of the day.",
     },
     {
-      head: "Therapists are unreachable by design",
+      head: "The enquiry belongs to whoever answers",
       body:
-        "Every pair of hands is in a sixty- or ninety-minute appointment. There is no moment in the day when somebody is both free and at the desk.",
+        "A caller working down a portal's results does not leave a voicemail and wait. They ring the next listing. A missed call in this trade is not a delayed conversation, it is somebody else's client.",
     },
     {
-      head: "The menu is long and the questions are repetitive",
+      head: "It is the same three questions about every listing",
       body:
-        "How long is the hot stone, is the facial suitable in pregnancy, what is in the package, can two of us come together. All written down; all still asked out loud.",
+        "Is it still available, what is the asking price, is it furnished, what are the service charges, can I see it on Saturday. All of it is written on the listing, and all of it is still asked out loud.",
     },
     {
-      head: "Packages and couples are a conversation",
+      head: "Tenants and buyers share one line",
       body:
-        "Two rooms and two therapists at the same hour, or a day package with lunch in the middle, is scheduling work. It cannot be taken as an ordinary booking and should not be.",
+        "The number on a listing is also the number a tenant with a leaking air-conditioner rings. Both are real calls, neither should wait for the other, and only one of them needs an agent.",
     },
   ],
   callTypes: [
     {
-      head: "Treatment booking requests",
+      head: "Portal and listing enquiries",
       body:
-        "The treatment, how long it runs, the therapist if they have a preference and the day that suits. Your team confirms the time and the room.",
+        "The listing they are calling about, what they are looking for, their budget and a number. Belline takes it against the reference you gave it, so the agent who rings back already knows which property it is.",
     },
     {
-      head: "The treatment menu and prices",
+      head: "Viewing requests",
       body:
-        "Read back from your own list — what a treatment includes, how long it takes, what it costs. Nothing on the list is nothing Belline will invent.",
+        "The property, the days and hours that suit them, and whether they are buying, renting or investing. Your agent confirms the viewing; Belline never offers a slot or says an agent is free.",
     },
     {
-      head: "Contraindications and suitability",
+      head: "Questions about a listing",
       body:
-        "Belline states the rule you wrote — pregnancy, recent surgery, a condition you exclude — and takes the request on that basis. It does not decide whether a guest is suitable.",
+        "Asking price, size, whether it is furnished, the service charge, the handover date — read back exactly from the details you wrote for that property. Anything not in them is taken as a message rather than guessed at.",
     },
     {
-      head: "Couples, groups and packages",
+      head: "Landlords and owners with something to list",
       body:
-        "Taken as a message with the date, the headcount and the number, because two rooms at one hour is scheduling, not a booking request.",
+        "A different call and a better one. Belline takes the property, the area and the number, and flags it for whoever handles new instructions rather than treating it as a buyer enquiry.",
     },
     {
-      head: "Gift vouchers",
+      head: "Tenants and maintenance",
       body:
-        "Belline explains what you sell and how somebody buys one, from your notes, and takes a message. It does not take a payment.",
+        "Taken as a message for property management with the unit, the problem and the number, so it does not sit in an agent's voicemail behind six viewing requests.",
     },
     {
-      head: "Late arrivals and cancellations",
+      head: "Anything about money, law or a visa",
       body:
-        "Your cancellation window as you wrote it, stated plainly, with the message passed to the desk so the room can be refilled.",
+        "Mortgages, transfer fees, golden visas, what a property will be worth in three years. Belline does not answer any of it. It takes the question and the number for a licensed broker in your team to answer.",
     },
   ],
   boundary:
-    "Belline will not decide whether a treatment is suitable for a guest, waive a cancellation window, quote a price that is not on your list, or take a payment. Packages, couples, groups and complaints go to a person.",
+    "Belline will not negotiate a price, offer a discount, confirm a viewing time, advise on a mortgage, a visa, a transfer fee or an investment return, or take a deposit or cheque details over the phone. It reads back the listing you wrote, takes the enquiry, and a registered broker in your team does the rest.",
   faqs: [
     {
-      q: "Can it tell a guest whether a treatment is safe in pregnancy?",
+      q: "Will it know which properties are still available?",
       a:
-        "It states the rule you gave it — that a treatment is or is not offered in pregnancy — and takes the request on that basis. It does not judge an individual guest's suitability, and anything beyond your written rule goes to your team as a message.",
+        "Only what you have told it. Belline reads the listings you give it and reads them back; it is not connected to your CRM or to a portal, so it does not know that something went under offer an hour ago. It takes the enquiry and your agent confirms — which is the same order of events as a portal lead today.",
     },
     {
-      q: "Will it book a couples treatment?",
+      q: "Can it book a viewing?",
       a:
-        "It takes it as a message rather than an ordinary request. Two rooms and two therapists at the same hour is scheduling work, so Belline captures the date, who is coming and a number, and flags it for the desk.",
+        "It takes the request. The property, when they could come, and whether they are buying or renting. Your agent confirms the time, because your agent is the person who knows where they will be at four on Saturday.",
     },
     {
-      q: "Can it sell a gift voucher over the phone?",
+      q: "Will it negotiate on the asking price?",
       a:
-        "No. It explains what you offer and how somebody buys one, from your own notes, and takes a message with the caller's number. Belline does not take card details or payments.",
+        "No, and that is deliberate. It states the price on the listing as you wrote it. A caller who wants to discuss the number is taken as a message for the agent, because a negotiation opened by a receptionist is a negotiation you did not choose to start.",
     },
     {
-      q: "Does it know how long each treatment runs?",
+      q: "What about mortgage, visa or investment questions?",
       a:
-        "If you have written it down, yes, and it reads it back exactly. Treatment lengths are the most-asked question on a spa line and the easiest to get wrong from memory.",
+        "It does not answer them. Those are advice, and advice comes from a licensed broker in your team. Belline takes the question in the caller's own words with their number and marks it for a person.",
     },
     {
-      q: "Will it hold our cancellation window?",
+      q: "A tenant rings about a broken air-conditioner. What happens?",
       a:
-        "Yes. It states the window as you wrote it and does not waive it because a caller is unhappy. A guest who wants an exception is taken as a message for a person, who can make that decision.",
+        "It is taken as a message for property management, with the unit, what has gone wrong and a number, rather than landing in a sales agent's voicemail. Your team sees it as its own item in the inbox.",
     },
     {
-      q: "Does it confirm the room and the time?",
+      q: "Does it work with the number on our portal listings?",
       a:
-        "No. It takes the request and says your team will confirm. Rooms and therapists are yours to allocate, and Belline has not looked at either.",
+        "Yes, because it answers whatever number you forward to it. You keep the number that is published on Bayut, Property Finder, Dubizzle or your own site, and forward the calls nobody picks up.",
     },
     {
-      q: "Can our therapists see what was said?",
+      q: "Can it tell one of our agents from another?",
       a:
-        "Your team gets a summary and a full transcript of every conversation, with the guest's details and what they asked for. Call audio is not recorded.",
+        "It takes the name of the agent a caller asks for and puts it on the message. It does not transfer between agents' mobiles unless you have given it a number to put a call through to, and it never says an agent is available.",
     },
     {
-      q: "Will a guest know it is an AI?",
+      q: "Will callers know it is not one of our agents?",
       a:
-        "If they ask, it says so. It does not pretend to be one of your therapists or your receptionist.",
+        "If they ask, it says so. It does not present itself as a member of your team, and it does not use an agent's name as its own.",
     },
   ],
 };
@@ -648,7 +674,7 @@ export const SEO_VERTICALS: readonly SeoVertical[] = [
   HAIR_SALONS,
   DENTAL_CLINICS,
   AESTHETIC_CLINICS,
-  SPAS,
+  REAL_ESTATE,
 ];
 
 export const SEO_VERTICAL_SLUGS = SEO_VERTICALS.map((v) => v.slug);

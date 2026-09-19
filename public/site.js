@@ -1871,7 +1871,12 @@ var SITE_CH = /^de-CH$/i.test(document.documentElement.getAttribute("lang") || "
    problem is written next to its field, and a typo in a big mail provider's
    domain is asked about once, as the book-a-call form does. */
 (function () {
-  var form = document.getElementById("warteliste");
+  // The German pages call it "warteliste" and the English location pages call
+    // it "waitlist", because each page's markup is written in its own language.
+    // This looked for the German id alone, so every English waitlist page
+    // shipped with `novalidate` and nothing bound to it: an empty submit left
+    // the site for an unstyled error page on another origin.
+    var form = document.getElementById("warteliste") || document.getElementById("waitlist");
   if (!form || !form.getAttribute("action")) return;
 
   var note = form.querySelector(".waitlist-note");

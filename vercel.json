@@ -7,7 +7,13 @@
   "trailingSlash": false,
   "redirects": [
     { "source": "/landing.html", "destination": "/", "permanent": true },
-    { "source": "/index.html", "destination": "/", "permanent": true }
+    { "source": "/index.html", "destination": "/", "permanent": true },
+    { "source": "/ai-receptionist/restaurants/dubai", "destination": "/ai-receptionist/restaurants/ae/dubai", "permanent": true },
+    { "source": "/ai-receptionist/hair-salons/sharjah", "destination": "/ai-receptionist/hair-salons/ae/sharjah", "permanent": true },
+    { "source": "/ai-receptionist/dental-clinics/london", "destination": "/ai-receptionist/dental-clinics/gb/london", "permanent": true },
+    { "source": "/ai-receptionist/in/dubai", "destination": "/ai-receptionist/in/ae/dubai", "permanent": true },
+    { "source": "/ai-receptionist/in/sharjah", "destination": "/ai-receptionist/in/ae/sharjah", "permanent": true },
+    { "source": "/ai-receptionist/in/london", "destination": "/ai-receptionist/in/gb/london", "permanent": true }
   ],
   "headers": [
     {

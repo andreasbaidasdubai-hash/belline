@@ -3,6 +3,7 @@ import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { applySiteFlags, swissSpelling } from "./site-flags";
 import { sendingDomainFor, senderPageFile } from "./sales/sending/domains";
+import { seoRedirectFor } from "./seo-redirects";
 import { applyIntegrations } from "../../scripts/site-integrations";
 
 /**
@@ -226,6 +227,33 @@ export function serveMarketing(req: IncomingMessage, res: ServerResponse): boole
   // The product's own routes stay on every hostname.
   if (pathname.startsWith("/api/") || pathname.startsWith("/ws/") || pathname.startsWith("/_next/")) {
     return false;
+  }
+
+  // A URL the location landing pages used to live at. Permanent, before any
+  // file lookup, because the old path and the new one are both directories
+  // with an index and serving both would be two URLs for one page.
+  const moved = seoRedirectFor(pathname);
+  if (moved) {
+    res.writeHead(301, { Location: moved, "Cache-Control": "public, max-age=3600" });
+    res.end();
+    return true;
+  }
+
+  /**
+   * One page, one URL.
+   *
+   * A directory with an index answered on three paths — `/x`, `/x/` and
+   * `/x/index.html` — all 200, all the same bytes. The static hosts
+   * canonicalise for us (`vercel.json` sets `cleanUrls` and `trailingSlash:
+   * false`); this server did not, so on the hostname the app itself serves,
+   * every generated page had two spare copies of itself held together by a
+   * canonical tag. Only the extension-less, slash-less form is served.
+   */
+  const canonicalPath = pathname.replace(/\/index\.html$/, "").replace(/(.)\/+$/, "$1");
+  if (canonicalPath !== pathname && canonicalPath !== "") {
+    res.writeHead(301, { Location: canonicalPath + url.search, "Cache-Control": "public, max-age=3600" });
+    res.end();
+    return true;
   }
 
   // A signed-in owner asking for `/` wants their dashboard, not the landing

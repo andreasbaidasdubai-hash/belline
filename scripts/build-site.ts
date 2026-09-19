@@ -41,8 +41,10 @@ import { SENDING_DOMAINS, senderPageFile } from "../src/lib/sales/sending/domain
 import { UNSUBSCRIBE_PATH } from "../src/lib/sales/sending/unsubscribe";
 import { senderPage } from "./site-sender";
 import { BADGE, BELL_FAB, CALL_PANEL, MARK, esc } from "./site-chrome";
-import { marketLive, missingPairCopy, seoPages, seoSitemapEntries } from "./seo/matrix";
+import { marketLive, missingPairCopy, seoPages, seoSitemapEntries, verticalHubPath } from "./seo/matrix";
+import { SEO_VERTICALS } from "./seo/verticals";
 import { renderSeoPage } from "./seo/render";
+import { SEO_REDIRECTS } from "../src/lib/seo-redirects";
 
 /**
  * Are the German pages part of this build? `SITE_GERMAN=off` leaves them out.
@@ -504,6 +506,22 @@ function navFor(active: string): string {
  * they are actually deciding about — a receptionist that will say anything is
  * worse than no receptionist, and every operator knows it.
  */
+/**
+ * The link from a trade page into the trade's city pages.
+ *
+ * Without it the whole of `/ai-receptionist` is a crawl island: the landing
+ * pages link *out* to `/dental` and `/salons`, and nothing linked back, so the
+ * only route in from this site was the sitemap. The trade hub is the right
+ * destination — it is the page that lists the cities — and the link only
+ * appears where this build actually wrote one.
+ */
+function seoLinkFor(tradeSlug: string): string {
+  const vertical = SEO_VERTICALS.find((x) => x.tradePage === `/${tradeSlug}`);
+  const built = vertical && seoPages().some((p) => p.kind === "vertical-hub" && p.vertical?.slug === vertical.slug);
+  if (!vertical || !built) return "";
+  return `      <a href="${verticalHubPath(vertical.slug)}">AI receptionist for ${esc(vertical.plural)}, city by city</a><br>\n`;
+}
+
 function verticalPage(v: Vertical): string {
   return `<!doctype html>
 <html lang="en">
@@ -686,7 +704,7 @@ ${CALL_PANEL}
       <a href="tel:+15717785920">+1 571 778 5920</a> (an international call from the UAE) ·
       <a href="mailto:hello@belline.ai">hello@belline.ai</a> ·
       <a href="https://app.belline.ai/login" rel="nofollow">Staff sign-in</a><br>
-      <a href="/privacy">Privacy policy</a> ·
+${seoLinkFor(v.slug)}      <a href="/privacy">Privacy policy</a> ·
       <a href="/terms">Terms of service</a>
     </p>
   </div>
@@ -754,6 +772,23 @@ if (NOT_OPEN_PAGES > 0) {
   console.log(
     `  (${NOT_OPEN_PAGES} of them are for markets we are not open in: waitlist, no prices, no checkout — src/lib/markets.ts decides, not the copy.)`,
   );
+}
+
+/**
+ * The permanent redirects from the URLs this system used to have.
+ *
+ * Three landing pages and three city hubs shipped at
+ * `/ai-receptionist/<trade>/<city>` before the country segment went in;
+ * src/lib/seo-redirects.ts explains why it went in and holds the list.
+ * Netlify reads a `_redirects` file out of the publish directory, so it is
+ * written here from the same table the app's own server and `npm run
+ * check:seo` read — three consumers, one list, and no chance of the site and
+ * the server disagreeing about where an indexed URL went.
+ */
+{
+  const lines = SEO_REDIRECTS.map((r) => `${r.from} ${r.to} 301!`);
+  fs.writeFileSync(path.join(OUT, "_redirects"), `${lines.join("\n")}\n`, "utf8");
+  console.log(`  _redirects             →  ${lines.length} permanent redirects from the old URL shape`);
 }
 
 /**

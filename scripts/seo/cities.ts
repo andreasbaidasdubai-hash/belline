@@ -72,7 +72,7 @@ const DUBAI: SeoCity = {
   languages:
     "English is the working language of most Dubai businesses, and Arabic is the official one. On a busy reception line you will also hear Hindi, Urdu, Malayalam and Tagalog, because that is who lives and works here. Belline answers in English.",
   week:
-    "Since January 2022 the UAE working week has run Monday to Friday, with the weekend on Saturday and Sunday and a shortened Friday in the public sector. Retail, salons and restaurants keep their own hours on top of that, and plenty of them are open seven days.",
+    "Since January 2022 the federal public sector has worked Monday to Friday, with the weekend on Saturday and Sunday and a shortened Friday, and most of Dubai's private sector followed it. Retail, salons and restaurants keep their own hours on top of that, and plenty of them are open seven days.",
   peak:
     "Two peaks, not one: late morning, and again from about seven in the evening when people are out of the office. Dubai eats and shops late, so an eight o'clock call is an ordinary call here rather than an after-hours one. During Ramadan the evening peak moves to after iftar and gets sharper.",
   habits:
@@ -80,12 +80,12 @@ const DUBAI: SeoCity = {
   emergency: "998 for an ambulance, or the nearest emergency department",
   districts: ["Dubai Marina", "Business Bay", "Jumeirah", "Downtown", "Al Quoz", "Deira"],
   hub: {
-    title: "AI receptionist in Dubai — Belline",
+    title: "AI receptionist for Dubai restaurants, salons and clinics | Belline",
     description:
-      "An AI receptionist for Dubai businesses. It answers your phone, WhatsApp and website from your own information and takes requests for your team to confirm.",
+      "Dubai trades late and messages first. An AI receptionist that answers your phone and your WhatsApp from your own information, written up trade by trade below.",
     headline: "A Dubai phone line does not stop at five.",
     lead:
-      "Dubai works Monday to Friday, eats late, and messages on WhatsApp. Belline answers your phone and your WhatsApp from your own information, through the evening and through the weekend.",
+      "Dubai works Monday to Friday, eats late, and messages on WhatsApp. Belline answers your phone and your WhatsApp from your own information, through the evening and through the weekend. Pick your trade below — each page is about that line specifically.",
   },
   intro:
     "Dubai is a city where the working day and the trading day are different things. Offices run Monday to Friday and close in the late afternoon; the salons, clinics and restaurants those office workers ring are open long after that, and busiest exactly when there is nobody free at the desk. Add a customer base that would rather send a WhatsApp than wait on hold, and the calls a Dubai business loses are not the ones it turned down — they are the ones it never heard.",
@@ -109,12 +109,12 @@ const ABU_DHABI: SeoCity = {
   emergency: "998 for an ambulance, or the nearest emergency department",
   districts: ["Al Reem Island", "Khalidiya", "Yas Island", "Saadiyat Island", "Al Raha", "Mussafah"],
   hub: {
-    title: "AI receptionist in Abu Dhabi — Belline",
+    title: "AI receptionist for Abu Dhabi clinics, salons and restaurants | Belline",
     description:
-      "An AI receptionist for Abu Dhabi businesses. It answers your phone, WhatsApp and website from your information and takes requests for your team to confirm.",
+      "The capital's calls arrive before eight and after six. An AI receptionist that answers both ends of the day from your own information, trade by trade.",
     headline: "The capital starts early and rings before you open.",
     lead:
-      "Abu Dhabi's working day begins before most reception desks do. Belline answers from the first call of the morning to the last of the evening, from your own information.",
+      "Abu Dhabi's working day begins before most reception desks do. Belline answers from the first call of the morning to the last of the evening, from your own information. Pick your trade below — each page is about that line specifically.",
   },
   intro:
     "Abu Dhabi keeps government hours, and everything else keeps hours around them. The first calls of the day land before eight, well before a front desk is properly staffed, and the second wave arrives after six from the same people on their way home. A business here is not losing calls at three in the afternoon; it is losing them at the two ends of the day, which are also the two times nobody is at the desk.",
@@ -138,12 +138,12 @@ const SHARJAH: SeoCity = {
   emergency: "998 for an ambulance, or the nearest emergency department",
   districts: ["Al Majaz", "Al Nahda", "Muwaileh", "Al Qasimia", "Al Khan"],
   hub: {
-    title: "AI receptionist in Sharjah — Belline",
+    title: "AI receptionist for Sharjah salons, clinics and restaurants | Belline",
     description:
-      "An AI receptionist for Sharjah businesses. It answers your phone, WhatsApp and website from your information and takes requests for your team to confirm.",
+      "Two working weeks, one phone line. An AI receptionist for Sharjah that answers on whichever calendar your callers keep, written up trade by trade below.",
     headline: "Sharjah keeps a different week. Your phone should keep up with it.",
     lead:
-      "A four-day government week, a three-day weekend, and half the emirate commuting to Dubai. Belline answers whichever calendar your callers are on.",
+      "A four-day government week, a three-day weekend, and a great many residents commuting to Dubai. Belline answers whichever calendar your callers are on. Pick your trade below — each page is about that line specifically.",
   },
   intro:
     "Sharjah runs on two calendars at once. The emirate's own government works Monday to Thursday with a three-day weekend, while a large part of the population drives into Dubai and works Monday to Friday there. For a business on the ground in Al Majaz or Muwaileh, that means the phone rings before the commute and after it, and the weekend starts on Friday for some callers and on Saturday for others. There is no single hour in the week when you can safely leave the line unattended.",
@@ -167,7 +167,7 @@ const LONDON: SeoCity = {
   emergency: "999 or 112, or NHS 111 for urgent advice that is not an emergency",
   districts: ["Shoreditch", "Mayfair", "Clapham", "Islington", "Canary Wharf", "Wimbledon"],
   hub: {
-    title: "AI receptionist in London — Belline (waitlist)",
+    title: "AI receptionist for London dental practices | Belline (waitlist)",
     description:
       "An AI receptionist that answers your phone, WhatsApp and website from your own information. Live in the UAE, not open in the UK yet — join the London waitlist.",
     headline: "We are not open in London yet.",
@@ -178,63 +178,69 @@ const LONDON: SeoCity = {
     "London businesses do not lose calls because nobody rings; they lose them because the ones that do ring are the hard ones. Everything routine has already been done on a website, so the phone carries the exceptions — the caller who needs to change something, the one the booking form rejected, the one with a question the FAQ does not cover. Those are exactly the calls worth answering, and exactly the calls a busy front desk cannot get to.",
 };
 
-const MANCHESTER: SeoCity = {
-  slug: "manchester",
-  name: "Manchester",
-  market: "GB",
-  country: "England",
-  timezone: "Europe/London",
-  clocksChange: true,
-  languages: "English, with a large student and international population across the city centre. Belline answers in English.",
-  week:
-    "Monday to Friday, with Saturday the busiest trading day of the week for most consumer businesses and Sunday shorter. The clocks move twice a year.",
-  peak:
-    "Early evening and Saturday. Manchester's independents live on walk-in and last-minute trade, which arrives by phone at the point where the shop floor is already full.",
-  habits:
-    "A strong independent scene where the owner is often the receptionist, the stylist and the person doing the books. The phone competes with all three, and usually loses to whichever one is standing in front of them.",
-  emergency: "999 or 112, or NHS 111 for urgent advice that is not an emergency",
-  districts: ["Northern Quarter", "Ancoats", "Deansgate", "Didsbury", "Chorlton", "Spinningfields"],
-  hub: {
-    title: "AI receptionist in Manchester — Belline (waitlist)",
-    description:
-      "An AI receptionist that answers your phone, WhatsApp and website from your own information. Live in the UAE, not open in the UK yet — join the Manchester waitlist.",
-    headline: "We are not open in Manchester yet.",
-    lead:
-      "Belline is live in the United Arab Emirates and nowhere else. There is nothing to buy on this page. If you run a Manchester business that loses calls, join the waitlist and we will write when we open here.",
-  },
+export const SEO_CITIES: readonly SeoCity[] = [DUBAI, ABU_DHABI, SHARJAH, LONDON];
+
+/**
+ * The country hub, for a country with more than one published city.
+ *
+ * `/ai-receptionist/in/ae`. It exists because the three emirates below it keep
+ * three different weeks and one country's worth of shared habits, and because
+ * a reader who has not decided on a city needs somewhere to land that is not a
+ * list of links. Where a country has one city — the United Kingdom has London
+ * and nothing else — no hub is built, because it would be the city page with a
+ * different heading, which is a doorway page with extra steps.
+ */
+export interface SeoCountry {
+  market: Market;
+  /** "the United Arab Emirates" — as it reads mid-sentence. */
+  name: string;
+  title: string;
+  description: string;
+  headline: string;
+  lead: string;
+  intro: string;
+  /** Three or four things that are true across the country, not in one city. */
+  facts: { head: string; body: string }[];
+}
+
+const UAE: SeoCountry = {
+  market: "AE",
+  name: "the United Arab Emirates",
+  title: "AI receptionist for UAE businesses, by trade and emirate | Belline",
+  description:
+    "An AI receptionist for businesses in the UAE. It answers your phone, WhatsApp and website from your own information — written up for each trade and each emirate.",
+  headline: "One country, two working weeks, and a phone caught between them",
+  lead:
+    "Belline is live in the United Arab Emirates. It answers your phone and a WhatsApp number of its own from your own hours, prices and rules, and takes requests for your team to confirm. Pick your emirate and your trade below.",
   intro:
-    "Manchester's independents are owner-run, and in an owner-run business the receptionist is also the person doing the work. The phone rings while they are mid-service, mid-conversation or mid-delivery, and it is answered when it is convenient rather than when it rings. Nobody there thinks that is fine; there is just one of them.",
+    "The UAE is a single market that does not keep a single calendar. Dubai and Abu Dhabi work Monday to Friday; Sharjah's own government has worked a four-day week since 2022 while a large share of its residents commute into Dubai on the other one. On top of that sits a customer base that treats messaging a business as ordinary rather than modern, a trading day that runs long into the evening, and a Ramadan calendar that moves the busiest hours of the day for a month.",
+  facts: [
+    {
+      head: "The working week is not the trading week",
+      body:
+        "Offices close in the late afternoon. The salons, clinics, restaurants and agencies those office workers ring are open for hours afterwards, and busiest at exactly the point there is nobody free at the desk. That gap — between when a business trades and when it can answer — is the whole of what Belline is for.",
+    },
+    {
+      head: "WhatsApp is a channel, not a fallback",
+      body:
+        "Customers here message a business the way they message a friend, and a number that only rings loses the ones who would rather type. Belline answers a WhatsApp number of its own alongside the phone, from the same information, so the answer does not depend on which one somebody picked.",
+    },
+    {
+      head: "English on the line, and the honest limit",
+      body:
+        "English is the working language of most businesses here and Arabic is the official one, with Hindi, Urdu, Malayalam and Tagalog common on any busy reception line. Belline answers in English only. That is a real limit in this market rather than a footnote, and it is better read here than discovered on a call.",
+    },
+    {
+      head: "Prices are in dirhams and set per market",
+      body:
+        "There is one catalogue and one set of UAE prices, and every page in this system reads them from it rather than repeating a number somebody typed. Nothing is converted from another currency, and no page quotes a price for a country where the checkout would refuse the business.",
+    },
+  ],
 };
 
-const DUBLIN: SeoCity = {
-  slug: "dublin",
-  name: "Dublin",
-  market: "IE",
-  country: "Ireland",
-  timezone: "Europe/Dublin",
-  clocksChange: true,
-  languages: "English, with Irish as the other official language and a large international workforce across the city. Belline answers in English.",
-  week:
-    "Monday to Friday, Saturday a full trading day, Sunday shorter and in some trades closed. The clocks move twice a year.",
-  peak:
-    "Lunchtime and the run home. Dublin's centre empties and refills on a tight commute, and the calls land in the gaps at either end of it.",
-  habits:
-    "People still ring in Dublin, more than the online-booking numbers would suggest, and they expect to reach somebody who knows the business rather than a call centre. A generic answering service is noticed immediately and badly.",
-  emergency: "112 or 999 for the emergency services, either of which reaches the same operator",
-  districts: ["Ranelagh", "Rathmines", "Temple Bar", "Dundrum", "Sandyford", "Stoneybatter"],
-  hub: {
-    title: "AI receptionist in Dublin — Belline (waitlist)",
-    description:
-      "An AI receptionist that answers your phone, WhatsApp and website from your own information. Live in the UAE, not open in Ireland yet — join the Dublin waitlist.",
-    headline: "We are not open in Dublin yet.",
-    lead:
-      "Belline is live in the United Arab Emirates and nowhere else. There is nothing to buy on this page. If you run a Dublin business that loses calls, join the waitlist and we will write when we open here.",
-  },
-  intro:
-    "Dublin still rings. For all the online booking, a great many customers here pick up the phone first, and they can tell within a sentence whether the person answering knows the business or is reading from a card in a call centre somewhere else. That is the bar a Dublin phone line has to clear, and it is a higher one than an answering service was ever built for.",
-};
+export const SEO_COUNTRIES: Partial<Record<Market, SeoCountry>> = { AE: UAE };
 
-export const SEO_CITIES: readonly SeoCity[] = [DUBAI, ABU_DHABI, SHARJAH, LONDON, MANCHESTER, DUBLIN];
+export const seoCountry = (market: Market): SeoCountry | null => SEO_COUNTRIES[market] ?? null;
 
 export const SEO_CITY_SLUGS = SEO_CITIES.map((c) => c.slug);
 
